@@ -214,7 +214,8 @@ class BloomAttention(nn.Module):
         self.pretraining_tp = config.pretraining_tp
         self.slow_but_exact = config.slow_but_exact
         if self.slow_but_exact and self.pretraining_tp > 1:
-            self.slice_size = config.hidden_size / self.pretraining_tp
+            assert config.hidden_size % self.pretraining_tp == 0
+            self.slice_size = config.hidden_size // self.pretraining_tp
 
         self.hidden_size = config.hidden_size
         num_heads = config.n_head
@@ -331,6 +332,7 @@ class BloomAttention(nn.Module):
             attention_scores = attention_scores.to(torch.float)
         attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min)
         attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
+        # attention_probs = attention_probs * ~attention_mask # Prevent values to be too huge
 
         # [batch_size, num_heads, q_length, kv_length]
         attention_probs = self.attention_dropout(attention_probs)
@@ -349,11 +351,11 @@ class BloomAttention(nn.Module):
 
         # aggregate results across tp ranks. See here: https://github.com/pytorch/pytorch/issues/76232
         if self.pretraining_tp > 1 and self.slow_but_exact:
-            output_tensor = torch.zeros_like(context_layer)
+            output_tensor = torch.zeros_like(context_layer) + self.dense.bias[None, None, :]
             for i in range(self.pretraining_tp):
                 output_tensor = output_tensor + F.linear(
                     context_layer[:, :, i * self.slice_size : (i + 1) * self.slice_size],
-                    self.dense.weight[:, i * self.slice_size : (i + 1) * self.slice_size],
+                    self.dense.weight[:, i * self.slice_size : (i + 1) * self.slice_size]
                 )
         else:
             output_tensor = self.dense(context_layer)
@@ -379,13 +381,14 @@ class BloomMLP(nn.Module):
         self.dense_4h_to_h = nn.Linear(4 * hidden_size, hidden_size)
         self.hidden_dropout = config.hidden_dropout
         if self.slow_but_exact and self.pretraining_tp > 1:
-            self.slice_size = hidden_size / self.pretraining_tp
+            assert (4 * hidden_size) % self.pretraining_tp == 0
+            self.slice_size = (4 * hidden_size) // self.pretraining_tp
 
     def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor) -> torch.Tensor:
         hidden_states = self.gelu_impl(self.dense_h_to_4h(hidden_states))
 
         if self.pretraining_tp > 1 and self.slow_but_exact:
-            intermediate_output = torch.zeros_like(residual)
+            intermediate_output = torch.zeros_like(residual) + self.dense_4h_to_h.bias[None, None, :]
             for i in range(self.pretraining_tp):
                 intermediate_output = intermediate_output + F.linear(
                     hidden_states[:, :, i * self.slice_size : (i + 1) * self.slice_size],
