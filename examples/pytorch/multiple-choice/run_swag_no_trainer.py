@@ -592,7 +592,6 @@ def main():
                 break
 
         model.eval()
-        samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
             with torch.no_grad():
                 outputs = model(**batch)
