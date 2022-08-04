@@ -550,7 +550,11 @@ def _load_state_dict_into_meta_model(
             param_name = param_name[len(start_prefix) :]
 
         module_name = param_name
-        # We convert floating dtypes to the `dtype` passed.
+
+        # We convert floating dtypes to the `dtype` passed. We make sure that the
+        # parameter is a floating point parameter. Sometimes we want to keep the buffers
+        # in int/uint/bool and not cast them.
+        # Please see: https://github.com/huggingface/transformers/pull/18471 for more details
         if dtype is not None and torch.is_floating_point(param):
             param = param.to(dtype)
 
