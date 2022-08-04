@@ -128,8 +128,6 @@ class MixedInt8TestPipeline(BaseMixedInt8Test):
             model_kwargs={"device_map": "auto", "load_in_8bit": True},
             max_new_tokens=self.MAX_NEW_TOKENS,
         )
-        # Needs a first forward pass to get the statistics
-        _ = self.pipe(self.input_text)
 
         # Real second forward pass
         pipeline_output = self.pipe(self.input_text)
@@ -172,9 +170,6 @@ class MixedInt8TestMultiGpu(BaseMixedInt8Test):
 
         # Check that inference pass works on the model
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-
-        # First dummy batch to get the statistics
-        _ = model_parallel.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
 
         # Second real batch
         output_parallel = model_parallel.generate(input_ids=encoded_input["input_ids"].to(0), max_new_tokens=10)
