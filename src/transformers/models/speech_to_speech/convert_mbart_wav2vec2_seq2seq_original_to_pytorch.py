@@ -22,7 +22,8 @@ import torch
 from torch import nn
 
 from transformers import (
-    MBart50Tokenizer,
+    PegasusConfig,
+    PegasusForCausalLM,
     MBartConfig,
     MBartForCausalLM,
     SpeechToSpeechConfig,
@@ -284,29 +285,13 @@ def convert_wav2vec2_checkpoint(
     config_yaml_path,
     encoder_config_path,
     decoder_config_path,
-    num_adapter_layers,
-    adapter_kernel_size,
-    adapter_stride,
-    encoder_output_dim,
     decoder_output_dim,
 ):
     """
     Copy/paste/tweak model's weights to transformers design.
     """
-    # load configs
-    encoder_config = Wav2Vec2ConformerConfig.from_pretrained(
-        encoder_config_path,
-        add_adapter=True,
-        num_adapter_layers=num_adapter_layers,
-        adapter_stride=adapter_stride,
-        adapter_kernel_size=adapter_kernel_size,
-        use_auth_token=True,
-        output_hidden_size=encoder_output_dim,
-    )
-    decoder_config = MBartConfig.from_pretrained(decoder_config_path, vocab_size=decoder_output_dim)
-
     # load model
-    model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(
+    model, cfg, task = fairseq.checkpoint_utils.load_model_ensemble_and_task(
         [checkpoint_path],
         arg_overrides={
             "config_yaml": config_yaml_path,
@@ -315,6 +300,25 @@ def convert_wav2vec2_checkpoint(
         },
     )
     model = model[0].eval()
+    fairseq_config = cfg["model"]
+
+    # load configs
+    encoder_config = Wav2Vec2ConformerConfig.from_pretrained(
+        encoder_config_path,
+        add_adapter=True,
+        num_adapter_layers=fairseq_config.adaptor_n_layers,
+        adapter_stride=fairseq_config.adaptor_stride,
+        adapter_kernel_size=fairseq_config.adaptor_kernel_size,
+        use_auth_token=True,
+        output_hidden_size=fairseq_config.w2v_args.model.encoder_embed_dim,
+    )
+    decoder_config = PegasusConfig.from_pretrained(
+        decoder_config_path,
+        decoder_layers=fairseq_config.decoder_layers,
+        vocab_size=decoder_output_dim,
+        max_position_embeddings=4002,
+    )
+
 
     # load feature extractor
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(encoder_config_path, use_auth_token=True)
@@ -325,7 +329,7 @@ def convert_wav2vec2_checkpoint(
     recursively_load_weights(model.encoder, hf_encoder)
 
     # load decoder weights
-    hf_decoder = MBartForCausalLM(decoder_config)
+    hf_decoder = PegasusForCausalLM(decoder_config)
     missing_keys, unexpected_keys = hf_decoder.model.decoder.load_state_dict(model.decoder.state_dict(), strict=False)
     logger.warning(f"The following keys are missing when loading the decoder weights: {missing_keys}")
     logger.warning(f"The following keys are unexpected when loading the decoder weights: {unexpected_keys}")
@@ -364,10 +368,6 @@ if __name__ == "__main__":
         type=str,
         help="Path to hf decoder checkpoint config",
     )
-    parser.add_argument("--num_adapter_layers", default=1, type=int, help="number of enc-dec adapter layers")
-    parser.add_argument("--adapter_stride", default=2, type=int, help="stride of adapter layers")
-    parser.add_argument("--adapter_kernel_size", default=3, type=int, help="kernel size of adapter layers")
-    parser.add_argument("--encoder_output_dim", default=1024, type=int, help="encoder output dim")
     parser.add_argument("--decoder_output_dim", default=1007, type=int, help="decoder output dim (=vocab size)")
 
     args = parser.parse_args()
@@ -378,9 +378,5 @@ if __name__ == "__main__":
         args.config_yaml_path,
         encoder_config_path=args.encoder_config_path,
         decoder_config_path=args.decoder_config_path,
-        num_adapter_layers=args.num_adapter_layers,
-        adapter_kernel_size=args.adapter_kernel_size,
-        adapter_stride=args.adapter_stride,
-        encoder_output_dim=args.encoder_output_dim,
         decoder_output_dim=args.decoder_output_dim,
     )
