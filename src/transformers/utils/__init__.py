@@ -22,6 +22,7 @@
 from packaging import version
 
 from .. import __version__
+from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from .doc import (
     add_code_sample_docstrings,
     add_end_docstrings,
