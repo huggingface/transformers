@@ -51,6 +51,7 @@ from .base import (
     infer_framework_load_model,
 )
 from .conversational import Conversation, ConversationalPipeline
+from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
@@ -68,7 +69,6 @@ from .token_classification import (
     TokenClassificationPipeline,
 )
 from .visual_question_answering import VisualQuestionAnsweringPipeline
-from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 
@@ -108,6 +108,7 @@ if is_torch_available():
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
         AutoModelForCTC,
+        AutoModelForDocumentQuestionAnswering,
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
         AutoModelForMaskedLM,
@@ -120,7 +121,6 @@ if is_torch_available():
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
         AutoModelForVisualQuestionAnswering,
-        AutoModelForDocumentQuestionAnswering,
     )
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel

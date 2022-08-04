@@ -7,7 +7,8 @@ from .base import PIPELINE_INIT_ARGS, Pipeline
 if is_vision_available():
     from PIL import Image
 
-    from ..image_utils import load_image
+    # TODO Will re-introduce when I add images back in
+    # from ..image_utils import load_image
 
 if is_torch_available():
     import torch
