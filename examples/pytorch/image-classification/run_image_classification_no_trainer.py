@@ -212,15 +212,13 @@ def main():
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers
     # in the environment
-    accelerator_kwargs = {
-        "gradient_accumulation_steps": args.gradient_accumulation_steps
-    }
+    accelerator_log_kwargs = {}
 
     if args.with_tracking:
-        accelerator_kwargs["log_with"] = args.report_to
-        accelerator_kwargs["logging_dir"] = args.output_dir
+        accelerator_log_kwargs["log_with"] = args.report_to
+        accelerator_log_kwargs["logging_dir"] = args.output_dir
 
-    accelerator = Accelerator(**accelerator_kwargs)
+    accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, **accelerator_log_kwargs)
 
     logger.info(accelerator.state)
     # Make one log on every process with the configuration for debugging.
@@ -394,7 +392,7 @@ def main():
         name=args.lr_scheduler_type,
         optimizer=optimizer,
         num_warmup_steps=args.num_warmup_steps,
-        num_training_steps=lr_num_training_steps
+        num_training_steps=lr_num_training_steps,
     )
 
     # Prepare everything with our `accelerator`.
