@@ -29,7 +29,7 @@ import traceback
 import warnings
 from contextlib import contextmanager
 from functools import partial
-from hashlib import new, sha256
+from hashlib import sha256
 from pathlib import Path
 from typing import BinaryIO, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
