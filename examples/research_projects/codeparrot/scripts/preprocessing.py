@@ -3,6 +3,7 @@ import hashlib
 import json
 import multiprocessing
 import os
+import re
 import shutil
 import time
 from pathlib import Path
@@ -15,9 +16,12 @@ from minhash_deduplication import deduplicate_dataset
 from transformers import AutoTokenizer, HfArgumentParser
 
 
+PATTERN = re.compile(r"\s+")
+
+
 def get_hash(example):
     """Get hash of content field."""
-    return {"hash": hashlib.md5(example["content"].strip().encode("utf-8")).hexdigest()}
+    return {"hash": hashlib.md5(re.sub(PATTERN, "", example["content"]).encode("utf-8")).hexdigest()}
 
 
 def line_stats(example):

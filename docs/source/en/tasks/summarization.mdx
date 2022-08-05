@@ -67,7 +67,7 @@ Load the T5 tokenizer to process `text` and `summary`:
 The preprocessing function needs to:
 
 1. Prefix the input with a prompt so T5 knows this is a summarization task. Some models capable of multiple NLP tasks require prompting for specific tasks.
-2. Use a context manager with the `as_target_tokenizer()` function to parallelize tokenization of inputs and labels.
+2. Use the keyword `text_target` argument when tokenizing labels.
 3. Truncate sequences to be no longer than the maximum length set by the `max_length` parameter.
 
 ```py
@@ -78,8 +78,7 @@ The preprocessing function needs to:
 ...     inputs = [prefix + doc for doc in examples["text"]]
 ...     model_inputs = tokenizer(inputs, max_length=1024, truncation=True)
 
-...     with tokenizer.as_target_tokenizer():
-...         labels = tokenizer(examples["summary"], max_length=128, truncation=True)
+...     labels = tokenizer(text_target=examples["summary"], max_length=128, truncation=True)
 
 ...     model_inputs["labels"] = labels["input_ids"]
 ...     return model_inputs
