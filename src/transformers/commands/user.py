@@ -22,7 +22,6 @@ from requests.exceptions import HTTPError
 from . import BaseTransformersCLICommand
 
 
-
 class UserCommands(BaseTransformersCLICommand):
     @staticmethod
     def register_subcommand(parser: ArgumentParser):
