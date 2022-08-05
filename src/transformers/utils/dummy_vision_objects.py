@@ -169,6 +169,13 @@ class SegformerFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class VideoMAEFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ViltFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 

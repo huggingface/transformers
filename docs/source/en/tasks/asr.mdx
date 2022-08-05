@@ -109,11 +109,10 @@ The preprocessing function needs to:
 >>> def prepare_dataset(batch):
 ...     audio = batch["audio"]
 
-...     batch["input_values"] = processor(audio["array"], sampling_rate=audio["sampling_rate"]).input_values[0]
+...     batch = processor(audio=audio["array"], sampling_rate=audio["sampling_rate"]).input_values[0]
 ...     batch["input_length"] = len(batch["input_values"])
 
-...     with processor.as_target_processor():
-...         batch["labels"] = processor(batch["transcription"]).input_ids
+...     batch["labels"] = processor(text=batch["transcription"]).input_ids
 ...     return batch
 ```
 
@@ -146,17 +145,9 @@ Unlike other data collators, this specific data collator needs to apply a differ
 ...         input_features = [{"input_values": feature["input_values"]} for feature in features]
 ...         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
-...         batch = self.processor.pad(
-...             input_features,
-...             padding=self.padding,
-...             return_tensors="pt",
-...         )
-...         with self.processor.as_target_processor():
-...             labels_batch = self.processor.pad(
-...                 label_features,
-...                 padding=self.padding,
-...                 return_tensors="pt",
-...             )
+...         batch = self.processor.pad(input_features, padding=self.padding, return_tensors="pt")
+
+...         labels_batch = self.processor.pad(labels=label_features, padding=self.padding, return_tensors="pt")
 
 ...         # replace padding with -100 to ignore loss correctly
 ...         labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
