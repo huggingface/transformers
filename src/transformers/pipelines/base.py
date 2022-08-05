@@ -630,7 +630,6 @@ class PipedPipelineDataFormat(PipelineDataFormat):
         for line in sys.stdin:
             # Split for multi-columns
             if "\t" in line:
-
                 line = line.split("\t")
                 if self.column:
                     # Dictionary to map arguments
@@ -752,7 +751,6 @@ class Pipeline(_ScikitCompat):
         binary_output: bool = False,
         **kwargs,
     ):
-
         if framework is None:
             framework, model = infer_framework_load_model(model, config=model.config)
 
@@ -1123,18 +1121,19 @@ class PipelineRegistry:
         supported_task.sort()
         return supported_task
 
-    def check_task(self, task: str) -> Tuple[Dict, Any]:
+    def check_task(self, task: str) -> Tuple[str, Dict, Any]:
         if task in self.task_aliases:
             task = self.task_aliases[task]
         if task in self.supported_tasks:
             targeted_task = self.supported_tasks[task]
-            return targeted_task, None
+            return task, targeted_task, None
 
         if task.startswith("translation"):
             tokens = task.split("_")
             if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
                 targeted_task = self.supported_tasks["translation"]
-                return targeted_task, (tokens[1], tokens[3])
+                task = "translation"
+                return task, targeted_task, (tokens[1], tokens[3])
             raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
 
         raise KeyError(
