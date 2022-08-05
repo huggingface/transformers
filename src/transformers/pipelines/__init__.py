@@ -606,6 +606,7 @@ def pipeline(
 
     # Retrieve the task
     if task in custom_tasks:
+        normalized_task = task
         targeted_task, task_options = clean_custom_task(custom_tasks[task])
         if pipeline_class is None:
             if not trust_remote_code:
