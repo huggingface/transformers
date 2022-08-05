@@ -1156,8 +1156,8 @@ class TFGroupViTVisionTransformer(tf.keras.layers.Layer):
 ################################################################################
 
 
-# Copied from transformers.models.clip.modeling_tf_clip.TFCLIPTextMainLayer with CLIP->GroupViT
 @keras_serializable
+# Copied from transformers.models.clip.modeling_tf_clip.TFCLIPTextMainLayer with CLIP->GroupViT
 class TFGroupViTTextMainLayer(tf.keras.layers.Layer):
     config_class = GroupViTTextConfig
 
@@ -1205,8 +1205,8 @@ class TFGroupViTTextMainLayer(tf.keras.layers.Layer):
         return text_model_outputs
 
 
-# Copied from transformers.models.clip.modeling_tf_clip.TFCLIPVisionMainLayer with CLIP->GroupViT
 @keras_serializable
+# Copied from transformers.models.clip.modeling_tf_clip.TFCLIPVisionMainLayer with CLIP->GroupViT
 class TFGroupViTVisionMainLayer(tf.keras.layers.Layer):
     config_class = GroupViTVisionConfig
 
