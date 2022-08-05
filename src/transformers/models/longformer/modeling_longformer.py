@@ -1861,7 +1861,7 @@ class LongformerForSequenceClassification(LongformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(LONGFORMER_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="jpelhaw/longformer-base-plagiarism-detection",
+        checkpoint="jpwahle/longformer-base-plagiarism-detection",
         output_type=LongformerSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output="'ORIGINAL'",
