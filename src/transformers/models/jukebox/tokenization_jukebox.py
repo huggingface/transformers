@@ -398,7 +398,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
             if not is_tensor(inputs):
                 inputs = as_tensor(inputs)
         except:  # noqa E722
-
             raise ValueError(
                 "Unable to create tensor, you should probably activate truncation and/or padding "
                 "with 'padding=True' 'truncation=True' to have batched tensors with the same length."

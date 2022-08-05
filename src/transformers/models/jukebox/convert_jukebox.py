@@ -55,6 +55,97 @@ MODEL_MAPPING = {
 }
 
 
+def fix_jukebox_keys(state_dict, model_state_dict):
+    new_dict = {}
+    for original_key, value in state_dict.items():
+        key = original_key
+        wo_model = key.split("model")
+        if len(wo_model) == 2 and "encoders" in key:
+            if len(wo_model[1].split(".")) <= 3:
+                key = wo_model[0] + "proj_out." + wo_model[1].split(".")[-1]
+            else:
+                block_index = str(int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]))
+                key = (
+                    wo_model[0] + "downsample_block." + block_index + "." + wo_model[1].split(".")[-1]
+                )
+        elif len(wo_model) == 2 and "decoders" in key:
+            if len(wo_model[1].split(".")) <= 3:
+                key = wo_model[0] + "proj_in." + wo_model[1].split(".")[-1]
+            else:
+                block_index = str(
+                    int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]) - 2
+                )
+                key = wo_model[0] + "upsample_block." + block_index + "." + wo_model[1].split(".")[-1]
+        elif len(wo_model) == 2 and "cond.model." in key:
+            if len(wo_model[1].split(".")) <= 3:
+                key = wo_model[0] + "proj_in." + wo_model[1].split(".")[-1]
+            else:
+                block_index = str(
+                    int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]) - 2
+                )
+                key = wo_model[0] + "upsample_block." + block_index + "." + wo_model[1].split(".")[-1]
+        elif len(wo_model) == 3 and "priors" in key:
+            # should also rename cond to low_lvl_conditioner
+            block_index = str(int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]) - 2)
+            key = (
+                wo_model[0]
+                + "upsample_block."
+                + block_index
+                + ".resnet_block."
+                + wo_model[1].split(".")[-2]
+                + ".model"
+                + wo_model[2]
+            )
+        elif len(wo_model) == 4 and "decoders" in key:
+            # convert from
+            # model.1.0 is the first upsample block's resnet layer. Then this
+            # layer has resnet_blocks (1 to 3) which has a sequential (last model). 3 is the 3nd conv
+            # vqvae.decoders.0.level_blocks.0.model.1.0.model.1.model.3.bias
+            # to
+            # vqvae.decoders.1.level_blocks.0.upsample_block.1.resnet_blocks.2.conv1d_2.weight
+            block_index = str(int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]) - 2)
+            key = (
+                wo_model[0]
+                + "upsample_block."
+                + block_index
+                + ".resnet_block."
+                + wo_model[2].split(".")[1]
+                + ".model"
+                + wo_model[3]
+            )
+        elif len(wo_model) == 4 and "encoders" in key:
+            block_index = str(int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]))
+            key = (
+                wo_model[0]
+                + "downsample_block."
+                + block_index
+                + ".resnet_block."
+                + wo_model[2].split(".")[1]
+                + ".model"
+                + wo_model[3]
+            )
+
+        if key.endswith(".model.1.bias") and len(key.split(".")) > 10:
+            key = key.replace(".model.1.bias", ".conv1d_1.bias")
+        elif key.endswith(".model.1.weight") and len(key.split(".")) > 10:
+            key = key.replace(".model.1.weight", ".conv1d_1.weight")
+        elif key.endswith(".model.3.bias") and len(key.split(".")) > 10:
+            key = key.replace(".model.3.bias", ".conv1d_2.bias")
+        elif key.endswith(".model.3.weight") and len(key.split(".")) > 10:
+            key = key.replace(".model.3.weight", ".conv1d_2.weight")
+
+        if key not in model_state_dict.keys():
+            print(f"failed converting {original_key} to {key}, does not match")
+        elif value.shape != model_state_dict[key].shape:
+            print(
+                f"{original_key}-> {key} : \nshape {model_state_dict[key].shape} and { value.shape},"
+                " do not match"
+            )
+            key = original_key
+        new_dict[key] = value
+    return new_dict
+
+
 @torch.no_grad()
 def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
     """
@@ -69,9 +160,14 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
         "model"
     ]
 
+    config = JukeboxConfig.from_pretrained(model_name)
+    model = JukeboxModel(config)
+    
     weight_dict = []
     for dict_name in priors:
         old_dic = torch.load(f"{pytorch_dump_folder_path}/{dict_name.split('/')[-1]}")["model"]
+        
+
         new_dic = {}
         for k in old_dic.keys():
             if k.endswith(".b"):
@@ -82,10 +178,11 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
                 new_dic[k.replace(".blocks.", ".model.")] = old_dic[k]
             else:
                 new_dic[k] = old_dic[k]
+                
+        new_dic = fix_jukebox_keys(new_dic,model.state_dict())
         weight_dict.append(new_dic)
 
-    config = JukeboxConfig.from_pretrained(model_name)
-    model = JukeboxModel(config)
+    
 
     model.vqvae.load_state_dict(vqvae_dic)
     for i in range(len(weight_dict)):

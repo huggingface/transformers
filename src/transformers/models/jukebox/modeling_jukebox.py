@@ -121,7 +121,8 @@ class ResConv1DBlock(nn.Module):
         hidden_states = self.relu(hidden_states)
         hidden_states = self.conv1d_2(hidden_states)
         return residuals + self.res_scale * hidden_states
-        
+
+
 class Resnet1D(nn.Module):
     def __init__(
         self,
@@ -144,8 +145,9 @@ class Resnet1D(nn.Module):
                 return depth % dilation_cycle
 
         blocks = []
-        for depth in range(n_depth) : 
-            blocks.append(ResConv1DBlock(
+        for depth in range(n_depth):
+            blocks.append(
+                ResConv1DBlock(
                     n_in,
                     int(m_conv * n_in),
                     dilation=dilation_growth_rate ** _get_depth(depth),
@@ -158,12 +160,12 @@ class Resnet1D(nn.Module):
         if reverse_dilation:
             blocks = blocks[::-1]
         self.resnet_block = nn.ModuleList(blocks)
-        
 
     def forward(self, hidden_states):
         for block in self.resnet_block:
             hidden_states = block(hidden_states)
         return hidden_states
+
 
 class EncoderConvBlock(nn.Module):
     def __init__(
@@ -198,6 +200,7 @@ class EncoderConvBlock(nn.Module):
         hidden_states = self.proj_out(hidden_states)
         return hidden_states
 
+
 class DecoderConvBock(nn.Module):
     def __init__(
         self,
@@ -221,7 +224,8 @@ class DecoderConvBock(nn.Module):
             filter_t, pad_t = stride_t * 2, stride_t // 2
             self.proj_in = nn.Conv1d(output_emb_width, width, 3, 1, 1)
             for i in range(down_t):
-                blocks.append( Resnet1D(
+                blocks.append(
+                    Resnet1D(
                         width,
                         depth,
                         m_conv,
@@ -233,11 +237,12 @@ class DecoderConvBock(nn.Module):
                         checkpoint_res=checkpoint_res,
                     )
                 )
-                blocks.append( nn.ConvTranspose1d(
+                blocks.append(
+                    nn.ConvTranspose1d(
                         width, input_emb_width if i == (down_t - 1) else width, filter_t, stride_t, pad_t
                     )
                 )
-                
+
         self.upsample_block = nn.ModuleList(blocks)
 
     def forward(self, hidden_states):
@@ -245,7 +250,8 @@ class DecoderConvBock(nn.Module):
         for block in self.upsample_block:
             hidden_states = block(hidden_states)
         return hidden_states
-    
+
+
 class Encoder(nn.Module):
     def __init__(self, input_emb_width, output_emb_width, levels, downs_t, strides_t, **block_kwargs):
         super().__init__()
@@ -335,8 +341,7 @@ def update(params):
 def calculate_strides(strides, downs):
     return [stride**down for stride, down in zip(strides, downs)]
 
-
-
+# rename TODO
 class BottleneckBlock(nn.Module):
     def __init__(self, k_bins, emb_width, mu):
         super().__init__()
@@ -435,12 +440,12 @@ class BottleneckBlock(nn.Module):
         x_l = x_l.view(N, T)
         return x_l, x_d
 
-    def quantise(self, x):
+    def quantise(self, hidden_states):
         # Calculate latent code x_l
         k_w = self.k.t()
         distance = (
-            torch.sum(x**2, dim=-1, keepdim=True)
-            - 2 * torch.matmul(x, k_w)
+            torch.sum(hidden_states**2, dim=-1, keepdim=True)
+            - 2 * torch.matmul(hidden_states, k_w)
             + torch.sum(k_w**2, dim=0, keepdim=True)
         )  # (N * L, b)
         min_distance, x_l = torch.min(distance, dim=-1)
@@ -456,11 +461,9 @@ class BottleneckBlock(nn.Module):
 
         # Preprocess.
         hidden_states, _ = self.preprocess(hidden_states)
-        # TODO remvove unused prenorm variable
 
         # Quantise
         x_l, _ = self.quantise(hidden_states)
-        # TODO remvove unused fit and the return variable
 
         # Postprocess.
         x_l = x_l.view(N, T)
@@ -544,94 +547,6 @@ class Bottleneck(nn.Module):
             if self.training:
                 metrics.append(metric)
         return music_tokens, xs_quantised, commit_losses, metrics
-
-
-# TODO replace FFT calls with torch.fft
-def stft(sig, hps):
-    return torch.stft(
-        sig,
-        hps.n_fft,
-        hps.hop_length,
-        win_length=hps.window_size,
-        window=torch.hann_window(hps.window_size, device=sig.device),
-    )
-
-
-# TODO replace spec
-def spec(x, hps):
-    return torch.norm(stft(x, hps), p=2, dim=-1)
-
-
-# TODO check if can be removed
-
-
-class DefaultSTFTValues:
-    def __init__(self, hps):
-        self.sr = hps.sr
-        self.n_fft = 2048
-        self.hop_length = 256
-        self.window_size = 6 * self.hop_length
-
-
-def norm(x):
-    return (x.view(x.shape[0], -1) ** 2).sum(dim=-1).sqrt()
-
-
-def squeeze(x):
-    if len(x.shape) == 3:
-        assert x.shape[-1] in [1, 2]
-        x = torch.mean(x, -1)
-    if len(x.shape) != 2:
-        raise ValueError(f"Unknown input shape {x.shape}")
-    return x
-
-
-def spectral_loss(x_in, x_out, hps):
-    hps = DefaultSTFTValues(hps)
-    spec_in = spec(squeeze(x_in.float()), hps)
-    spec_out = spec(squeeze(x_out.float()), hps)
-    return norm(spec_in - spec_out)
-
-
-def spectral_convergence(x_in, x_out, hps, epsilon=2e-3):
-    hps = DefaultSTFTValues(hps)
-    spec_in = spec(squeeze(x_in.float()), hps)
-    spec_out = spec(squeeze(x_out.float()), hps)
-
-    gt_norm = norm(spec_in)
-    residual_norm = norm(spec_in - spec_out)
-    mask = (gt_norm > epsilon).float()
-    return (residual_norm * mask) / torch.clamp(gt_norm, min=epsilon)
-
-
-class STFTValues:
-    def __init__(self, hps, n_fft, hop_length, window_size):
-        self.sr = hps.sr
-        self.n_fft = n_fft
-        self.hop_length = hop_length
-        self.window_size = window_size
-
-
-def multispectral_loss(x_in, x_out, hps):
-    losses = []
-    assert len(hps.multispec_loss_n_fft) == len(hps.multispec_loss_hop_length) == len(hps.multispec_loss_window_size)
-    args = [hps.multispec_loss_n_fft, hps.multispec_loss_hop_length, hps.multispec_loss_window_size]
-    for n_fft, hop_length, window_size in zip(*args):
-        hps = STFTValues(hps, n_fft, hop_length, window_size)
-        spec_in = spec(squeeze(x_in.float()), hps)
-        spec_out = spec(squeeze(x_out.float()), hps)
-        losses.append(norm(spec_in - spec_out))
-    return sum(losses) / len(losses)
-
-
-def average_metrics(_metrics):
-    metrics = {}
-    for _metric in _metrics:
-        for key, val in _metric.items():
-            if key not in metrics:
-                metrics[key] = []
-            metrics[key].append(val)
-    return {key: sum(vals) / len(vals) for key, vals in metrics.items()}
 
 
 class JukeboxVQVAE(PreTrainedModel):
@@ -764,9 +679,8 @@ class JukeboxVQVAE(PreTrainedModel):
         ]
         return self.decode(music_tokens)
 
-    def forward(self, x, hps, loss_fn="l1"):
-        metrics = {}
-
+    # TODO rename
+    def forward(self, x, hps):
         # Encode/Decode
         x_in = self.preprocess(x)
         xs = []
@@ -782,68 +696,13 @@ class JukeboxVQVAE(PreTrainedModel):
             x_out = decoder(xs_quantised[level : level + 1], all_levels=False)
             x_outs.append(x_out)
 
-        # Loss
-        def _spectral_loss(x_target, x_out, hps):
-            if hps.use_nonrelative_specloss:
-                sl = spectral_loss(x_target, x_out, hps) / hps.bandwidth["spec"]
-            else:
-                sl = spectral_convergence(x_target, x_out, hps)
-            sl = torch.mean(sl)
-            return sl
-
-        def _multispectral_loss(x_target, x_out, hps):
-            sl = multispectral_loss(x_target, x_out, hps) / hps.bandwidth["spec"]
-            sl = torch.mean(sl)
-            return sl
-
-        recons_loss = torch.zeros(()).to(x.device)
-        spec_loss = torch.zeros(()).to(x.device)
-        multispec_loss = torch.zeros(()).to(x.device)
-        x_target = x.float()
-
         for level in reversed(range(self.levels)):
             x_out = self.postprocess(x_outs[level])
-            this_recons_loss = _loss_fn(loss_fn, x_target, x_out, hps)
-            this_spec_loss = _spectral_loss(x_target, x_out, hps)
-            this_multispec_loss = _multispectral_loss(x_target, x_out, hps)
-            metrics[f"recons_loss_l{level + 1}"] = this_recons_loss
-            metrics[f"spectral_loss_l{level + 1}"] = this_spec_loss
-            metrics[f"multispectral_loss_l{level + 1}"] = this_multispec_loss
-            recons_loss += this_recons_loss
-            spec_loss += this_spec_loss
-            multispec_loss += this_multispec_loss
 
         commit_loss = sum(commit_losses)
-        loss = (
-            recons_loss + self.spectral * spec_loss + self.multispectral * multispec_loss + self.commit * commit_loss
-        )
+        loss = self.commit * commit_loss
 
-        with torch.no_grad():
-            sc = torch.mean(spectral_convergence(x_target, x_out, hps))
-            l2_loss = _loss_fn("l2", x_target, x_out, hps)
-            l1_loss = _loss_fn("l1", x_target, x_out, hps)
-            linf_loss = _loss_fn("linf", x_target, x_out, hps)
-
-        quantiser_metrics = average_metrics(quantiser_metrics)
-
-        metrics.update(
-            dict(
-                recons_loss=recons_loss,
-                spectral_loss=spec_loss,
-                multispectral_loss=multispec_loss,
-                spectral_convergence=sc,
-                l2_loss=l2_loss,
-                l1_loss=l1_loss,
-                linf_loss=linf_loss,
-                commit_loss=commit_loss,
-                **quantiser_metrics,
-            )
-        )
-
-        for key, val in metrics.items():
-            metrics[key] = val.detach()
-
-        return x_out, loss, metrics
+        return x_out, loss
 
 
 # Scalable transformer
@@ -1311,7 +1170,7 @@ class JukeboxAttention(nn.Module):
         if "value" in self.cache:
             del self.cache["value"]
         self.cache = {}
-        
+
     def check_cache(self, n_samples, sample_t, fp16):
         assert self.sample_t == sample_t, f"{self.sample_t} != {sample_t}"
         if sample_t == 0:
@@ -1326,7 +1185,6 @@ class JukeboxAttention(nn.Module):
 
 
 class JukeboxBlock(nn.Module):
-    # previously ResAttnBlock
     def __init__(
         self,
         width,
@@ -1369,7 +1227,7 @@ class JukeboxBlock(nn.Module):
             encoder_dims=encoder_dims,
             prime_len=prime_len,
         )
-        
+
         self.ln_0 = JukeboxLayerNorm(width)
         self.mlp = JukeboxMLP(
             width=width,
@@ -1382,9 +1240,10 @@ class JukeboxBlock(nn.Module):
         self.ln_1 = JukeboxLayerNorm(width)
         self.res_scale = res_scale
 
-        # TODO either support checkpointing for faster inference or get rid of this 
+        # TODO either support checkpointing for faster inference or get rid of this
         self.checkpoint_attn = checkpoint_attn
         self.checkpoint_mlp = checkpoint_mlp
+        
         self.width = width
         self.attn_func = attn_func
 
@@ -1538,6 +1397,7 @@ class JukeboxTransformer(nn.Module):
         for l in self._attn_mods:
             l.attn.del_cache()
 
+
 class JukeboxPositionalEmbedding(nn.Module):
     def __init__(self, input_shape, width, init_scale=1.0, pos_init=False):
         super().__init__()
@@ -1555,7 +1415,6 @@ class JukeboxPositionalEmbedding(nn.Module):
 
 
 class JukeboxConditionalAutoregressive(nn.Module):
-    # previously ConditionalAutoregressive2D, renamed it to prior
     def __init__(
         self,
         input_shape,
@@ -1665,7 +1524,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             return x.view(N, *self.input_shape)
         else:
             return x.view(N, -1)
-        
+
     # TODO RENAME x, x_cond and y_cond, x_prime, x_gen, x_t
     def forward(
         self,
@@ -1743,7 +1602,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             cond = x_cond
         x = x + self.pos_emb()[sample_t : sample_t + 1] + cond  # Pos emb, dropout is identity at eval time
         return x, cond
-    
+
     # TODO rename x, x_conds, y_conds
     def sample(
         self,
@@ -1773,14 +1632,13 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 preds = []
 
             for sample_t in get_range(range(0, sample_tokens)):
-
                 hidden_states, cond = self.get_emb(sample_t, n_samples, tokens, x_cond, y_cond)
                 self.transformer.check_cache(n_samples, sample_t, fp16)
                 hidden_states = self.transformer(
                     hidden_states, encoder_kv=encoder_kv, sample=True, fp16=fp16
                 )  # TODO put fp16 back # Transformer
                 if self.add_cond_after_transformer:
-                    hidden_states= hidden_states + cond
+                    hidden_states = hidden_states + cond
                 hidden_states = self.x_out(hidden_states)  # Predictions
                 if get_preds:
                     preds.append(hidden_states.clone())
@@ -1817,7 +1675,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
         chunk_size=None,
         sample_tokens=None,
     ):
-
         if sample_tokens is None:
             sample_tokens = self.input_dims
         # Preprocess.
@@ -1847,7 +1704,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
             x = None
 
             for current_chunk_size in get_range(chunk_sizes):
-
                 xs_prime, conds_prime = [], []
                 for sample_t in range(start, start + current_chunk_size):
                     x_prime, cond_prime = self.get_emb(sample_t, n_samples, x, x_cond, y_cond)
@@ -2027,7 +1883,6 @@ class SimpleEmbedding(nn.Module):
         super().__init__()
         self.bins = bins
         self.emb = nn.Embedding(bins, out_width)
-        # nn.init.normal_(self.emb.weight, std=0.01 * init_scale)
 
     def forward(self, y):
         return self.emb(y)
@@ -2081,6 +1936,7 @@ class RangeEmbedding(nn.Module):
         normalised_position = (position - self.pos_min) / (self.pos_max - self.pos_min)  # [0,1)
         bins = (self.bins * normalised_position).floor().long().detach()  # [0,1) -> [0,1..,bins) -> [0,1...,bins-1]
         return self.emb(bins)
+
 
 # TODO rename y_bins and t_bins as well as y
 class LabelConditioner(nn.Module):
@@ -2142,7 +1998,8 @@ class LabelConditioner(nn.Module):
             pos_emb = None
         return start_emb, pos_emb
 
-# TODO rename every conditioning 
+
+# TODO rename every conditioning
 class JukeboxPrior(nn.Module):
     """
     Model the prior on vq codes conditioned on timing, artist, genre, lyrics and codes from levels above. To condition
@@ -2661,7 +2518,9 @@ def get_alignment(x, music_tokens, labels, prior, level, fp16, hps):
     bs, total_length = tokens.shape[0], tokens.shape[1]
     if total_length < n_ctx:
         padding_length = n_ctx - total_length
-        tokens = torch.cat([tokens, torch.zeros(bs, n_ctx - total_length, dtype=tokens.dtype, device=tokens.device)], dim=1)
+        tokens = torch.cat(
+            [tokens, torch.zeros(bs, n_ctx - total_length, dtype=tokens.dtype, device=tokens.device)], dim=1
+        )
         total_length = tokens.shape[1]
     else:
         padding_length = 0
@@ -2677,7 +2536,7 @@ def get_alignment(x, music_tokens, labels, prior, level, fp16, hps):
         end = start + n_ctx
 
         # set y offset, sample_length and lyrics tokens
-        y, indices_hop = prior.get_y(labels, start, hps.sample_length, get_indices=True,offset=0)
+        y, indices_hop = prior.get_y(labels, start, hps.sample_length, get_indices=True, offset=0)
 
         tokens_bs = torch.chunk(tokens, bs, dim=0)
         y_bs = torch.chunk(y, bs, dim=0)
@@ -2723,7 +2582,7 @@ def save_wav(fname, lvl, metas, aud, sr):
     for i in list(range(aud.shape[0])):
         if metas is not None:
             # twitter prompts or inputs are in the form of a dictionnary
-            artists, genres, lyrics =  list(metas)[i].values()
+            artists, genres, lyrics = list(metas)[i].values()
             path = f"{fname}/lvl_{lvl}-{artists}-{genres}-{lyrics[:5]}-{i}.wav"
             soundfile.write(path, aud[i], samplerate=sr, format="wav")
         else:
@@ -2845,9 +2704,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         print(f"Sampling level {level}")
         if total_length >= self.priors[level].n_ctx:
             for start in get_range(get_starts(total_length, self.priors[level].n_ctx, hop_length)):
-                music_tokens = self.sample_single_window(
-                    music_tokens, labels, offset, sampling_kwargs, level, start
-                )
+                music_tokens = self.sample_single_window(music_tokens, labels, offset, sampling_kwargs, level, start)
 
         else:
             music_tokens = self.sample_partial_window(
@@ -2906,7 +2763,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         if sample_levels is None:
             sample_levels = range(len(self.priors))
         for level in reversed(sample_levels):
-            self.config.sample_length = total_length  # total length of the signal, might be bit different 
+            self.config.sample_length = total_length  # total length of the signal, might be bit different
             # from the actual generated length
             self.priors[level].to(music_tokens[level].device).eval()
             empty_cache()
@@ -2934,11 +2791,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
                     os.makedirs(logdir)
                 # torch.save(dict(music_tokens=music_tokens, labels=labels, sampling_kwargs=sampling_kwargs, raw_audio=raw_audio), f"{logdir}/data.pth.tar")
                 save_wav(logdir, level, metas=metas, aud=raw_audio, sr=self.config.sr)
-                if (
-                    alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0
-                ): 
+                if alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0:
                     empty_cache()
-                    #alignments = get_alignment(raw_audio, music_tokens, labels[-1], self.priors[-1], level, sampling_kwargs[-1]["fp16"], self.config)
+                    # alignments = get_alignment(raw_audio, music_tokens, labels[-1], self.priors[-1], level, sampling_kwargs[-1]["fp16"], self.config)
                     pass  # consumes too much ram
         return music_tokens
 
