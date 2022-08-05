@@ -15,7 +15,7 @@ limitations under the License.
 
 # Examples
 
-This folder contains actively maintained examples of use of 🤗 Transformers using the PyTorch backend, organized along NLP tasks.
+This folder contains actively maintained examples of use of 🤗 Transformers using the PyTorch backend, organized by ML task.
 
 ## The Big Table of Tasks
 
