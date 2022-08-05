@@ -48,47 +48,89 @@ SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = get_tests_dir("fixtures")
 def prepare_image_inputs(feature_extract_tester, equal_resolution=False, numpify=False, torchify=False):
     """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
     or a list of PyTorch tensors if one specifies torchify=True.
+
+    One can specify whether the images are of the same resolution or not.
     """
 
     assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
 
-    if equal_resolution:
-        image_inputs = []
-        for i in range(feature_extract_tester.batch_size):
-            image_inputs.append(
-                np.random.randint(
-                    255,
-                    size=(
-                        feature_extract_tester.num_channels,
-                        feature_extract_tester.max_resolution,
-                        feature_extract_tester.max_resolution,
-                    ),
-                    dtype=np.uint8,
-                )
-            )
-    else:
-        image_inputs = []
-
-        # To avoid getting image width/height 0
-        min_resolution = feature_extract_tester.min_resolution
-        if getattr(feature_extract_tester, "size_divisor", None):
-            # If `size_divisor` is defined, the image needs to have width/size >= `size_divisor`
-            min_resolution = max(feature_extract_tester.size_divisor, min_resolution)
-
-        for i in range(feature_extract_tester.batch_size):
+    image_inputs = []
+    for i in range(feature_extract_tester.batch_size):
+        if equal_resolution:
+            width = height = feature_extract_tester.max_resolution
+        else:
+            # To avoid getting image width/height 0
+            min_resolution = feature_extract_tester.min_resolution
+            if getattr(feature_extract_tester, "size_divisor", None):
+                # If `size_divisor` is defined, the image needs to have width/size >= `size_divisor`
+                min_resolution = max(feature_extract_tester.size_divisor, min_resolution)
             width, height = np.random.choice(np.arange(min_resolution, feature_extract_tester.max_resolution), 2)
-            image_inputs.append(
-                np.random.randint(255, size=(feature_extract_tester.num_channels, width, height), dtype=np.uint8)
+        image_inputs.append(
+            np.random.randint(
+                255,
+                size=(
+                    feature_extract_tester.num_channels,
+                    width,
+                    height,
+                ),
+                dtype=np.uint8,
             )
+        )
 
     if not numpify and not torchify:
         # PIL expects the channel dimension as last dimension
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+        image_inputs = [Image.fromarray(np.moveaxis(image, 0, -1)) for image in image_inputs]
 
     if torchify:
-        image_inputs = [torch.from_numpy(x) for x in image_inputs]
+        image_inputs = [torch.from_numpy(image) for image in image_inputs]
 
     return image_inputs
+
+
+def prepare_video(feature_extract_tester, width=10, height=10, numpify=False, torchify=False):
+    """This function prepares a video as a list of PIL images/NumPy arrays/PyTorch tensors."""
+
+    video = []
+    for i in range(feature_extract_tester.num_frames):
+        video.append(np.random.randint(255, size=(feature_extract_tester.num_channels, width, height), dtype=np.uint8))
+
+    if not numpify and not torchify:
+        # PIL expects the channel dimension as last dimension
+        video = [Image.fromarray(np.moveaxis(frame, 0, -1)) for frame in video]
+
+    if torchify:
+        video = [torch.from_numpy(frame) for frame in video]
+
+    return video
+
+
+def prepare_video_inputs(feature_extract_tester, equal_resolution=False, numpify=False, torchify=False):
+    """This function prepares a batch of videos: a list of list of PIL images, or a list of list of numpy arrays if
+    one specifies numpify=True, or a list of list of PyTorch tensors if one specifies torchify=True.
+
+    One can specify whether the videos are of the same resolution or not.
+    """
+
+    assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
+
+    video_inputs = []
+    for i in range(feature_extract_tester.batch_size):
+        if equal_resolution:
+            width = height = feature_extract_tester.max_resolution
+        else:
+            width, height = np.random.choice(
+                np.arange(feature_extract_tester.min_resolution, feature_extract_tester.max_resolution), 2
+            )
+            video = prepare_video(
+                feature_extract_tester=feature_extract_tester,
+                width=width,
+                height=height,
+                numpify=numpify,
+                torchify=torchify,
+            )
+        video_inputs.append(video)
+
+    return video_inputs
 
 
 class FeatureExtractionSavingTestMixin:

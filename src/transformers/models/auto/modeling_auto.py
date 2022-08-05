@@ -127,6 +127,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("unispeech", "UniSpeechModel"),
         ("unispeech-sat", "UniSpeechSatModel"),
         ("van", "VanModel"),
+        ("videomae", "VideoMAEModel"),
         ("vilt", "ViltModel"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
         ("visual_bert", "VisualBertModel"),
@@ -187,6 +188,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("unispeech", "UniSpeechForPreTraining"),
         ("unispeech-sat", "UniSpeechSatForPreTraining"),
+        ("videomae", "VideoMAEForPreTraining"),
         ("visual_bert", "VisualBertForPreTraining"),
         ("vit_mae", "ViTMAEForPreTraining"),
         ("wav2vec2", "Wav2Vec2ForPreTraining"),
@@ -378,6 +380,12 @@ MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Instance Segmentation mapping
         ("maskformer", "MaskFormerForInstanceSegmentation"),
+    ]
+)
+
+MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("videomae", "VideoMAEForVideoClassification"),
     ]
 )
 
@@ -754,6 +762,9 @@ MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING = _LazyAutoMapping(
 MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES
 )
+MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES
+)
 MODEL_FOR_VISION_2_SEQ_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES)
 MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES
@@ -936,6 +947,13 @@ class AutoModelForObjectDetection(_BaseAutoModelClass):
 
 
 AutoModelForObjectDetection = auto_class_update(AutoModelForObjectDetection, head_doc="object detection")
+
+
+class AutoModelForVideoClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING
+
+
+AutoModelForVideoClassification = auto_class_update(AutoModelForVideoClassification, head_doc="video classification")
 
 
 class AutoModelForVision2Seq(_BaseAutoModelClass):
