@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # Allenamento distribuito con 🤗 Accelerate
 
-La parallelizzazione è emersa come strategia per allenare modelli sempre più grandi su hardware limitato e accelerarne la velocità di allenamento di diversi ordini di magnitudine. In Hugging Face, abbiamo creato la libreria [🤗 Accelerate](https://huggingface.co/docs/accelerate/index.html) per aiutarti ad allenare in modo semplice un modello 🤗 Transformers su qualsiasi tipo di configurazione distribuita, sia che si tratti di più GPU su una sola macchina o di più GPU su più macchine. In questo tutorial, imparerai come personalizzare il training loop nativo di PyTorch per consentire l'addestramento in un ambiente distribuito.
+La parallelizzazione è emersa come strategia per allenare modelli sempre più grandi su hardware limitato e accelerarne la velocità di allenamento di diversi ordini di magnitudine. In Hugging Face, abbiamo creato la libreria [🤗 Accelerate](https://huggingface.co/docs/accelerate) per aiutarti ad allenare in modo semplice un modello 🤗 Transformers su qualsiasi tipo di configurazione distribuita, sia che si tratti di più GPU su una sola macchina o di più GPU su più macchine. In questo tutorial, imparerai come personalizzare il training loop nativo di PyTorch per consentire l'addestramento in un ambiente distribuito.
 
 ## Configurazione
 
@@ -129,4 +129,4 @@ La libreria 🤗 Accelerate può anche essere utilizzata in un notebook se stai 
 >>> notebook_launcher(training_function)
 ```
 
-Per maggiori informazioni relative a 🤗 Accelerate e le sue numerose funzionalità, fai riferimento alla [documentazione](https://huggingface.co/docs/accelerate/index.html).
+Per maggiori informazioni relative a 🤗 Accelerate e le sue numerose funzionalità, fai riferimento alla [documentazione](https://huggingface.co/docs/accelerate).
