@@ -389,6 +389,14 @@ def get_tokenizer_config(
     tokenizer.save_pretrained("tokenizer-test")
     tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
+    user_agent = {
+        "file_type": "tokenizer",
+        "from_auto_class": kwargs.get("_from_auto", False),
+        "is_fast": kwargs.get("is_fast", False),
+    }
+    if "_from_pipeline" in kwargs:
+        user_agent["using_pipeline"] = kwargs.get("_from_pipeline")
+
     resolved_config_file = get_file_from_repo(
         pretrained_model_name_or_path,
         TOKENIZER_CONFIG_FILE,
@@ -399,6 +407,7 @@ def get_tokenizer_config(
         use_auth_token=use_auth_token,
         revision=revision,
         local_files_only=local_files_only,
+        user_agent=user_agent,
     )
     if resolved_config_file is None:
         logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
@@ -502,7 +511,7 @@ class AutoTokenizer:
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
 
-        use_fast = kwargs.pop("use_fast", True)
+        use_fast = kwargs.get("use_fast", True)
         tokenizer_type = kwargs.pop("tokenizer_type", None)
         trust_remote_code = kwargs.pop("trust_remote_code", False)
 

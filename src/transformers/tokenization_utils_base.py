@@ -1701,6 +1701,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     revision=revision,
                     local_files_only=local_files_only,
                     subfolder=subfolder,
+                    user_agent=user_agent,
                 )
                 if resolved_config_file is not None:
                     with open(resolved_config_file, encoding="utf-8") as reader:
@@ -3196,8 +3197,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 )
                 if truncation_strategy == TruncationStrategy.ONLY_FIRST:
                     error_msg = (
-                        error_msg
-                        + "Please select another truncation strategy than "
+                        error_msg + "Please select another truncation strategy than "
                         f"{truncation_strategy}, for instance 'longest_first' or 'only_second'."
                     )
                 logger.error(error_msg)

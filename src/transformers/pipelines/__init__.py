@@ -579,10 +579,11 @@ def pipeline(
 
     # Config is the primordial information item.
     # Instantiate config if needed
+    _from_pipeline = "auto" if task is None else task
     if isinstance(config, str):
-        config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        config = AutoConfig.from_pretrained(config, _from_pipeline=_from_pipeline, **hub_kwargs, **model_kwargs)
     elif config is None and isinstance(model, str):
-        config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        config = AutoConfig.from_pretrained(model, _from_pipeline=_from_pipeline, **hub_kwargs, **model_kwargs)
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:

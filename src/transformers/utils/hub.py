@@ -473,18 +473,25 @@ def timed_cache(ttl):
             cache[key] = (time.time(), result)
             return result
 
+        def clear_cache():
+            nonlocal cache
+            cache.clear()
+
+        wrapped.clear_cache = clear_cache
+
         return wrapped
 
     return true_decorator
 
 
-@timed_cache(ttl=10)
-def request_head(url, headers, allow_redirects, proxies, timeout):
-
-    print("----")
-    print(f"Fetching {url}")
+def _request_head(url, headers, allow_redirects, proxies, timeout):
     r = requests.head(url, headers=headers, allow_redirects=allow_redirects, proxies=proxies, timeout=timeout)
     return r
+
+
+@timed_cache(ttl=10)
+def request_head(url, headers, allow_redirects, proxies, timeout):
+    return _request_head(url, headers, allow_redirects, proxies, timeout)
 
 
 def get_from_cache(
@@ -881,6 +888,7 @@ def get_file_from_repo(
     revision: Optional[str] = None,
     local_files_only: bool = False,
     subfolder: str = "",
+    user_agent: Dict[str, str] = None,
 ):
     """
     Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
@@ -948,6 +956,7 @@ def get_file_from_repo(
         subfolder=subfolder,
         _raise_exceptions_for_missing_entries=False,
         _raise_exceptions_for_connection_errors=False,
+        user_agent=user_agent,
     )
 
 

@@ -420,7 +420,9 @@ class _BaseAutoModelClass:
         trust_remote_code = kwargs.pop("trust_remote_code", False)
         kwargs["_from_auto"] = True
         if not isinstance(config, PretrainedConfig):
-            config, kwargs = AutoConfig.from_pretrained(
+            # TODO this seems to eat up from_auto_class and `_from_pipeline` kwargs
+            # which are necessary for tracking.
+            config, _kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path, return_unused_kwargs=True, trust_remote_code=trust_remote_code, **kwargs
             )
         if hasattr(config, "auto_map") and cls.__name__ in config.auto_map:

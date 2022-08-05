@@ -24,7 +24,8 @@ import transformers
 
 # Try to import everything from transformers to ensure every object can be loaded.
 from transformers import *  # noqa F406
-from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER
+from transformers import AutoFeatureExtractor, AutoModel, AutoTokenizer, pipeline
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_tokenizers, require_torch
 from transformers.utils import (
     CONFIG_NAME,
     FLAX_WEIGHTS_NAME,
@@ -218,3 +219,209 @@ class GenericUtilTests(unittest.TestCase):
             self.assertEqual(find_labels(FlaxBertForSequenceClassification), [])
             self.assertEqual(find_labels(FlaxBertForPreTraining), [])
             self.assertEqual(find_labels(FlaxBertForQuestionAnswering), [])
+
+
+class TelemetryTest(unittest.TestCase):
+    url = "https://huggingface.co/hf-internal-testing/tiny-random-gpt2/resolve/main/"
+
+    def setUp(self):
+        import transformers.utils.hub
+
+        self.real_request_head = transformers.utils.hub._request_head
+
+        self.calls = []
+
+        def counter_request_head(*args, **kwargs):
+            self.calls.append([args, kwargs])
+            return self.real_request_head(*args, **kwargs)
+
+        transformers.utils.hub._request_head = counter_request_head
+
+    def tearDown(self):
+        transformers.utils.hub._request_head = self.real_request_head
+        transformers.utils.hub.request_head.clear_cache()
+
+    @require_torch
+    def test_pipeline(self):
+        pipeline(task="text-generation", model="hf-internal-testing/tiny-random-gpt2")
+
+        files = [args[0][len(self.url) :] for args, _ in self.calls]
+        self.assertEqual(
+            files,
+            [
+                "config.json",
+                "pytorch_model.bin",
+                "tokenizer_config.json",
+                "vocab.json",
+                "merges.txt",
+                "tokenizer.json",
+                "added_tokens.json",
+                "special_tokens_map.json",
+            ],
+        )
+
+        for file, (args, _) in zip(files, self.calls):
+            headers = args[1]
+            user_agent = headers["user-agent"]
+
+            self.assertIn(
+                "using_pipeline/text-generation",
+                user_agent,
+                f"user_agent is incorrect for file {file}",
+            )
+
+    @require_tokenizers
+    def test_tokenizer(self):
+        AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+
+        files = [args[0][len(self.url) :] for args, _ in self.calls]
+        self.assertEqual(
+            files,
+            [
+                "tokenizer_config.json",
+                "vocab.json",
+                "merges.txt",
+                "tokenizer.json",
+                "added_tokens.json",
+                "special_tokens_map.json",
+            ],
+        )
+
+        for file, (args, _) in zip(files, self.calls):
+            headers = args[1]
+            user_agent = headers["user-agent"]
+
+            self.assertIn(
+                "file_type/tokenizer",
+                user_agent,
+                f"user_agent is incorrect for file {file}",
+            )
+            self.assertIn(
+                "is_fast/True",
+                user_agent,
+                f"user_agent is incorrect for file {file}",
+            )
+
+    def test_slow_tokenizer(self):
+        AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2", use_fast=False)
+
+        files = [args[0][len(self.url) :] for args, _ in self.calls]
+        self.assertEqual(
+            files,
+            [
+                "tokenizer_config.json",
+                "vocab.json",
+                "merges.txt",
+                "added_tokens.json",
+                "special_tokens_map.json",
+            ],
+        )
+
+        for file, (args, _) in zip(files, self.calls):
+            headers = args[1]
+            user_agent = headers["user-agent"]
+
+            self.assertIn(
+                "file_type/tokenizer",
+                user_agent,
+                f"user_agent is incorrect for file {file}",
+            )
+            self.assertIn(
+                "from_auto_class/True",
+                user_agent,
+                f"user_agent is incorrect for file {file}",
+            )
+            self.assertIn(
+                "is_fast/False",
+                user_agent,
+                f"user_agent is incorrect for file {file}",
+            )
+
+    @require_torch
+    def test_model(self):
+        AutoModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+
+        files = [args[0][len(self.url) :] for args, _ in self.calls]
+        self.assertEqual(
+            files,
+            [
+                "config.json",
+                "pytorch_model.bin",
+            ],
+        )
+
+        for file, (args, _) in zip(files, self.calls):
+            if file == "config.json":
+                # Skip config
+                continue
+            headers = args[1]
+            user_agent = headers["user-agent"]
+
+            self.assertIn(
+                "file_type/model",
+                user_agent,
+                f"user_agent is incorrect for file {file}",
+            )
+            self.assertIn(
+                "from_auto_class/True",
+                user_agent,
+                f"user_agent is incorrect for file {file}",
+            )
+
+    @require_torch
+    def test_model_raw(self):
+        from transformers import GPT2Model
+
+        GPT2Model.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+
+        files = [args[0][len(self.url) :] for args, _ in self.calls]
+        self.assertEqual(
+            files,
+            [
+                "config.json",
+                "pytorch_model.bin",
+            ],
+        )
+
+        for file, (args, _) in zip(files, self.calls):
+            if file == "config.json":
+                # Skip config
+                continue
+            headers = args[1]
+            user_agent = headers["user-agent"]
+
+            self.assertIn(
+                "file_type/model",
+                user_agent,
+                f"user_agent is incorrect for file {file}",
+            )
+            self.assertIn(
+                "from_auto_class/False",
+                user_agent,
+                f"user_agent is incorrect for file {file}",
+            )
+
+    def test_feature_extractor(self):
+        AutoFeatureExtractor.from_pretrained("hf-internal-testing/tiny-random-wav2vec2")
+        url = "https://huggingface.co/hf-internal-testing/tiny-random-wav2vec2/resolve/main/"
+
+        files = [args[0][len(url) :] for args, _ in self.calls]
+        self.assertEqual(
+            files,
+            ["preprocessor_config.json"],
+        )
+
+        for file, (args, _) in zip(files, self.calls):
+            headers = args[1]
+            user_agent = headers["user-agent"]
+
+            self.assertIn(
+                "file_type/feature extractor",
+                user_agent,
+                f"user_agent is incorrect for file {file}",
+            )
+            self.assertIn(
+                "from_auto_class/True",
+                user_agent,
+                f"user_agent is incorrect for file {file}",
+            )
