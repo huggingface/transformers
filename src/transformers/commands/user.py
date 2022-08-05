@@ -103,7 +103,7 @@ class LoginCommand(BaseUserCommand):
     def run(self):
         print(
             ANSI.red(
-                "ERROR! `transformers-cli login` uses an outdated login mechanism "
+                "ERROR! `huggingface-cli login` uses an outdated login mechanism "
                 "that is not compatible with the Hugging Face Hub backend anymore. "
                 "Please use `huggingface-cli login instead."
             )
