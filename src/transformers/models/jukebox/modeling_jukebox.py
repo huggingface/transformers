@@ -157,18 +157,13 @@ class Resnet1D(nn.Module):
         self.checkpoint_res = checkpoint_res
         if reverse_dilation:
             blocks = blocks[::-1]
-        if self.checkpoint_res == 1:
-            self.blocks = nn.ModuleList(blocks)
-        else:
-            self.model = nn.Sequential(*blocks)
+        self.resnet_block = nn.ModuleList(blocks)
+        
 
     def forward(self, hidden_states):
-        if self.checkpoint_res == 1:
-            for block in self.blocks:
-                hidden_states = block(hidden_states)
-            return hidden_states
-        return self.model(hidden_states)
-
+        for block in self.resnet_block:
+            hidden_states = block(hidden_states)
+        return hidden_states
 
 class EncoderConvBlock(nn.Module):
     def __init__(
@@ -190,19 +185,18 @@ class EncoderConvBlock(nn.Module):
         filter_t, pad_t = stride_t * 2, stride_t // 2
         if down_t > 0:
             for i in range(down_t):
-                # TODO remvove the sequential in favor of a more understanble code
-                block = nn.Sequential(
-                    nn.Conv1d(input_emb_width if i == 0 else width, width, filter_t, stride_t, pad_t),
-                    Resnet1D(width, depth, m_conv, dilation_growth_rate, dilation_cycle, zero_out, res_scale),
+                blocks.append(nn.Conv1d(input_emb_width if i == 0 else width, width, filter_t, stride_t, pad_t))
+                blocks.append(
+                    Resnet1D(width, depth, m_conv, dilation_growth_rate, dilation_cycle, zero_out, res_scale)
                 )
-                blocks.append(block)
-            block = nn.Conv1d(width, output_emb_width, 3, 1, 1)
-            blocks.append(block)
-        self.model = nn.Sequential(*blocks)
+        self.proj_out = nn.Conv1d(width, output_emb_width, 3, 1, 1)
+        self.downsample_block = nn.ModuleList(blocks)
 
     def forward(self, hidden_states):
-        return self.model(hidden_states)
-
+        for block in self.downsample_block:
+            hidden_states = block(hidden_states)
+        hidden_states = self.proj_out(hidden_states)
+        return hidden_states
 
 class DecoderConvBock(nn.Module):
     def __init__(
@@ -225,12 +219,9 @@ class DecoderConvBock(nn.Module):
         blocks = []
         if down_t > 0:
             filter_t, pad_t = stride_t * 2, stride_t // 2
-            block = nn.Conv1d(output_emb_width, width, 3, 1, 1)
-            blocks.append(block)
-            # TODO replace with modulelists
+            self.proj_in = nn.Conv1d(output_emb_width, width, 3, 1, 1)
             for i in range(down_t):
-                block = nn.Sequential(
-                    Resnet1D(
+                blocks.append( Resnet1D(
                         width,
                         depth,
                         m_conv,
@@ -240,18 +231,21 @@ class DecoderConvBock(nn.Module):
                         res_scale=res_scale,
                         reverse_dilation=reverse_decoder_dilation,
                         checkpoint_res=checkpoint_res,
-                    ),
-                    nn.ConvTranspose1d(
-                        width, input_emb_width if i == (down_t - 1) else width, filter_t, stride_t, pad_t
-                    ),
+                    )
                 )
-                blocks.append(block)
-        self.model = nn.Sequential(*blocks)
+                blocks.append( nn.ConvTranspose1d(
+                        width, input_emb_width if i == (down_t - 1) else width, filter_t, stride_t, pad_t
+                    )
+                )
+                
+        self.upsample_block = nn.ModuleList(blocks)
 
     def forward(self, hidden_states):
-        return self.model(hidden_states)
-
-
+        hidden_states = self.proj_in(hidden_states)
+        for block in self.upsample_block:
+            hidden_states = block(hidden_states)
+        return hidden_states
+    
 class Encoder(nn.Module):
     def __init__(self, input_emb_width, output_emb_width, levels, downs_t, strides_t, **block_kwargs):
         super().__init__()
@@ -341,27 +335,6 @@ def update(params):
 def calculate_strides(strides, downs):
     return [stride**down for stride, down in zip(strides, downs)]
 
-# TODO Remove losses
-def _loss_fn(loss_fn, x_target, x_pred, hps):
-    if loss_fn == "l1":
-        return torch.mean(torch.abs(x_pred - x_target)) / hps.bandwidth["l1"]
-    elif loss_fn == "l2":
-        return torch.mean((x_pred - x_target) ** 2) / hps.bandwidth["l2"]
-    elif loss_fn == "linf":
-        residual = ((x_pred - x_target) ** 2).reshape(x_target.shape[0], -1)
-        values, _ = torch.topk(residual, hps.linf_k, dim=1)
-        return torch.mean(values) / hps.bandwidth["l2"]
-    elif loss_fn == "lmix":
-        loss = 0.0
-        if hps.lmix_l1:
-            loss += hps.lmix_l1 * _loss_fn("l1", x_target, x_pred, hps)
-        if hps.lmix_l2:
-            loss += hps.lmix_l2 * _loss_fn("l2", x_target, x_pred, hps)
-        if hps.lmix_linf:
-            loss += hps.lmix_linf * _loss_fn("linf", x_target, x_pred, hps)
-        return loss
-    else:
-        assert False, f"Unknown loss_fn {loss_fn}"
 
 
 class BottleneckBlock(nn.Module):
