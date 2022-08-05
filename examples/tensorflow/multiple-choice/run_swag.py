@@ -54,17 +54,6 @@ logger = logging.getLogger(__name__)
 
 
 # region Helper classes and functions
-class SavePretrainedCallback(tf.keras.callbacks.Callback):
-    # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
-    # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
-    # that saves the model with this method after each epoch.
-    def __init__(self, output_dir, **kwargs):
-        super().__init__()
-        self.output_dir = output_dir
-
-    def on_epoch_end(self, epoch, logs=None):
-        self.model.save_pretrained(self.output_dir)
-
 
 @dataclass
 class DataCollatorForMultipleChoice:
@@ -391,7 +380,6 @@ def main():
         if "train" not in raw_datasets:
             raise ValueError("--do_train requires a train dataset")
         train_dataset = raw_datasets["train"]
-        non_label_columns = [feature for feature in train_dataset.features if feature not in ("label", "labels")]
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
@@ -444,66 +432,72 @@ def main():
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
+
         if training_args.do_train:
-            total_train_steps = (len(train_dataset) // total_train_batch_size) * int(training_args.num_train_epochs)
+            num_train_steps = (len(train_dataset) // total_train_batch_size) * int(training_args.num_train_epochs)
+            if training_args.warmup_steps > 0:
+                num_warmup_steps = training_args.warmup_steps
+            elif training_args.warmup_ratio > 0:
+                num_warmup_steps = int(num_train_steps * training_args.warmup_ratio)
+            else:
+                num_warmup_steps = 0
             optimizer, lr_schedule = create_optimizer(
-                init_lr=training_args.learning_rate, num_train_steps=int(total_train_steps), num_warmup_steps=0
+                init_lr=training_args.learning_rate,
+                num_train_steps=num_train_steps,
+                num_warmup_steps=num_warmup_steps,
+                adam_beta1=training_args.adam_beta1,
+                adam_beta2=training_args.adam_beta2,
+                adam_epsilon=training_args.adam_epsilon,
+                weight_decay_rate=training_args.weight_decay,
+                adam_global_clipnorm=training_args.max_grad_norm,
             )
         else:
-            optimizer = "adam"  # Just put anything in here, since we're not using it anyway
-        model.compile(
-            optimizer=optimizer,
-            loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-            metrics=[tf.keras.metrics.SparseCategoricalAccuracy(name="accuracy")],
-        )
+            optimizer = None
+            lr_schedule = None
+        model.compile(optimizer=optimizer, metrics=['accuracy'], jit_compile=training_args.xla)
         # endregion
 
         # region Training
         if training_args.do_train:
-            dataset_exclude_cols = set(non_label_columns + ["label"])
-            tf_train_dataset = train_dataset.to_tf_dataset(
-                columns=[col for col in train_dataset.column_names if col not in dataset_exclude_cols],
+            dataset_options = tf.data.Options()
+            dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+
+            tf_train_dataset = model.prepare_tf_dataset(
+                train_dataset,
                 shuffle=True,
                 batch_size=total_train_batch_size,
                 collate_fn=data_collator,
-                drop_remainder=True,
-                # `label_cols` is needed for user-defined losses, such as in this example
-                label_cols="label" if "label" in train_dataset.column_names else None,
-            )
+            ).with_options(dataset_options)
 
             if training_args.do_eval:
-                validation_data = eval_dataset.to_tf_dataset(
-                    columns=[col for col in eval_dataset.column_names if col not in dataset_exclude_cols],
+                validation_data = model.prepare_tf_dataset(
+                    eval_dataset,
                     shuffle=False,
                     batch_size=total_eval_batch_size,
                     collate_fn=data_collator,
                     drop_remainder=True,
-                    # `label_cols` is needed for user-defined losses, such as in this example
-                    label_cols="label" if "label" in eval_dataset.column_names else None,
-                )
+                ).with_options(dataset_options)
             else:
                 validation_data = None
             model.fit(
                 tf_train_dataset,
                 validation_data=validation_data,
                 epochs=int(training_args.num_train_epochs),
-                callbacks=[SavePretrainedCallback(output_dir=training_args.output_dir)],
             )
         # endregion
 
         # region Evaluation
         if training_args.do_eval and not training_args.do_train:
-            dataset_exclude_cols = set(non_label_columns + ["label"])
+            dataset_options = tf.data.Options()
+            dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
             # Do a standalone evaluation pass
-            tf_eval_dataset = eval_dataset.to_tf_dataset(
-                columns=[col for col in eval_dataset.column_names if col not in dataset_exclude_cols],
+            tf_eval_dataset = model.prepare_tf_dataset(
+                eval_dataset,
                 shuffle=False,
                 batch_size=total_eval_batch_size,
                 collate_fn=data_collator,
                 drop_remainder=True,
-                # `label_cols` is needed for user-defined losses, such as in this example
-                label_cols="label" if "label" in eval_dataset.column_names else None,
-            )
+            ).with_options(dataset_options)
             model.evaluate(tf_eval_dataset)
         # endregion
 

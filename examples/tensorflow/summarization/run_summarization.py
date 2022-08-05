@@ -22,7 +22,6 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from functools import partial
 from typing import Optional
 
 import datasets
@@ -30,7 +29,6 @@ import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
 import tensorflow as tf
 from datasets import load_dataset
-from tqdm import tqdm
 
 import evaluate
 import transformers
@@ -43,6 +41,8 @@ from transformers import (
     TFTrainingArguments,
     create_optimizer,
     set_seed,
+    DataCollatorForSeq2Seq,
+    KerasMetricCallback,
 )
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, is_offline_mode, send_example_telemetry
@@ -253,7 +253,6 @@ class DataTrainingArguments:
 
 # endregion
 
-
 # region Dataset name mappings
 summarization_name_mapping = {
     "amazon_reviews_multi": ("review_body", "review_title"),
@@ -270,72 +269,6 @@ summarization_name_mapping = {
     "multi_news": ("document", "summary"),
 }
 # endregion
-
-
-# region Data generator
-def sample_generator(dataset, model, tokenizer, shuffle, pad_to_multiple_of=None):
-    if shuffle:
-        sample_ordering = np.random.permutation(len(dataset))
-    else:
-        sample_ordering = np.arange(len(dataset))
-    for sample_idx in sample_ordering:
-        example = dataset[int(sample_idx)]
-        # Handle dicts with proper padding and conversion to tensor.
-        example = tokenizer.pad(example, return_tensors="np", pad_to_multiple_of=pad_to_multiple_of)
-        example = {key: tf.convert_to_tensor(arr, dtype_hint=tf.int32) for key, arr in example.items()}
-        if model is not None and hasattr(model, "prepare_decoder_input_ids_from_labels"):
-            decoder_input_ids = model.prepare_decoder_input_ids_from_labels(
-                labels=tf.expand_dims(example["labels"], 0)
-            )
-            example["decoder_input_ids"] = tf.squeeze(decoder_input_ids, 0)
-        yield example, example["labels"]  # TF needs some kind of labels, even if we don't use them
-    return
-
-
-# endregion
-
-
-# region Helper functions
-def dataset_to_tf(dataset, model, tokenizer, total_batch_size, num_epochs, shuffle):
-    if dataset is None:
-        return None
-    train_generator = partial(sample_generator, dataset, model, tokenizer, shuffle=shuffle)
-    train_signature = {
-        feature: tf.TensorSpec(shape=(None,), dtype=tf.int32)
-        for feature in dataset.features
-        if feature != "special_tokens_mask"
-    }
-    if (
-        model is not None
-        and "decoder_input_ids" not in train_signature
-        and hasattr(model, "prepare_decoder_input_ids_from_labels")
-    ):
-        train_signature["decoder_input_ids"] = train_signature["labels"]
-    # This may need to be changed depending on your particular model or tokenizer!
-    padding_values = {
-        key: tf.convert_to_tensor(tokenizer.pad_token_id if tokenizer.pad_token_id is not None else 0, dtype=tf.int32)
-        for key in train_signature.keys()
-    }
-    padding_values["labels"] = tf.convert_to_tensor(-100, dtype=tf.int32)
-    train_signature["labels"] = train_signature["input_ids"]
-    train_signature = (train_signature, train_signature["labels"])
-    options = tf.data.Options()
-    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
-    tf_dataset = (
-        tf.data.Dataset.from_generator(train_generator, output_signature=train_signature)
-        .with_options(options)
-        .padded_batch(
-            batch_size=total_batch_size,
-            drop_remainder=True,
-            padding_values=(padding_values, np.array(-100, dtype=np.int32)),
-        )
-        .repeat(int(num_epochs))
-    )
-    return tf_dataset
-
-
-# endregion
-
 
 def main():
     # region Argument parsing
@@ -587,58 +520,100 @@ def main():
         if model.config.decoder_start_token_id is None:
             raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
+        label_pad_token_id = -100 if data_args.ignore_pad_token_for_loss else tokenizer.pad_token_id
+        data_collator = DataCollatorForSeq2Seq(
+            tokenizer,
+            model=model,
+            label_pad_token_id=label_pad_token_id,
+            pad_to_multiple_of=128,  # Reduce the number of unique shapes for XLA, especially for generation
+            return_tensors='tf',
+        )
+
+        dataset_options = tf.data.Options()
+        dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
-        tf_train_dataset = dataset_to_tf(
+        tf_train_dataset = model.prepare_tf_dataset(
             train_dataset,
-            model,
-            tokenizer,
-            total_batch_size=total_train_batch_size,
-            num_epochs=training_args.num_train_epochs,
+            collate_fn=data_collator,
+            batch_size=total_train_batch_size,
             shuffle=True,
-        )
-        tf_eval_dataset = dataset_to_tf(
+        ).with_options(dataset_options)
+        tf_eval_dataset = model.prepare_tf_dataset(
             eval_dataset,
-            model,
-            tokenizer,
-            total_eval_batch_size,
-            num_epochs=1,
+            collate_fn=data_collator,
+            batch_size=total_eval_batch_size,
             shuffle=False,
-        )
+        ).with_options(dataset_options)
         # endregion
 
         # region Optimizer, loss and LR scheduling
-        # Scheduler and math around the number of training steps.
-        num_update_steps_per_epoch = len(train_dataset) // total_train_batch_size
-        num_train_steps = training_args.num_train_epochs * num_update_steps_per_epoch
-        optimizer, lr_schedule = create_optimizer(
-            init_lr=training_args.learning_rate, num_train_steps=num_train_steps, num_warmup_steps=0
-        )
-
-        def masked_sparse_categorical_crossentropy(y_true, y_pred):
-            # We clip the negative labels to 0 to avoid NaNs appearing in the output and
-            # fouling up everything that comes afterwards. The loss values corresponding to clipped values
-            # will be masked later anyway, but even masked NaNs seem to cause overflows for some reason.
-            # 1e6 is chosen as a reasonable upper bound for the number of token indices - in the unlikely
-            # event that you have more than 1 million tokens in your vocabulary, consider increasing this value.
-            # More pragmatically, consider redesigning your tokenizer.
-            losses = tf.keras.losses.sparse_categorical_crossentropy(
-                tf.clip_by_value(y_true, 0, int(1e6)), y_pred, from_logits=True
+        num_train_steps = int(len(tf_train_dataset) * training_args.num_train_epochs)
+        if training_args.warmup_steps > 0:
+            num_warmup_steps = training_args.warmup_steps
+        elif training_args.warmup_ratio > 0:
+            num_warmup_steps = int(num_train_steps * training_args.warmup_ratio)
+        else:
+            num_warmup_steps = 0
+        if training_args.do_train:
+            optimizer, lr_schedule = create_optimizer(
+                init_lr=training_args.learning_rate,
+                num_train_steps=num_train_steps,
+                num_warmup_steps=num_warmup_steps,
+                adam_beta1=training_args.adam_beta1,
+                adam_beta2=training_args.adam_beta2,
+                adam_epsilon=training_args.adam_epsilon,
+                weight_decay_rate=training_args.weight_decay,
+                adam_global_clipnorm=training_args.max_grad_norm,
             )
-            # Compute the per-sample loss only over the unmasked tokens
-            losses = tf.ragged.boolean_mask(losses, y_true != -100)
-            losses = tf.reduce_mean(losses, axis=-1)
-            return losses
+        else:
+            optimizer = None
+            lr_schedule = None
 
         # endregion
 
-        # region Metric
-        metric = evaluate.load("rouge")
+        # region Metric and KerasMetricCallback
+        if training_args.do_eval:
+            metric = evaluate.load("rouge")
+
+            if data_args.val_max_target_length is None:
+                data_args.val_max_target_length = data_args.max_target_length
+
+            gen_kwargs = {
+                "max_length": data_args.val_max_target_length if data_args is not None else config.max_length,
+                "num_beams": data_args.num_beams,
+                "no_repeat_ngram_size": 0  # Not supported under XLA right now, and some models set it by default
+            }
+
+            def compute_metrics(preds):
+                predictions, labels = preds
+                if isinstance(predictions, tuple):
+                    predictions = predictions[0]
+                decoded_preds = tokenizer.batch_decode(predictions, skip_special_tokens=True)
+                labels = np.where(labels != -100, labels, tokenizer.pad_token_id)
+                decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
+                decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
+                metrics = metric.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
+                # Only print the mid f-measures, but there are a lot of other statistics in there too!
+                metrics = {key: round(val.mid.fmeasure * 100, 4) for key, val in metrics.items()}
+                return metrics
+
+            metric_callback = KerasMetricCallback(
+                metric_fn=compute_metrics,
+                eval_dataset=tf_eval_dataset,
+                predict_with_generate=True,
+                use_xla_generation=True,
+                generate_kwargs=gen_kwargs
+            )
+            callbacks = [metric_callback]
+        else:
+            callbacks = []
         # endregion
 
         # region Training
-        model.compile(loss={"logits": masked_sparse_categorical_crossentropy}, optimizer=optimizer)
+        model.compile(optimizer=optimizer, jit_compile=training_args.xla)
 
         if training_args.do_train:
             logger.info("***** Running training *****")
@@ -648,28 +623,22 @@ def main():
             logger.info(f"  Total train batch size = {total_train_batch_size}")
             logger.info(f"  Total optimization steps = {num_train_steps}")
 
-            model.fit(
-                tf_train_dataset,
-                epochs=int(training_args.num_train_epochs),
-                steps_per_epoch=num_update_steps_per_epoch,
-            )
+            model.fit(tf_train_dataset, epochs=int(training_args.num_train_epochs), callbacks=callbacks)
         # endregion
 
         # region Validation
-        if data_args.val_max_target_length is None:
-            data_args.val_max_target_length = data_args.max_target_length
 
-        gen_kwargs = {
-            "max_length": data_args.val_max_target_length if data_args is not None else config.max_length,
-            "num_beams": data_args.num_beams,
-        }
-        if training_args.do_eval:
+        if training_args.do_eval and not training_args.do_train:
+            # Do a standalone evaluation run
             logger.info("Evaluation...")
-            for batch, labels in tqdm(
-                tf_eval_dataset, total=len(eval_dataset) // training_args.per_device_eval_batch_size
-            ):
+
+            @tf.function(jit_compile=True)
+            def generate(**kwargs):
+                return model.generate(**kwargs)
+
+            for batch, labels in tf_eval_dataset:
                 batch.update(gen_kwargs)
-                generated_tokens = model.generate(**batch)
+                generated_tokens = generate(**batch)
                 if isinstance(generated_tokens, tuple):
                     generated_tokens = generated_tokens[0]
                 decoded_preds = tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
@@ -680,7 +649,7 @@ def main():
                 metric.add_batch(predictions=decoded_preds, references=decoded_labels)
 
             result = metric.compute(use_stemmer=True)
-            result = {k: round(v * 100, 4) for k, v in result.items()}
+            result = {key: round(val.mid.fmeasure * 100, 4) for key, val in result.items()}
 
             logger.info(result)
         # endregion
