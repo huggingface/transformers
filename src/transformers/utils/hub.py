@@ -81,7 +81,7 @@ old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 hf_cache_home = os.path.expanduser(
     os.getenv("HF_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
 )
-default_cache_path = os.path.join(hf_cache_home, "transformers")
+default_cache_path = os.path.join(hf_cache_home, "hub")
 
 # Onetime move from the old location to the new one if no ENV variable has been set.
 if (
@@ -102,7 +102,8 @@ if (
 
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
-TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
+HUGGINGFACE_HUB_CACHE = os.getenv("HUGGINGFACE_HUB_CACHE", PYTORCH_TRANSFORMERS_CACHE)
+TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", HUGGINGFACE_HUB_CACHE)
 HF_MODULES_CACHE = os.getenv("HF_MODULES_CACHE", os.path.join(hf_cache_home, "modules"))
 TRANSFORMERS_DYNAMIC_MODULE_NAME = "transformers_modules"
 SESSION_ID = uuid4().hex
@@ -1475,9 +1476,16 @@ def move_to_new_cache(file, repo, filename, revision, etag, commit_hash):
     clean_files_for(file)
 
 
-def move_cache(cache_dir=None, token=None):
+def move_cache(cache_dir=None, new_cache_dir=None, token=None):
+    if new_cache_dir is None:
+        new_cache_dir = TRANSFORMERS_CACHE
     if cache_dir is None:
-        cache_dir = TRANSFORMERS_CACHE
+        # Migrate from old cache in .cache/huggingface/hub
+        old_cache = Path(TRANSFORMERS_CACHE).parent / "transformers"
+        if os.path.isdir(str(old_cache)):
+            cache_dir = str(old_cache)
+        else:
+            cache_dir = new_cache_dir
     if token is None:
         token = HfFolder.get_token()
     cached_files = get_all_cached_files(cache_dir=cache_dir)
