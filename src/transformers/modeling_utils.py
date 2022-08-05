@@ -31,7 +31,6 @@ from packaging import version
 from torch import Tensor, device, nn
 from torch.nn import CrossEntropyLoss
 
-from requests import HTTPError
 from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 from transformers.utils.import_utils import is_sagemaker_mp_enabled
 
@@ -51,24 +50,18 @@ from .pytorch_utils import (  # noqa: F401
 from .utils import (
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
-    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     TF2_WEIGHTS_NAME,
     TF_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     ContextManagers,
-    EntryNotFoundError,
     ModelOutput,
     PushToHubMixin,
-    RepositoryNotFoundError,
-    RevisionNotFoundError,
-    cached_path,
+    cached_file,
     copy_func,
     has_file,
-    hf_bucket_url,
     is_accelerate_available,
     is_offline_mode,
-    is_remote_url,
     logging,
     replace_return_docstrings,
 )
@@ -1868,7 +1861,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         if pretrained_model_name_or_path is not None:
             pretrained_model_name_or_path = str(pretrained_model_name_or_path)
-            if os.path.isdir(pretrained_model_name_or_path):
+            is_local = os.path.isdir(pretrained_model_name_or_path)
+            if is_local:
                 if from_tf and os.path.isfile(
                     os.path.join(pretrained_model_name_or_path, subfolder, TF_WEIGHTS_NAME + ".index")
                 ):
@@ -1911,10 +1905,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         f"Error no file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME + '.index'} or "
                         f"{FLAX_WEIGHTS_NAME} found in directory {pretrained_model_name_or_path}."
                     )
-            elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)) or is_remote_url(
-                pretrained_model_name_or_path
-            ):
+            elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
                 archive_file = pretrained_model_name_or_path
+                is_local = True
             elif os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path + ".index")):
                 if not from_tf:
                     raise ValueError(
@@ -1922,6 +1915,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         "from_tf to True to load from this checkpoint."
                     )
                 archive_file = os.path.join(subfolder, pretrained_model_name_or_path + ".index")
+                is_local = True
             else:
                 # set correct filename
                 if from_tf:
@@ -1931,63 +1925,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 else:
                     filename = WEIGHTS_NAME
 
-                archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path,
-                    filename=filename,
-                    revision=revision,
-                    mirror=mirror,
-                    subfolder=subfolder if len(subfolder) > 0 else None,
-                )
+                try:
+                    # Load from URL or cache if already cached
+                    cached_file_kwargs = dict(
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        resume_download=resume_download,
+                        local_files_only=local_files_only,
+                        use_auth_token=use_auth_token,
+                        user_agent=user_agent,
+                        revision=revision,
+                        subfolder=subfolder,
+                        _raise_exceptions_for_missing_entries=False,
+                    )
+                    resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
-            try:
-                # Load from URL or cache if already cached
-                resolved_archive_file = cached_path(
-                    archive_file,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    use_auth_token=use_auth_token,
-                    user_agent=user_agent,
-                )
-
-            except RepositoryNotFoundError:
-                raise EnvironmentError(
-                    f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
-                    "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a "
-                    "token having permission to this repo with `use_auth_token` or log in with `huggingface-cli "
-                    "login` and pass `use_auth_token=True`."
-                )
-            except RevisionNotFoundError:
-                raise EnvironmentError(
-                    f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for "
-                    "this model name. Check the model page at "
-                    f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
-                )
-            except EntryNotFoundError:
-                if filename == WEIGHTS_NAME:
-                    try:
+                    # Since we set _raise_exceptions_for_missing_entries=False, we don't get an expection but a None
+                    # result when internet is up, the repo and revision exist, but the file does not.
+                    if resolved_archive_file is None and filename == WEIGHTS_NAME:
                         # Maybe the checkpoint is sharded, we try to grab the index name in this case.
-                        archive_file = hf_bucket_url(
-                            pretrained_model_name_or_path,
-                            filename=WEIGHTS_INDEX_NAME,
-                            revision=revision,
-                            mirror=mirror,
-                            subfolder=subfolder if len(subfolder) > 0 else None,
+                        resolved_archive_file = cached_file(
+                            pretrained_model_name_or_path, WEIGHTS_INDEX_NAME, **cached_file_kwargs
                         )
-                        resolved_archive_file = cached_path(
-                            archive_file,
-                            cache_dir=cache_dir,
-                            force_download=force_download,
-                            proxies=proxies,
-                            resume_download=resume_download,
-                            local_files_only=local_files_only,
-                            use_auth_token=use_auth_token,
-                            user_agent=user_agent,
-                        )
-                        is_sharded = True
-                    except EntryNotFoundError:
+                        if resolved_archive_file is not None:
+                            is_sharded = True
+                    if resolved_archive_file is None:
                         # Otherwise, maybe there is a TF or Flax model file.  We try those to give a helpful error
                         # message.
                         has_file_kwargs = {
@@ -2013,42 +1976,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                 f"{pretrained_model_name_or_path} does not appear to have a file named {WEIGHTS_NAME},"
                                 f" {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or {FLAX_WEIGHTS_NAME}."
                             )
-                else:
+                except EnvironmentError:
+                    # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
+                    # to the original exception.
+                    raise
+                except Exception:
+                    # For any other exception, we throw a generic error.
                     raise EnvironmentError(
-                        f"{pretrained_model_name_or_path} does not appear to have a file named {filename}."
+                        f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it"
+                        " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+                        f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
+                        f" directory containing a file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or"
+                        f" {FLAX_WEIGHTS_NAME}."
                     )
-            except HTTPError as err:
-                raise EnvironmentError(
-                    f"There was a specific connection error when trying to load {pretrained_model_name_or_path}:\n"
-                    f"{err}"
-                )
-            except ValueError:
-                raise EnvironmentError(
-                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this model, couldn't find it"
-                    f" in the cached files and it looks like {pretrained_model_name_or_path} is not the path to a"
-                    f" directory containing a file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or"
-                    f" {FLAX_WEIGHTS_NAME}.\nCheckout your internet connection or see how to run the library in"
-                    " offline mode at 'https://huggingface.co/docs/transformers/installation#offline-mode'."
-                )
-            except EnvironmentError:
-                raise EnvironmentError(
-                    f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it from "
-                    "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
-                    f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                    f"containing a file named {WEIGHTS_NAME}, {TF2_WEIGHTS_NAME}, {TF_WEIGHTS_NAME} or "
-                    f"{FLAX_WEIGHTS_NAME}."
-                )
 
-            if resolved_archive_file == archive_file:
+            if is_local:
                 logger.info(f"loading weights file {archive_file}")
+                resolved_archive_file = archive_file
             else:
-                logger.info(f"loading weights file {archive_file} from cache at {resolved_archive_file}")
+                logger.info(f"loading weights file {filename} from cache at {resolved_archive_file}")
         else:
             resolved_archive_file = None
 
         # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
         if is_sharded:
-            # resolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
+            # rsolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
             resolved_archive_file, sharded_metadata = get_checkpoint_shard_files(
                 pretrained_model_name_or_path,
                 resolved_archive_file,
