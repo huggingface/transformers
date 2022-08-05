@@ -842,6 +842,7 @@ def get_checkpoint_shard_files(
                 use_auth_token=use_auth_token,
                 user_agent=user_agent,
                 revision=revision,
+                subfolder=subfolder,
             )
         # We have already dealt with RepositoryNotFoundError and RevisionNotFoundError when getting the index, so
         # we don't have to catch them here.
