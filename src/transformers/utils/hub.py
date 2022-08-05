@@ -1543,7 +1543,7 @@ if cache_version < 1:
         )
     else:
         logger.warn(
-            "The cache for model files in Transformers v4.22.0 has been udpated. Migrating your old cache. This is a "
+            "The cache for model files in Transformers v4.22.0 has been updated. Migrating your old cache. This is a "
             "one-time only operation. You can interrupt this and resume the migration later on by calling "
             "`transformers.utils.move_cache()`."
         )
