@@ -818,8 +818,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         >>> model = RagSequenceForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
 
         >>> inputs = tokenizer("How many people live in Paris?", return_tensors="pt")
-        >>> with tokenizer.as_target_tokenizer():
-        ...     targets = tokenizer("In Paris, there are 10 million people.", return_tensors="pt")
+        >>> targets = tokenizer(text_target="In Paris, there are 10 million people.", return_tensors="pt")
         >>> input_ids = inputs["input_ids"]
         >>> labels = targets["input_ids"]
         >>> outputs = model(input_ids=input_ids, labels=labels)
@@ -1287,8 +1286,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         >>> model = RagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
 
         >>> inputs = tokenizer("How many people live in Paris?", return_tensors="pt")
-        >>> with tokenizer.as_target_tokenizer():
-        ...     targets = tokenizer("In Paris, there are 10 million people.", return_tensors="pt")
+        >>> targets = tokenizer(text_target="In Paris, there are 10 million people.", return_tensors="pt")
         >>> input_ids = inputs["input_ids"]
         >>> labels = targets["input_ids"]
         >>> outputs = model(input_ids=input_ids, labels=labels)

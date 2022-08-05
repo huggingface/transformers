@@ -43,6 +43,11 @@ _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
+# SequenceClassification docstring
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ArthurZ/opt-350m-dummy-sc"
+_SEQ_CLASS_EXPECTED_LOSS = 1.71
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
+
 
 OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/opt-125m",
@@ -474,7 +479,6 @@ class OPTDecoder(OPTPreTrainedModel):
 
     Args:
         config: OPTConfig
-        embed_tokens (nn.Embedding): output embedding
     """
 
     def __init__(self, config: OPTConfig):
@@ -1008,10 +1012,11 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
     @add_start_docstrings_to_model_forward(OPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=SequenceClassifierOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
-        expected_output="'LABEL_0'",
-        expected_loss=5.28,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,

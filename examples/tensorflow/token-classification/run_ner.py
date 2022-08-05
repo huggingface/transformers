@@ -27,8 +27,9 @@ from typing import Optional
 import datasets
 import numpy as np
 import tensorflow as tf
-from datasets import ClassLabel, load_dataset, load_metric
+from datasets import ClassLabel, load_dataset
 
+import evaluate
 import transformers
 from transformers import (
     CONFIG_MAPPING,
@@ -478,7 +479,7 @@ def main():
         # endregion
 
         # Metrics
-        metric = load_metric("seqeval")
+        metric = evaluate.load("seqeval")
 
         def get_labels(y_pred, y_true):
             # Transform predictions and references tensos to numpy arrays
