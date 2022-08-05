@@ -32,6 +32,7 @@ from ...modeling_tf_outputs import (
 )
 from ...modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
+    TFQuestionAnsweringLoss,
     TFModelInputType,
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
@@ -1388,7 +1389,7 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
     """,
     LAYOUTLM_START_DOCSTRING,
 )
-class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFTokenClassificationLoss):
+class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFQuestionAnsweringLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [
         r"pooler",
