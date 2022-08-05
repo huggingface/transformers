@@ -407,7 +407,7 @@ class TFGroupViTTokenAssign(tf.keras.layers.Layer):
         return new_image_tokens, attention
 
 
-# Copied from transformers.models.vit.modeling_tf_vit.TFViTPatchEmbeddings with ViT->GroupViT
+# Adapted from transformers.models.vit.modeling_tf_vit.TFViTPatchEmbeddings with ViT->GroupViT
 class TFGroupViTPatchEmbeddings(tf.keras.layers.Layer):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
@@ -886,7 +886,7 @@ class TFGroupViTEncoderLayer(tf.keras.layers.Layer):
         attention_mask: tf.Tensor,
         causal_attention_mask: tf.Tensor,
         output_attentions: bool,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Tuple[tf.Tensor]:
         """
         Args:
@@ -907,6 +907,7 @@ class TFGroupViTEncoderLayer(tf.keras.layers.Layer):
             attention_mask=attention_mask,
             causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
+            training=training,
         )
         hidden_states = attention_outputs[0]
         hidden_states = residual + hidden_states
@@ -930,7 +931,7 @@ class TFGroupViTTextEncoder(tf.keras.layers.Layer):
 
     def call(
         self,
-        inputs_embeds,
+        hidden_states,
         attention_mask: tf.Tensor,
         causal_attention_mask: tf.Tensor,
         output_attentions: bool,
@@ -941,7 +942,6 @@ class TFGroupViTTextEncoder(tf.keras.layers.Layer):
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        hidden_states = inputs_embeds
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
@@ -1023,7 +1023,7 @@ class TFGroupViTVisionEncoder(tf.keras.layers.Layer):
 ################################################################################
 
 
-# Copied from transformers.models.clip.modeling_tf_clip.TFCLIPTextTransformer with CLIP->GroupViT, CLIPEncoder->GroupViTTextEncoder
+# Copied from transformers.models.clip.modeling_tf_clip.TFCLIPTextTransformer with CLIPText->GroupViTText, CLIPEncoder->GroupViTTextEncoder
 class TFGroupViTTextTransformer(tf.keras.layers.Layer):
     def __init__(self, config: GroupViTTextConfig, **kwargs):
         super().__init__(**kwargs)
@@ -1042,7 +1042,7 @@ class TFGroupViTTextTransformer(tf.keras.layers.Layer):
         output_attentions: bool,
         output_hidden_states: bool,
         return_dict: bool,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         input_shape = shape_list(input_ids)
 
@@ -1058,12 +1058,13 @@ class TFGroupViTTextTransformer(tf.keras.layers.Layer):
         attention_mask = _expand_mask(attention_mask)
 
         encoder_outputs = self.encoder(
-            inputs_embeds=embedding_output,
+            hidden_states=embedding_output,
             attention_mask=attention_mask,
             causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         sequence_output = encoder_outputs[0]
@@ -1225,7 +1226,7 @@ class TFGroupViTVisionMainLayer(tf.keras.layers.Layer):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
 
         if pixel_values is None:
@@ -1236,13 +1237,14 @@ class TFGroupViTVisionMainLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         return vision_model_outputs
 
 
-# Adapted from transformers.models.clip.modeling_tf_clip.TFCLIPMainLayer
 @keras_serializable
+# Adapted from transformers.models.clip.modeling_tf_clip.TFCLIPMainLayer
 class TFGroupViTMainLayer(tf.keras.layers.Layer):
     config_class = GroupViTConfig
 
