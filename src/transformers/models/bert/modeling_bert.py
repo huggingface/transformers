@@ -1512,12 +1512,13 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForSequenceClassification(BertPreTrainedModel):
-    def __init__(self, config, num_last_hidden_join = 1):
+    def __init__(self, config, num_last_hidden_join = None):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
+        assert num_last_hidden_join > 0
         assert num_last_hidden_join < config.num_hidden_layers
-        self.num_last_hiddens_join = num_last_hidden_join
+        self.num_last_hiddens_join = (int)(num_last_hidden_join)
         
 
         self.bert = BertModel(config)
