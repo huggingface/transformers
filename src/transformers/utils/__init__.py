@@ -63,17 +63,14 @@ from .hub import (
     cached_file,
     default_cache_path,
     define_sagemaker_information,
-    filename_to_url,
     get_cached_models,
     get_file_from_repo,
-    get_from_cache,
     get_full_repo_name,
     has_file,
     http_user_agent,
     is_offline_mode,
     move_cache,
     send_example_telemetry,
-    url_to_filename,
 )
 from .import_utils import (
     ENV_VARS_TRUE_AND_AUTO_VALUES,
