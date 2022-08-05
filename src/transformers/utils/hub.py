@@ -1419,7 +1419,7 @@ def get_hub_metadata(url, token=None):
         method="HEAD", url=url, headers=headers, allow_redirects=False
     )
     huggingface_hub.file_download._raise_for_status(r)
-    commit_hash = r.headers[HUGGINGFACE_HEADER_X_REPO_COMMIT]
+    commit_hash = r.headers.get(HUGGINGFACE_HEADER_X_REPO_COMMIT)
     etag = r.headers.get(HUGGINGFACE_HEADER_X_LINKED_ETAG) or r.headers.get("ETag")
     etag = huggingface_hub.file_download._normalize_etag(etag)
     return etag, commit_hash
@@ -1491,6 +1491,9 @@ def move_cache(cache_dir=None, token=None):
                 continue
 
         etag, commit_hash = hub_metadata[url]
+        if etag is None or commit_hash is None:
+            continue
+
         if file_info["etag"] != etag:
             # Cached file is not up to date, we just throw it as a new version will be downloaded anyway.
             clean_files_for(os.path.join(cache_dir, file_info["file"]))
