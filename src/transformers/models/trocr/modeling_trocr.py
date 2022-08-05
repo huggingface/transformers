@@ -628,10 +628,11 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
+            input = input_ids
+            input_ids = input_ids.view(-1, input.shape[-1])
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
+            input = inputs_embeds[:, :, -1]
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
@@ -642,7 +643,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         if self.config.use_learned_position_embeddings:
-            embed_pos = self.embed_positions(input_shape, past_key_values_length=past_key_values_length)
+            embed_pos = self.embed_positions(input, past_key_values_length=past_key_values_length)
         else:
             embed_pos = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
 
@@ -652,6 +653,8 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
             hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        input_shape = input.shape
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
