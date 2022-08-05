@@ -105,6 +105,7 @@ _deps = [
     "datasets",
     "deepspeed>=0.6.5",
     "dill<0.3.5",
+    "evaluate>=0.2.0",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
@@ -115,7 +116,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.1.0,<1.0",
+    "huggingface-hub>=0.8.1,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -289,6 +290,7 @@ extras["testing"] = (
         "psutil",
         "datasets",
         "dill",
+        "evaluate",
         "pytest-timeout",
         "black",
         "sacrebleu",
@@ -399,7 +401,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.21.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.22.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

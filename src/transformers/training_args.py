@@ -34,6 +34,7 @@ from .trainer_utils import (
 from .utils import (
     ExplicitEnum,
     cached_property,
+    ccl_version,
     get_full_repo_name,
     is_accelerate_available,
     is_sagemaker_dp_enabled,
@@ -44,6 +45,7 @@ from .utils import (
     is_torch_tf32_available,
     is_torch_tpu_available,
     logging,
+    requires_backends,
     torch_required,
 )
 
@@ -803,12 +805,12 @@ class TrainingArguments:
             )
         },
     )
-    fsdp_transformer_layer_cls_to_wrap: str = field(
+    fsdp_transformer_layer_cls_to_wrap: Optional[str] = field(
         default=None,
         metadata={
             "help": (
                 "Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
-                "(useful only when `fsdp` flag is passed).",
+                "(useful only when `fsdp` flag is passed)."
             )
         },
     )
@@ -1301,11 +1303,17 @@ class TrainingArguments:
                         "CPU distributed training backend is not properly set. "
                         "Please set '--xpu_backend' to either 'mpi' or 'ccl'."
                     )
-                if self.xpu_backend == "ccl" and int(os.environ.get("CCL_WORKER_COUNT", 0)) < 1:
-                    raise ValueError(
-                        "CPU distributed training backend is ccl. but CCL_WORKER_COUNT is not correctly set. "
-                        "Please use like 'export CCL_WORKER_COUNT = 1' to set."
-                    )
+                if self.xpu_backend == "ccl":
+                    requires_backends(self, "oneccl_bind_pt")
+                    if ccl_version >= "1.12":
+                        import oneccl_bindings_for_pytorch  # noqa: F401
+                    else:
+                        import torch_ccl  # noqa: F401
+                    if int(os.environ.get("CCL_WORKER_COUNT", 0)) < 1:
+                        raise ValueError(
+                            "CPU distributed training backend is ccl. but CCL_WORKER_COUNT is not correctly set. "
+                            "Please use like 'export CCL_WORKER_COUNT = 1' to set."
+                        )
 
                 # Try to get launch configuration from environment variables set by MPI launcher - works for Intel MPI, OpenMPI and MVAPICH
                 rank = get_int_from_env(["RANK", "PMI_RANK", "OMPI_COMM_WORLD_RANK", "MV2_COMM_WORLD_RANK"], 0)
@@ -1333,6 +1341,8 @@ class TrainingArguments:
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
         elif is_sagemaker_dp_enabled():
+            import smdistributed.dataparallel.torch.torch_smddp  # noqa: F401
+
             dist.init_process_group(backend="smddp")
             self.local_rank = int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))
             device = torch.device("cuda", self.local_rank)

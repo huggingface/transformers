@@ -21,7 +21,6 @@ from typing import List, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -32,16 +31,22 @@ from ...modeling_outputs import (
     MaskedLMOutput,
     ModelOutput,
     SequenceClassifierOutput,
+    TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (
+    find_pruneable_heads_and_indices,
+    is_torch_greater_or_equal_than_1_10,
+    is_torch_greater_than_1_6,
+    prune_linear_layer,
+)
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_vilt import ViltConfig
 
 
 logger = logging.get_logger(__name__)
 
-if torch.__version__ < (1, 10, 0):
+if not is_torch_greater_or_equal_than_1_10:
     logger.warning(
         f"You are using torch=={torch.__version__}, but torch>=1.10.0 is required to use "
         "ViltModel. Please upgrade torch."
@@ -250,7 +255,7 @@ class TextEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        if version.parse(torch.__version__) > version.parse("1.6.0"):
+        if is_torch_greater_than_1_6:
             self.register_buffer(
                 "token_type_ids",
                 torch.zeros(self.position_ids.size(), dtype=torch.long),
@@ -1401,4 +1406,91 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
             logits=logits,
             hidden_states=hidden_states,
             attentions=attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    ViLT Model with a token classification head on top (a linear layer on top of the final hidden-states of the text
+    tokens) e.g. for Named-Entity-Recognition (NER) tasks.
+    """,
+    VILT_START_DOCSTRING,
+)
+class ViltForTokenClassification(ViltPreTrainedModel):
+
+    _keys_to_ignore_on_load_unexpected = [r"pooler"]
+
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.vilt = ViltModel(config, add_pooling_layer=False)
+
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(VILT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        pixel_values=None,
+        pixel_mask=None,
+        head_mask=None,
+        inputs_embeds=None,
+        image_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+
+        Returns:
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.vilt(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            pixel_values=pixel_values,
+            pixel_mask=pixel_mask,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            image_embeds=image_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]
+
+        text_input_size = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+
+        sequence_output = self.dropout(sequence_output)
+        logits = self.classifier(sequence_output[:, :text_input_size])
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
