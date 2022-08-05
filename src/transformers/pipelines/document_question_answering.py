@@ -1,6 +1,6 @@
 from typing import List, Optional, Tuple, Union
 
-from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
+from ..utils import add_end_docstrings, is_pytesseract_available, is_torch_available, is_vision_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
@@ -8,24 +8,66 @@ if is_vision_available():
     from PIL import Image
 
     # TODO Will re-introduce when I add images back in
-    # from ..image_utils import load_image
+    from ..image_utils import load_image
 
 if is_torch_available():
     import torch
 
     from ..models.auto.modeling_auto import MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING
 
+TESSERACT_LOADED = False
+if is_pytesseract_available():
+    TESSERACT_LOADED = True
+    import pytesseract
 
 logger = logging.get_logger(__name__)
 
-# TODO:
-#   1. Should we make this a chunk pipeline for consistency with QAPipeline?
-#   2. Should we switch padding default to "do_not_pad" and do the same "unsqueeze" trick as the qa pipeline?
+
+# normalize_bbox() and apply_tesseract() are derived from apply_tesseract in models/layoutlmv3/feature_extraction_layoutlmv3.py.
+# However, because the pipeline may evolve from what layoutlmv3 currently does, it's copied (vs. imported) to avoid creating an
+# unecessary dependency.
+def normalize_box(box, width, height):
+    return [
+        int(1000 * (box[0] / width)),
+        int(1000 * (box[1] / height)),
+        int(1000 * (box[2] / width)),
+        int(1000 * (box[3] / height)),
+    ]
+
+
+def apply_tesseract(image: Image.Image, lang: Optional[str], tesseract_config: Optional[str]):
+    """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
+    # apply OCR
+    data = pytesseract.image_to_data(image, lang=lang, output_type="dict", config=tesseract_config)
+    words, left, top, width, height = data["text"], data["left"], data["top"], data["width"], data["height"]
+
+    # filter empty words and corresponding coordinates
+    irrelevant_indices = [idx for idx, word in enumerate(words) if not word.strip()]
+    words = [word for idx, word in enumerate(words) if idx not in irrelevant_indices]
+    left = [coord for idx, coord in enumerate(left) if idx not in irrelevant_indices]
+    top = [coord for idx, coord in enumerate(top) if idx not in irrelevant_indices]
+    width = [coord for idx, coord in enumerate(width) if idx not in irrelevant_indices]
+    height = [coord for idx, coord in enumerate(height) if idx not in irrelevant_indices]
+
+    # turn coordinates into (left, top, left+width, top+height) format
+    actual_boxes = []
+    for x, y, w, h in zip(left, top, width, height):
+        actual_box = [x, y, x + w, y + h]
+        actual_boxes.append(actual_box)
+
+    image_width, image_height = image.size
+
+    # finally, normalize the bounding boxes
+    normalized_boxes = []
+    for box in actual_boxes:
+        normalized_boxes.append(normalize_box(box, image_width, image_height))
+
+    assert len(words) == len(normalized_boxes), "Not as many words as there are bounding boxes"
+
+    return words, normalized_boxes
 
 
 def postprocess_qa_output(model, model_outputs, word_ids, words, framework, top_k):
-    # TODO: Test to make sure this works with tensorflow too (or break on the framework)
-
     # TODO: This is a very poor implementation of start/end (just here for completeness sake).
     # Ideally we can refactor/borrow the implementation in the question answering pipeline.
     results = []
@@ -65,7 +107,6 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         self.check_model_type(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING)
 
-    # TODO: Borrow params from QA pipeline probably
     def _sanitize_parameters(
         self,
         padding=None,
@@ -182,8 +223,6 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             inputs = image
         return super().__call__(inputs, **kwargs)
 
-    # TODO:
-    #   1) Use apply_tesseract from layoutlmv3/feature_extraction_layoutlmv3
     def preprocess(
         self,
         input,
@@ -192,6 +231,8 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         max_question_len=64,
         max_seq_len=None,
         word_boxes: Tuple[str, List[float]] = None,
+        lang=None,
+        tesseract_config="",
     ):
         # NOTE: This code mirrors the code in question answering and will be implemented in a follow up PR
         # to support documents with enough tokens that overflow the model's window
@@ -204,13 +245,35 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             raise ValueError("Unsupported: striding inputs")
             # doc_stride = min(max_seq_len // 2, 128)
 
-        # TODO: Run OCR on the image if words is None
-        # I'll remove this assert once I implement OCR
-        assert input["word_boxes"], "This should be fixed and replaced with OCR"
+        image = None
+        image_features = {}
+        if "image" in input:
+            image = load_image(input["image"])
+            if self.feature_extractor is not None:
+                image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
 
-        words = [x[0] for x in input["word_boxes"]]
-        boxes = [x[1] for x in input["word_boxes"]]
+        words, boxes = None, None
+        if "word_boxes" in input:
+            words = [x[0] for x in input["word_boxes"]]
+            boxes = [x[1] for x in input["word_boxes"]]
+        elif "words" in image_features and "boxes" in image_features:
+            words = image_features.pop("words")
+            boxes = image_features.pop("boxes")
+        elif image is not None:
+            if not TESSERACT_LOADED:
+                raise ValueError(
+                    "If you provide an image without word_boxes, then the pipeline will run OCR using Tesseract, but"
+                    " pytesseract is not available"
+                )
+            words, boxes = apply_tesseract(image, lang=lang, tesseract_config=tesseract_config)
+        else:
+            raise ValueError(
+                "You must provide an image or word_boxes. If you provide an image, the pipeline will automatically run"
+                " OCR to derive words and boxes"
+            )
 
+        # TODO: The safe way to do this is to call the tokenizer in succession on each token and insert the CLS/SEP
+        # tokens ourselves.
         encoding = self.tokenizer(
             text=input["question"].split(),
             text_pair=words,
@@ -227,7 +290,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             # return_overflowing_tokens=True,
         )
 
-        # TODO: For now, this should always be num_spans=1 given the flags we've passed in above
+        # TODO: For now, this should always be num_spans == 1 given the flags we've passed in above
         num_spans = len(encoding["input_ids"])
 
         # For each span, place a bounding box [0,0,0,0] for question and CLS tokens, [1000,1000,1000,1000]
