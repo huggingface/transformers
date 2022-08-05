@@ -17,6 +17,7 @@
 import unittest
 
 import numpy as np
+from parameterized import parameterized
 
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -200,3 +201,50 @@ class VideoMAEFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.T
                 self.feature_extract_tester.size,
             ),
         )
+
+    @parameterized.expand([
+        ("do_resize_True_do_center_crop_True_do_normalize_True", True, True, True),
+        ("do_resize_True_do_center_crop_True_do_normalize_False", True, True, False),
+        ("do_resize_True_do_center_crop_False_do_normalize_True", True, False, True),
+        ("do_resize_True_do_center_crop_False_do_normalize_False", True, False, False),
+        ("do_resize_False_do_center_crop_True_do_normalize_True", False, True, True),
+        ("do_resize_False_do_center_crop_True_do_normalize_False", False, True, False),
+        ("do_resize_False_do_center_crop_False_do_normalize_True", False, False, True),
+        ("do_resize_False_do_center_crop_False_do_normalize_False", False, False, False)
+    ])
+    def test_call_flags(self, _, do_resize, do_center_crop, do_normalize):
+        # Initialize feature_extractor
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
+        feature_extractor.do_center_crop = do_center_crop
+        feature_extractor.do_resize = do_resize
+        feature_extractor.do_normalize = do_normalize
+        # create random PIL images
+        video_inputs = prepare_video_inputs(self.feature_extract_tester, equal_resolution=False)
+
+        pixel_values = feature_extractor(video_inputs, return_tensors=None)['pixel_values']
+        self.assertEqual(len(pixel_values), self.feature_extract_tester.batch_size)
+
+        num_channels = self.feature_extract_tester.num_channels
+        size = self.feature_extract_tester.size
+        num_frames = self.feature_extract_tester.num_frames
+        crop_size = self.feature_extract_tester.size
+
+        for video_input, video_output in zip(video_inputs, pixel_values):
+            expected_shape = [(3, *video_input[0].size[::-1])]
+            if do_resize:
+                c, h, w = expected_shape[0]
+                short, long = (w, h) if w <= h else (h, w)
+                min_size = size
+                if short == min_size:
+                    resized_shape = (c, h, w)
+                else:
+                    short, long = min_size, int(long * min_size / short)
+                    resized_shape = (c, long, short) if w <= h else (c, short, long)
+                expected_shape = [resized_shape]
+            if do_center_crop:
+                expected_shape = [(num_channels, crop_size, crop_size)]
+            expected_shapes = expected_shape * num_frames
+
+            for idx, frame in enumerate(video_output):
+                self.assertEqual(frame.shape, expected_shapes[idx])
+                self.assertIsInstance(frame, np.ndarray)

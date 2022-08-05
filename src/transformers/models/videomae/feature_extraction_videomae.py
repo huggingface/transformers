@@ -81,10 +81,10 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
     def crop_video(self, video, size):
         return [self.center_crop(frame, size) for frame in video]
 
-    def normalize_video(self, video, mean, std):
+    def normalize_video(self, video, mean, std, rescale=False, channel_first=True):
         # video can be a list of PIL images, list of NumPy arrays or list of PyTorch tensors
         # first: convert to list of NumPy arrays
-        video = [self.to_numpy_array(frame) for frame in video]
+        video = [self.to_numpy_array(frame, rescale=rescale, channel_first=channel_first) for frame in video]
 
         # second: stack to get (num_frames, num_channels, height, width)
         video = np.stack(video, axis=0)
@@ -96,6 +96,9 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
             std = np.array(std).astype(video.dtype)
 
         return (video - mean[None, :, None, None]) / std[None, :, None, None]
+
+    def to_numpy_array_video(self, video, rescale=None, channel_first=True):
+        return [self.to_numpy_array(frame, rescale, channel_first) for frame in video]
 
     def __call__(
         self, videos: ImageInput, return_tensors: Optional[Union[str, TensorType]] = None, **kwargs
@@ -159,8 +162,13 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
             videos = [self.resize_video(video, size=self.size, resample=self.resample) for video in videos]
         if self.do_center_crop and self.size is not None:
             videos = [self.crop_video(video, size=self.size) for video in videos]
+
+        # if do_normalize=False, the casting to a numpy array won't happen, so we need to do it here
+        make_channel_first = True if isinstance(videos[0][0], Image.Image) else videos[0][0].shape[-1] in (1, 3)
+        videos = [self.to_numpy_array_video(video, rescale=False, channel_first=make_channel_first) for video in videos]
+
         if self.do_normalize:
-            videos = [self.normalize_video(video, mean=self.image_mean, std=self.image_std) for video in videos]
+            videos = [self.normalize_video(video, mean=self.image_mean, std=self.image_std, rescale=True, channel_first=False) for video in videos]
 
         # return as BatchFeature
         data = {"pixel_values": videos}
