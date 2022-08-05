@@ -60,6 +60,7 @@ from .hub import (
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
+    cached_file,
     cached_path,
     default_cache_path,
     define_sagemaker_information,
@@ -76,6 +77,7 @@ from .hub import (
     is_local_clone,
     is_offline_mode,
     is_remote_url,
+    move_cache,
     send_example_telemetry,
     url_to_filename,
 )
