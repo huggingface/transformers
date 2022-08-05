@@ -32,9 +32,9 @@ from ...modeling_tf_outputs import (
 )
 from ...modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
-    TFQuestionAnsweringLoss,
     TFModelInputType,
     TFPreTrainedModel,
+    TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
