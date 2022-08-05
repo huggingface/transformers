@@ -20,6 +20,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
+import requests
 import transformers
 
 # Try to import everything from transformers to ensure every object can be loaded.
@@ -225,27 +226,25 @@ class TelemetryTest(unittest.TestCase):
     url = "https://huggingface.co/hf-internal-testing/tiny-random-gpt2/resolve/main/"
 
     def setUp(self):
-        import transformers.utils.hub
 
-        self.real_request_head = transformers.utils.hub._request_head
+        self.real_request = requests.request
 
         self.calls = []
 
         def counter_request_head(*args, **kwargs):
             self.calls.append([args, kwargs])
-            return self.real_request_head(*args, **kwargs)
+            return self.real_request(*args, **kwargs)
 
-        transformers.utils.hub._request_head = counter_request_head
+        requests.request = counter_request_head
 
     def tearDown(self):
-        transformers.utils.hub._request_head = self.real_request_head
-        transformers.utils.hub.request_head.clear_cache()
+        requests.request = self.real_request
 
     @require_torch
     def test_pipeline(self):
         pipeline(task="text-generation", model="hf-internal-testing/tiny-random-gpt2")
 
-        files = [args[0][len(self.url) :] for args, _ in self.calls]
+        files = [kwargs["url"][len(self.url) :] for _, kwargs in self.calls]
         self.assertEqual(
             files,
             [
@@ -260,9 +259,8 @@ class TelemetryTest(unittest.TestCase):
             ],
         )
 
-        for file, (args, _) in zip(files, self.calls):
-            headers = args[1]
-            user_agent = headers["user-agent"]
+        for file, (_, kwargs) in zip(files, self.calls):
+            user_agent = kwargs["headers"]["user-agent"]
 
             self.assertIn(
                 "using_pipeline/text-generation",
@@ -274,7 +272,7 @@ class TelemetryTest(unittest.TestCase):
     def test_tokenizer(self):
         AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
-        files = [args[0][len(self.url) :] for args, _ in self.calls]
+        files = [kwargs["url"][len(self.url) :] for _, kwargs in self.calls]
         self.assertEqual(
             files,
             [
@@ -287,9 +285,8 @@ class TelemetryTest(unittest.TestCase):
             ],
         )
 
-        for file, (args, _) in zip(files, self.calls):
-            headers = args[1]
-            user_agent = headers["user-agent"]
+        for file, (_, kwargs) in zip(files, self.calls):
+            user_agent = kwargs["headers"]["user-agent"]
 
             self.assertIn(
                 "file_type/tokenizer",
@@ -305,7 +302,7 @@ class TelemetryTest(unittest.TestCase):
     def test_slow_tokenizer(self):
         AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2", use_fast=False)
 
-        files = [args[0][len(self.url) :] for args, _ in self.calls]
+        files = [kwargs["url"][len(self.url) :] for _, kwargs in self.calls]
         self.assertEqual(
             files,
             [
@@ -317,9 +314,8 @@ class TelemetryTest(unittest.TestCase):
             ],
         )
 
-        for file, (args, _) in zip(files, self.calls):
-            headers = args[1]
-            user_agent = headers["user-agent"]
+        for file, (_, kwargs) in zip(files, self.calls):
+            user_agent = kwargs["headers"]["user-agent"]
 
             self.assertIn(
                 "file_type/tokenizer",
@@ -341,7 +337,7 @@ class TelemetryTest(unittest.TestCase):
     def test_model(self):
         AutoModel.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
-        files = [args[0][len(self.url) :] for args, _ in self.calls]
+        files = [kwargs["url"][len(self.url) :] for _, kwargs in self.calls]
         self.assertEqual(
             files,
             [
@@ -350,12 +346,11 @@ class TelemetryTest(unittest.TestCase):
             ],
         )
 
-        for file, (args, _) in zip(files, self.calls):
+        for file, (_, kwargs) in zip(files, self.calls):
             if file == "config.json":
                 # Skip config
                 continue
-            headers = args[1]
-            user_agent = headers["user-agent"]
+            user_agent = kwargs["headers"]["user-agent"]
 
             self.assertIn(
                 "file_type/model",
@@ -374,7 +369,7 @@ class TelemetryTest(unittest.TestCase):
 
         GPT2Model.from_pretrained("hf-internal-testing/tiny-random-gpt2")
 
-        files = [args[0][len(self.url) :] for args, _ in self.calls]
+        files = [kwargs["url"][len(self.url) :] for _, kwargs in self.calls]
         self.assertEqual(
             files,
             [
@@ -383,12 +378,11 @@ class TelemetryTest(unittest.TestCase):
             ],
         )
 
-        for file, (args, _) in zip(files, self.calls):
+        for file, (_, kwargs) in zip(files, self.calls):
             if file == "config.json":
                 # Skip config
                 continue
-            headers = args[1]
-            user_agent = headers["user-agent"]
+            user_agent = kwargs["headers"]["user-agent"]
 
             self.assertIn(
                 "file_type/model",
@@ -411,9 +405,8 @@ class TelemetryTest(unittest.TestCase):
             ["preprocessor_config.json"],
         )
 
-        for file, (args, _) in zip(files, self.calls):
-            headers = args[1]
-            user_agent = headers["user-agent"]
+        for file, (_, kwargs) in zip(files, self.calls):
+            user_agent = kwargs["headers"]["user-agent"]
 
             self.assertIn(
                 "file_type/feature extractor",
