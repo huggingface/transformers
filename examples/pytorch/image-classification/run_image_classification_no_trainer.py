@@ -382,17 +382,15 @@ def main():
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
     num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
-    lr_num_training_steps = len(train_dataloader) * num_update_steps_per_epoch
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
-        lr_num_training_steps = args.max_train_steps * args.gradient_accumulation_steps
 
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
         optimizer=optimizer,
         num_warmup_steps=args.num_warmup_steps,
-        num_training_steps=lr_num_training_steps,
+        num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
     )
 
     # Prepare everything with our `accelerator`.
