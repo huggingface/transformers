@@ -793,7 +793,7 @@ class BartEncoder(BartPretrainedModel):
             input = input_ids
             input_ids = input_ids.view(-1, input_ids.shape[-1])
         elif inputs_embeds is not None:
-            input = inputs_embeds[:,:,-1]
+            input = inputs_embeds[:, :, -1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
@@ -1018,7 +1018,7 @@ class BartDecoder(BartPretrainedModel):
             input = input_ids
             input_ids = input_ids.view(-1, input_ids.shape[-1])
         elif inputs_embeds is not None:
-            input = inputs_embeds[:,:,-1]
+            input = inputs_embeds[:, :, -1]
         else:
             raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
 
