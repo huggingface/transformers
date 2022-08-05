@@ -218,6 +218,8 @@
         title: DialoGPT
       - local: model_doc/distilbert
         title: DistilBERT
+      - local: model_doc/donut
+        title: Donut
       - local: model_doc/dpr
         title: DPR
       - local: model_doc/electra

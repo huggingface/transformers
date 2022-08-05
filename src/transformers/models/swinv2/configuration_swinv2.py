@@ -74,6 +74,8 @@ class Swinv2Config(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        add_final_layer_norm (`bool`, *optional*, defaults to True):
+            Whether or not to add a final layer normalization layer after the stages.
         encoder_stride (`int`, `optional`, defaults to 32):
             Factor to increase the spatial resolution by in the decoder head for masked image modeling.
 
@@ -117,6 +119,7 @@ class Swinv2Config(PretrainedConfig):
         patch_norm=True,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
+        add_final_layer_norm=True,
         encoder_stride=32,
         **kwargs
     ):
@@ -140,6 +143,7 @@ class Swinv2Config(PretrainedConfig):
         self.path_norm = patch_norm
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
+        self.add_final_layer_norm = add_final_layer_norm
         self.encoder_stride = encoder_stride
         # we set the hidden_size attribute in order to make Swinv2 work with VisionEncoderDecoderModel
         # this indicates the channel dimension after the last stage of the model
