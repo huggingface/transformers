@@ -588,7 +588,8 @@ def main():
             with accelerator.accumulate(model):
                 # forward
                 outputs = model(**batch)
-                accelerator.backward(outputs.loss)
+                loss = outputs.loss
+                accelerator.backward(loss)
 
                 # make sure that `num_losses` is summed for distributed training
                 # and average gradients over losses of all devices

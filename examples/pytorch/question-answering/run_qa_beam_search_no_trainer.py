@@ -837,6 +837,7 @@ def main():
                 accelerator.backward(loss)
 
                 optimizer.step()
+                lr_scheduler.step()
                 optimizer.zero_grad()
 
             # Checks if the accelerator has performed an optimization step behind the scenes
