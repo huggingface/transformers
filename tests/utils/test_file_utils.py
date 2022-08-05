@@ -32,7 +32,6 @@ from transformers.utils import (
     ContextManagers,
     find_labels,
     get_file_from_repo,
-    get_from_cache,
     has_file,
     is_flax_available,
     is_tf_available,
@@ -79,14 +78,6 @@ class TestImportMechanisms(unittest.TestCase):
 
 
 class GetFromCacheTests(unittest.TestCase):
-    def test_bogus_url(self):
-        # This lets us simulate no connection
-        # as the error raised is the same
-        # `ConnectionError`
-        url = "https://bogus"
-        with self.assertRaisesRegex(ValueError, "Connection error"):
-            _ = get_from_cache(url)
-
     def test_has_file(self):
         self.assertTrue(has_file("hf-internal-testing/tiny-bert-pt-only", WEIGHTS_NAME))
         self.assertFalse(has_file("hf-internal-testing/tiny-bert-pt-only", TF2_WEIGHTS_NAME))

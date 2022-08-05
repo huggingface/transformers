@@ -490,7 +490,6 @@ def has_file(
     path_or_repo: Union[str, os.PathLike],
     filename: str,
     revision: Optional[str] = None,
-    mirror: Optional[str] = None,
     proxies: Optional[Dict[str, str]] = None,
     use_auth_token: Optional[Union[bool, str]] = None,
 ):
@@ -507,7 +506,7 @@ def has_file(
     if os.path.isdir(path_or_repo):
         return os.path.isfile(os.path.join(path_or_repo, filename))
 
-    url = hf_hub_url(path_or_repo, filename=filename, revision=revision, mirror=mirror)
+    url = hf_hub_url(path_or_repo, filename=filename, revision=revision)
 
     headers = {"user-agent": http_user_agent()}
     if isinstance(use_auth_token, str):
@@ -798,7 +797,6 @@ def get_checkpoint_shard_files(
     use_auth_token=None,
     user_agent=None,
     revision=None,
-    mirror=None,
     subfolder="",
 ):
     """
@@ -843,6 +841,7 @@ def get_checkpoint_shard_files(
                 local_files_only=local_files_only,
                 use_auth_token=use_auth_token,
                 user_agent=user_agent,
+                revision=revision,
             )
         # We have already dealt with RepositoryNotFoundError and RevisionNotFoundError when getting the index, so
         # we don't have to catch them here.
