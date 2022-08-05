@@ -30,6 +30,8 @@
   - sections:
     - local: tasks/language_modeling
       title: Modelado de lenguaje
+    - local: tasks/summarization
+      title: Sumarización
     - local: tasks/image_classification
       title: Clasificación de imágenes
     title: Fine-tuning para tareas posteriores
