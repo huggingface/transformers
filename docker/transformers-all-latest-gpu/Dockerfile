@@ -47,6 +47,8 @@ RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/acc
 
 # Add bitsandbytes for mixed int8 testing
 RUN python3 -m pip install -i https://test.pypi.org/simple/ bitsandbytes==0.31.2
+# add correct LD_LIB path
+ENV LD_LIBRARY_PATH /usr/local/cuda/lib64
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
