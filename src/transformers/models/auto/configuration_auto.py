@@ -490,6 +490,7 @@ class _LazyConfigMapping(OrderedDict):
         if key in self._mapping.keys():
             raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
         self._extra_content[key] = value
+        self.mapping[key] = value.__name__
 
 
 CONFIG_MAPPING = _LazyConfigMapping(CONFIG_MAPPING_NAMES)
