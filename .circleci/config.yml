@@ -72,8 +72,8 @@ jobs:
             - run: pip3 install --upgrade pip
             - run: pip3 uninstall -y torch numba resampy numpy
             - run: pip3 install -U numba
-            - run: pip3 install -U resampy==0.3.1
-            # - run: pip3 install --no-cache-dir git+https://github.com/bmcfee/resampy@032-tweaks#egg=resampy
+            # - run: pip3 install -U resampy==0.3.1
+            - run: pip3 install --no-cache-dir git+https://github.com/bmcfee/resampy@032-tweaks#egg=resampy
 
             - run: pip3 uninstall -y torch
             - run: wget https://download.pytorch.org/whl/nightly/cpu/torch-1.12.0.dev20220216%2Bcpu-cp37-cp37m-linux_x86_64.whl
