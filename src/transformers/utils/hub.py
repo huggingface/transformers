@@ -29,7 +29,7 @@ import traceback
 import warnings
 from contextlib import contextmanager
 from functools import partial
-from hashlib import sha256
+from hashlib import new, sha256
 from pathlib import Path
 from typing import BinaryIO, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
@@ -81,7 +81,8 @@ old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 hf_cache_home = os.path.expanduser(
     os.getenv("HF_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
 )
-default_cache_path = os.path.join(hf_cache_home, "transformers")
+hf_cache_home = os.getenv("HUGGINFACE_CACHE", hf_cache_home)
+default_cache_path = hf_cache_home
 
 # Onetime move from the old location to the new one if no ENV variable has been set.
 if (
@@ -1475,9 +1476,15 @@ def move_to_new_cache(file, repo, filename, revision, etag, commit_hash):
     clean_files_for(file)
 
 
-def move_cache(cache_dir=None, token=None):
+def move_cache(cache_dir=None, new_cache_dir=None, token=None):
+    if new_cache_dir is None:
+        new_cache_dir = TRANSFORMERS_CACHE
     if cache_dir is None:
-        cache_dir = TRANSFORMERS_CACHE
+        # Migrate from old cache in .cache/huggingface/transformers
+        if os.path.isdir(os.path.join(TRANSFORMERS_CACHE, "transformers")):
+            cache_dir = os.path.join(TRANSFORMERS_CACHE, "transformers")
+        else:
+            cache_dir = new_cache_dir
     if token is None:
         token = HfFolder.get_token()
     cached_files = get_all_cached_files(cache_dir=cache_dir)
