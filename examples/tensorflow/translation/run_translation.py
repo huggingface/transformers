@@ -594,6 +594,10 @@ def main():
             logger.info(f"  Total train batch size = {total_train_batch_size}")
             logger.info(f"  Total optimization steps = {num_train_steps}")
 
+            if training_args.xla and not data_args.pad_to_max_length:
+                logger.warning("XLA training may be slow at first when --pad_to_max_length is not set "
+                               "until all possible shapes have been compiled.")
+
             model.fit(tf_train_dataset, epochs=int(training_args.num_train_epochs), callbacks=callbacks)
         # endregion
 
