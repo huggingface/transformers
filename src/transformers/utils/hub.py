@@ -1514,7 +1514,7 @@ def move_cache(cache_dir=None, new_cache_dir=None, token=None):
             # Not a file from huggingface.co
             continue
 
-        repo = os.path.join(cache_dir, url_info["repo"])
+        repo = os.path.join(new_cache_dir, url_info["repo"])
         move_to_new_cache(
             file=os.path.join(cache_dir, file_info["file"]),
             repo=repo,
