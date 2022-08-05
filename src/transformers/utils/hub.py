@@ -81,8 +81,7 @@ old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 hf_cache_home = os.path.expanduser(
     os.getenv("HF_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
 )
-hf_cache_home = os.getenv("HUGGINFACE_CACHE", hf_cache_home)
-default_cache_path = hf_cache_home
+default_cache_path = os.path.join(hf_cache_home, "hub")
 
 # Onetime move from the old location to the new one if no ENV variable has been set.
 if (
@@ -103,7 +102,8 @@ if (
 
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
-TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
+HUGGINGFACE_HUB_CACHE = os.getenv("HUGGINGFACE_HUB_CACHE", PYTORCH_TRANSFORMERS_CACHE)
+TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", HUGGINGFACE_HUB_CACHE)
 HF_MODULES_CACHE = os.getenv("HF_MODULES_CACHE", os.path.join(hf_cache_home, "modules"))
 TRANSFORMERS_DYNAMIC_MODULE_NAME = "transformers_modules"
 SESSION_ID = uuid4().hex
@@ -1480,9 +1480,10 @@ def move_cache(cache_dir=None, new_cache_dir=None, token=None):
     if new_cache_dir is None:
         new_cache_dir = TRANSFORMERS_CACHE
     if cache_dir is None:
-        # Migrate from old cache in .cache/huggingface/transformers
-        if os.path.isdir(os.path.join(TRANSFORMERS_CACHE, "transformers")):
-            cache_dir = os.path.join(TRANSFORMERS_CACHE, "transformers")
+        # Migrate from old cache in .cache/huggingface/hub
+        old_cache = Path(TRANSFORMERS_CACHE).parent / "transformers"
+        if os.path.isdir(str(old_cache)):
+            cache_dir = str(old_cache)
         else:
             cache_dir = new_cache_dir
     if token is None:
