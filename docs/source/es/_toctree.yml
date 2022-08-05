@@ -33,6 +33,8 @@
     - local: tasks/image_classification
       title: Clasificación de imágenes
     title: Fine-tuning para tareas posteriores
+  - local: run_scripts
+    title: Entrenamiento con scripts
   - local: sagemaker
     title: Ejecutar el entrenamiento en Amazon SageMaker
   - local: multilingual
