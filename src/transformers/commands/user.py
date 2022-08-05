@@ -22,8 +22,6 @@ from requests.exceptions import HTTPError
 from . import BaseTransformersCLICommand
 
 
-UPLOAD_MAX_FILES = 15
-
 
 class UserCommands(BaseTransformersCLICommand):
     @staticmethod
