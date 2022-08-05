@@ -1421,7 +1421,8 @@ def get_hub_metadata(url, token=None):
     huggingface_hub.file_download._raise_for_status(r)
     commit_hash = r.headers.get(HUGGINGFACE_HEADER_X_REPO_COMMIT)
     etag = r.headers.get(HUGGINGFACE_HEADER_X_LINKED_ETAG) or r.headers.get("ETag")
-    etag = huggingface_hub.file_download._normalize_etag(etag)
+    if etag is not None:
+        etag = huggingface_hub.file_download._normalize_etag(etag)
     return etag, commit_hash
 
 
