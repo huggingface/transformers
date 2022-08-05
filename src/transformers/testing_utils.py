@@ -1386,9 +1386,13 @@ def pytest_terminal_summary_main(tr, id):
         tr.summary_warnings()  # final warnings
 
     tr.reportchars = "wPpsxXEf"  # emulate -rA (used in summary_passes() and short_test_summary())
-    with open(report_files["passes"], "w") as f:
-        tr._tw = create_terminal_writer(config, f)
-        tr.summary_passes()
+
+    # Skip the `passes` report, as it starts to take more than 5 minutes, and sometimes it timeouts on CircleCI if it
+    # takes > 10 minutes (as this part doesn't generate any output on the terminal).
+    # (also, it seems there is no useful information in this report, and we rarely need to read it)
+    # with open(report_files["passes"], "w") as f:
+    #     tr._tw = create_terminal_writer(config, f)
+    #     tr.summary_passes()
 
     with open(report_files["summary_short"], "w") as f:
         tr._tw = create_terminal_writer(config, f)

@@ -24,8 +24,9 @@ from typing import Optional
 
 import numpy as np
 import tensorflow as tf
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 
+import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -61,7 +62,7 @@ class SavePretrainedCallback(tf.keras.callbacks.Callback):
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.21.0.dev0")
+check_min_version("4.22.0.dev0")
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -366,7 +367,7 @@ def main():
     # endregion
 
     # region Metric function
-    metric = load_metric("glue", data_args.task_name)
+    metric = evaluate.load("glue", data_args.task_name)
 
     def compute_metrics(preds, label_ids):
         preds = preds["logits"]

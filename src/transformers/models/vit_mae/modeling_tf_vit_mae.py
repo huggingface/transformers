@@ -722,8 +722,8 @@ class TFViTMAEPreTrainedModel(TFPreTrainedModel):
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
-
-        return self.call(inputs)
+        output = self.call(inputs)
+        return self.serving_output(output)
 
 
 VIT_MAE_START_DOCSTRING = r"""
@@ -841,6 +841,18 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
         )
 
         return outputs
+
+    def serving_output(self, output: TFViTMAEModelOutput) -> TFViTMAEModelOutput:
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFViTMAEModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            mask=output.mask,
+            ids_restore=output.ids_restore,
+            hidden_states=hidden_states,
+            attentions=attentions,
+        )
 
 
 class TFViTMAEDecoder(tf.keras.layers.Layer):
@@ -1142,4 +1154,16 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
             ids_restore=ids_restore,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output: TFViTMAEForPreTrainingOutput) -> TFViTMAEForPreTrainingOutput:
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFViTMAEForPreTrainingOutput(
+            logits=output.logits,
+            mask=output.mask,
+            ids_restore=output.ids_restore,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )

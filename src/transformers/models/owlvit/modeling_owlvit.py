@@ -1153,7 +1153,6 @@ class OwlViTClassPredictionHead(nn.Module):
 
 class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     config_class = OwlViTConfig
-    main_input_name = "pixel_values"
 
     def __init__(self, config: OwlViTConfig):
         super().__init__(config)
@@ -1170,6 +1169,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         if not feature_map.ndim == 4:
             raise ValueError("Expected input shape is [batch_size, num_channels, height, width]")
 
+        device = feature_map.device
         height, width = feature_map.shape[1:3]
 
         box_coordinates = np.stack(np.meshgrid(np.arange(1, width + 1), np.arange(1, height + 1)), axis=-1).astype(
@@ -1181,7 +1181,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         box_coordinates = box_coordinates.reshape(
             box_coordinates.shape[0] * box_coordinates.shape[1], box_coordinates.shape[2]
         )
-        box_coordinates = torch.from_numpy(box_coordinates)
+        box_coordinates = torch.from_numpy(box_coordinates).to(device)
 
         return box_coordinates
 
@@ -1245,8 +1245,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
     def image_text_embedder(
         self,
-        pixel_values: torch.FloatTensor,
         input_ids: torch.Tensor,
+        pixel_values: torch.FloatTensor,
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = None,
     ) -> torch.FloatTensor:
@@ -1283,9 +1283,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     @replace_return_docstrings(output_type=OwlViTObjectDetectionOutput, config_class=OwlViTConfig)
     def forward(
         self,
-        pixel_values: torch.FloatTensor,
         input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
+        pixel_values: torch.FloatTensor,
+        attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1300,23 +1300,31 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> import torch
         >>> from transformers import OwlViTProcessor, OwlViTForObjectDetection
 
-        >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
         >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
+        >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt")
+        >>> texts = [["a photo of a cat", "a photo of a dog"]]
+        >>> inputs = processor(text=texts, images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> logits = outputs["logits"]  # Prediction logits of shape [batch_size, num_patches, num_max_text_queries]
-        >>> boxes = outputs["pred_boxes"]  # Object box boundaries of shape # [batch_size, num_patches, 4]
 
-        >>> batch_size = boxes.shape[0]
-        >>> for i in range(batch_size):  # Loop over sets of images and text queries
-        ...     boxes = outputs["pred_boxes"][i]
-        ...     logits = torch.max(outputs["logits"][i], dim=-1)
-        ...     scores = torch.sigmoid(logits.values)
-        ...     labels = logits.indices
+        >>> # Target image sizes (height, width) to rescale box predictions [batch_size, 2]
+        >>> target_sizes = torch.Tensor([image.size[::-1]])
+        >>> # Convert outputs (bounding boxes and class logits) to COCO API
+        >>> results = processor.post_process(outputs=outputs, target_sizes=target_sizes)
+
+        >>> i = 0  # Retrieve predictions for the first image for the corresponding text queries
+        >>> text = texts[i]
+        >>> boxes, scores, labels = results[i]["boxes"], results[i]["scores"], results[i]["labels"]
+
+        >>> score_threshold = 0.1
+        >>> for box, score, label in zip(boxes, scores, labels):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     if score >= score_threshold:
+        ...         print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
+        Detected a photo of a cat with confidence 0.243 at location [1.42, 50.69, 308.58, 370.48]
+        Detected a photo of a cat with confidence 0.298 at location [348.06, 20.56, 642.33, 372.61]
         ```"""
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1329,8 +1337,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         if output_hidden_states:
             outputs = self.owlvit(
-                pixel_values=pixel_values,
                 input_ids=input_ids,
+                pixel_values=pixel_values,
                 attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1341,8 +1349,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         # Embed images and text queries
         feature_map, query_embeds = self.image_text_embedder(
-            pixel_values=pixel_values,
             input_ids=input_ids,
+            pixel_values=pixel_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
@@ -1365,7 +1373,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pred_boxes = self.box_predictor(image_feats, feature_map)
 
         if not return_dict:
-            return (
+            output = (
                 pred_logits,
                 pred_boxes,
                 query_embeds,
@@ -1374,6 +1382,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
                 text_model_last_hidden_states,
                 vision_model_last_hidden_states,
             )
+            output = tuple(x for x in output if x is not None)
+            return output
 
         return OwlViTObjectDetectionOutput(
             image_embeds=feature_map,

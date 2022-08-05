@@ -201,9 +201,9 @@ class TFSegformerSelfOutput(tf.keras.layers.Layer):
         self.dense = tf.keras.layers.Dense(hidden_size, name="dense")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+    def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states, training=training)
         return hidden_states
 
 
@@ -276,13 +276,13 @@ class TFSegformerMixFFN(tf.keras.layers.Layer):
         self.dense2 = tf.keras.layers.Dense(out_features, name="dense2")
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob)
 
-    def call(self, hidden_states: tf.Tensor, height: int, width: int) -> tf.Tensor:
+    def call(self, hidden_states: tf.Tensor, height: int, width: int, training: bool = False) -> tf.Tensor:
         hidden_states = self.dense1(hidden_states)
         hidden_states = self.depthwise_convolution(hidden_states, height, width)
         hidden_states = self.intermediate_act_fn(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = self.dense2(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states, training=training)
         return hidden_states
 
 
@@ -544,7 +544,9 @@ class TFSegformerPreTrainedModel(TFPreTrainedModel):
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
-        return self.call(inputs)
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
 
 SEGFORMER_START_DOCSTRING = r"""
@@ -628,6 +630,14 @@ class TFSegformerModel(TFSegformerPreTrainedModel):
         )
         return outputs
 
+    def serving_output(self, output: TFBaseModelOutput) -> TFBaseModelOutput:
+        # hidden_states and attention not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
+        )
+
 
 @add_start_docstrings(
     """
@@ -692,6 +702,12 @@ class TFSegformerForImageClassification(TFSegformerPreTrainedModel, TFSequenceCl
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )
 
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        # hidden_states and attention not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        return TFSequenceClassifierOutput(
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
+        )
+
 
 class TFSegformerMLP(tf.keras.layers.Layer):
     """
@@ -733,7 +749,7 @@ class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
 
         self.config = config
 
-    def call(self, encoder_hidden_states):
+    def call(self, encoder_hidden_states, training: bool = False):
         batch_size = shape_list(encoder_hidden_states[-1])[0]
 
         all_hidden_states = ()
@@ -757,9 +773,9 @@ class TFSegformerDecodeHead(TFSegformerPreTrainedModel):
             all_hidden_states += (encoder_hidden_state,)
 
         hidden_states = self.linear_fuse(tf.concat(all_hidden_states[::-1], axis=-1))
-        hidden_states = self.batch_norm(hidden_states)
+        hidden_states = self.batch_norm(hidden_states, training=training)
         hidden_states = self.activation(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states, training=training)
 
         # logits of shape (batch_size, height/4, width/4, num_labels)
         logits = self.classifier(hidden_states)
@@ -833,8 +849,8 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
         >>> outputs = model(**inputs, training=False)
         >>> # logits are of shape (batch_size, num_labels, height, width)
         >>> logits = outputs.logits
-        >>> logits.shape
-        (1, 150, 128, 128)
+        >>> list(logits.shape)
+        [1, 150, 128, 128]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
@@ -875,4 +891,10 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
             logits=logits,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output: TFSemanticSegmenterOutput) -> TFSemanticSegmenterOutput:
+        # hidden_states and attention not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        return TFSemanticSegmenterOutput(
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
         )

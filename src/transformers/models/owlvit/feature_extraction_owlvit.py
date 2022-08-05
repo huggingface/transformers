@@ -26,7 +26,6 @@ from ...utils import TensorType, is_torch_available, logging
 
 if is_torch_available():
     import torch
-    from torch import nn
 
 logger = logging.get_logger(__name__)
 
@@ -109,18 +108,19 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
+        logits, boxes = outputs.logits, outputs.pred_boxes
 
-        if len(out_logits) != len(target_sizes):
+        if len(logits) != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
         if target_sizes.shape[1] != 2:
             raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
-        prob = nn.functional.softmax(out_logits, -1)
-        scores, labels = prob[..., :-1].max(-1)
+        probs = torch.max(logits, dim=-1)
+        scores = torch.sigmoid(probs.values)
+        labels = probs.indices
 
         # Convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(out_bbox)
+        boxes = center_to_corners_format(boxes)
 
         # Convert from relative [0, 1] to absolute [0, height] coordinates
         img_h, img_w = target_sizes.unbind(1)

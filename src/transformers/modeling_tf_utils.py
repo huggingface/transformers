@@ -24,6 +24,7 @@ import pickle
 import re
 import warnings
 from collections.abc import Mapping
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 import h5py
@@ -58,7 +59,6 @@ from .utils import (
     RepositoryNotFoundError,
     RevisionNotFoundError,
     cached_path,
-    copy_func,
     find_labels,
     has_file,
     hf_bucket_url,
@@ -66,6 +66,7 @@ from .utils import (
     is_remote_url,
     logging,
     requires_backends,
+    working_or_temp_dir,
 )
 
 
@@ -403,8 +404,13 @@ def unpack_inputs(func):
         # move any arg into kwargs, if they exist
         fn_args_and_kwargs.update(dict(zip(func.__code__.co_varnames[1:], args)))
 
-        # process the inputs and call the wrapped function
-        unpacked_inputs = input_processing(func, self.config, **fn_args_and_kwargs)
+        # Encoder Decoder models delegate the application of the configuration options to their inner models.
+        if "encoder_decoder" in str(self).lower():
+            config = None
+        else:
+            config = self.config
+
+        unpacked_inputs = input_processing(func, config, **fn_args_and_kwargs)
         return func(self, **unpacked_inputs)
 
     # Keras enforces the first layer argument to be passed, and checks it through `inspect.getfullargspec()`. This
@@ -559,18 +565,19 @@ def input_processing(func, config, **kwargs):
     if "kwargs" in output:
         del output["kwargs"]
 
-    boolean_dict = {
-        k: v
-        for k, v in output.items()
-        if k in ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
-    }
+    if config is not None:
+        boolean_dict = {
+            k: v
+            for k, v in output.items()
+            if k in ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
+        }
 
-    output.update(
-        booleans_processing(
-            config=config,
-            **boolean_dict,
+        output.update(
+            booleans_processing(
+                config=config,
+                **boolean_dict,
+            )
         )
-    )
 
     return output
 
@@ -1873,7 +1880,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or `None`, just returns a pointer to the input tokens
-                ``tf.Variable``` module of the model without doing anything.
+                `tf.Variable` module of the model without doing anything.
 
         Return:
             `tf.Variable`: Pointer to the resized Embedding Module or the old Embedding Module if `new_num_tokens` is
@@ -1913,6 +1920,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         version=1,
         push_to_hub=False,
         max_shard_size: Union[int, str] = "10GB",
+        create_pr: bool = False,
         **kwargs
     ):
         """
@@ -1929,16 +1937,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 TensorFlow Serving as detailed in the official documentation
                 https://www.tensorflow.org/tfx/serving/serving_basic
             push_to_hub (`bool`, *optional*, defaults to `False`):
-                Whether or not to push your model to the Hugging Face model hub after saving it.
-
-                <Tip warning={true}>
-
-                Using `push_to_hub=True` will synchronize the repository you are pushing to with `save_directory`,
-                which requires `save_directory` to be a local clone of the repo you are pushing to if it's an existing
-                folder. Pass along `temp_dir=True` to use a temporary directory instead.
-
-                </Tip>
-
+                Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
+                repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
+                namespace).
             max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
                 The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
                 lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
@@ -1950,6 +1951,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
                 </Tip>
 
+            create_pr (`bool`, *optional*, defaults to `False`):
+                Whether or not to create a PR with the uploaded files or directly commit.
+
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -1957,11 +1961,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
 
+        os.makedirs(save_directory, exist_ok=True)
+
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo = self._create_or_get_repo(save_directory, **kwargs)
-
-        os.makedirs(save_directory, exist_ok=True)
+            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id, token = self._create_repo(repo_id, **kwargs)
+            files_timestamps = self._get_files_timestamps(save_directory)
 
         if saved_model:
             saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
@@ -2024,8 +2030,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         param_dset[:] = layer.numpy()
 
         if push_to_hub:
-            url = self._push_to_hub(repo, commit_message=commit_message)
-            logger.info(f"Model pushed to the hub in this commit: {url}")
+            self._upload_modified_files(
+                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+            )
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -2152,10 +2159,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         local_files_only = kwargs.pop("local_files_only", False)
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
         mirror = kwargs.pop("mirror", None)
         load_weight_prefix = kwargs.pop("load_weight_prefix", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
+
+        if trust_remote_code is True:
+            logger.warning(
+                "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
+                " ignored."
+            )
 
         user_agent = {"file_type": "model", "framework": "tensorflow", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -2469,12 +2483,95 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         return model
 
+    def push_to_hub(
+        self,
+        repo_id: str,
+        use_temp_dir: Optional[bool] = None,
+        commit_message: Optional[str] = None,
+        private: Optional[bool] = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
+        max_shard_size: Optional[Union[int, str]] = "10GB",
+        **model_card_kwargs
+    ) -> str:
+        """
+        Upload the model files to the 🤗 Model Hub while synchronizing a local clone of the repo in `repo_path_or_name`.
 
-# To update the docstring, we need to copy the method, otherwise we change the original docstring.
-TFPreTrainedModel.push_to_hub = copy_func(TFPreTrainedModel.push_to_hub)
-TFPreTrainedModel.push_to_hub.__doc__ = TFPreTrainedModel.push_to_hub.__doc__.format(
-    object="model", object_class="TFAutoModel", object_files="model checkpoint"
-)
+        Parameters:
+            repo_id (`str`):
+                The name of the repository you want to push your model to. It should contain your organization name
+                when pushing to a given organization.
+            use_temp_dir (`bool`, *optional*):
+                Whether or not to use a temporary directory to store the files saved before they are pushed to the Hub.
+                Will default to `True` if there is no directory named like `repo_id`, `False` otherwise.
+            commit_message (`str`, *optional*):
+                Message to commit while pushing. Will default to `"Upload model"`.
+            private (`bool`, *optional*):
+                Whether or not the repository created should be private (requires a paying subscription).
+            use_auth_token (`bool` or `str`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `transformers-cli login` (stored in `~/.huggingface`). Will default to `True` if
+                `repo_url` is not specified.
+            max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+                Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
+                will then be each of size lower than this size. If expressed as a string, needs to be digits followed
+                by a unit (like `"5MB"`).
+            model_card_kwargs:
+                Additional keyword arguments passed along to the [`~TFPreTrainedModel.create_model_card`] method.
+
+        Examples:
+
+        ```python
+        from transformers import TFAutoModel
+
+        model = TFAutoModel.from_pretrained("bert-base-cased")
+
+        # Push the model to your namespace with the name "my-finetuned-bert".
+        model.push_to_hub("my-finetuned-bert")
+
+        # Push the model to an organization with the name "my-finetuned-bert".
+        model.push_to_hub("huggingface/my-finetuned-bert")
+        ```
+        """
+        if "repo_path_or_name" in model_card_kwargs:
+            warnings.warn(
+                "The `repo_path_or_name` argument is deprecated and will be removed in v5 of Transformers. Use "
+                "`repo_id` instead."
+            )
+            repo_id = model_card_kwargs.pop("repo_path_or_name")
+        # Deprecation warning will be sent after for repo_url and organization
+        repo_url = model_card_kwargs.pop("repo_url", None)
+        organization = model_card_kwargs.pop("organization", None)
+
+        if os.path.isdir(repo_id):
+            working_dir = repo_id
+            repo_id = repo_id.split(os.path.sep)[-1]
+        else:
+            working_dir = repo_id.split("/")[-1]
+
+        repo_id, token = self._create_repo(
+            repo_id, private=private, use_auth_token=use_auth_token, repo_url=repo_url, organization=organization
+        )
+
+        if use_temp_dir is None:
+            use_temp_dir = not os.path.isdir(working_dir)
+
+        with working_or_temp_dir(working_dir=working_dir, use_temp_dir=use_temp_dir) as work_dir:
+            files_timestamps = self._get_files_timestamps(work_dir)
+
+            # Save all files.
+            self.save_pretrained(work_dir, max_shard_size=max_shard_size)
+            if hasattr(self, "history") and hasattr(self, "create_model_card"):
+                # This is a Keras model and we might be able to fish out its History and make a model card out of it
+                base_model_card_args = {
+                    "output_dir": work_dir,
+                    "model_name": Path(repo_id).name,
+                }
+                base_model_card_args.update(model_card_kwargs)
+                self.create_model_card(**base_model_card_args)
+
+            self._upload_modified_files(
+                work_dir, repo_id, files_timestamps, commit_message=commit_message, token=token
+            )
 
 
 class TFConv1D(tf.keras.layers.Layer):
