@@ -382,7 +382,7 @@ class FeaturesManager:
             "default-with-past",
             "seq2seq-lm",
             "seq2seq-lm-with-past",
-            onnx_config_cls="models.t5.T5OnnxConfig",
+            onnx_config_cls="models.mt5.MT5OnnxConfig",
         ),
         "m2m-100": supported_features_mapping(
             "default",
