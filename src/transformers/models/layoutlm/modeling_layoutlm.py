@@ -750,10 +750,10 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LayoutLMTokenizer, LayoutLMModel
+        >>> from transformers import AutoTokenizer, LayoutLMModel
         >>> import torch
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         >>> model = LayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "world"]
@@ -1281,12 +1281,12 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         a prediction of what it thinks the answer is (the span of the answer within the texts parsed from the image).
 
         ```python
-        >>> from transformers import LayoutLMTokenizer, LayoutLMForQuestionAnswering
+        >>> from transformers import AutoTokenizer, LayoutLMForQuestionAnswering
         >>> from datasets import load_dataset
         >>> import torch
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased", add_prefix_space=True)
-        >>> model = AutoModelForQuestionAnswering.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased", add_prefix_space=True)
+        >>> model = LayoutLMForQuestionAnswering.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]

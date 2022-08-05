@@ -1445,23 +1445,17 @@ class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFQuestionAnswer
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import LayoutLMTokenizer, TFLayoutLMForTokenClassification
+        >>> from transformers import AutoTokenizer, TFLayoutLMForQuestionAnswering
+        >>> from datasets import load_dataset
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
-        >>> model = TFLayoutLMForTokenClassification.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> model = TFLayoutLMForQuestionAnswering.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
         >>> example = dataset[0]
         >>> question = "what's his name?"
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
-
-        >>> token_boxes = []
-        >>> for word, box in zip(words, normalized_word_boxes):
-        ...     word_tokens = tokenizer.tokenize(word)
-        ...     token_boxes.extend([box] * len(word_tokens))
-        >>> # add bounding boxes of cls + sep tokens
-        >>> token_boxes = [[0, 0, 0, 0]] + token_boxes + [[1000, 1000, 1000, 1000]]
 
         >>> encoding = tokenizer(
         ...     question.split(), words, is_split_into_words=True, return_token_type_ids=True, return_tensors="tf"
