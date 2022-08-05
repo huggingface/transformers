@@ -25,6 +25,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import traceback
 import warnings
 from contextlib import contextmanager
 from functools import partial
@@ -1480,7 +1481,7 @@ def move_cache(cache_dir=None, token=None):
     if token is None:
         token = HfFolder.get_token()
     cached_files = get_all_cached_files(cache_dir=cache_dir)
-    print(f"Moving {len(cached_files)} to the new cache system")
+    print(f"Moving {len(cached_files)} files to the new cache system")
 
     hub_metadata = {}
     for file_info in tqdm(cached_files):
@@ -1541,9 +1542,11 @@ if cache_version < 1:
     try:
         move_cache()
     except Exception as e:
+        trace = "\n".join(traceback.format_tb(e.__traceback__))
         logger.error(
-            "There was a problem when trying to move your cache. You can do this later on by calling "
-            f"`transformers.utils.move_cache()`.\n{e}."
+            f"There was a problem when trying to move your cache:\n\n{trace}\n\nPlease file an issue at "
+            "https://github.com/huggingface/transformers/issues/new/choose and copy paste this whole message and we "
+            "will do our best to help."
         )
 
     try:
