@@ -637,8 +637,8 @@ class DisentangledSelfAttention(nn.Module):
             qkvw = [torch.cat([ws[i * 3 + k] for i in range(self.num_attention_heads)], dim=0) for k in range(3)]
             qkvb = [None] * 3
 
-            q = linear(qkvw[0], qkvb[0], query_states)
-            k, v = [linear(qkvw[i], qkvb[i], hidden_states) for i in range(1, 3)]
+            q = linear(qkvw[0], qkvb[0], torch.tensor(query_states, dtype=qkvw[0].dtype))
+            k, v = [linear(qkvw[i], qkvb[i], torch.tensor(hidden_states, dtype=qkvw[i].dtype)) for i in range(1, 3)]
             query_layer, key_layer, value_layer = [self.transpose_for_scores(x) for x in [q, k, v]]
 
         query_layer = query_layer + self.transpose_for_scores(self.q_bias[None, None, :])
