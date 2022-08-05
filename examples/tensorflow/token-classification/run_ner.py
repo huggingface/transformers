@@ -49,7 +49,7 @@ from transformers.utils.versions import require_version
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/tensorflow/token-classification/requirements.txt")
 
 
 # region Command-line arguments
@@ -496,15 +496,28 @@ def main():
         # If you have variable batch sizes (i.e. not using pad_to_max_length), then
         # this bit might fail on TF < 2.8 because TF can't concatenate outputs of varying seq
         # length from predict().
+
         try:
             predictions = model.predict(tf_eval_dataset, batch_size=training_args.per_device_eval_batch_size)["logits"]
         except tf.python.framework.errors_impl.InvalidArgumentError:
             raise ValueError("Concatenating predictions failed! If your version of TensorFlow is 2.8.0 or older "
                              "then you will need to use --pad_to_max_length to generate predictions, as older "
                              "versions of TensorFlow cannot concatenate variable-length predictions as RaggedTensor.")
-        predictions = tf.math.argmax(predictions, axis=-1)  # Should work for tf.ragged outputs too
-        labels = np.array(eval_dataset["label"])
-        labels[np.array(eval_dataset["attention_mask"]) == 0] = -100
+        if isinstance(predictions, tf.RaggedTensor):
+            predictions = predictions.to_tensor(default_value=-100)
+        predictions = tf.math.argmax(predictions, axis=-1).numpy()
+        if "label" in eval_dataset:
+            labels = eval_dataset.with_format("tf")["label"]
+        else:
+            labels = eval_dataset.with_format("tf")["labels"]
+        if isinstance(labels, tf.RaggedTensor):
+            labels = labels.to_tensor(default_value=-100)
+        labels = labels.numpy()
+        attention_mask = eval_dataset.with_format("tf")["attention_mask"]
+        if isinstance(attention_mask, tf.RaggedTensor):
+            attention_mask = attention_mask.to_tensor(default_value=-100)
+        attention_mask = attention_mask.numpy()
+        labels[attention_mask == 0] = -100
         preds, refs = get_labels(predictions, labels)
         metric.add_batch(
             predictions=preds,
