@@ -515,7 +515,9 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             end_ = output["end"]
             example = output["example"]
             p_mask = output["p_mask"]
-            attention_mask = output["attention_mask"].numpy() if "attention_mask" in output else None
+            attention_mask = (
+                output["attention_mask"].numpy() if output.get("attention_mask", None) is not None else None
+            )
 
             starts, ends, scores, min_null_score = select_starts_ends(
                 start_, end_, p_mask, attention_mask, min_null_score, top_k, handle_impossible_answer, max_answer_len

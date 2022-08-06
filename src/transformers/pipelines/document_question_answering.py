@@ -366,7 +366,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             model_outputs["start_logits"],
             model_outputs["end_logits"],
             model_outputs["p_mask"],
-            model_outputs["attention_mask"].numpy() if "attention_mask" in model_outputs else None,
+            model_outputs["attention_mask"].numpy() if model_outputs.get("attention_mask", None) is not None else None,
             min_null_score,
             top_k,
             handle_impossible_answer,
