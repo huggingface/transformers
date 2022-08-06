@@ -106,12 +106,15 @@ def no_init_weights(_enable=True):
     TODO(Patrick): Delete safety argument `_enable=True` at next major version. .
     """
     global _init_weights
-    if _enable:
-        _init_weights = False
+    saved = _init_weights
+    value = False if _enable else _init_weights
+    _init_weights = value
     try:
         yield
     finally:
-        _init_weights = True
+        if _init_weights != value:
+            logger.warning("_init_weights was changed inside no_init_weights context")
+        _init_weights = saved
 
 
 try:
