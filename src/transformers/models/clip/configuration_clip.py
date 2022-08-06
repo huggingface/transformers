@@ -16,8 +16,15 @@
 
 import copy
 import os
-from typing import Union
+from collections import OrderedDict
 
+from typing import Any, Mapping, Union, Optional
+
+from transformers import TensorType
+from transformers.processing_utils import ProcessorMixin
+
+from ... import is_torch_available
+from ...onnx import OnnxConfig
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -317,3 +324,33 @@ class CLIPConfig(PretrainedConfig):
         output["vision_config"] = self.vision_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output
+
+        
+class CLIPOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "sequence"}), 
+                ("attention_mask", {0: "batch", 1: "sequence"}), 
+                ("pixel_values", {0: "batch"})
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4
+
+    def generate_dummy_inputs(
+        self,
+        processor: ProcessorMixin,
+        framework: Optional[TensorType] = None,
+    ) -> Mapping[str, Any]:
+
+        text_input_dict = super().generate_dummy_inputs(
+            processor.tokenizer, framework=framework
+        )
+        image_input_dict = super().generate_dummy_inputs(
+            processor.feature_extractor, framework=framework
+        )
+        return {**text_input_dict, **image_input_dict}
