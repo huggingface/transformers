@@ -10,7 +10,6 @@ from .question_answering import select_starts_ends
 if is_vision_available():
     from PIL import Image
 
-    # TODO Will re-introduce when I add images back in
     from ..image_utils import load_image
 
 if is_torch_available():
@@ -38,7 +37,7 @@ def normalize_box(box, width, height):
     ]
 
 
-def apply_tesseract(image: Image.Image, lang: Optional[str], tesseract_config: Optional[str]):
+def apply_tesseract(image: "Image.Image", lang: Optional[str], tesseract_config: Optional[str]):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
     # apply OCR
     data = pytesseract.image_to_data(image, lang=lang, output_type="dict", config=tesseract_config)
