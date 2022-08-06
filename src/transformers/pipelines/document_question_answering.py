@@ -4,6 +4,7 @@ import numpy as np
 
 from ..utils import add_end_docstrings, is_pytesseract_available, is_torch_available, is_vision_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
+from .question_answering import select_starts_ends
 
 
 if is_vision_available():
@@ -156,9 +157,6 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         word_boxes: Tuple[str, List[float]] = None,
         **kwargs,
     ):
-        # TODO:
-        #   - Should we attempt to support a batch of inputs like the question answering pipeline?
-        #   - Implement top-k (may come for free when integrating the QA post processor)
         """
         Answer the question(s) given as inputs by using the context(s). The pipeline accepts an image and question, as
         well as an optional list of (word, box) tuples which represent the text in the document. If the `word_boxes`
@@ -356,12 +354,43 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         model_outputs["attention_mask"] = model_inputs["attention_mask"]
         return model_outputs
 
-    def postprocess(self, model_outputs, top_k=5):
-        return postprocess_qa_output(
-            self.model,
-            model_outputs,
-            model_outputs["word_ids"],
-            model_outputs["words"],
-            self.framework,
+    def postprocess(self, model_outputs, top_k=1, handle_impossible_answer=False, max_answer_len=15):
+        min_null_score = 1000000  # large and positive
+        answers = []
+        words = model_outputs["words"]
+
+        # Currently, we expect the length of model_outputs to be 1, because we do not stride
+        # in the preprocessor code. But this code is written generally (like the question_answering
+        # pipeline) to support that scenario
+        starts, ends, scores, min_null_score = select_starts_ends(
+            model_outputs["start_logits"],
+            model_outputs["end_logits"],
+            model_outputs["p_mask"],
+            model_outputs["attention_mask"].numpy() if "attention_mask" in model_outputs else None,
+            min_null_score,
             top_k,
+            handle_impossible_answer,
+            max_answer_len,
         )
+
+        word_ids = model_outputs["word_ids"][0]
+        for s, e, score in zip(starts, ends, scores):
+            word_start, word_end = word_ids[s], word_ids[e]
+            answers.append(
+                {
+                    "score": score,
+                    "answer": " ".join(words[word_start : word_end + 1]),
+                    "start": word_start,
+                    "end": word_end,
+                }
+            )
+
+        print(handle_impossible_answer)
+        if handle_impossible_answer:
+            answers.append({"score": min_null_score, "answer": "", "start": 0, "end": 0})
+            print(answers[-1])
+
+        answers = sorted(answers, key=lambda x: x["score"], reverse=True)[:top_k]
+        if len(answers) == 1:
+            return answers[0]
+        return answers
