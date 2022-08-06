@@ -190,7 +190,7 @@ _import_structure = {
     "models.dialogpt": [],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
     "models.dit": [],
-    "models.donut": ["DonutProcessor"],
+    "models.donut": ["DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "DonutProcessor", "DonutSwinConfig"],
     "models.dpr": [
         "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DPRConfig",
@@ -1099,6 +1099,13 @@ else:
             "DistilBertForTokenClassification",
             "DistilBertModel",
             "DistilBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.donut"].extend(
+        [
+            "DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DonutSwinModel",
+            "DonutSwinPreTrainedModel",
         ]
     )
     _import_structure["models.dpr"].extend(
@@ -2986,7 +2993,7 @@ if TYPE_CHECKING:
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
-    from .models.donut import DonutProcessor
+    from .models.donut import DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, DonutProcessor, DonutSwinConfig
     from .models.dpr import (
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DPRConfig,
@@ -3765,6 +3772,7 @@ if TYPE_CHECKING:
             DistilBertModel,
             DistilBertPreTrainedModel,
         )
+        from .models.donut import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST, DonutSwinModel, DonutSwinPreTrainedModel
         from .models.dpr import (
             DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
             DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,

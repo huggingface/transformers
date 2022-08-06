@@ -56,6 +56,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("deit", "DeiTModel"),
         ("detr", "DetrModel"),
         ("distilbert", "DistilBertModel"),
+        ("donut", "DonutSwinModel"),
         ("dpr", "DPRQuestionEncoder"),
         ("dpt", "DPTModel"),
         ("electra", "ElectraModel"),
