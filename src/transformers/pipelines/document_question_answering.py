@@ -271,6 +271,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             # truncation="only_second",
             # return_overflowing_tokens=True,
         )
+        encoding.update(image_features)
 
         # TODO: For now, this should always be num_spans == 1 given the flags we've passed in above, but the
         # code is written to naturally handle multiple spans at the right time.
