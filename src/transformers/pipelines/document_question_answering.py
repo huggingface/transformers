@@ -1,5 +1,7 @@
 from typing import List, Optional, Tuple, Union
 
+import numpy as np
+
 from ..utils import add_end_docstrings, is_pytesseract_available, is_torch_available, is_vision_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
@@ -272,6 +274,12 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
                 " OCR to derive words and boxes"
             )
 
+        if self.tokenizer.padding_side != "right":
+            raise ValueError(
+                "Document question answering only supports tokenizers whose padding side is 'right', not"
+                f" {self.tokenizer.padding_side}"
+            )
+
         # TODO: The safe way to do this is to call the tokenizer in succession on each token and insert the CLS/SEP
         # tokens ourselves.
         encoding = self.tokenizer(
@@ -292,6 +300,17 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
 
         # TODO: For now, this should always be num_spans == 1 given the flags we've passed in above
         num_spans = len(encoding["input_ids"])
+
+        # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
+        # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
+        p_mask = [[tok != 1 for tok in encoding.sequence_ids(span_id)] for span_id in range(num_spans)]
+        for span_idx in range(num_spans):
+            input_ids_span_idx = encoding["input_ids"][span_idx]
+            # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
+            if self.tokenizer.cls_token_id is not None:
+                cls_indices = np.nonzero(np.array(input_ids_span_idx) == self.tokenizer.cls_token_id)[0]
+                for cls_index in cls_indices:
+                    p_mask[span_idx][cls_index] = 0
 
         # For each span, place a bounding box [0,0,0,0] for question and CLS tokens, [1000,1000,1000,1000]
         # for SEP tokens, and the word's bounding box for words in the original document.
@@ -319,18 +338,22 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         encoding.pop("overflow_to_sample_mapping", None)
         return {
             **encoding,
+            "p_mask": p_mask,
             "word_ids": word_ids,
             "words": words,
         }
 
     def _forward(self, model_inputs):
+        p_mask = model_inputs.pop("p_mask", None)
         word_ids = model_inputs.pop("word_ids", None)
         words = model_inputs.pop("words", None)
 
         model_outputs = self.model(**model_inputs)
 
+        model_outputs["p_mask"] = p_mask
         model_outputs["word_ids"] = word_ids
         model_outputs["words"] = words
+        model_outputs["attention_mask"] = model_inputs["attention_mask"]
         return model_outputs
 
     def postprocess(self, model_outputs, top_k=5):
