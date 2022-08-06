@@ -354,3 +354,7 @@ class CLIPOnnxConfig(OnnxConfig):
             processor.feature_extractor, framework=framework
         )
         return {**text_input_dict, **image_input_dict}
+    
+    @property
+    def default_onnx_opset(self) -> int:
+        return 14
