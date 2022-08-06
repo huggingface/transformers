@@ -37,8 +37,6 @@ if is_torch_available():
     from transformers.models.donut.modeling_donut_swin import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import AutoFeatureExtractor
 
 if is_torch_fx_available():
@@ -156,13 +154,7 @@ class DonutSwinModelTester:
 @require_torch
 class DonutSwinModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (
-        (
-            DonutSwinModel,
-        )
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (DonutSwinModel,) if is_torch_available() else ()
     fx_compatible = True
 
     test_pruning = False
@@ -480,11 +472,7 @@ class DonutSwinModelTest(ModelTesterMixin, unittest.TestCase):
 class DonutSwinModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return (
-            AutoFeatureExtractor.from_pretrained("naver-clova-ix/donut-base")
-            if is_vision_available()
-            else None
-        )
+        return AutoFeatureExtractor.from_pretrained("naver-clova-ix/donut-base") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):

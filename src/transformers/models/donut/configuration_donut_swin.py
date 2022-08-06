@@ -87,7 +87,7 @@ class DonutSwinConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "donut_swin"
+    model_type = "donut"
 
     attribute_map = {
         "num_attention_heads": "num_heads",

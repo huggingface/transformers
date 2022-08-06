@@ -24,10 +24,10 @@ from donut import DonutModel
 from transformers import (
     DonutFeatureExtractor,
     DonutProcessor,
+    DonutSwinConfig,
+    DonutSwinModel,
     MBartConfig,
     MBartForCausalLM,
-    SwinConfig,
-    SwinModel,
     VisionEncoderDecoderModel,
     XLMRobertaTokenizerFast,
 )
@@ -36,14 +36,13 @@ from transformers import (
 def get_configs(model):
     original_config = model.config
 
-    encoder_config = SwinConfig(
+    encoder_config = DonutSwinConfig(
         image_size=original_config.input_size,
         patch_size=4,
         depths=original_config.encoder_layer,
         num_heads=[4, 8, 16, 32],
         window_size=original_config.window_size,
         embed_dim=128,
-        add_final_layer_norm=False,
     )
     decoder_config = MBartConfig(
         is_decoder=True,
@@ -140,7 +139,7 @@ def convert_donut_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     # load HuggingFace model
     encoder_config, decoder_config = get_configs(original_model)
-    encoder = SwinModel(encoder_config)
+    encoder = DonutSwinModel(encoder_config)
     decoder = MBartForCausalLM(decoder_config)
     model = VisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
     model.eval()
