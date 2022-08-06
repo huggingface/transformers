@@ -1494,7 +1494,7 @@ class TFGroupViTPreTrainedModel(TFPreTrainedModel):
     """
 
     config_class = GroupViTConfig
-    base_model_prefix = "group_vit"
+    base_model_prefix = "groupvit"
 
 
 ################################################################################
@@ -1650,7 +1650,7 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
     def __init__(self, config: GroupViTTextConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.group_vit = TFGroupViTTextMainLayer(config, name="group_vit")
+        self.group_vit = TFGroupViTTextMainLayer(config, name="groupvit")
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -1737,7 +1737,7 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
     def __init__(self, config: GroupViTVisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.group_vit = TFGroupViTVisionMainLayer(config, name="group_vit")
+        self.group_vit = TFGroupViTVisionMainLayer(config, name="groupvit")
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -1831,7 +1831,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
     def __init__(self, config: GroupViTConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.group_vit = TFGroupViTMainLayer(config, name="group_vit")
+        self.group_vit = TFGroupViTMainLayer(config, name="groupvit")
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
