@@ -23,13 +23,14 @@ import PIL.ImageOps
 import requests
 
 from .utils import is_torch_available
+from .utils.constants import (  # noqa: F401
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+)
 from .utils.generic import _is_torch
 
-
-IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]
-IMAGENET_DEFAULT_STD = [0.229, 0.224, 0.225]
-IMAGENET_STANDARD_MEAN = [0.5, 0.5, 0.5]
-IMAGENET_STANDARD_STD = [0.5, 0.5, 0.5]
 
 ImageInput = Union[
     PIL.Image.Image, np.ndarray, "torch.Tensor", List[PIL.Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa

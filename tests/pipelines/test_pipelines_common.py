@@ -795,7 +795,7 @@ class CustomPipelineTest(unittest.TestCase):
         alias = "text-classification"
         # Get the original task, so we can restore it at the end.
         # (otherwise the subsequential tests in `TextClassificationPipelineTests` will fail)
-        original_task, original_task_options = PIPELINE_REGISTRY.check_task(alias)
+        _, original_task, _ = PIPELINE_REGISTRY.check_task(alias)
 
         try:
             with CaptureLogger(logger_) as cm:
@@ -816,7 +816,7 @@ class CustomPipelineTest(unittest.TestCase):
         )
         assert "custom-text-classification" in PIPELINE_REGISTRY.get_supported_tasks()
 
-        task_def, _ = PIPELINE_REGISTRY.check_task("custom-text-classification")
+        _, task_def, _ = PIPELINE_REGISTRY.check_task("custom-text-classification")
         self.assertEqual(task_def["pt"], (AutoModelForSequenceClassification,) if is_torch_available() else ())
         self.assertEqual(task_def["tf"], (TFAutoModelForSequenceClassification,) if is_tf_available() else ())
         self.assertEqual(task_def["type"], "text")
