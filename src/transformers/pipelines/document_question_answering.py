@@ -70,27 +70,6 @@ def apply_tesseract(image: Image.Image, lang: Optional[str], tesseract_config: O
     return words, normalized_boxes
 
 
-def postprocess_qa_output(model, model_outputs, word_ids, words, framework, top_k):
-    # TODO: This is a very poor implementation of start/end (just here for completeness sake).
-    # Ideally we can refactor/borrow the implementation in the question answering pipeline.
-    results = []
-    for i, (s, e) in enumerate(zip(model_outputs.start_logits.argmax(-1), model_outputs.end_logits.argmax(-1))):
-        if s > e:
-            continue
-        else:
-            word_start, word_end = word_ids[i][s], word_ids[i][e]
-            results.append(
-                {
-                    "score": 0.5,  # TODO
-                    "answer": " ".join(words[word_start : word_end + 1]),
-                    "start": word_start,
-                    "end": word_end,
-                }
-            )
-
-    return results
-
-
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class DocumentQuestionAnsweringPipeline(Pipeline):
     # TODO: Update task_summary docs to include an example with document QA and then update the first sentence
@@ -158,10 +137,9 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         **kwargs,
     ):
         """
-        Answer the question(s) given as inputs by using the context(s). The pipeline accepts an image and question, as
-        well as an optional list of (word, box) tuples which represent the text in the document. If the `word_boxes`
-        are not provided, it will use the Tesseract OCR engine (if available) to extract the words and boxes
-        automatically.
+        Answer the question(s) given as inputs by using the document(s). A document is defined as an image and an
+        optional list of (word, box) tuples which represent the text in the document. If the `word_boxes` are not
+        provided, it will use the Tesseract OCR engine (if available) to extract the words and boxes automatically.
 
         You can invoke the pipeline several ways:
 
@@ -242,8 +220,9 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         #            max_seq_len = min(self.tokenizer.model_max_length, 512)
 
         if doc_stride is not None:
-            raise ValueError("Unsupported: striding inputs")
+            # TODO implement
             # doc_stride = min(max_seq_len // 2, 128)
+            raise ValueError("Unsupported: striding inputs")
 
         image = None
         image_features = {}
@@ -278,8 +257,6 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
                 f" {self.tokenizer.padding_side}"
             )
 
-        # TODO: The safe way to do this is to call the tokenizer in succession on each token and insert the CLS/SEP
-        # tokens ourselves.
         encoding = self.tokenizer(
             text=input["question"].split(),
             text_pair=words,
@@ -296,11 +273,13 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             # return_overflowing_tokens=True,
         )
 
-        # TODO: For now, this should always be num_spans == 1 given the flags we've passed in above
+        # TODO: For now, this should always be num_spans == 1 given the flags we've passed in above, but the
+        # code is written to naturally handle multiple spans at the right time.
         num_spans = len(encoding["input_ids"])
 
         # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
         # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
+        # This logic mirrors the logic in the question_answering pipeline
         p_mask = [[tok != 1 for tok in encoding.sequence_ids(span_id)] for span_id in range(num_spans)]
         for span_idx in range(num_spans):
             input_ids_span_idx = encoding["input_ids"][span_idx]
@@ -333,7 +312,9 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
 
         word_ids = [encoding.word_ids(i) for i in range(num_spans)]
 
-        encoding.pop("overflow_to_sample_mapping", None)
+        # TODO This will be necessary when we implement overflow support
+        # encoding.pop("overflow_to_sample_mapping", None)
+
         return {
             **encoding,
             "p_mask": p_mask,
@@ -359,9 +340,9 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         answers = []
         words = model_outputs["words"]
 
-        # Currently, we expect the length of model_outputs to be 1, because we do not stride
-        # in the preprocessor code. But this code is written generally (like the question_answering
-        # pipeline) to support that scenario
+        # TODO: Currently, we expect the length of model_outputs to be 1, because we do not stride
+        # in the preprocessor code. When we implement that, we'll either need to handle tensors of size
+        # > 1 or use the ChunkPipeline and handle multiple outputs (each of size = 1).
         starts, ends, scores, min_null_score = select_starts_ends(
             model_outputs["start_logits"],
             model_outputs["end_logits"],
@@ -385,10 +366,8 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
                 }
             )
 
-        print(handle_impossible_answer)
         if handle_impossible_answer:
             answers.append({"score": min_null_score, "answer": "", "start": 0, "end": 0})
-            print(answers[-1])
 
         answers = sorted(answers, key=lambda x: x["score"], reverse=True)[:top_k]
         if len(answers) == 1:
