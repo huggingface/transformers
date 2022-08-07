@@ -171,6 +171,7 @@ def resize(
     size: Tuple[int, int],
     resample=PIL.Image.Resampling.BILINEAR,
     data_format: Optional[ChannelDimension] = None,
+    return_numpy: bool = True,
 ) -> np.ndarray:
     """
     Resizes `image` to (h, w) specified by `size` using the PIL library.
@@ -184,6 +185,9 @@ def resize(
             The filter to user for resampling.
         data_format (`ChannelDimension`, *optional*, defaults to `None`):
             The channel dimension format of the output image. If `None`, will use the inferred format from the input.
+        return_numpy (`bool`, *optional*, defaults to `True`):
+            Whether or not to return the resized image as a numpy array. If False a PIL.Image.Image object is
+            returned.
 
     Returns:
         image: A resized np.ndarray.
@@ -204,6 +208,8 @@ def resize(
     h, w = size
     # PIL images are in the format (width, height)
     resized_image = image.resize((w, h), resample=resample)
-    resized_image = np.array(resized_image)
-    resized_image = to_channel_dimension_format(resized_image, data_format)
+
+    if return_numpy:
+        resized_image = np.array(resized_image)
+        resized_image = to_channel_dimension_format(resized_image, data_format)
     return resized_image

@@ -126,3 +126,9 @@ class ImageTransformsTester(unittest.TestCase):
         resized_image = resize(image, (30, 40), data_format="channels_last")
         self.assertIsInstance(resized_image, np.ndarray)
         self.assertEqual(resized_image.shape, (30, 40, 3))
+
+        # Check PIL.Image.Image is return if return_numpy=False
+        resized_image = resize(image, (30, 40), return_numpy=False)
+        self.assertIsInstance(resized_image, PIL.Image.Image)
+        # PIL size is in (width, height) order
+        self.assertEqual(resized_image.size, (40, 30))
