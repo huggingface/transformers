@@ -133,11 +133,13 @@ model = AutoModel.from_config(config)
 
 Due to Pytorch design, this functionality is only available for floating dtypes.
 
-### Mixed int8 quantization 🪶
+### Mixed int8 quantization 
 
 From the paper `GPT3.int8() : 8-bit Matrix Multiplication for Transformers at Scale`, we suport HuggingFace 🤗  integration for all models in the Hub with few lines of code. 
 For models trained in  half-precision (aka, either `float16` or `bfloat16`). This method aims to reduce `nn.Linear` size by 2, without affecting too much quality by operating on the outliers in half-precision. Therefore the method is termed as mixed 8bit quantization.
 This technique is useful and works well for billion scale models (>1B parameters) therefore we advice you to use it only for models of that scale. This method has been tested for 2-billion to 176-billion scale models and supports only PyTorch models. 
+
+![HFxbitsandbytes.png](https://s3.amazonaws.com/moonup/production/uploads/1659861207959-62441d1d9fdefb55a0b7d12c.png)
 
 Int8 mixed-precision matrix decomposition works by separating a matrix multiplication into two streams: (1) and systematic feature outlier stream matrix multiplied in fp16 (0.01%), (2) a regular stream of int8 matrix multiplication (99.9%). With this method, int8 inference with no predictive degradation is possible for very large models (>=176B parameters).
 Values are usually normally distributed, that is, most values are in the range [-3.5, 3.5], but there are some exceptional systematic outliers that are very differently distributed for large models. These outliers are often in the interval [-60, -6] or [6, 60]. Int8 quantization works well for values of magnitude ~5, but beyond that, there is a significant performance penalty. A good default threshold is 6, but a lower threshold might be needed for more unstable models (small models, fine-tuning).
