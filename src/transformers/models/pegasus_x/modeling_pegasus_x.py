@@ -126,10 +126,9 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 class PegasusXSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, embed_dim, padding_idx, max_scale: int = 10000.0):
+    def __init__(self, embed_dim, max_scale: int = 10000.0):
         super().__init__()
         self.embed_dim = embed_dim
-        self.padding_idx = padding_idx
         self.max_scale = max_scale
 
     @torch.no_grad()
@@ -744,8 +743,6 @@ class PegasusXPreTrainedModel(PreTrainedModel):
             pass
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (PegasusXDecoder, PegasusXEncoder)):
@@ -880,20 +877,16 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
-        self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
         else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim)
 
         self.embed_global = nn.Embedding(config.num_global_tokens, embed_dim)
-        self.embed_positions = PegasusXSinusoidalPositionalEmbedding(
-            embed_dim,
-            self.padding_idx,
-        )
+        self.embed_positions = PegasusXSinusoidalPositionalEmbedding(embed_dim)
         self.layers = nn.ModuleList([
             PegasusXEncoderLayer(
                 stagger_blocks_this_layer=i % 2 == 1 and config.stagger_local_blocks,
@@ -922,10 +915,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         logger.info(f"Setting `config.max_position_embeddings={new_num_position_embeddings}`...")
         self.config.max_position_embeddings = new_num_position_embeddings
 
-        self.embed_positions = PegasusXSinusoidalPositionalEmbedding(
-            self.config.d_model,
-            self.padding_idx,
-        )
+        self.embed_positions = PegasusXSinusoidalPositionalEmbedding(self.config.d_model)
         self.embed_positions.to(self.device)
 
     def get_position_embeddings(self) -> nn.Embedding:
@@ -1089,19 +1079,15 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         if embed_tokens is not None:
             self.embed_tokens = embed_tokens
         else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
+            self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
 
-        self.embed_positions = PegasusXSinusoidalPositionalEmbedding(
-            config.d_model,
-            self.padding_idx,
-        )
+        self.embed_positions = PegasusXSinusoidalPositionalEmbedding(config.d_model)
         self.layers = nn.ModuleList([PegasusXDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
 
@@ -1150,10 +1136,7 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
         logger.info(f"Setting `config.max_position_embeddings={new_num_position_embeddings}`...")
         self.config.max_position_embeddings = new_num_position_embeddings
 
-        self.embed_positions = PegasusXSinusoidalPositionalEmbedding(
-            self.config.d_model,
-            self.padding_idx,
-        )
+        self.embed_positions = PegasusXSinusoidalPositionalEmbedding(self.config.d_model)
         self.embed_positions.to(self.device)
 
     def get_position_embeddings(self) -> nn.Embedding:
@@ -1359,8 +1342,8 @@ class PegasusXModel(PegasusXPreTrainedModel):
     def __init__(self, config: PegasusXConfig):
         super().__init__(config)
 
-        padding_idx, vocab_size = config.pad_token_id, config.vocab_size
-        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
+        vocab_size = config.vocab_size
+        self.shared = nn.Embedding(vocab_size, config.d_model)
 
         self.encoder = PegasusXEncoder(config, self.shared)
         self.decoder = PegasusXDecoder(config, self.shared)
