@@ -17,8 +17,6 @@
 # limitations under the License.
 
 from . import (
-    pegasus_x,
-    pegasus_x,
     albert,
     auto,
     bart,
@@ -106,6 +104,7 @@ from . import (
     opt,
     owlvit,
     pegasus,
+    pegasus_x,
     perceiver,
     phobert,
     plbart,

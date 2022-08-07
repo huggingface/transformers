@@ -46,12 +46,6 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
-"PegasusXEncoder",  # Building part of bigger (tested) model.
-    "PegasusXDecoder",  # Building part of bigger (tested) model.
-    "PegasusXDecoderWrapper", # Building part of bigger (tested) model.
-"PegasusXEncoder",  # Building part of bigger (tested) model.
-    "PegasusXDecoder",  # Building part of bigger (tested) model.
-    "PegasusXDecoderWrapper", # Building part of bigger (tested) model.
     "OPTDecoder",  # Building part of bigger (tested) model.
     "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
     "SegformerDecodeHead",  # Building part of bigger (tested) model.
@@ -88,6 +82,9 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "MvpEncoder",  # Building part of bigger (tested) model.
     "PegasusEncoder",  # Building part of bigger (tested) model.
     "PegasusDecoderWrapper",  # Building part of bigger (tested) model.
+    "PegasusXEncoder",  # Building part of bigger (tested) model.
+    "PegasusXDecoder",  # Building part of bigger (tested) model.
+    "PegasusXDecoderWrapper", # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
     "RealmBertModel",  # Building part of bigger (tested) model.
