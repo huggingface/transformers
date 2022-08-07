@@ -14,35 +14,23 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The PEGASUSX model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>)  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
+The PEGASUS-X model was proposed in [Investigating Efficiently Extending Transformers for Long Input Summarization](<INSERT PAPER LINK HERE>)  by Jason Phang, Yao Zhao and Peter J. Liu.
+
+PEGASUS-X (PEGASUS eXtended) extends the PEGASUS models for long input summarization through additional long input pretraining and using staggered block-local attention with glboal tokens in the encoder.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*While large pretrained Transformer models have proven highly capable at tackling natural language tasks, handling long sequence inputs continues to be a significant challenge. One such task is long input summarization, where inputs are longer than the maximum input context of most pretrained models. Through an extensive set of experiments, we investigate what model architectural changes and pretraining paradigms can most efficiently adapt a pretrained Transformer for long input summarization. We find that a staggered, block-local Transformer with global encoder tokens strikes a good balance of performance and efficiency, and that an additional pretraining phase on long sequences meaningfully improves downstream summarization performance. Based on our findings, we introduce PEGASUS-X, an extension of the PEGASUS model with additional long input pretraining to handle inputs of up to 16K tokens. PEGASUS-X achieves strong performance on long input summarization tasks comparable with much larger models while adding few additional parameters and not requiring model parallelism to train.*
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+* PEGASUS-X uses the same tokenizer as PEGASUS.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [zphang](<https://huggingface.co/zphang). The original code can be found [here](https://github.com/google-research/pegasus).
 
 ## PegasusXConfig
 
 [[autodoc]] PegasusXConfig
-
-
-## PegasusXTokenizer
-
-[[autodoc]] PegasusXTokenizer
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-
-
-## PegasusXTokenizerFast
-
-[[autodoc]] PegasusXTokenizerFast
 
 
 ## PegasusXModel
@@ -55,47 +43,3 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
 
 [[autodoc]] PegasusXForConditionalGeneration
     - forward
-
-
-## PegasusXForSequenceClassification
-
-[[autodoc]] PegasusXForSequenceClassification
-    - forward
-
-
-## PegasusXForQuestionAnswering
-
-[[autodoc]] PegasusXForQuestionAnswering
-    - forward
-
-
-## PegasusXForCausalLM
-
-[[autodoc]] PegasusXForCausalLM
-    - forward
-
-
-## FlaxPegasusXModel
-
-[[autodoc]] FlaxPegasusXModel
-    - call
-
-
-## FlaxPegasusXForSequenceClassification
-
-[[autodoc]] FlaxPegasusXForSequenceClassification
-    - call
-
-
-## FlaxPegasusXForQuestionAnswering
-
-[[autodoc]] FlaxPegasusXForQuestionAnswering
-    - call
-
-
-## FlaxPegasusXForConditionalGeneration
-
-[[autodoc]] FlaxPegasusXForConditionalGeneration
-    - call
-
-

@@ -2699,7 +2699,6 @@ else:
 
     _import_structure["models.pegasus_x"].extend(
         [
-            "FlaxPegasusXForConditionalGeneration",
             "FlaxPegasusXModel",
             "FlaxPegasusXPreTrainedModel",
         ]
@@ -3524,7 +3523,6 @@ if TYPE_CHECKING:
         from .models.pegasus_x import (
             PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST,
             PegasusXForConditionalGeneration,
-            PegasusXForCausalLM,
             PegasusXModel,
             PegasusXPreTrainedModel,
         )
@@ -5059,13 +5057,6 @@ if TYPE_CHECKING:
         from .modeling_flax_utils import FlaxPreTrainedModel
 
         # Flax model imports
-
-        from .models.pegasus_x import (
-            FlaxPegasusXForConditionalGeneration,
-            FlaxPegasusXModel,
-            FlaxPegasusXPreTrainedModel,
-        )
-
         from .models.albert import (
             FlaxAlbertForMaskedLM,
             FlaxAlbertForMultipleChoice,
