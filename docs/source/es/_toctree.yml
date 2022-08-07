@@ -40,7 +40,7 @@
   - local: multilingual
     title: Modelos multilingües para inferencia
   - local: converting_tensorflow_models
-    title: Convertir Checkpoints en TensorFlow
+    title: Convertir Checkpoints de TensorFlow
   title: Guías prácticas
 - sections:
   - local: philosophy
