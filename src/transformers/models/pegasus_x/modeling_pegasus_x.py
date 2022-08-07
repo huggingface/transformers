@@ -60,6 +60,7 @@ PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = [
 @dataclasses.dataclass
 class DimensionInfo:
     """Wrapper for dimension info."""
+
     B: int  # batch size
     T: int  # token length
     K: int  # block size
@@ -69,7 +70,7 @@ class DimensionInfo:
     N: int  # num blocks
     G: int  # global length
     P: int  # padded token seq length
-    
+
     # Note: Compared to the original Flax implementation, we will pad the token representations to
     #       a multiple of block size at the start of the encoder layers, so T=P always.
 
@@ -135,14 +136,14 @@ class PegasusXSinusoidalPositionalEmbedding(nn.Module):
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         batch_size, seq_len = input_embeds.shape[:2]
         positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, 
-            dtype=torch.long, device=input_embeds.device
+            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=input_embeds.device
         )[:, None]
         pe = torch.zeros((seq_len, self.embed_dim), device=input_embeds.device, dtype=input_embeds.dtype)
         half_d_feature = self.embed_dim // 2
         div_term = torch.exp(
             torch.arange(half_d_feature, device=input_embeds.device, dtype=input_embeds.dtype)
-            * -(np.log(float(self.max_scale)) / (half_d_feature - 1)))
+            * -(np.log(float(self.max_scale)) / (half_d_feature - 1))
+        )
         pe[:, :half_d_feature] = torch.sin(positions * div_term)
         pe[:, half_d_feature:] = torch.cos(positions * div_term)
         return pe[None].expand(batch_size, -1, -1)
@@ -344,21 +345,27 @@ class PegasusXGlobalLocalAttention(nn.Module):
         local_q = self._shape(self.q_proj(token_hidden_states) * self.scaling, seq_len=dim.P, bsz=dim.B)
         local_k = self._shape(self.k_proj(token_hidden_states), seq_len=dim.P, bsz=dim.B)
         local_v = self._shape(self.v_proj(token_hidden_states), seq_len=dim.P, bsz=dim.B)
-        
+
         # [B, H, G, F]
         global_q = self._shape(self.q_proj(global_hidden_states) * self.scaling, seq_len=dim.G, bsz=dim.B)
         global_k = self._shape(self.k_proj(global_hidden_states), seq_len=dim.G, bsz=dim.B)
         global_v = self._shape(self.v_proj(global_hidden_states), seq_len=dim.G, bsz=dim.B)
 
         global_attn_output, global_attn_probs = self.compute_global_attention_representations(
-            global_q=global_q, global_k=global_k, global_v=global_v,
-            local_k=local_k, local_v=local_v,
+            global_q=global_q,
+            global_k=global_k,
+            global_v=global_v,
+            local_k=local_k,
+            local_v=local_v,
             mask=attention_mask,
             dim=dim,
         )
         local_attn_output, local_attn_probs = self.compute_local_attention_representations(
-            global_k=global_k, global_v=global_v,
-            local_q=local_q, local_k=local_k, local_v=local_v,
+            global_k=global_k,
+            global_v=global_v,
+            local_q=local_q,
+            local_k=local_k,
+            local_v=local_v,
             mask=attention_mask,
             dim=dim,
         )
@@ -380,22 +387,15 @@ class PegasusXGlobalLocalAttention(nn.Module):
             attn_probs = None
 
         return local_attn_output, global_attn_output, attn_probs
-    
+
     def compute_global_attention_representations(
-            self,
-            global_q,
-            global_k,
-            global_v,
-            local_k,
-            local_v,
-            mask,
-            dim: DimensionInfo):
+        self, global_q, global_k, global_v, local_k, local_v, mask, dim: DimensionInfo
+    ):
         """Compute attention representations for global tokens.
-    
-        Global tokens will attend to both global tokens as well as all input
-        sequence tokens. Because the input sequence tokens are arranged in blocks
-        for local attention, we unblock them and compute attention.
-    
+
+        Global tokens will attend to both global tokens as well as all input sequence tokens. Because the input
+        sequence tokens are arranged in blocks for local attention, we unblock them and compute attention.
+
         Args:
             global_q: [B, H, G, F] query vectors from global tokens
             global_k: [B, H, G, F] key vectors from global tokens
@@ -404,10 +404,9 @@ class PegasusXGlobalLocalAttention(nn.Module):
             local_v: [B, H, P, F] value vectors from local tokens
             mask: [B, P] attention mask
             dim: DimensionInfo wrapper for dimensions
-    
+
         Returns:
-            output of shape `[batch_sizes, length, features]`.
-            where length will be padded to a multiple of block_size
+            output of shape `[batch_sizes, length, features]`. where length will be padded to a multiple of block_size
         """
         # [B, H, G+P, F]
         global_and_local_k = torch.cat([global_k, local_k], dim=2)
@@ -422,25 +421,18 @@ class PegasusXGlobalLocalAttention(nn.Module):
         attn_weights = attn_weights + extended_mask[:, None, None, :]
         attn_probs = nn.functional.softmax(attn_weights, dim=-1)
         attn_probs = nn.functional.dropout(attn_probs, p=self.dropout, training=self.training)
-        
+
         # [B, H, G, F]
         attn_output = torch.einsum("BHGX,BHXF->BHGF", attn_probs, global_and_local_v)
         return attn_output, attn_probs
 
     def compute_local_attention_representations(
-            self,
-            global_k,
-            global_v,
-            local_q,
-            local_k,
-            local_v,
-            mask,
-            dim: DimensionInfo):
+        self, global_k, global_v, local_q, local_k, local_v, mask, dim: DimensionInfo
+    ):
         """Compute attention representations for local tokens.
 
-        Local tokens will attend to both global tokens as well as all other tokens
-        within the same local block. Hence, we need to tile and
-        concatenate the global tokens to every local block
+        Local tokens will attend to both global tokens as well as all other tokens within the same local block. Hence,
+        we need to tile and concatenate the global tokens to every local block
 
         Args:
             global_k: [B, H, G, F] key vectors from global tokens
@@ -452,8 +444,7 @@ class PegasusXGlobalLocalAttention(nn.Module):
             dim: DimensionInfo wrapper for dimensions
 
         Returns:
-            output of shape `[batch_sizes, length, features]`.
-            where length will be padded to a multiple of block_size
+            output of shape `[batch_sizes, length, features]`. where length will be padded to a multiple of block_size
         """
         # [B, H, N, K, F]
         blocked_local_q = local_q.view(dim.B, dim.H, dim.N, dim.K, dim.F)
@@ -469,17 +460,17 @@ class PegasusXGlobalLocalAttention(nn.Module):
         blocked_local2global = torch.einsum("BHNKF,BHGF->BHNKG", blocked_local_q, global_k)
         # [B, H, N, K, K]
         blocked_local2local = torch.einsum("BHNKF,BHNXF->BHNKX", blocked_local_q, blocked_local_k)
-        
+
         # [B, H, N, K, G+K]
         attn_weights = torch.cat([blocked_local2global, blocked_local2local], dim=4)
         attn_weights = attn_weights + extended_mask[:, None, :, None, :]
         attn_probs = nn.functional.softmax(attn_weights, dim=-1)
         attn_probs = nn.functional.dropout(attn_probs, p=self.dropout, training=self.training)
-        
+
         # [B, H, N, K, G]
-        local2global_attn_probs = attn_probs[:, :, :, :, :dim.G]
+        local2global_attn_probs = attn_probs[:, :, :, :, : dim.G]
         # [B, H, N, K, K]
-        local2local_attn_probs = attn_probs[:, :, :, :, dim.G:]
+        local2local_attn_probs = attn_probs[:, :, :, :, dim.G :]
 
         # [B, H, N, K, F]
         local2global_attn_output = torch.einsum("BHNKG,BHGF->BHNKF", local2global_attn_probs, global_v)
@@ -533,16 +524,14 @@ class PegasusXEncoderLayer(nn.Module):
         """
         residual = hidden_states
         global_residual = global_hidden_states
-        
+
         hidden_states = self.self_attn_layer_norm(hidden_states)
         global_hidden_states = self.global_self_attn_layer_norm(global_hidden_states)
 
         if self.stagger_blocks_this_layer:
             # Pad the blocks to simulate staggering
             hidden_states, attention_mask = self.pad_local_tokens(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                block_size=self.block_size
+                hidden_states=hidden_states, attention_mask=attention_mask, block_size=self.block_size
             )
 
         hidden_states, global_hidden_states, attn_weights = self.self_attn(
@@ -551,17 +540,14 @@ class PegasusXEncoderLayer(nn.Module):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
-        
+
         if self.stagger_blocks_this_layer:
             # Undo the padding
-            hidden_states = self.unpad_local_tokens(
-                padded_hidden_states=hidden_states,
-                block_size=self.block_size
-            )
-        
+            hidden_states = self.unpad_local_tokens(padded_hidden_states=hidden_states, block_size=self.block_size)
+
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        
+
         global_hidden_states = nn.functional.dropout(global_hidden_states, p=self.dropout, training=self.training)
         global_hidden_states = global_residual + global_hidden_states
 
@@ -576,7 +562,9 @@ class PegasusXEncoderLayer(nn.Module):
         global_residual = global_hidden_states
         global_hidden_states = self.final_layer_norm(global_hidden_states)
         global_hidden_states = self.activation_fn(self.fc1(global_hidden_states))
-        global_hidden_states = nn.functional.dropout(global_hidden_states, p=self.activation_dropout, training=self.training)
+        global_hidden_states = nn.functional.dropout(
+            global_hidden_states, p=self.activation_dropout, training=self.training
+        )
         global_hidden_states = self.fc2(global_hidden_states)
         global_hidden_states = nn.functional.dropout(global_hidden_states, p=self.dropout, training=self.training)
         global_hidden_states = global_residual + global_hidden_states
@@ -595,21 +583,23 @@ class PegasusXEncoderLayer(nn.Module):
             outputs += (attn_weights,)
 
         return outputs
-    
+
     @classmethod
     def pad_local_tokens(cls, hidden_states, attention_mask, block_size):
         assert hidden_states.dim() == 3
         pad_size = block_size // 2
         mask_min_value = torch.finfo(hidden_states.dtype).min
         padded_hidden_states = torch.nn.functional.pad(
-            hidden_states, pad=(0, 0, pad_size, pad_size),
+            hidden_states,
+            pad=(0, 0, pad_size, pad_size),
         )
         padded_mask = torch.nn.functional.pad(
-            attention_mask, pad=(pad_size, pad_size),
+            attention_mask,
+            pad=(pad_size, pad_size),
             value=mask_min_value,
         )
         return padded_hidden_states, padded_mask
-    
+
     @classmethod
     def unpad_local_tokens(cls, padded_hidden_states, block_size):
         assert padded_hidden_states.dim() == 3
@@ -886,12 +876,14 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
 
         self.embed_global = nn.Embedding(config.num_global_tokens, embed_dim)
         self.embed_positions = PegasusXSinusoidalPositionalEmbedding(embed_dim)
-        self.layers = nn.ModuleList([
-            PegasusXEncoderLayer(
-                stagger_blocks_this_layer=i % 2 == 1 and config.stagger_local_blocks,
-                config=config)
-            for i in range(config.encoder_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                PegasusXEncoderLayer(
+                    stagger_blocks_this_layer=i % 2 == 1 and config.stagger_local_blocks, config=config
+                )
+                for i in range(config.encoder_layers)
+            ]
+        )
         self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
@@ -989,7 +981,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         batch_size, seq_len, _ = hidden_states.shape
-        
+
         # Setup mask
         if attention_mask is None:
             attention_mask = torch.ones(*input_shape, dtype=inputs_embeds.dtype, device=inputs_embeds.device)
@@ -1000,13 +992,13 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
             inverted_mask.to(torch.bool),
             mask_min_value,
         )
-        
+
         # padding to block_size
         if seq_len % self.config.block_size != 0:
             pad_len = self.config.block_size - seq_len % self.config.block_size
             hidden_states = nn.functional.pad(hidden_states, pad=(0, 0, 0, pad_len), value=0)
             attention_mask = nn.functional.pad(attention_mask, pad=(0, pad_len), value=mask_min_value)
-        
+
         # Global tokens
         global_hidden_states = self.embed_global(
             torch.arange(self.config.num_global_tokens, device=hidden_states.device)[None].expand(batch_size, -1)
@@ -1478,9 +1470,7 @@ class PegasusXModel(PegasusXPreTrainedModel):
         )
 
 
-@add_start_docstrings(
-    "The PEGASUS-X for conditional generation (e.g. summarization).", PEGASUS_X_START_DOCSTRING
-)
+@add_start_docstrings("The PEGASUS-X for conditional generation (e.g. summarization).", PEGASUS_X_START_DOCSTRING)
 class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
@@ -1614,13 +1604,7 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past=None,
-        attention_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs
+        self, decoder_input_ids, past=None, attention_mask=None, use_cache=None, encoder_outputs=None, **kwargs
     ):
         # cut decoder_input_ids if past is used
         if past is not None:

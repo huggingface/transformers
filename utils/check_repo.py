@@ -84,7 +84,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "PegasusDecoderWrapper",  # Building part of bigger (tested) model.
     "PegasusXEncoder",  # Building part of bigger (tested) model.
     "PegasusXDecoder",  # Building part of bigger (tested) model.
-    "PegasusXDecoderWrapper", # Building part of bigger (tested) model.
+    "PegasusXDecoderWrapper",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
     "ProphetNetDecoderWrapper",  # Building part of bigger (tested) model.
     "RealmBertModel",  # Building part of bigger (tested) model.
@@ -128,10 +128,10 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
-"PegasusXEncoder",
+    "PegasusXEncoder",
     "PegasusXDecoder",
     "PegasusXDecoderWrapper",
-"PegasusXEncoder",
+    "PegasusXEncoder",
     "PegasusXDecoder",
     "PegasusXDecoderWrapper",
     "DPTForDepthEstimation",

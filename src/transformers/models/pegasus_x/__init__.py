@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import  _LazyModule, OptionalDependencyNotAvailable
+from ...utils import _LazyModule, OptionalDependencyNotAvailable
 from ...utils import is_torch_available
 
 

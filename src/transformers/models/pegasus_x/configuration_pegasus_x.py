@@ -39,8 +39,8 @@ class PegasusXConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
-            Vocabulary size of the PEGASUS-X model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`PegasusXModel`].
+            Vocabulary size of the PEGASUS-X model. Defines the number of different tokens that can be represented by
+            the `inputs_ids` passed when calling [`PegasusXModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimension of the layers and the pooler layer.
         encoder_layers (`int`, *optional*, defaults to 12):
@@ -56,8 +56,8 @@ class PegasusXConfig(PretrainedConfig):
         encoder_ffn_dim (`int`, *optional*, defaults to 4096):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            `"gelu"`, `"relu"`, `"silu"` and `"gelu_new"` are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -72,11 +72,11 @@ class PegasusXConfig(PretrainedConfig):
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
         decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models)
         forced_eos_token_id (`int`, *optional*, defaults to 1):
@@ -158,11 +158,11 @@ class PegasusXConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
-        
+
         self.num_global_tokens = num_global_tokens
         self.block_size = block_size
         self.stagger_local_blocks = stagger_local_blocks
-        
+
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,

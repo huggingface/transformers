@@ -154,7 +154,9 @@ class PegasusXModelTester:
         next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
         output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)["last_hidden_state"]
+        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+            "last_hidden_state"
+        ]
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
@@ -201,11 +203,7 @@ class PegasusXModelTester:
 
 @require_torch
 class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (PegasusXModel, PegasusXForConditionalGeneration)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (PegasusXModel, PegasusXForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (PegasusXForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
@@ -319,7 +317,7 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
                     self.model_tester.num_attention_heads,
                     math.ceil(encoder_seq_length / model.config.block_size),
                     model.config.block_size,
-                    model.config.block_size + model.config.num_global_tokens
+                    model.config.block_size + model.config.num_global_tokens,
                 ],
             )
             out_len = len(outputs)
@@ -383,7 +381,7 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
                     self.model_tester.num_attention_heads,
                     math.ceil(encoder_seq_length / model.config.block_size),
                     model.config.block_size,
-                    model.config.block_size + model.config.num_global_tokens
+                    model.config.block_size + model.config.num_global_tokens,
                 ],
             )
 
@@ -416,7 +414,6 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         )
 
     def test_hidden_states_output(self):
-
         def _check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
             model.to(torch_device)
@@ -564,10 +561,10 @@ TOLERANCE = 1e-4
 class PegasusXModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
-        return PegasusTokenizer.from_pretrained('zphang/pegasus-x-base')
+        return PegasusTokenizer.from_pretrained("zphang/pegasus-x-base")
 
     def test_inference_no_head(self):
-        model = PegasusXModel.from_pretrained('pegasus-x-base').to(torch_device)
+        model = PegasusXModel.from_pretrained("pegasus-x-base").to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         decoder_input_ids = _long_tensor([[2, 0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588]])
         inputs_dict = prepare_pegasus_x_inputs_dict(model.config, input_ids, decoder_input_ids)
@@ -582,7 +579,7 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
-        model = PegasusXForConditionalGeneration.from_pretrained('pegasus-x-base').to(torch_device)
+        model = PegasusXForConditionalGeneration.from_pretrained("pegasus-x-base").to(torch_device)
 
         # change to intended input
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -599,8 +596,8 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        hf = PegasusXForConditionalGeneration.from_pretrained('zphang/pegasus-x-base').to(torch_device)
-        tok = PegasusTokenizer.from_pretrained('google/pegasus-base')
+        hf = PegasusXForConditionalGeneration.from_pretrained("zphang/pegasus-x-base").to(torch_device)
+        tok = PegasusTokenizer.from_pretrained("google/pegasus-base")
 
         batch_input = [
             # string 1,
@@ -857,4 +854,3 @@ class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin
 
 def round_up(n, k):
     return math.ceil(n / k) * k
-
