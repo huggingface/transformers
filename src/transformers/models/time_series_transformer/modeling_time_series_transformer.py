@@ -1381,7 +1381,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
                 past_observed_values,
             )
 
-            enc_out = encoder(encoder_inputs)
+            encoder_outputs = encoder(inputs_embeds=encoder_inputs)
+            enc_last_hidden = encoder_outputs.last_hidden_state
 
             repeated_scale = scale.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
@@ -1391,7 +1392,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             features = torch.cat((expanded_static_feat, future_time_feat), dim=-1)
             repeated_features = features.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
-            repeated_enc_out = enc_out.repeat_interleave(repeats=num_parallel_samples, dim=0)
+            repeated_enc_last_hidden = enc_last_hidden.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
             future_samples = []
 
@@ -1408,9 +1409,10 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
 
                 decoder_input = torch.cat((reshaped_lagged_sequence, repeated_features[:, : k + 1]), dim=-1)
 
-                output = decoder(decoder_input, repeated_enc_out)
+                dec_output = decoder(inputs_embeds=decoder_input, encoder_hidden_states=repeated_enc_last_hidden)
+                dec_last_hidden = dec_output.last_hidden_state
 
-                params = self.param_proj(output[:, -1:])
+                params = self.param_proj(dec_last_hidden[:, -1:])
                 distr = self.output_distribution(params, scale=repeated_scale)
                 next_sample = distr.sample()
 
