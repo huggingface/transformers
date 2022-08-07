@@ -73,15 +73,15 @@ class DonutSwinConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
 
-        Example:
+    Example:
 
     ```python
     >>> from transformers import DonutSwinConfig, DonutSwinModel
 
     >>> # Initializing a Donut naver-clova-ix/donut-base style configuration
-    >>> configuration = DonutConfig()
+    >>> configuration = DonutSwinConfig()
 
-    >>> # Initializing a model from the naver-clova-ix/donut-base style configuration
+    >>> # Randomly initializing a model from the naver-clova-ix/donut-base style configuration
     >>> model = DonutSwinModel(configuration)
 
     >>> # Accessing the model configuration

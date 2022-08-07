@@ -18,7 +18,6 @@ import argparse
 
 import torch
 from datasets import load_dataset
-from PIL import Image
 
 from donut import DonutModel
 from transformers import (
@@ -149,8 +148,8 @@ def convert_donut_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     model.load_state_dict(new_state_dict)
 
     # verify results on scanned document
-    dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
-    image = Image.open(dataset["test"][0]["file"]).convert("RGB")
+    dataset = load_dataset("hf-internal-testing/example-documents")
+    image = dataset["test"][0]["image"].convert("RGB")
 
     tokenizer = XLMRobertaTokenizerFast.from_pretrained(model_name, from_slow=True)
     feature_extractor = DonutFeatureExtractor(
@@ -197,8 +196,8 @@ def convert_donut_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
         processor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model.push_to_hub(model_name.split("/")[-1], organization="nielsr")
-        processor.push_to_hub(model_name.split("/")[-1], organization="nielsr")
+        model.push_to_hub("nielsr/" + model_name.split("/")[-1], commit_message="Update model")
+        processor.push_to_hub("nielsr/" + model_name.split("/")[-1], commit_message="Update model")
 
 
 if __name__ == "__main__":
