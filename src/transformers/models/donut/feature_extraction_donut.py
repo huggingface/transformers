@@ -116,12 +116,7 @@ class DonutFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             pad_width = delta_width // 2
             pad_height = delta_height // 2
 
-        padding = (
-            pad_width,
-            pad_height,
-            delta_width - pad_width,
-            delta_height - pad_height,
-        )
+        padding = (pad_width, pad_height, delta_width - pad_width, delta_height - pad_height)
         return ImageOps.expand(image, padding)
 
     def __call__(
