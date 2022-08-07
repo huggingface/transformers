@@ -138,7 +138,7 @@ class PegasusXSinusoidalPositionalEmbedding(nn.Module):
             past_key_values_length, past_key_values_length + seq_len, 
             dtype=torch.long, device=input_embeds.device
         )[:, None]
-        pe = torch.zeros((seq_len, self.embed_dim), device=input_embeds.device)
+        pe = torch.zeros((seq_len, self.embed_dim), device=input_embeds.device, dtype=input_embeds.dtype)
         half_d_feature = self.embed_dim // 2
         div_term = torch.exp(
             torch.arange(half_d_feature, device=input_embeds.device, dtype=input_embeds.dtype)
@@ -993,6 +993,7 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         # Setup mask
         if attention_mask is None:
             attention_mask = torch.ones(*input_shape, dtype=inputs_embeds.dtype, device=inputs_embeds.device)
+        attention_mask = attention_mask.to(dtype=hidden_states.dtype)
         mask_min_value = torch.finfo(hidden_states.dtype).min
         inverted_mask = 1.0 - attention_mask
         attention_mask = inverted_mask.masked_fill(

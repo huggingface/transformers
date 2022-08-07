@@ -1470,7 +1470,7 @@ class GenerationTesterMixin:
         encoder_expected_shape = (batch_size, config.num_attention_heads, seq_length, seq_length)
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
-            [layer_attentions.shape for layer_attentions in attentions],
+            [layer_attentions["local"].shape for layer_attentions in attentions],
             [encoder_expected_shape] * len(attentions),
         )
 

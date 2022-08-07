@@ -12,12 +12,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch PEGASUSX model. """
+""" Testing suite for the PyTorch PEGASUS-X model. """
 
 
 import copy
 import tempfile
 import unittest
+import math
 
 from transformers import is_torch_available
 from transformers.utils import cached_property
@@ -34,11 +35,8 @@ if is_torch_available():
     from transformers import (
         PegasusXConfig,
         PegasusXForConditionalGeneration,
-        PegasusXForQuestionAnswering,
-        PegasusXForCausalLM,
-        PegasusXForSequenceClassification,
         PegasusXModel,
-        PegasusXTokenizer,
+        PegasusTokenizer,
     )
     from transformers.models.pegasus_x.modeling_pegasus_x import (
         PegasusXDecoder,
@@ -106,7 +104,6 @@ class PegasusXModelTester:
         self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
             3,
         )
@@ -129,6 +126,7 @@ class PegasusXModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
+            stagger_local_blocks=False,
         )
         inputs_dict = prepare_pegasus_x_inputs_dict(config, input_ids, decoder_input_ids)
         return config, inputs_dict
@@ -204,7 +202,7 @@ class PegasusXModelTester:
 @require_torch
 class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (PegasusXModel, PegasusXForConditionalGeneration, PegasusXForSequenceClassification, PegasusXForQuestionAnswering)
+        (PegasusXModel, PegasusXForConditionalGeneration)
         if is_torch_available()
         else ()
     )
@@ -243,7 +241,7 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in (PegasusXModel, PegasusXForConditionalGeneration, PegasusXForQuestionAnswering):
+        for model_class in (PegasusXModel, PegasusXForConditionalGeneration):
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -279,6 +277,259 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         model.generate(input_ids, attention_mask=attention_mask)
         model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        seq_len = getattr(self.model_tester, "seq_length", None)
+        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
+        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        chunk_length = getattr(self.model_tester, "chunk_length", None)
+        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
+            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(attentions[0]["local"].shape[-4:]),
+                [
+                    self.model_tester.num_attention_heads,
+                    math.ceil(encoder_seq_length / model.config.block_size),
+                    model.config.block_size,
+                    model.config.block_size + model.config.num_global_tokens
+                ],
+            )
+            out_len = len(outputs)
+
+            if self.is_encoder_decoder:
+                correct_outlen = 5
+
+                # loss is at first position
+                if "labels" in inputs_dict:
+                    correct_outlen += 1  # loss is added to beginning
+                if "past_key_values" in outputs:
+                    correct_outlen += 1  # past_key_values have been returned
+
+                self.assertEqual(out_len, correct_outlen)
+
+                # decoder attentions
+                decoder_attentions = outputs.decoder_attentions
+                self.assertIsInstance(decoder_attentions, (list, tuple))
+                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(decoder_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                )
+
+                # cross attentions
+                cross_attentions = outputs.cross_attentions
+                self.assertIsInstance(cross_attentions, (list, tuple))
+                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+                self.assertListEqual(
+                    list(cross_attentions[0].shape[-3:]),
+                    [
+                        self.model_tester.num_attention_heads,
+                        decoder_seq_length,
+                        encoder_key_length,
+                    ],
+                )
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if hasattr(self.model_tester, "num_hidden_states_types"):
+                added_hidden_states = self.model_tester.num_hidden_states_types
+            elif self.is_encoder_decoder:
+                added_hidden_states = 2
+            else:
+                added_hidden_states = 1
+            self.assertEqual(out_len + added_hidden_states, len(outputs))
+
+            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(self_attentions[0]["local"].shape[-4:]),
+                [
+                    self.model_tester.num_attention_heads,
+                    math.ceil(encoder_seq_length / model.config.block_size),
+                    model.config.block_size,
+                    model.config.block_size + model.config.num_global_tokens
+                ],
+            )
+
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
+        encoder_expected_shape = (
+            batch_size,
+            config.num_attention_heads,
+            math.ceil(seq_length / config.block_size),
+            config.block_size,
+            config.block_size + config.num_global_tokens,
+        )
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [layer_attentions["local"].shape for layer_attentions in attentions],
+            [encoder_expected_shape] * len(attentions),
+        )
+
+    def _check_encoder_hidden_states_for_generate(self, hidden_states, batch_size, config, seq_length):
+        encoder_expected_shape = (batch_size, round_up(seq_length, config.block_size), config.hidden_size)
+        self.assertIsInstance(hidden_states, tuple)
+        # Only the last layer will have the hidden states truncated back to token level
+        self.assertListEqual(
+            [layer_hidden_states.shape for layer_hidden_states in hidden_states[:-1]],
+            [encoder_expected_shape] * (len(hidden_states) - 1),
+        )
+        # Only the last layer will have the hidden states truncated back to token level
+        self.assertEqual(
+            hidden_states[-1][0].shape,
+            (batch_size, seq_length, config.hidden_size),
+        )
+
+    def test_hidden_states_output(self):
+
+        def _check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            if hasattr(self.model_tester, "encoder_seq_length"):
+                seq_length = self.model_tester.encoder_seq_length
+                if hasattr(self.model_tester, "chunk_length") and self.model_tester.chunk_length > 1:
+                    seq_length = seq_length * self.model_tester.chunk_length
+            else:
+                seq_length = self.model_tester.seq_length
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [round_up(seq_length, config.block_size), self.model_tester.hidden_size],
+            )
+
+            if config.is_encoder_decoder:
+                hidden_states = outputs.decoder_hidden_states
+
+                self.assertIsInstance(hidden_states, (list, tuple))
+                self.assertEqual(len(hidden_states), expected_num_layers)
+                seq_len = getattr(self.model_tester, "seq_length", None)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
+
+                self.assertListEqual(
+                    list(hidden_states[0].shape[-2:]),
+                    [decoder_seq_length, self.model_tester.hidden_size],
+                )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            _check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            _check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = self.has_attentions
+
+        # no need to test all models as different heads yield the same functionality
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+
+        output = outputs[0]
+
+        if config.is_encoder_decoder:
+            # Seq2Seq models
+            encoder_hidden_states = outputs.encoder_hidden_states[0]
+            encoder_hidden_states.retain_grad()
+
+            decoder_hidden_states = outputs.decoder_hidden_states[0]
+            decoder_hidden_states.retain_grad()
+
+            if self.has_attentions:
+                encoder_attentions = outputs.encoder_attentions[0]
+                encoder_attentions["local"].retain_grad()
+                encoder_attentions["global"].retain_grad()
+
+                decoder_attentions = outputs.decoder_attentions[0]
+                decoder_attentions.retain_grad()
+
+                cross_attentions = outputs.cross_attentions[0]
+                cross_attentions.retain_grad()
+
+            output.flatten()[0].backward(retain_graph=True)
+
+            self.assertIsNotNone(encoder_hidden_states.grad)
+            self.assertIsNotNone(decoder_hidden_states.grad)
+
+            if self.has_attentions:
+                self.assertIsNotNone(encoder_attentions["local"].grad)
+                self.assertIsNotNone(encoder_attentions["global"].grad)
+                self.assertIsNotNone(decoder_attentions.grad)
+                self.assertIsNotNone(cross_attentions.grad)
+        else:
+            # Encoder-/Decoder-only models
+            hidden_states = outputs.hidden_states[0]
+            hidden_states.retain_grad()
+
+            if self.has_attentions:
+                attentions = outputs.attentions[0]
+                attentions.retain_grad()
+
+            output.flatten()[0].backward(retain_graph=True)
+
+            self.assertIsNotNone(hidden_states.grad)
+
+            if self.has_attentions:
+                self.assertIsNotNone(attentions.grad)
+
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
@@ -313,7 +564,7 @@ TOLERANCE = 1e-4
 class PegasusXModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
-        return PegasusXTokenizer.from_pretrained('pegasus-x-base')
+        return PegasusTokenizer.from_pretrained('zphang/pegasus-x-base')
 
     def test_inference_no_head(self):
         model = PegasusXModel.from_pretrained('pegasus-x-base').to(torch_device)
@@ -348,8 +599,8 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        hf = PegasusXForConditionalGeneration.from_pretrained('pegasus-x-base').to(torch_device)
-        tok = PegasusXTokenizer.from_pretrained('pegasus-x-base')
+        hf = PegasusXForConditionalGeneration.from_pretrained('zphang/pegasus-x-base').to(torch_device)
+        tok = PegasusTokenizer.from_pretrained('google/pegasus-base')
 
         batch_input = [
             # string 1,
@@ -576,10 +827,11 @@ class PegasusXStandaloneDecoderModelTester:
 
 @require_torch
 class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (PegasusXDecoder, PegasusXForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (PegasusXForCausalLM,) if is_torch_available() else ()
+    all_model_classes = (PegasusXDecoder,) if is_torch_available() else ()
+    all_generative_model_classes = ()
     test_pruning = False
     is_encoder_decoder = False
+    test_head_masking = False
 
     def setUp(
         self,
@@ -601,3 +853,8 @@ class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         return
+
+
+def round_up(n, k):
+    return math.ceil(n / k) * k
+
