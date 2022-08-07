@@ -30,7 +30,6 @@ from ...activations import ACT2FN
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
@@ -47,9 +46,9 @@ from .configuration_pegasus_x import PegasusXConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "google/pegasus-large"
-_CONFIG_FOR_DOC = "PegasusConfig"
-_TOKENIZER_FOR_DOC = "PegasusTokenizer"
+_CHECKPOINT_FOR_DOC = "google/pegasus--xlarge"
+_CONFIG_FOR_DOC = "PegasusXConfig"
+_TOKENIZER_FOR_DOC = "PegasusXTokenizer"
 
 
 PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = [
