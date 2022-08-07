@@ -93,6 +93,7 @@ else:
         "AutoModelForVideoClassification",
         "AutoModelForVision2Seq",
         "AutoModelForVisualQuestionAnswering",
+        "AutoModelForDocumentQuestionAnswering",
         "AutoModelWithLMHead",
     ]
 
@@ -218,6 +219,7 @@ if TYPE_CHECKING:
             AutoModelForAudioXVector,
             AutoModelForCausalLM,
             AutoModelForCTC,
+            AutoModelForDocumentQuestionAnswering,
             AutoModelForImageClassification,
             AutoModelForImageSegmentation,
             AutoModelForInstanceSegmentation,
