@@ -19,11 +19,13 @@ import fnmatch
 import io
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
 import tarfile
 import tempfile
+import traceback
 import warnings
 from contextlib import contextmanager
 from functools import partial
@@ -34,14 +36,26 @@ from urllib.parse import urlparse
 from uuid import uuid4
 from zipfile import ZipFile, is_zipfile
 
+import huggingface_hub
 import requests
 from filelock import FileLock
-from huggingface_hub import HfFolder, Repository, create_repo, list_repo_files, whoami
+from huggingface_hub import (
+    CommitOperationAdd,
+    HfFolder,
+    create_commit,
+    create_repo,
+    hf_hub_download,
+    list_repo_files,
+    whoami,
+)
+from huggingface_hub.constants import HUGGINGFACE_HEADER_X_LINKED_ETAG, HUGGINGFACE_HEADER_X_REPO_COMMIT
+from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError, RevisionNotFoundError
 from requests.exceptions import HTTPError
 from requests.models import Response
 from transformers.utils.logging import tqdm
 
 from . import __version__, logging
+from .generic import working_or_temp_dir
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
     _tf_version,
@@ -67,7 +81,7 @@ old_default_cache_path = os.path.join(torch_cache_home, "transformers")
 hf_cache_home = os.path.expanduser(
     os.getenv("HF_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "huggingface"))
 )
-default_cache_path = os.path.join(hf_cache_home, "transformers")
+default_cache_path = os.path.join(hf_cache_home, "hub")
 
 # Onetime move from the old location to the new one if no ENV variable has been set.
 if (
@@ -88,7 +102,8 @@ if (
 
 PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", default_cache_path)
 PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
-TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
+HUGGINGFACE_HUB_CACHE = os.getenv("HUGGINGFACE_HUB_CACHE", PYTORCH_TRANSFORMERS_CACHE)
+TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", HUGGINGFACE_HUB_CACHE)
 HF_MODULES_CACHE = os.getenv("HF_MODULES_CACHE", os.path.join(hf_cache_home, "modules"))
 TRANSFORMERS_DYNAMIC_MODULE_NAME = "transformers_modules"
 SESSION_ID = uuid4().hex
@@ -384,21 +399,6 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     return ua
 
 
-class RepositoryNotFoundError(HTTPError):
-    """
-    Raised when trying to access a hf.co URL with an invalid repository name, or with a private repo name the user does
-    not have access to.
-    """
-
-
-class EntryNotFoundError(HTTPError):
-    """Raised when trying to access a hf.co URL with a valid repository and revision but an invalid filename."""
-
-
-class RevisionNotFoundError(HTTPError):
-    """Raised when trying to access a hf.co URL with a valid repository but an invalid revision."""
-
-
 def _raise_for_status(response: Response):
     """
     Internal version of `request.raise_for_status()` that will refine a potential HTTPError.
@@ -627,6 +627,213 @@ def get_from_cache(
     return cache_path
 
 
+def try_to_load_from_cache(cache_dir, repo_id, filename, revision=None):
+    """
+    Explores the cache to return the latest cached file for a given revision.
+    """
+    if revision is None:
+        revision = "main"
+
+    model_id = repo_id.replace("/", "--")
+    model_cache = os.path.join(cache_dir, f"models--{model_id}")
+    if not os.path.isdir(model_cache):
+        # No cache for this model
+        return None
+
+    # Resolve refs (for instance to convert main to the associated commit sha)
+    cached_refs = os.listdir(os.path.join(model_cache, "refs"))
+    if revision in cached_refs:
+        with open(os.path.join(model_cache, "refs", revision)) as f:
+            revision = f.read()
+
+    cached_shas = os.listdir(os.path.join(model_cache, "snapshots"))
+    if revision not in cached_shas:
+        # No cache for this revision and we won't try to return a random revision
+        return None
+
+    cached_file = os.path.join(model_cache, "snapshots", revision, filename)
+    return cached_file if os.path.isfile(cached_file) else None
+
+
+# If huggingface_hub changes the class of error for this to FileNotFoundError, we will be able to avoid that in the
+# future.
+LOCAL_FILES_ONLY_HF_ERROR = (
+    "Cannot find the requested files in the disk cache and outgoing traffic has been disabled. To enable hf.co "
+    "look-ups and downloads online, set 'local_files_only' to False."
+)
+
+
+# In the future, this ugly contextmanager can be removed when huggingface_hub as a released version where we can
+# activate/deactivate progress bars.
+@contextmanager
+def _patch_hf_hub_tqdm():
+    """
+    A context manager to make huggingface hub use the tqdm version of Transformers (which is controlled by some utils)
+    in logging.
+    """
+    old_tqdm = huggingface_hub.file_download.tqdm
+    huggingface_hub.file_download.tqdm = tqdm
+    yield
+    huggingface_hub.file_download.tqdm = old_tqdm
+
+
+def cached_file(
+    path_or_repo_id: Union[str, os.PathLike],
+    filename: str,
+    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    force_download: bool = False,
+    resume_download: bool = False,
+    proxies: Optional[Dict[str, str]] = None,
+    use_auth_token: Optional[Union[bool, str]] = None,
+    revision: Optional[str] = None,
+    local_files_only: bool = False,
+    subfolder: str = "",
+    user_agent: Optional[Union[str, Dict[str, str]]] = None,
+    _raise_exceptions_for_missing_entries=True,
+    _raise_exceptions_for_connection_errors=True,
+):
+    """
+    Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
+
+    Args:
+        path_or_repo_id (`str` or `os.PathLike`):
+            This can be either:
+
+            - a string, the *model id* of a model repo on huggingface.co.
+            - a path to a *directory* potentially containing the file.
+        filename (`str`):
+            The name of the file to locate in `path_or_repo`.
+        cache_dir (`str` or `os.PathLike`, *optional*):
+            Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
+            cache should not be used.
+        force_download (`bool`, *optional*, defaults to `False`):
+            Whether or not to force to (re-)download the configuration files and override the cached versions if they
+            exist.
+        resume_download (`bool`, *optional*, defaults to `False`):
+            Whether or not to delete incompletely received file. Attempts to resume the download if such a file exists.
+        proxies (`Dict[str, str]`, *optional*):
+            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+            'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+        use_auth_token (`str` or *bool*, *optional*):
+            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+            when running `huggingface-cli login` (stored in `~/.huggingface`).
+        revision (`str`, *optional*, defaults to `"main"`):
+            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+            identifier allowed by git.
+        local_files_only (`bool`, *optional*, defaults to `False`):
+            If `True`, will only try to load the tokenizer configuration from local files.
+        subfolder (`str`, *optional*, defaults to `""`):
+            In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+            specify the folder name here.
+
+    <Tip>
+
+    Passing `use_auth_token=True` is required when you want to use a private model.
+
+    </Tip>
+
+    Returns:
+        `Optional[str]`: Returns the resolved file (to the cache folder if downloaded from a repo).
+
+    Examples:
+
+    ```python
+    # Download a model weight from the Hub and cache it.
+    model_weights_file = cached_file("bert-base-uncased", "pytorch_model.bin")
+    ```"""
+    if is_offline_mode() and not local_files_only:
+        logger.info("Offline mode: forcing local_files_only=True")
+        local_files_only = True
+    if subfolder is None:
+        subfolder = ""
+
+    path_or_repo_id = str(path_or_repo_id)
+    full_filename = os.path.join(subfolder, filename)
+    if os.path.isdir(path_or_repo_id):
+        resolved_file = os.path.join(os.path.join(path_or_repo_id, subfolder), filename)
+        if not os.path.isfile(resolved_file):
+            if _raise_exceptions_for_missing_entries:
+                raise EnvironmentError(f"Could not locate {full_filename} inside {path_or_repo_id}.")
+            else:
+                return None
+        return resolved_file
+
+    if cache_dir is None:
+        cache_dir = TRANSFORMERS_CACHE
+    if isinstance(cache_dir, Path):
+        cache_dir = str(cache_dir)
+    user_agent = http_user_agent(user_agent)
+    try:
+        # Load from URL or cache if already cached
+        with _patch_hf_hub_tqdm():
+            resolved_file = hf_hub_download(
+                path_or_repo_id,
+                filename,
+                subfolder=None if len(subfolder) == 0 else subfolder,
+                revision=revision,
+                cache_dir=cache_dir,
+                user_agent=user_agent,
+                force_download=force_download,
+                proxies=proxies,
+                resume_download=resume_download,
+                use_auth_token=use_auth_token,
+                local_files_only=local_files_only,
+            )
+
+    except RepositoryNotFoundError:
+        raise EnvironmentError(
+            f"{path_or_repo_id} is not a local folder and is not a valid model identifier "
+            "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
+            "pass a token having permission to this repo with `use_auth_token` or log in with "
+            "`huggingface-cli login` and pass `use_auth_token=True`."
+        )
+    except RevisionNotFoundError:
+        raise EnvironmentError(
+            f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
+            "for this model name. Check the model page at "
+            f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
+        )
+    except EntryNotFoundError:
+        if not _raise_exceptions_for_missing_entries:
+            return None
+        if revision is None:
+            revision = "main"
+        raise EnvironmentError(
+            f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
+            f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
+        )
+    except HTTPError as err:
+        # First we try to see if we have a cached version (not up to date):
+        resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, revision=revision)
+        if resolved_file is not None:
+            return resolved_file
+        if not _raise_exceptions_for_connection_errors:
+            return None
+
+        raise EnvironmentError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{err}")
+    except ValueError as err:
+        # HuggingFace Hub returns a ValueError for a missing file when local_files_only=True we need to catch it here
+        # This could be caught above along in `EntryNotFoundError` if hf_hub sent a different error message here
+        if LOCAL_FILES_ONLY_HF_ERROR in err.args[0] and local_files_only and not _raise_exceptions_for_missing_entries:
+            return None
+
+        # Otherwise we try to see if we have a cached version (not up to date):
+        resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, revision=revision)
+        if resolved_file is not None:
+            return resolved_file
+        if not _raise_exceptions_for_connection_errors:
+            return None
+        raise EnvironmentError(
+            f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this file, couldn't find it in the"
+            f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing a file named"
+            f" {full_filename}.\nCheckout your internet connection or see how to run the library in offline mode at"
+            " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
+        )
+
+    return resolved_file
+
+
 def get_file_from_repo(
     path_or_repo: Union[str, os.PathLike],
     filename: str,
@@ -637,6 +844,7 @@ def get_file_from_repo(
     use_auth_token: Optional[Union[bool, str]] = None,
     revision: Optional[str] = None,
     local_files_only: bool = False,
+    subfolder: str = "",
 ):
     """
     Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
@@ -662,13 +870,16 @@ def get_file_from_repo(
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`).
+            when running `huggingface-cli login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
             identifier allowed by git.
         local_files_only (`bool`, *optional*, defaults to `False`):
             If `True`, will only try to load the tokenizer configuration from local files.
+        subfolder (`str`, *optional*, defaults to `""`):
+            In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+            specify the folder name here.
 
     <Tip>
 
@@ -688,47 +899,20 @@ def get_file_from_repo(
     # This model does not have a tokenizer config so the result will be None.
     tokenizer_config = get_file_from_repo("xlm-roberta-base", "tokenizer_config.json")
     ```"""
-    if is_offline_mode() and not local_files_only:
-        logger.info("Offline mode: forcing local_files_only=True")
-        local_files_only = True
-
-    path_or_repo = str(path_or_repo)
-    if os.path.isdir(path_or_repo):
-        resolved_file = os.path.join(path_or_repo, filename)
-        return resolved_file if os.path.isfile(resolved_file) else None
-    else:
-        resolved_file = hf_bucket_url(path_or_repo, filename=filename, revision=revision, mirror=None)
-
-    try:
-        # Load from URL or cache if already cached
-        resolved_file = cached_path(
-            resolved_file,
-            cache_dir=cache_dir,
-            force_download=force_download,
-            proxies=proxies,
-            resume_download=resume_download,
-            local_files_only=local_files_only,
-            use_auth_token=use_auth_token,
-        )
-
-    except RepositoryNotFoundError:
-        raise EnvironmentError(
-            f"{path_or_repo} is not a local folder and is not a valid model identifier "
-            "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
-            "pass a token having permission to this repo with `use_auth_token` or log in with "
-            "`huggingface-cli login` and pass `use_auth_token=True`."
-        )
-    except RevisionNotFoundError:
-        raise EnvironmentError(
-            f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
-            "for this model name. Check the model page at "
-            f"'https://huggingface.co/{path_or_repo}' for available revisions."
-        )
-    except EnvironmentError:
-        # The repo and revision exist, but the file does not or there was a connection error fetching it.
-        return None
-
-    return resolved_file
+    return cached_file(
+        path_or_repo_id=path_or_repo,
+        filename=filename,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        resume_download=resume_download,
+        proxies=proxies,
+        use_auth_token=use_auth_token,
+        revision=revision,
+        local_files_only=local_files_only,
+        subfolder=subfolder,
+        _raise_exceptions_for_missing_entries=False,
+        _raise_exceptions_for_connection_errors=False,
+    )
 
 
 def has_file(
@@ -765,7 +949,7 @@ def has_file(
 
     r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=10)
     try:
-        _raise_for_status(r)
+        huggingface_hub.utils._errors._raise_for_status(r)
         return True
     except RepositoryNotFoundError as e:
         logger.error(e)
@@ -799,7 +983,7 @@ def get_list_of_files(
             identifier allowed by git.
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`).
+            when running `huggingface-cli login` (stored in `~/.huggingface`).
         local_files_only (`bool`, *optional*, defaults to `False`):
             Whether or not to only rely on local files and not to attempt to download any files.
 
@@ -869,48 +1053,122 @@ class PushToHubMixin:
     A Mixin containing the functionality to push a model or tokenizer to the hub.
     """
 
+    def _create_repo(
+        self,
+        repo_id: str,
+        private: Optional[bool] = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
+        repo_url: Optional[str] = None,
+        organization: Optional[str] = None,
+    ):
+        """
+        Create the repo if needed, cleans up repo_id with deprecated kwards `repo_url` and `organization`, retrives the
+        token.
+        """
+        if repo_url is not None:
+            warnings.warn(
+                "The `repo_url` argument is deprecated and will be removed in v5 of Transformers. Use `repo_id` "
+                "instead."
+            )
+            repo_id = repo_url.replace(f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/", "")
+        if organization is not None:
+            warnings.warn(
+                "The `organization` argument is deprecated and will be removed in v5 of Transformers. Set your "
+                "organization directly in the `repo_id` passed instead (`repo_id={organization}/{model_id}`)."
+            )
+            if not repo_id.startswith(organization):
+                if "/" in repo_id:
+                    repo_id = repo_id.split("/")[-1]
+                repo_id = f"{organization}/{repo_id}"
+
+        token = HfFolder.get_token() if use_auth_token is True else use_auth_token
+        url = create_repo(repo_id=repo_id, token=token, private=private, exist_ok=True)
+
+        # If the namespace is not there, add it or `upload_file` will complain
+        if "/" not in repo_id and url != f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{repo_id}":
+            repo_id = get_full_repo_name(repo_id, token=token)
+        return repo_id, token
+
+    def _get_files_timestamps(self, working_dir: Union[str, os.PathLike]):
+        """
+        Returns the list of files with their last modification timestamp.
+        """
+        return {f: os.path.getmtime(os.path.join(working_dir, f)) for f in os.listdir(working_dir)}
+
+    def _upload_modified_files(
+        self,
+        working_dir: Union[str, os.PathLike],
+        repo_id: str,
+        files_timestamps: Dict[str, float],
+        commit_message: Optional[str] = None,
+        token: Optional[str] = None,
+        create_pr: bool = False,
+    ):
+        """
+        Uploads all modified files in `working_dir` to `repo_id`, based on `files_timestamps`.
+        """
+        if commit_message is None:
+            if "Model" in self.__class__.__name__:
+                commit_message = "Upload model"
+            elif "Config" in self.__class__.__name__:
+                commit_message = "Upload config"
+            elif "Tokenizer" in self.__class__.__name__:
+                commit_message = "Upload tokenizer"
+            elif "FeatureExtractor" in self.__class__.__name__:
+                commit_message = "Upload feature extractor"
+            elif "Processor" in self.__class__.__name__:
+                commit_message = "Upload processor"
+            else:
+                commit_message = f"Upload {self.__class__.__name__}"
+        modified_files = [
+            f
+            for f in os.listdir(working_dir)
+            if f not in files_timestamps or os.path.getmtime(os.path.join(working_dir, f)) > files_timestamps[f]
+        ]
+        operations = []
+        for file in modified_files:
+            operations.append(CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file))
+        logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
+        return create_commit(
+            repo_id=repo_id, operations=operations, commit_message=commit_message, token=token, create_pr=create_pr
+        )
+
     def push_to_hub(
         self,
-        repo_path_or_name: Optional[str] = None,
-        repo_url: Optional[str] = None,
-        use_temp_dir: bool = False,
+        repo_id: str,
+        use_temp_dir: Optional[bool] = None,
         commit_message: Optional[str] = None,
-        organization: Optional[str] = None,
         private: Optional[bool] = None,
         use_auth_token: Optional[Union[bool, str]] = None,
         max_shard_size: Optional[Union[int, str]] = "10GB",
-        **model_card_kwargs
+        create_pr: bool = False,
+        **deprecated_kwargs
     ) -> str:
         """
         Upload the {object_files} to the 🤗 Model Hub while synchronizing a local clone of the repo in
         `repo_path_or_name`.
 
         Parameters:
-            repo_path_or_name (`str`, *optional*):
-                Can either be a repository name for your {object} in the Hub or a path to a local folder (in which case
-                the repository will have the name of that local folder). If not specified, will default to the name
-                given by `repo_url` and a local directory with that name will be created.
-            repo_url (`str`, *optional*):
-                Specify this in case you want to push to an existing repository in the hub. If unspecified, a new
-                repository will be created in your namespace (unless you specify an `organization`) with `repo_name`.
-            use_temp_dir (`bool`, *optional*, defaults to `False`):
-                Whether or not to clone the distant repo in a temporary directory or in `repo_path_or_name` inside the
-                current working directory. This will slow things down if you are making changes in an existing repo
-                since you will need to clone the repo before every push.
+            repo_id (`str`):
+                The name of the repository you want to push your {object} to. It should contain your organization name
+                when pushing to a given organization.
+            use_temp_dir (`bool`, *optional*):
+                Whether or not to use a temporary directory to store the files saved before they are pushed to the Hub.
+                Will default to `True` if there is no directory named like `repo_id`, `False` otherwise.
             commit_message (`str`, *optional*):
-                Message to commit while pushing. Will default to `"add {object}"`.
-            organization (`str`, *optional*):
-                Organization in which you want to push your {object} (you must be a member of this organization).
+                Message to commit while pushing. Will default to `"Upload {object}"`.
             private (`bool`, *optional*):
                 Whether or not the repository created should be private (requires a paying subscription).
             use_auth_token (`bool` or `str`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `transformers-cli login` (stored in `~/.huggingface`). Will default to `True` if
-                `repo_url` is not specified.
-
-
-        Returns:
-            `str`: The url of the commit of your {object} in the given repository.
+                when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
+                is not specified.
+            max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+                Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
+                will then be each of size lower than this size. If expressed as a string, needs to be digits followed
+                by a unit (like `"5MB"`).
+            create_pr (`bool`, *optional*, defaults to `False`):
+                Whether or not to create a PR with the uploaded files or directly commit.
 
         Examples:
 
@@ -919,134 +1177,45 @@ class PushToHubMixin:
 
         {object} = {object_class}.from_pretrained("bert-base-cased")
 
-        # Push the {object} to your namespace with the name "my-finetuned-bert" and have a local clone in the
-        # *my-finetuned-bert* folder.
+        # Push the {object} to your namespace with the name "my-finetuned-bert".
         {object}.push_to_hub("my-finetuned-bert")
 
-        # Push the {object} to your namespace with the name "my-finetuned-bert" with no local clone.
-        {object}.push_to_hub("my-finetuned-bert", use_temp_dir=True)
-
-        # Push the {object} to an organization with the name "my-finetuned-bert" and have a local clone in the
-        # *my-finetuned-bert* folder.
-        {object}.push_to_hub("my-finetuned-bert", organization="huggingface")
-
-        # Make a change to an existing repo that has been cloned locally in *my-finetuned-bert*.
-        {object}.push_to_hub("my-finetuned-bert", repo_url="https://huggingface.co/sgugger/my-finetuned-bert")
+        # Push the {object} to an organization with the name "my-finetuned-bert".
+        {object}.push_to_hub("huggingface/my-finetuned-bert")
         ```
         """
-        if use_temp_dir:
-            # Make sure we use the right `repo_name` for the `repo_url` before replacing it.
-            if repo_url is None:
-                if use_auth_token is None:
-                    use_auth_token = True
-                repo_name = Path(repo_path_or_name).name
-                repo_url = self._get_repo_url_from_name(
-                    repo_name, organization=organization, private=private, use_auth_token=use_auth_token
-                )
-            repo_path_or_name = tempfile.mkdtemp()
-
-        # Create or clone the repo. If the repo is already cloned, this just retrieves the path to the repo.
-        repo = self._create_or_get_repo(
-            repo_path_or_name=repo_path_or_name,
-            repo_url=repo_url,
-            organization=organization,
-            private=private,
-            use_auth_token=use_auth_token,
-        )
-        # Save the files in the cloned repo
-        self.save_pretrained(repo_path_or_name, max_shard_size=max_shard_size)
-        if hasattr(self, "history") and hasattr(self, "create_model_card"):
-            self.save_pretrained(repo_path_or_name, max_shard_size=max_shard_size)
-            # This is a Keras model and we might be able to fish out its History and make a model card out of it
-            base_model_card_args = {
-                "output_dir": repo_path_or_name,
-                "model_name": Path(repo_path_or_name).name,
-            }
-            base_model_card_args.update(model_card_kwargs)
-            self.create_model_card(**base_model_card_args)
-
-        # Commit and push!
-        url = self._push_to_hub(repo, commit_message=commit_message)
-
-        # Clean up! Clean up! Everybody everywhere!
-        if use_temp_dir:
-            shutil.rmtree(repo_path_or_name)
-
-        return url
-
-    @staticmethod
-    def _get_repo_url_from_name(
-        repo_name: str,
-        organization: Optional[str] = None,
-        private: bool = None,
-        use_auth_token: Optional[Union[bool, str]] = None,
-    ) -> str:
-        if isinstance(use_auth_token, str):
-            token = use_auth_token
-        elif use_auth_token:
-            token = HfFolder.get_token()
-            if token is None:
-                raise ValueError(
-                    "You must login to the Hugging Face hub on this computer by typing `transformers-cli login` and "
-                    "entering your credentials to use `use_auth_token=True`. Alternatively, you can pass your own "
-                    "token as the `use_auth_token` argument."
-                )
-        else:
-            token = None
-
-        # Special provision for the test endpoint (CI)
-        return create_repo(
-            token,
-            repo_name,
-            organization=organization,
-            private=private,
-            repo_type=None,
-            exist_ok=True,
-        )
-
-    @classmethod
-    def _create_or_get_repo(
-        cls,
-        repo_path_or_name: Optional[str] = None,
-        repo_url: Optional[str] = None,
-        organization: Optional[str] = None,
-        private: bool = None,
-        use_auth_token: Optional[Union[bool, str]] = None,
-    ) -> Repository:
-        if repo_path_or_name is None and repo_url is None:
-            raise ValueError("You need to specify a `repo_path_or_name` or a `repo_url`.")
-
-        if use_auth_token is None and repo_url is None:
-            use_auth_token = True
-
-        if repo_path_or_name is None:
-            repo_path_or_name = repo_url.split("/")[-1]
-
-        if repo_url is None and not os.path.exists(repo_path_or_name):
-            repo_name = Path(repo_path_or_name).name
-            repo_url = cls._get_repo_url_from_name(
-                repo_name, organization=organization, private=private, use_auth_token=use_auth_token
+        if "repo_path_or_name" in deprecated_kwargs:
+            warnings.warn(
+                "The `repo_path_or_name` argument is deprecated and will be removed in v5 of Transformers. Use "
+                "`repo_id` instead."
             )
+            repo_id = deprecated_kwargs.pop("repo_path_or_name")
+        # Deprecation warning will be sent after for repo_url and organization
+        repo_url = deprecated_kwargs.pop("repo_url", None)
+        organization = deprecated_kwargs.pop("organization", None)
 
-        # Create a working directory if it does not exist.
-        if not os.path.exists(repo_path_or_name):
-            os.makedirs(repo_path_or_name)
+        if os.path.isdir(repo_id):
+            working_dir = repo_id
+            repo_id = repo_id.split(os.path.sep)[-1]
+        else:
+            working_dir = repo_id.split("/")[-1]
 
-        repo = Repository(repo_path_or_name, clone_from=repo_url, use_auth_token=use_auth_token)
-        repo.git_pull()
-        return repo
+        repo_id, token = self._create_repo(
+            repo_id, private=private, use_auth_token=use_auth_token, repo_url=repo_url, organization=organization
+        )
 
-    @classmethod
-    def _push_to_hub(cls, repo: Repository, commit_message: Optional[str] = None) -> str:
-        if commit_message is None:
-            if "Tokenizer" in cls.__name__:
-                commit_message = "add tokenizer"
-            elif "Config" in cls.__name__:
-                commit_message = "add config"
-            else:
-                commit_message = "add model"
+        if use_temp_dir is None:
+            use_temp_dir = not os.path.isdir(working_dir)
 
-        return repo.push_to_hub(commit_message=commit_message)
+        with working_or_temp_dir(working_dir=working_dir, use_temp_dir=use_temp_dir) as work_dir:
+            files_timestamps = self._get_files_timestamps(work_dir)
+
+            # Save all files.
+            self.save_pretrained(work_dir, max_shard_size=max_shard_size)
+
+            return self._upload_modified_files(
+                work_dir, repo_id, files_timestamps, commit_message=commit_message, token=token, create_pr=create_pr
+            )
 
 
 def get_full_repo_name(model_id: str, organization: Optional[str] = None, token: Optional[str] = None):
@@ -1210,3 +1379,190 @@ def get_checkpoint_shard_files(
         cached_filenames.append(cached_filename)
 
     return cached_filenames, sharded_metadata
+
+
+# All what is below is for conversion between old cache format and new cache format.
+
+
+def get_all_cached_files(cache_dir=None):
+    """
+    Returns a list for all files cached with appropriate metadata.
+    """
+    if cache_dir is None:
+        cache_dir = TRANSFORMERS_CACHE
+    else:
+        cache_dir = str(cache_dir)
+
+    cached_files = []
+    for file in os.listdir(cache_dir):
+        meta_path = os.path.join(cache_dir, f"{file}.json")
+        if not os.path.isfile(meta_path):
+            continue
+
+        with open(meta_path, encoding="utf-8") as meta_file:
+            metadata = json.load(meta_file)
+            url = metadata["url"]
+            etag = metadata["etag"].replace('"', "")
+            cached_files.append({"file": file, "url": url, "etag": etag})
+
+    return cached_files
+
+
+def get_hub_metadata(url, token=None):
+    """
+    Returns the commit hash and associated etag for a given url.
+    """
+    if token is None:
+        token = HfFolder.get_token()
+    headers = {"user-agent": http_user_agent()}
+    headers["authorization"] = f"Bearer {token}"
+
+    r = huggingface_hub.file_download._request_with_retry(
+        method="HEAD", url=url, headers=headers, allow_redirects=False
+    )
+    huggingface_hub.file_download._raise_for_status(r)
+    commit_hash = r.headers.get(HUGGINGFACE_HEADER_X_REPO_COMMIT)
+    etag = r.headers.get(HUGGINGFACE_HEADER_X_LINKED_ETAG) or r.headers.get("ETag")
+    if etag is not None:
+        etag = huggingface_hub.file_download._normalize_etag(etag)
+    return etag, commit_hash
+
+
+def extract_info_from_url(url):
+    """
+    Extract repo_name, revision and filename from an url.
+    """
+    search = re.search(r"^https://huggingface\.co/(.*)/resolve/([^/]*)/(.*)$", url)
+    if search is None:
+        return None
+    repo, revision, filename = search.groups()
+    cache_repo = "--".join(["models"] + repo.split("/"))
+    return {"repo": cache_repo, "revision": revision, "filename": filename}
+
+
+def clean_files_for(file):
+    """
+    Remove, if they exist, file, file.json and file.lock
+    """
+    for f in [file, f"{file}.json", f"{file}.lock"]:
+        if os.path.isfile(f):
+            os.remove(f)
+
+
+def move_to_new_cache(file, repo, filename, revision, etag, commit_hash):
+    """
+    Move file to repo following the new huggingface hub cache organization.
+    """
+    os.makedirs(repo, exist_ok=True)
+
+    # refs
+    os.makedirs(os.path.join(repo, "refs"), exist_ok=True)
+    if revision != commit_hash:
+        ref_path = os.path.join(repo, "refs", revision)
+        with open(ref_path, "w") as f:
+            f.write(commit_hash)
+
+    # blobs
+    os.makedirs(os.path.join(repo, "blobs"), exist_ok=True)
+    # TODO: replace copy by move when all works well.
+    blob_path = os.path.join(repo, "blobs", etag)
+    shutil.move(file, blob_path)
+
+    # snapshots
+    os.makedirs(os.path.join(repo, "snapshots"), exist_ok=True)
+    os.makedirs(os.path.join(repo, "snapshots", commit_hash), exist_ok=True)
+    pointer_path = os.path.join(repo, "snapshots", commit_hash, filename)
+    huggingface_hub.file_download._create_relative_symlink(blob_path, pointer_path)
+    clean_files_for(file)
+
+
+def move_cache(cache_dir=None, new_cache_dir=None, token=None):
+    if new_cache_dir is None:
+        new_cache_dir = TRANSFORMERS_CACHE
+    if cache_dir is None:
+        # Migrate from old cache in .cache/huggingface/hub
+        old_cache = Path(TRANSFORMERS_CACHE).parent / "transformers"
+        if os.path.isdir(str(old_cache)):
+            cache_dir = str(old_cache)
+        else:
+            cache_dir = new_cache_dir
+    if token is None:
+        token = HfFolder.get_token()
+    cached_files = get_all_cached_files(cache_dir=cache_dir)
+    print(f"Moving {len(cached_files)} files to the new cache system")
+
+    hub_metadata = {}
+    for file_info in tqdm(cached_files):
+        url = file_info.pop("url")
+        if url not in hub_metadata:
+            try:
+                hub_metadata[url] = get_hub_metadata(url, token=token)
+            except requests.HTTPError:
+                continue
+
+        etag, commit_hash = hub_metadata[url]
+        if etag is None or commit_hash is None:
+            continue
+
+        if file_info["etag"] != etag:
+            # Cached file is not up to date, we just throw it as a new version will be downloaded anyway.
+            clean_files_for(os.path.join(cache_dir, file_info["file"]))
+            continue
+
+        url_info = extract_info_from_url(url)
+        if url_info is None:
+            # Not a file from huggingface.co
+            continue
+
+        repo = os.path.join(new_cache_dir, url_info["repo"])
+        move_to_new_cache(
+            file=os.path.join(cache_dir, file_info["file"]),
+            repo=repo,
+            filename=url_info["filename"],
+            revision=url_info["revision"],
+            etag=etag,
+            commit_hash=commit_hash,
+        )
+
+
+cache_version_file = os.path.join(TRANSFORMERS_CACHE, "version.txt")
+if not os.path.isfile(cache_version_file):
+    cache_version = 0
+else:
+    with open(cache_version_file) as f:
+        cache_version = int(f.read())
+
+
+if cache_version < 1:
+    if is_offline_mode():
+        logger.warn(
+            "You are offline and the cache for model files in Transformers v4.22.0 has been updated while your local "
+            "cache seems to be the one of a previous version. It is very likely that all your calls to any "
+            "`from_pretrained()` method will fail. Remove the offline mode and enable internet connection to have "
+            "your cache be updated automatically, then you can go back to offline mode."
+        )
+    else:
+        logger.warn(
+            "The cache for model files in Transformers v4.22.0 has been updated. Migrating your old cache. This is a "
+            "one-time only operation. You can interrupt this and resume the migration later on by calling "
+            "`transformers.utils.move_cache()`."
+        )
+    try:
+        move_cache()
+    except Exception as e:
+        trace = "\n".join(traceback.format_tb(e.__traceback__))
+        logger.error(
+            f"There was a problem when trying to move your cache:\n\n{trace}\n\nPlease file an issue at "
+            "https://github.com/huggingface/transformers/issues/new/choose and copy paste this whole message and we "
+            "will do our best to help."
+        )
+
+    try:
+        os.makedirs(TRANSFORMERS_CACHE, exist_ok=True)
+        with open(cache_version_file, "w") as f:
+            f.write("1")
+    except Exception:
+        logger.warn(
+            f"There was a problem when trying to write in your cache folder ({TRANSFORMERS_CACHE}). You should set "
+            "the environment variable TRANSFORMERS_CACHE to a writable directory."
+        )

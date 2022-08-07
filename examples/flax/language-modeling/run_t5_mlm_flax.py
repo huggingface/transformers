@@ -172,7 +172,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -327,7 +327,7 @@ class FlaxDataCollatorForT5MLM:
     pad_token_id: int
     decoder_start_token_id: int
 
-    def __call__(self, examples: List[Dict[str, np.ndarray]]) -> Dict[str, np.ndarray]:
+    def __call__(self, examples: List[Dict[str, np.ndarray]]) -> BatchEncoding:
 
         # convert list to dict and tensorize input
         batch = BatchEncoding(
@@ -746,7 +746,6 @@ def main():
             config,
             seed=training_args.seed,
             dtype=getattr(jnp, model_args.dtype),
-            use_auth_token=True if model_args.use_auth_token else None,
         )
 
     # Data collator

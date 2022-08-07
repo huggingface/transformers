@@ -92,6 +92,9 @@ def process_doc_file(code_file, add_new_line=True):
 
     # fmt: off
     splits = code.split("```")
+    if len(splits) % 2 != 1:
+        raise ValueError("The number of occurrences of ``` should be an even number.")
+
     splits = [s if i % 2 == 0 else process_code_block(s, add_new_line=add_new_line) for i, s in enumerate(splits)]
     clean_code = "```".join(splits)
     # fmt: on

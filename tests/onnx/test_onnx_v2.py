@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from unittest import TestCase
@@ -25,6 +26,11 @@ from transformers.testing_utils import require_onnx, require_rjieba, require_tf,
 
 if is_torch_available() or is_tf_available():
     from transformers.onnx.features import FeaturesManager
+
+if is_torch_available():
+    import torch
+
+    from transformers.models.deberta import modeling_deberta
 
 
 @require_onnx
@@ -222,7 +228,9 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("blenderbot", "facebook/blenderbot-400M-distill"),
     ("bigbird-pegasus", "google/bigbird-pegasus-large-arxiv"),
     ("longt5", "google/long-t5-local-base"),
-    ("longt5", "google/long-t5-tglobal-base"),
+    # Disable for now as it causes fatal error `Floating point exception (core dumped)` and the subsequential tests are
+    # not run.
+    # ("longt5", "google/long-t5-tglobal-base"),
 }
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_MODELS` once TensorFlow has parity with the PyTorch model implementations.
@@ -356,3 +364,40 @@ class OnnxExportTestCaseV2(TestCase):
         self, test_name, name, model_name, feature, onnx_config_class_constructor
     ):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+
+
+class StableDropoutTestCase(TestCase):
+    """Tests export of StableDropout module."""
+
+    @require_torch
+    @pytest.mark.filterwarnings("ignore:.*Dropout.*:UserWarning:torch.onnx.*")  # torch.onnx is spammy.
+    def test_training(self):
+        """Tests export of StableDropout in training mode."""
+        devnull = open(os.devnull, "wb")
+        # drop_prob must be > 0 for the test to be meaningful
+        sd = modeling_deberta.StableDropout(0.1)
+        # Avoid warnings in training mode
+        do_constant_folding = False
+        # Dropout is a no-op in inference mode
+        training = torch.onnx.TrainingMode.PRESERVE
+        input = (torch.randn(2, 2),)
+
+        torch.onnx.export(
+            sd,
+            input,
+            devnull,
+            opset_version=12,  # Minimum supported
+            do_constant_folding=do_constant_folding,
+            training=training,
+        )
+
+        # Expected to fail with opset_version < 12
+        with self.assertRaises(Exception):
+            torch.onnx.export(
+                sd,
+                input,
+                devnull,
+                opset_version=11,
+                do_constant_folding=do_constant_folding,
+                training=training,
+            )

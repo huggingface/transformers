@@ -78,12 +78,7 @@ The preprocessing function needs to:
 >>> def preprocess_function(examples):
 ...     inputs = [prefix + example[source_lang] for example in examples["translation"]]
 ...     targets = [example[target_lang] for example in examples["translation"]]
-...     model_inputs = tokenizer(inputs, max_length=128, truncation=True)
-
-...     with tokenizer.as_target_tokenizer():
-...         labels = tokenizer(targets, max_length=128, truncation=True)
-
-...     model_inputs["labels"] = labels["input_ids"]
+...     model_inputs = tokenizer(inputs, text_target=targets, max_length=128, truncation=True)
 ...     return model_inputs
 ```
 

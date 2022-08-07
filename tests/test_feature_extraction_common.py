@@ -22,7 +22,7 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo, set_access_token
 from requests.exceptions import HTTPError
 from transformers import AutoFeatureExtractor, Wav2Vec2FeatureExtractor
 from transformers.testing_utils import TOKEN, USER, check_json_file_has_correct_format, get_tests_dir, is_staging_test
@@ -48,47 +48,89 @@ SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR = get_tests_dir("fixtures")
 def prepare_image_inputs(feature_extract_tester, equal_resolution=False, numpify=False, torchify=False):
     """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
     or a list of PyTorch tensors if one specifies torchify=True.
+
+    One can specify whether the images are of the same resolution or not.
     """
 
     assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
 
-    if equal_resolution:
-        image_inputs = []
-        for i in range(feature_extract_tester.batch_size):
-            image_inputs.append(
-                np.random.randint(
-                    255,
-                    size=(
-                        feature_extract_tester.num_channels,
-                        feature_extract_tester.max_resolution,
-                        feature_extract_tester.max_resolution,
-                    ),
-                    dtype=np.uint8,
-                )
-            )
-    else:
-        image_inputs = []
-
-        # To avoid getting image width/height 0
-        min_resolution = feature_extract_tester.min_resolution
-        if getattr(feature_extract_tester, "size_divisor", None):
-            # If `size_divisor` is defined, the image needs to have width/size >= `size_divisor`
-            min_resolution = max(feature_extract_tester.size_divisor, min_resolution)
-
-        for i in range(feature_extract_tester.batch_size):
+    image_inputs = []
+    for i in range(feature_extract_tester.batch_size):
+        if equal_resolution:
+            width = height = feature_extract_tester.max_resolution
+        else:
+            # To avoid getting image width/height 0
+            min_resolution = feature_extract_tester.min_resolution
+            if getattr(feature_extract_tester, "size_divisor", None):
+                # If `size_divisor` is defined, the image needs to have width/size >= `size_divisor`
+                min_resolution = max(feature_extract_tester.size_divisor, min_resolution)
             width, height = np.random.choice(np.arange(min_resolution, feature_extract_tester.max_resolution), 2)
-            image_inputs.append(
-                np.random.randint(255, size=(feature_extract_tester.num_channels, width, height), dtype=np.uint8)
+        image_inputs.append(
+            np.random.randint(
+                255,
+                size=(
+                    feature_extract_tester.num_channels,
+                    width,
+                    height,
+                ),
+                dtype=np.uint8,
             )
+        )
 
     if not numpify and not torchify:
         # PIL expects the channel dimension as last dimension
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
+        image_inputs = [Image.fromarray(np.moveaxis(image, 0, -1)) for image in image_inputs]
 
     if torchify:
-        image_inputs = [torch.from_numpy(x) for x in image_inputs]
+        image_inputs = [torch.from_numpy(image) for image in image_inputs]
 
     return image_inputs
+
+
+def prepare_video(feature_extract_tester, width=10, height=10, numpify=False, torchify=False):
+    """This function prepares a video as a list of PIL images/NumPy arrays/PyTorch tensors."""
+
+    video = []
+    for i in range(feature_extract_tester.num_frames):
+        video.append(np.random.randint(255, size=(feature_extract_tester.num_channels, width, height), dtype=np.uint8))
+
+    if not numpify and not torchify:
+        # PIL expects the channel dimension as last dimension
+        video = [Image.fromarray(np.moveaxis(frame, 0, -1)) for frame in video]
+
+    if torchify:
+        video = [torch.from_numpy(frame) for frame in video]
+
+    return video
+
+
+def prepare_video_inputs(feature_extract_tester, equal_resolution=False, numpify=False, torchify=False):
+    """This function prepares a batch of videos: a list of list of PIL images, or a list of list of numpy arrays if
+    one specifies numpify=True, or a list of list of PyTorch tensors if one specifies torchify=True.
+
+    One can specify whether the videos are of the same resolution or not.
+    """
+
+    assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
+
+    video_inputs = []
+    for i in range(feature_extract_tester.batch_size):
+        if equal_resolution:
+            width = height = feature_extract_tester.max_resolution
+        else:
+            width, height = np.random.choice(
+                np.arange(feature_extract_tester.min_resolution, feature_extract_tester.max_resolution), 2
+            )
+            video = prepare_video(
+                feature_extract_tester=feature_extract_tester,
+                width=width,
+                height=height,
+                numpify=numpify,
+                torchify=torchify,
+            )
+        video_inputs.append(video)
+
+    return video_inputs
 
 
 class FeatureExtractionSavingTestMixin:
@@ -128,13 +170,13 @@ class FeatureExtractorUtilTester(unittest.TestCase):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
         response_mock.status_code = 500
-        response_mock.headers = []
+        response_mock.headers = {}
         response_mock.raise_for_status.side_effect = HTTPError
 
         # Download this model to make sure it's in the cache.
         _ = Wav2Vec2FeatureExtractor.from_pretrained("hf-internal-testing/tiny-random-wav2vec2")
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
+        with mock.patch("requests.request", return_value=response_mock) as mock_head:
             _ = Wav2Vec2FeatureExtractor.from_pretrained("hf-internal-testing/tiny-random-wav2vec2")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -167,47 +209,57 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
 
     def test_push_to_hub(self):
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
+        feature_extractor.push_to_hub("test-feature-extractor", use_auth_token=self._token)
+
+        new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(f"{USER}/test-feature-extractor")
+        for k, v in feature_extractor.__dict__.items():
+            self.assertEqual(v, getattr(new_feature_extractor, k))
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="test-feature-extractor")
+
+        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
             feature_extractor.save_pretrained(
-                os.path.join(tmp_dir, "test-feature-extractor"), push_to_hub=True, use_auth_token=self._token
+                tmp_dir, repo_id="test-feature-extractor", push_to_hub=True, use_auth_token=self._token
             )
 
-            new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(f"{USER}/test-feature-extractor")
-            for k, v in feature_extractor.__dict__.items():
-                self.assertEqual(v, getattr(new_feature_extractor, k))
+        new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(f"{USER}/test-feature-extractor")
+        for k, v in feature_extractor.__dict__.items():
+            self.assertEqual(v, getattr(new_feature_extractor, k))
 
     def test_push_to_hub_in_organization(self):
         feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
+        feature_extractor.push_to_hub("valid_org/test-feature-extractor", use_auth_token=self._token)
 
+        new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("valid_org/test-feature-extractor")
+        for k, v in feature_extractor.__dict__.items():
+            self.assertEqual(v, getattr(new_feature_extractor, k))
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="valid_org/test-feature-extractor")
+
+        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
             feature_extractor.save_pretrained(
-                os.path.join(tmp_dir, "test-feature-extractor-org"),
-                push_to_hub=True,
-                use_auth_token=self._token,
-                organization="valid_org",
+                tmp_dir, repo_id="valid_org/test-feature-extractor-org", push_to_hub=True, use_auth_token=self._token
             )
 
-            new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("valid_org/test-feature-extractor-org")
-            for k, v in feature_extractor.__dict__.items():
-                self.assertEqual(v, getattr(new_feature_extractor, k))
+        new_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("valid_org/test-feature-extractor-org")
+        for k, v in feature_extractor.__dict__.items():
+            self.assertEqual(v, getattr(new_feature_extractor, k))
 
     def test_push_to_hub_dynamic_feature_extractor(self):
         CustomFeatureExtractor.register_for_auto_class()
         feature_extractor = CustomFeatureExtractor.from_pretrained(SAMPLE_FEATURE_EXTRACTION_CONFIG_DIR)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-feature-extractor", use_auth_token=self._token)
-            feature_extractor.save_pretrained(tmp_dir)
+        feature_extractor.push_to_hub("test-dynamic-feature-extractor", use_auth_token=self._token)
 
-            # This has added the proper auto_map field to the config
-            self.assertDictEqual(
-                feature_extractor.auto_map,
-                {"AutoFeatureExtractor": "custom_feature_extraction.CustomFeatureExtractor"},
-            )
-            # The code has been copied from fixtures
-            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, "custom_feature_extraction.py")))
-
-            repo.push_to_hub()
+        # This has added the proper auto_map field to the config
+        self.assertDictEqual(
+            feature_extractor.auto_map,
+            {"AutoFeatureExtractor": "custom_feature_extraction.CustomFeatureExtractor"},
+        )
 
         new_feature_extractor = AutoFeatureExtractor.from_pretrained(
             f"{USER}/test-dynamic-feature-extractor", trust_remote_code=True
