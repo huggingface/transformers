@@ -10,37 +10,29 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Converting Tensorflow Checkpoints
+# Convertir Checkpoints en Tensorflow
 
-A command-line interface is provided to convert original Bert/GPT/GPT-2/Transformer-XL/XLNet/XLM checkpoints to models
-that can be loaded using the `from_pretrained` methods of the library.
+Te proporcionamos una interfaz de línea de comandos (`CLI`, por sus siglas en inglés) para convertir puntos de control (_checkpoints_) originales de Bert/GPT/GPT-2/Transformer-XL/XLNet/XLM en modelos que se puedan cargar utilizando los métodos `from_pretrained` de la biblioteca.
 
 <Tip>
 
-Since 2.3.0 the conversion script is now part of the transformers CLI (**transformers-cli**) available in any
-transformers >= 2.3.0 installation.
+Desde 2.3.0, el script para convertir es parte de la CLI de transformers (**transformers-cli**) disponible en cualquier instalación de transformers >= 2.3.0.
 
-The documentation below reflects the **transformers-cli convert** command format.
+La siguiente documentación refleja el formato para el comando **transformers-cli convert**.
 
 </Tip>
 
 ## BERT
 
-You can convert any TensorFlow checkpoint for BERT (in particular [the pre-trained models released by Google](https://github.com/google-research/bert#pre-trained-models)) in a PyTorch save file by using the
-[convert_bert_original_tf_checkpoint_to_pytorch.py](https://github.com/huggingface/transformers/tree/main/src/transformers/models/bert/convert_bert_original_tf_checkpoint_to_pytorch.py) script.
+Puedes convertir cualquier checkpoint de TensorFlow para BERT (en particular, [los modelos previamente entrenados y publicados por Google](https://github.com/google-research/bert#pre-trained-models)) en un archivo de PyTorch mediante el script [convert_bert_original_tf_checkpoint_to_pytorch.py](https://github.com/huggingface/transformers/tree/main/src/transformers/models/bert/convert_bert_original_tf_checkpoint_to_pytorch.py).
 
-This CLI takes as input a TensorFlow checkpoint (three files starting with `bert_model.ckpt`) and the associated
-configuration file (`bert_config.json`), and creates a PyTorch model for this configuration, loads the weights from
-the TensorFlow checkpoint in the PyTorch model and saves the resulting model in a standard PyTorch save file that can
-be imported using `from_pretrained()` (see example in [quicktour](quicktour) , [run_glue.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_glue.py) ).
+Esta CLI toma como entrada un checkpoint de TensorFlow (tres archivos que comienzan con `bert_model.ckpt`) y el archivo de configuración asociado (`bert_config.json`), y crea un modelo PyTorch para esta configuración, carga los pesos del checkpoint de TensorFlow en el modelo de PyTorch y guarda el modelo resultante en un archivo estándar de PyTorch que se puede importar usando `from_pretrained()` (ve el ejemplo en [Tour rápido](quicktour), [run_glue.py](https://github.com/huggingface/transformers/tree/main/examples/pytorch/text-classification/run_glue.py)).
 
-You only need to run this conversion script **once** to get a PyTorch model. You can then disregard the TensorFlow
-checkpoint (the three files starting with `bert_model.ckpt`) but be sure to keep the configuration file (\
-`bert_config.json`) and the vocabulary file (`vocab.txt`) as these are needed for the PyTorch model too.
+Solo necesitas ejecutar este script **una vez** para convertir un modelo a PyTorch. Después, puedes ignorar el checkpoint de TensorFlow (los tres archivos que comienzan con `bert_model.ckpt`), pero asegúrate de conservar el archivo de configuración (`bert_config.json`) y el archivo de vocabulario (`vocab.txt`) ya que estos también son necesarios para el modelo en PyTorch.
 
-To run this specific conversion script you will need to have TensorFlow and PyTorch installed (`pip install tensorflow`). The rest of the repository only requires PyTorch.
+Para ejecutar este script en específico, deberás tener instalado TensorFlow y PyTorch (`pip install tensorflow`). El resto del repositorio solo requiere PyTorch.
 
-Here is an example of the conversion process for a pre-trained `BERT-Base Uncased` model:
+Aquí hay un ejemplo del proceso para convertir un modelo `BERT-Base Uncased` entrenado previamente:
 
 ```bash
 export BERT_BASE_DIR=/path/to/bert/uncased_L-12_H-768_A-12
@@ -51,18 +43,15 @@ transformers-cli convert --model_type bert \
   --pytorch_dump_output $BERT_BASE_DIR/pytorch_model.bin
 ```
 
-You can download Google's pre-trained models for the conversion [here](https://github.com/google-research/bert#pre-trained-models).
+Puedes descargar los modelos preentrenados de Google para la conversión [aquí](https://github.com/google-research/bert#pre-trained-models).
 
 ## ALBERT
 
-Convert TensorFlow model checkpoints of ALBERT to PyTorch using the
-[convert_albert_original_tf_checkpoint_to_pytorch.py](https://github.com/huggingface/transformers/tree/main/src/transformers/models/albert/convert_albert_original_tf_checkpoint_to_pytorch.py) script.
+Convierte los checkpoints del modelo TensorFlow de ALBERT a PyTorch usando el script [convert_albert_original_tf_checkpoint_to_pytorch.py](https://github.com/huggingface/transformers/tree/main/src/transformers/models/albert/convert_albert_original_tf_checkpoint_to_pytorch.py).
 
-The CLI takes as input a TensorFlow checkpoint (three files starting with `model.ckpt-best`) and the accompanying
-configuration file (`albert_config.json`), then creates and saves a PyTorch model. To run this conversion you will
-need to have TensorFlow and PyTorch installed.
+La CLI toma como entrada un checkpoint de TensorFlow (tres archivos que comienzan con `model.ckpt-best`) y el archivo de configuración adjunto (`albert_config.json`), luego crea y guarda un modelo de PyTorch. Para ejecutar esta conversión, deberás tener instalados TensorFlow y PyTorch.
 
-Here is an example of the conversion process for the pre-trained `ALBERT Base` model:
+Aquí hay un ejemplo del proceso para convertir un modelo `ALBERT Base` entrenado previamente:
 
 ```bash
 export ALBERT_BASE_DIR=/path/to/albert/albert_base
@@ -73,13 +62,11 @@ transformers-cli convert --model_type albert \
   --pytorch_dump_output $ALBERT_BASE_DIR/pytorch_model.bin
 ```
 
-You can download Google's pre-trained models for the conversion [here](https://github.com/google-research/albert#pre-trained-models).
+Puedes descargar los modelos preentrenados de Google para la conversión [aquí](https://github.com/google-research/albert#pre-trained-models).
 
 ## OpenAI GPT
 
-Here is an example of the conversion process for a pre-trained OpenAI GPT model, assuming that your NumPy checkpoint
-save as the same format than OpenAI pretrained model (see [here](https://github.com/openai/finetune-transformer-lm)\
-)
+Este es un ejemplo del proceso para convertir un modelo OpenAI GPT preentrenado, asumiendo que tu checkpoint de NumPy se guarda con el mismo formato que el modelo preentrenado de OpenAI (más información [aquí](https://github.com/openai/finetune-transformer-lm)):
 
 ```bash
 export OPENAI_GPT_CHECKPOINT_FOLDER_PATH=/path/to/openai/pretrained/numpy/weights
@@ -93,7 +80,7 @@ transformers-cli convert --model_type gpt \
 
 ## OpenAI GPT-2
 
-Here is an example of the conversion process for a pre-trained OpenAI GPT-2 model (see [here](https://github.com/openai/gpt-2))
+Aquí hay un ejemplo del proceso para convertir un modelo OpenAI GPT-2 entrenado previamente (más información [aquí](https://github.com/openai/gpt-2)):
 
 ```bash
 export OPENAI_GPT2_CHECKPOINT_PATH=/path/to/gpt2/pretrained/weights
@@ -107,7 +94,7 @@ transformers-cli convert --model_type gpt2 \
 
 ## Transformer-XL
 
-Here is an example of the conversion process for a pre-trained Transformer-XL model (see [here](https://github.com/kimiyoung/transformer-xl/tree/master/tf#obtain-and-evaluate-pretrained-sota-models))
+Aquí hay un ejemplo del proceso para convertir un modelo Transformer-XL entrenado previamente (más información [aquí](https://github.com/kimiyoung/transformer-xl/tree/master/tf#obtain-and-evaluate-pretrained-sota-models)):
 
 ```bash
 export TRANSFO_XL_CHECKPOINT_FOLDER_PATH=/path/to/transfo/xl/checkpoint
@@ -121,7 +108,7 @@ transformers-cli convert --model_type transfo_xl \
 
 ## XLNet
 
-Here is an example of the conversion process for a pre-trained XLNet model:
+Aquí hay un ejemplo del proceso para convertir un modelo XLNet entrenado previamente:
 
 ```bash
 export TRANSFO_XL_CHECKPOINT_PATH=/path/to/xlnet/checkpoint
@@ -136,7 +123,7 @@ transformers-cli convert --model_type xlnet \
 
 ## XLM
 
-Here is an example of the conversion process for a pre-trained XLM model:
+Aquí hay un ejemplo del proceso para convertir un modelo XLM entrenado previamente:
 
 ```bash
 export XLM_CHECKPOINT_PATH=/path/to/xlm/checkpoint
@@ -150,7 +137,7 @@ transformers-cli convert --model_type xlm \
 
 ## T5
 
-Here is an example of the conversion process for a pre-trained T5 model:
+Aquí hay un ejemplo del proceso para convertir un modelo T5 entrenado previamente:
 
 ```bash
 export T5=/path/to/t5/uncased_L-12_H-768_A-12
