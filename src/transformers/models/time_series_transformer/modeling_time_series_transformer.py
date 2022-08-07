@@ -108,21 +108,21 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
 
 
-class TimeSeriesTransformerLearnedPositionalEmbedding(nn.Embedding):
-    """
-    This module learns positional embeddings up to a fixed maximum size.
-    """
+# class TimeSeriesTransformerLearnedPositionalEmbedding(nn.Embedding):
+#     """
+#     This module learns positional embeddings up to a fixed maximum size.
+#     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int):
-        super().__init__(num_embeddings, embedding_dim)
+#     def __init__(self, num_embeddings: int, embedding_dim: int):
+#         super().__init__(num_embeddings, embedding_dim)
 
-    def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
-        """`input_ids_shape` is expected to be [bsz x seqlen]."""
-        bsz, seq_len = input_ids_shape[:2]
-        positions = torch.arange(
-            past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        )
-        return super().forward(positions)
+#     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
+#         """`input_ids_shape` is expected to be [bsz x seqlen]."""
+#         bsz, seq_len = input_ids_shape[:2]
+#         positions = torch.arange(
+#             past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
+#         )
+#         return super().forward(positions)
 
 
 class TimeSeriesTransformerAttention(nn.Module):
@@ -1111,25 +1111,28 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             embedding_dims=config.embedding_dimension,
         )
 
-        self.d_model = config.input_size * len(config.lags_seq) + self._number_of_features
+        config.d_model = config.input_size * len(config.lags_seq) + self._number_of_features
 
         # transformer enc-decoder and mask initializer
-        self.transformer = nn.Transformer(
-            d_model=self.d_model,
-            nhead=config.nhead,
-            num_encoder_layers=config.encoder_layers,
-            num_decoder_layers=config.decoder_layers,
-            dim_feedforward=config.ffn_dim,
-            dropout=config.dropout,
-            activation=config.activation_function,
-            batch_first=True,
-        )
+        self.encoder = TimeSeriesTransformerEncoder(config)
+        self.decoder = TimeSeriesTransformerDecoder(config)
 
-        # causal decoder tgt mask
-        self.register_buffer(
-            "tgt_mask",
-            self.transformer.generate_square_subsequent_mask(config.prediction_length),
-        )
+        # self.transformer = nn.Transformer(
+        #     d_model=self.d_model,
+        #     nhead=config.nhead,
+        #     num_encoder_layers=config.encoder_layers,
+        #     num_decoder_layers=config.decoder_layers,
+        #     dim_feedforward=config.ffn_dim,
+        #     dropout=config.dropout,
+        #     activation=config.activation_function,
+        #     batch_first=True,
+        # )
+
+        # # causal decoder tgt mask
+        # self.register_buffer(
+        #     "tgt_mask",
+        #     self.transformer.generate_square_subsequent_mask(config.prediction_length),
+        # )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1246,8 +1249,8 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         enc_input = transformer_inputs[:, : self.config.context_length, ...]
         dec_input = transformer_inputs[:, self.config.context_length :, ...]
 
-        enc_out = self.transformer.encoder(enc_input)
-        return self.transformer.decoder(dec_input, enc_out, tgt_mask=self.tgt_mask)
+        encoder_outputs = self.encoder(inputs_embeds=enc_input)
+        return self.decoder(inputs_embeds=dec_input, encoder_hidden_states=encoder_outputs.last_hidden_state)
 
     def get_input_embeddings(self):
         return self.shared
@@ -1258,10 +1261,10 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         self.decoder.embed_tokens = self.shared
 
     def get_encoder(self):
-        return self.transformer.encoder
+        return self.encoder
 
     def get_decoder(self):
-        return self.transformer.decoder
+        return self.decoder
 
     @add_start_docstrings_to_model_forward(TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -1290,7 +1293,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         )
         dec_output = self.output_params(transformer_inputs)
 
-        return dec_output, scale
+        return dec_output.last_hidden_state, scale
 
         # return Seq2SeqModelOutput(
         #     last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1311,7 +1314,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
         self.transformer = TimeSeriesTransformerModel(config)
         if config.distribution_output == "student_t":
             self.distribution_output = StudentTOutput()
-            self.param_proj = self.distribution_output.get_args_proj(self.transformer.d_model)
+            self.param_proj = self.distribution_output.get_args_proj(self.transformer.config.d_model)
             self.target_shape = self.distribution_output.event_shape
 
         if config.loss == "nll":

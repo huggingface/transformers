@@ -39,7 +39,6 @@ if is_torch_available():
         TimeSeriesTransformerForSequenceClassification,
         TimeSeriesTransformerForPrediction,
         TimeSeriesTransformerModel,
-        TimeSeriesTransformerTokenizer,
     )
     from transformers.models.time_series_transformer.modeling_time_series_transformer import (
         TimeSeriesTransformerDecoder,

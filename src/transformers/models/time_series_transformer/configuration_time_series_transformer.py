@@ -124,6 +124,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         dropout: float = 0.1,
         num_parallel_samples: int = 100,
         init_std: float = 0.02,
+        use_cache=True,
         **kwargs
     ):
         # time series specific parameters
@@ -147,11 +148,27 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
         # Transformer architecture parameters
         self.nhead = nhead
+        self.encoder_attention_heads = nhead
+        self.decoder_attention_heads = nhead
+
         self.encoder_layers = encoder_layers
         self.decoder_layers = decoder_layers
         self.ffn_dim = ffn_dim
+        self.encoder_ffn_dim = ffn_dim
+        self.decoder_ffn_dim = ffn_dim
+
         self.dropout = dropout
+        self.attention_dropout = dropout
+        self.activation_dropout = dropout
+        self.encoder_layerdrop = dropout
+        self.decoder_layerdrop = dropout
+
         self.activation_function = activation_function
         self.init_std = init_std
+
+        self.output_attentions = False
+        self.output_hidden_states = False
+
+        self.use_cache = use_cache
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
