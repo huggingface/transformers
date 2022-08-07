@@ -785,8 +785,8 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits  # shape (batch_size, num_labels, height, width)
-        >>> logits.shape
-        (1, 150, 128, 128)
+        >>> list(logits.shape)
+        [1, 150, 128, 128]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (

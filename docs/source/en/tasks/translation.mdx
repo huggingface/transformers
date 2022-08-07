@@ -78,12 +78,7 @@ The preprocessing function needs to:
 >>> def preprocess_function(examples):
 ...     inputs = [prefix + example[source_lang] for example in examples["translation"]]
 ...     targets = [example[target_lang] for example in examples["translation"]]
-...     model_inputs = tokenizer(inputs, max_length=128, truncation=True)
-
-...     with tokenizer.as_target_tokenizer():
-...         labels = tokenizer(targets, max_length=128, truncation=True)
-
-...     model_inputs["labels"] = labels["input_ids"]
+...     model_inputs = tokenizer(inputs, text_target=targets, max_length=128, truncation=True)
 ...     return model_inputs
 ```
 
@@ -93,10 +88,32 @@ Use 🤗 Datasets [`~datasets.Dataset.map`] function to apply the preprocessing 
 >>> tokenized_books = books.map(preprocess_function, batched=True)
 ```
 
+<frameworkcontent>
+<pt>
+Load T5 with [`AutoModelForSeq2SeqLM`]:
+
+```py
+>>> from transformers import AutoModelForSeq2SeqLM
+
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
+```
+</pt>
+<tf>
+Load T5 with [`TFAutoModelForSeq2SeqLM`]:
+
+```py
+>>> from transformers import TFAutoModelForSeq2SeqLM
+
+>>> model = TFAutoModelForSeq2SeqLM.from_pretrained("t5-small")
+```
+</tf>
+</frameworkcontent>
+
 Use [`DataCollatorForSeq2Seq`] to create a batch of examples. It will also *dynamically pad* your text and labels to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
 
 <frameworkcontent>
 <pt>
+
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
@@ -104,6 +121,7 @@ Use [`DataCollatorForSeq2Seq`] to create a batch of examples. It will also *dyna
 ```
 </pt>
 <tf>
+
 ```py
 >>> from transformers import DataCollatorForSeq2Seq
 
@@ -116,13 +134,6 @@ Use [`DataCollatorForSeq2Seq`] to create a batch of examples. It will also *dyna
 
 <frameworkcontent>
 <pt>
-Load T5 with [`AutoModelForSeq2SeqLM`]:
-
-```py
->>> from transformers import AutoModelForSeq2SeqLM, Seq2SeqTrainingArguments, Seq2SeqTrainer
-
->>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
-```
 
 <Tip>
 
@@ -137,6 +148,8 @@ At this point, only three steps remain:
 3. Call [`~Trainer.train`] to fine-tune your model.
 
 ```py
+>>> from transformers import Seq2SeqTrainingArguments, Seq2SeqTrainer
+
 >>> training_args = Seq2SeqTrainingArguments(
 ...     output_dir="./results",
 ...     evaluation_strategy="epoch",
@@ -192,14 +205,6 @@ Set up an optimizer function, learning rate schedule, and some training hyperpar
 >>> from transformers import create_optimizer, AdamWeightDecay
 
 >>> optimizer = AdamWeightDecay(learning_rate=2e-5, weight_decay_rate=0.01)
-```
-
-Load T5 with [`TFAutoModelForSeq2SeqLM`]:
-
-```py
->>> from transformers import TFAutoModelForSeq2SeqLM
-
->>> model = TFAutoModelForSeq2SeqLM.from_pretrained("t5-small")
 ```
 
 Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):

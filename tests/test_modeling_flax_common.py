@@ -1153,38 +1153,63 @@ class FlaxModelPushToHubTester(unittest.TestCase):
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         model = FlaxBertModel(config)
+        model.push_to_hub("test-model-flax", use_auth_token=self._token)
+
+        new_model = FlaxBertModel.from_pretrained(f"{USER}/test-model-flax")
+
+        base_params = flatten_dict(unfreeze(model.params))
+        new_params = flatten_dict(unfreeze(new_model.params))
+
+        for key in base_params.keys():
+            max_diff = (base_params[key] - new_params[key]).sum().item()
+            self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="test-model-flax")
+
+        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(
-                os.path.join(tmp_dir, "test-model-flax"), push_to_hub=True, use_auth_token=self._token
-            )
+            model.save_pretrained(tmp_dir, repo_id="test-model-flax", push_to_hub=True, use_auth_token=self._token)
 
-            new_model = FlaxBertModel.from_pretrained(f"{USER}/test-model-flax")
+        new_model = FlaxBertModel.from_pretrained(f"{USER}/test-model-flax")
 
-            base_params = flatten_dict(unfreeze(model.params))
-            new_params = flatten_dict(unfreeze(new_model.params))
+        base_params = flatten_dict(unfreeze(model.params))
+        new_params = flatten_dict(unfreeze(new_model.params))
 
-            for key in base_params.keys():
-                max_diff = (base_params[key] - new_params[key]).sum().item()
-                self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+        for key in base_params.keys():
+            max_diff = (base_params[key] - new_params[key]).sum().item()
+            self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
     def test_push_to_hub_in_organization(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         model = FlaxBertModel(config)
+        model.push_to_hub("valid_org/test-model-flax-org", use_auth_token=self._token)
+
+        new_model = FlaxBertModel.from_pretrained("valid_org/test-model-flax-org")
+
+        base_params = flatten_dict(unfreeze(model.params))
+        new_params = flatten_dict(unfreeze(new_model.params))
+
+        for key in base_params.keys():
+            max_diff = (base_params[key] - new_params[key]).sum().item()
+            self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="valid_org/test-model-flax-org")
+
+        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(
-                os.path.join(tmp_dir, "test-model-flax-org"),
-                push_to_hub=True,
-                use_auth_token=self._token,
-                organization="valid_org",
+                tmp_dir, repo_id="valid_org/test-model-flax-org", push_to_hub=True, use_auth_token=self._token
             )
 
-            new_model = FlaxBertModel.from_pretrained("valid_org/test-model-flax-org")
+        new_model = FlaxBertModel.from_pretrained("valid_org/test-model-flax-org")
 
-            base_params = flatten_dict(unfreeze(model.params))
-            new_params = flatten_dict(unfreeze(new_model.params))
+        base_params = flatten_dict(unfreeze(model.params))
+        new_params = flatten_dict(unfreeze(new_model.params))
 
-            for key in base_params.keys():
-                max_diff = (base_params[key] - new_params[key]).sum().item()
-                self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+        for key in base_params.keys():
+            max_diff = (base_params[key] - new_params[key]).sum().item()
+            self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")

@@ -21,6 +21,7 @@ https://huggingface.co/models?filter=t5
 """
 import json
 import logging
+import math
 import os
 import sys
 import time
@@ -41,6 +42,7 @@ import jax
 import jax.numpy as jnp
 import optax
 from flax import jax_utils, traverse_util
+from flax.jax_utils import pad_shard_unpad
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from huggingface_hub import Repository
@@ -170,7 +172,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -325,7 +327,7 @@ class FlaxDataCollatorForT5MLM:
     pad_token_id: int
     decoder_start_token_id: int
 
-    def __call__(self, examples: List[Dict[str, np.ndarray]]) -> Dict[str, np.ndarray]:
+    def __call__(self, examples: List[Dict[str, np.ndarray]]) -> BatchEncoding:
 
         # convert list to dict and tensorize input
         batch = BatchEncoding(
@@ -459,15 +461,20 @@ class FlaxDataCollatorForT5MLM:
         return is_noise[:orig_length]
 
 
-def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarray:
+def generate_batch_splits(samples_idx: np.ndarray, batch_size: int, drop_last=True) -> np.ndarray:
+    """Generate batches of data for a specified batch size from sample indices. If the dataset size is not divisible by
+    the batch size and `drop_last` is `True`, the last incomplete batch is dropped. Else, it is returned."""
     num_samples = len(samples_idx)
-    samples_to_remove = num_samples % batch_size
-
-    if samples_to_remove != 0:
-        samples_idx = samples_idx[:-samples_to_remove]
-    sections_split = num_samples // batch_size
-    batch_idx = np.split(samples_idx, sections_split)
-    return batch_idx
+    if drop_last:
+        samples_to_remove = num_samples % batch_size
+        if samples_to_remove != 0:
+            samples_idx = samples_idx[:-samples_to_remove]
+        sections_split = num_samples // batch_size
+        samples_idx = samples_idx.reshape((sections_split, batch_size))
+    else:
+        sections_split = math.ceil(num_samples / batch_size)
+        samples_idx = np.array_split(samples_idx, sections_split)
+    return samples_idx
 
 
 def write_train_metric(summary_writer, train_metrics, train_time, step):
@@ -756,7 +763,8 @@ def main():
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
     train_batch_size = int(training_args.per_device_train_batch_size) * jax.device_count()
-    eval_batch_size = int(training_args.per_device_eval_batch_size) * jax.device_count()
+    per_device_eval_batch_size = int(training_args.per_device_eval_batch_size)
+    eval_batch_size = per_device_eval_batch_size * jax.device_count()
 
     num_train_steps = len(tokenized_datasets["train"]) // train_batch_size * num_epochs
 
@@ -782,10 +790,17 @@ def main():
     # The mask is True for parameters that should be decayed.
     def decay_mask_fn(params):
         flat_params = traverse_util.flatten_dict(params)
-        flat_mask = {
-            path: (path[-1] != "bias" and path[-2:] not in [("layer_norm", "scale"), ("final_layer_norm", "scale")])
-            for path in flat_params
-        }
+        # find out all LayerNorm parameters
+        layer_norm_candidates = ["layernorm", "layer_norm", "ln"]
+        layer_norm_named_params = set(
+            [
+                layer[-2:]
+                for layer_norm_name in layer_norm_candidates
+                for layer in flat_params.keys()
+                if layer_norm_name in "".join(layer).lower()
+            ]
+        )
+        flat_mask = {path: (path[-1] != "bias" and path[-2:] not in layer_norm_named_params) for path in flat_params}
         return traverse_util.unflatten_dict(flat_mask)
 
     # create adam optimizer
@@ -910,7 +925,7 @@ def main():
                 num_eval_samples = len(tokenized_datasets["validation"])
                 # Avoid using jax.numpy here in case of TPU training
                 eval_samples_idx = np.arange(num_eval_samples)
-                eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
+                eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size, drop_last=False)
 
                 eval_metrics = []
                 for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
@@ -918,8 +933,9 @@ def main():
                     model_inputs = data_collator(samples)
 
                     # Model forward
-                    model_inputs = shard(model_inputs.data)
-                    metrics = p_eval_step(state.params, model_inputs)
+                    metrics = pad_shard_unpad(p_eval_step, static_return=True)(
+                        state.params, model_inputs.data, min_device_batch=per_device_eval_batch_size
+                    )
                     eval_metrics.append(metrics)
 
                 # get eval metrics
@@ -947,7 +963,7 @@ def main():
         num_eval_samples = len(tokenized_datasets["validation"])
         # Avoid using jax.numpy here in case of TPU training
         eval_samples_idx = np.arange(num_eval_samples)
-        eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
+        eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size, drop_last=False)
 
         eval_metrics = []
         for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=2)):
@@ -955,8 +971,9 @@ def main():
             model_inputs = data_collator(samples)
 
             # Model forward
-            model_inputs = shard(model_inputs.data)
-            metrics = p_eval_step(state.params, model_inputs)
+            metrics = pad_shard_unpad(p_eval_step, static_return=True)(
+                state.params, model_inputs.data, min_device_batch=per_device_eval_batch_size
+            )
             eval_metrics.append(metrics)
 
         # get eval metrics

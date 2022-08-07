@@ -934,9 +934,9 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
         >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = logits.argmax(-1).item()
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        Predicted class: maillot
+        >>> predicted_class_idx = tf.math.argmax(logits, axis=-1)[0]
+        >>> print("Predicted class:", model.config.id2label[int(predicted_class_idx)])
+        Predicted class: ptarmigan
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

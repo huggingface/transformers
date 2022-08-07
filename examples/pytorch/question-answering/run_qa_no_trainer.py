@@ -29,10 +29,11 @@ from pathlib import Path
 import datasets
 import numpy as np
 import torch
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
+import evaluate
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
@@ -56,7 +57,7 @@ from utils_qa import postprocess_qa_predictions
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.21.0.dev0")
+check_min_version("4.22.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -696,7 +697,7 @@ def main():
         references = [{"id": ex["id"], "answers": ex[answer_column_name]} for ex in examples]
         return EvalPrediction(predictions=formatted_predictions, label_ids=references)
 
-    metric = load_metric("squad_v2" if args.version_2_with_negative else "squad")
+    metric = evaluate.load("squad_v2" if args.version_2_with_negative else "squad")
 
     # Create and fill numpy array of size len_of_validation_data * max_length_of_output_tensor
     def create_and_fill_np_array(start_or_end_logits, dataset, max_len):
@@ -714,7 +715,7 @@ def main():
         step = 0
         # create a numpy array and fill it with -100.
         logits_concat = np.full((len(dataset), max_len), -100, dtype=np.float64)
-        # Now since we have create an array now we will populate it with the outputs gathered using accelerator.gather
+        # Now since we have create an array now we will populate it with the outputs gathered using accelerator.gather_for_metrics
         for i, output_logit in enumerate(start_or_end_logits):  # populate columns
             # We have to fill it such that we have to take the whole tensor and replace it on the newly created array
             # And after every iteration we have to change the step
@@ -900,8 +901,8 @@ def main():
                 start_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
                 end_logits = accelerator.pad_across_processes(end_logits, dim=1, pad_index=-100)
 
-            all_start_logits.append(accelerator.gather(start_logits).cpu().numpy())
-            all_end_logits.append(accelerator.gather(end_logits).cpu().numpy())
+            all_start_logits.append(accelerator.gather_for_metrics(start_logits).cpu().numpy())
+            all_end_logits.append(accelerator.gather_for_metrics(end_logits).cpu().numpy())
 
     max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
 
@@ -939,8 +940,8 @@ def main():
                     start_logits = accelerator.pad_across_processes(start_logits, dim=1, pad_index=-100)
                     end_logits = accelerator.pad_across_processes(end_logits, dim=1, pad_index=-100)
 
-                all_start_logits.append(accelerator.gather(start_logits).cpu().numpy())
-                all_end_logits.append(accelerator.gather(end_logits).cpu().numpy())
+                all_start_logits.append(accelerator.gather_for_metrics(start_logits).cpu().numpy())
+                all_end_logits.append(accelerator.gather_for_metrics(end_logits).cpu().numpy())
 
         max_len = max([x.shape[1] for x in all_start_logits])  # Get the max_length of the tensor
         # concatenate the numpy array
