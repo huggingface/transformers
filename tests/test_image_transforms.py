@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from parameterized import parameterized
-from transformers.testing_utils import require_vision
+from transformers.testing_utils import require_flax, require_tf, require_torch, require_vision
 from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
 
 
@@ -29,7 +29,7 @@ if is_tf_available():
     import tensorflow as tf
 
 if is_flax_available():
-    import jax.numpy as jnp
+    import jax
 
 if is_vision_available():
     import PIL.Image
@@ -52,21 +52,61 @@ def get_random_image(height, width, num_channels=3, channels_first=True):
 class ImageTransformsTester(unittest.TestCase):
     @parameterized.expand(
         [
-            ("numpy_float_channels_first", True, lambda x: x, (3, 4, 5), np.float32),
-            ("numpy_float_channels_last", True, lambda x: x, (4, 5, 3), np.float32),
-            ("numpy_int_channels_first", True, lambda x: x, (3, 4, 5), np.int32),
-            ("numpy_uint_channels_first", True, lambda x: x, (3, 4, 5), np.uint8),
-            ("tensorflow", is_tf_available, tf.convert_to_tensor, (3, 4, 5), np.float32),
-            ("torch", is_torch_available, torch.tensor, (3, 4, 5), np.float32),
-            ("jax", is_flax_available, jnp.array, (3, 4, 5), np.float32),
+            ("numpy_float_channels_first", (3, 4, 5), np.float32),
+            ("numpy_float_channels_last", (4, 5, 3), np.float32),
+            ("numpy_int_channels_first", (3, 4, 5), np.int32),
+            ("numpy_uint_channels_first", (3, 4, 5), np.uint8),
         ]
     )
-    def test_to_pil_image(self, name, is_library_available, to_tensor, image_shape, dtype):
+    @require_vision
+    def test_to_pil_image(self, name, image_shape, dtype):
         image = np.random.randint(0, 256, image_shape).astype(dtype)
-        if is_library_available:
-            image = to_tensor(image)
-            pil_image = to_pil_image(image)
-            self.assertIsInstance(pil_image, PIL.Image.Image)
+        pil_image = to_pil_image(image)
+        self.assertIsInstance(pil_image, PIL.Image.Image)
+        self.assertEqual(pil_image.size, (image_shape[2], image_shape[1]))
+
+    @require_tf
+    def test_to_pil_image_from_tensorflow(self):
+        # channels_first
+        image = tf.random.uniform((3, 4, 5))
+        pil_image = to_pil_image(image)
+        self.assertIsInstance(pil_image, PIL.Image.Image)
+        self.assertEqual(pil_image.size, (5, 4))
+
+        # channels_last
+        image = tf.random.uniform((4, 5, 3))
+        pil_image = to_pil_image(image)
+        self.assertIsInstance(pil_image, PIL.Image.Image)
+        self.assertEqual(pil_image.size, (5, 4))
+
+    @require_torch
+    def test_to_pil_image_from_torch(self):
+        # channels first
+        image = torch.rand((3, 4, 5))
+        pil_image = to_pil_image(image)
+        self.assertIsInstance(pil_image, PIL.Image.Image)
+        self.assertEqual(pil_image.size, (5, 4))
+
+        # channels last
+        image = torch.rand((4, 5, 3))
+        pil_image = to_pil_image(image)
+        self.assertIsInstance(pil_image, PIL.Image.Image)
+        self.assertEqual(pil_image.size, (5, 4))
+
+    @require_flax
+    def test_to_pil_image_from_jax(self):
+        key = jax.random.PRNGKey(0)
+        # channel first
+        image = jax.random.uniform(key, (3, 4, 5))
+        pil_image = to_pil_image(image)
+        self.assertIsInstance(pil_image, PIL.Image.Image)
+        self.assertEqual(pil_image.size, (5, 4))
+
+        # channel last
+        image = jax.random.uniform(key, (4, 5, 3))
+        pil_image = to_pil_image(image)
+        self.assertIsInstance(pil_image, PIL.Image.Image)
+        self.assertEqual(pil_image.size, (5, 4))
 
     def test_to_channel_dimension_format(self):
         # Test that function doesn't reorder if channel dim matches the input.
