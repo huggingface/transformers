@@ -59,7 +59,7 @@ limitations under the License.
 
 These models can be applied on:
 
-* 📝  Text, for tasks like text classification, information extraction, question answering, summarization, translation, and text generation, in over 100 languages.
+* 📝 Text, for tasks like text classification, information extraction, question answering, summarization, translation, and text generation, in over 100 languages.
 * 🖼️ Images, for tasks like image classification, object detection, and segmentation. 
 * 🗣️ Audio, for tasks like speech recognition and audio classification. 
 
