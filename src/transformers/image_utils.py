@@ -30,13 +30,13 @@ from .utils.constants import (  # noqa: F401
 from .utils.generic import ExplicitEnum, _is_jax, _is_tensorflow, _is_torch
 
 
-if is_vision_available:
+if is_vision_available():
     import PIL.Image
     import PIL.ImageOps
 
 
 ImageInput = Union[
-    PIL.Image.Image, np.ndarray, "torch.Tensor", List[PIL.Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
+    "PIL.Image.Image", np.ndarray, "torch.Tensor", List["PIL.Image.Image"], List[np.ndarray], List["torch.Tensor"]  # noqa
 ]
 
 

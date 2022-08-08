@@ -63,7 +63,7 @@ class ImageTransformsTester(unittest.TestCase):
         image = np.random.randint(0, 256, image_shape).astype(dtype)
         pil_image = to_pil_image(image)
         self.assertIsInstance(pil_image, PIL.Image.Image)
-        self.assertEqual(pil_image.size, (image_shape[2], image_shape[1]))
+        self.assertEqual(pil_image.size, (5, 4))
 
     @require_tf
     def test_to_pil_image_from_tensorflow(self):
