@@ -1102,6 +1102,7 @@ class GroupViTTextTransformer(nn.Module):
         if input_ids is None:
             raise ValueError("You have to specify either input_ids")
 
+        input_ids = input_ids.to(torch.int)  # for onnx compatibility, since onnx doesn't support int64
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
 
