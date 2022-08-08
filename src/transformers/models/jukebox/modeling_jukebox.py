@@ -81,7 +81,6 @@ except ImportError:
     from torch.nn import LayerNorm as FusedLayerNorm
 
 
-# VQ-VAE building blocks
 class JukeboxConv1D(nn.Module):
     def __init__(self, n_in, n_out, zero_out=False):
         super(JukeboxConv1D, self).__init__()
@@ -339,7 +338,7 @@ def update(params):
 def calculate_strides(strides, downs):
     return [stride**down for stride, down in zip(strides, downs)]
 
-# rename TODO
+
 class JukeboxBottleneckBlock(nn.Module):
     def __init__(self, codebook_dim, codebook_width, mu):
         super().__init__()
@@ -374,22 +373,13 @@ class JukeboxBottleneckBlock(nn.Module):
         self.codebook_sum = self.codebook
         self.codebook_elem = torch.ones(codebook_dim, device=self.codebook.device)
 
-    # def restore_k(self, num_tokens=None, threshold=1.0):
-    #     codebook_dim = self.codebook_dim  # mu -> _
-    #     self.init = True
-    #     self.codebook_sum = self.codebook.clone()
-    #     self.codebook_elem = torch.ones(codebook_dim, device=self.codebook.device)
-    #     if num_tokens is not None:
-    #         expected_usage = num_tokens / codebook_dim
-    #         self.codebook_elem.data.mul_(expected_usage)
-    #         self.codebook_sum.data.mul_(expected_usage)
-    #     self.threshold = threshold
-
     def update_codebook(self, hidden_states, latent_states):
         mu, codebook_width, codebook_dim = self.mu, self.codebook_width, self.codebook_dim
         with torch.no_grad():
             # Calculate new centres
-            latent_states_onehot = torch.zeros(codebook_dim, hidden_states.shape[0], device=hidden_states.device)  # codebook_dim, N * L
+            latent_states_onehot = torch.zeros(
+                codebook_dim, hidden_states.shape[0], device=hidden_states.device
+            )  # codebook_dim, N * L
             latent_states_onehot.scatter_(0, latent_states.view(1, hidden_states.shape[0]), 1)
 
             _codebook_sum = torch.matmul(latent_states_onehot, hidden_states)  # codebook_dim, w
@@ -402,8 +392,14 @@ class JukeboxBottleneckBlock(nn.Module):
             self.codebook_sum = mu * self.codebook_sum + (1.0 - mu) * _codebook_sum  # w, codebook_dim
             self.codebook_elem = mu * self.codebook_elem + (1.0 - mu) * _codebook_elem  # codebook_dim
             usage = (self.codebook_elem.view(codebook_dim, 1) >= self.threshold).float()
-            self.codebook = usage * (self.codebook_sum.view(codebook_dim, codebook_width) / self.codebook_elem.view(codebook_dim, 1)) + (1 - usage) * _random_codebook
-            _codebook_prob = _codebook_elem / torch.sum(_codebook_elem)  # latent_states_onehot.mean(dim=-1)  # prob of each bin
+            self.codebook = (
+                usage
+                * (self.codebook_sum.view(codebook_dim, codebook_width) / self.codebook_elem.view(codebook_dim, 1))
+                + (1 - usage) * _random_codebook
+            )
+            _codebook_prob = _codebook_elem / torch.sum(
+                _codebook_elem
+            )  # latent_states_onehot.mean(dim=-1)  # prob of each bin
             entropy = -torch.sum(_codebook_prob * torch.log(_codebook_prob + 1e-8))  # entropy ie how diverse
             used_curr = (_codebook_elem >= self.threshold).sum()
             usage = torch.sum(usage)
@@ -431,7 +427,7 @@ class JukeboxBottleneckBlock(nn.Module):
     def postprocess(self, latent_states, dequantised_states, x_shape):
         # [NT, C] -> NTC -> NCT
         N, T = x_shape
-        dequantised_states= dequantised_states.view(N, T, -1).permute(0, 2, 1).contiguous()
+        dequantised_states = dequantised_states.view(N, T, -1).permute(0, 2, 1).contiguous()
         latent_states = latent_states.view(N, T)
         return latent_states, dequantised_states
 
@@ -471,7 +467,9 @@ class JukeboxBottleneckBlock(nn.Module):
         dequantised_states = self.dequantise(music_tokens)
 
         # Postprocess
-        dequantised_states = dequantised_states.view(samples, seq_length, self.codebook_width).permute(0, 2, 1).contiguous()
+        dequantised_states = (
+            dequantised_states.view(samples, seq_length, self.codebook_width).permute(0, 2, 1).contiguous()
+        )
         return dequantised_states
 
     def forward(self, hidden_states, update_codebook=True):
@@ -486,7 +484,7 @@ class JukeboxBottleneckBlock(nn.Module):
 
         # Quantise and dequantise through bottleneck
         music_tokens, fit = self.quantise(hidden_states)
-        dequantised_states= self.dequantise(music_tokens)
+        dequantised_states = self.dequantise(music_tokens)
 
         # Update embeddings
         if update_codebook:
@@ -498,10 +496,10 @@ class JukeboxBottleneckBlock(nn.Module):
         commit_loss = torch.norm(dequantised_states.detach() - hidden_states) ** 2 / np.prod(hidden_states.shape)
 
         # Passthrough
-        dequantised_states= hidden_states + (dequantised_states- hidden_states).detach()
+        dequantised_states = hidden_states + (dequantised_states - hidden_states).detach()
 
         # Postprocess
-        latent_states, dequantised_states= self.postprocess(latent_states, dequantised_states, (samples, seq_length))
+        latent_states, dequantised_states = self.postprocess(latent_states, dequantised_states, (samples, seq_length))
         return latent_states, dequantised_states, commit_loss, dict(fit=fit, pn=prenorm, **update_metrics)
 
 
@@ -530,7 +528,9 @@ class JukeboxBottleneck(nn.Module):
         for level in range(self.levels):
             level_block = self.level_blocks[-level - 1]
             hidden_states = input_audio[level]
-            sampled_tokens, quantised_states, commit_loss, metric = level_block(hidden_states, update_codebook=self.training)
+            sampled_tokens, quantised_states, commit_loss, metric = level_block(
+                hidden_states, update_codebook=self.training
+            )
             music_tokens.append(sampled_tokens)
             if not self.training:
                 # Be extra paranoid and make sure the encoder weights can't
@@ -597,12 +597,22 @@ class JukeboxVQVAE(PreTrainedModel):
 
         def encoder(level):
             return Encoder(
-                x_channels, codebook_width, level + 1, downs_t[: level + 1], strides_t[: level + 1], **_block_kwargs(level)
+                x_channels,
+                codebook_width,
+                level + 1,
+                downs_t[: level + 1],
+                strides_t[: level + 1],
+                **_block_kwargs(level),
             )
 
         def decoder(level):
             return Decoder(
-                x_channels, codebook_width, level + 1, downs_t[: level + 1], strides_t[: level + 1], **_block_kwargs(level)
+                x_channels,
+                codebook_width,
+                level + 1,
+                downs_t[: level + 1],
+                strides_t[: level + 1],
+                **_block_kwargs(level),
             )
 
         self.encoders = nn.ModuleList()
@@ -662,9 +672,7 @@ class JukeboxVQVAE(PreTrainedModel):
         for chunk_i in audio_chunks:
             music_tokens_i = self._encode(chunk_i, start_level=start_level, end_level=end_level)
             music_tokens_list.append(music_tokens_i)
-        music_tokens = [
-            torch.cat(music_tokens_level, dim=0) for music_tokens_level in zip(*music_tokens_list)
-        ]
+        music_tokens = [torch.cat(music_tokens_level, dim=0) for music_tokens_level in zip(*music_tokens_list)]
         return music_tokens
 
     def sample(self, n_samples):
@@ -699,7 +707,9 @@ class JukeboxVQVAE(PreTrainedModel):
         return dequantised_state, loss
 
 
-# Scalable transformer
+# Jukebox autoregressive model and its building blocks
+
+
 class JukeboxMLP(nn.Module):
     def __init__(self, width, n_state, resid_dropout=0.0, afn="gelu", zero_out=False, init_scale=1.0):
         # a single channel is always used in original code
@@ -771,7 +781,7 @@ class JukeboxAttention(nn.Module):
         width,
         n_ctx,
         n_state,
-        n_head,
+        num_heads,
         attn_dropout=0.0,
         resid_dropout=0.0,
         scale=True,
@@ -789,7 +799,7 @@ class JukeboxAttention(nn.Module):
         self.width = width  # should have a better name
         self.n_ctx = n_ctx  # NOTE: n_ctx could be different within operations. This is complete n_ctx
         self.n_state = n_state
-        self.n_head = n_head
+        self.num_heads = num_heads
         self.scale = scale
         self.mask = mask
         if attn_func == 6:
@@ -829,57 +839,69 @@ class JukeboxAttention(nn.Module):
         self.record_attn = False
         self.w = None
 
-    def _attn(self, q, k, v, sample):
-        scale = 1.0 / math.sqrt(math.sqrt(self.n_state // self.n_head))
+    def _attn(self, query_states, key_states, value_states, sample):
+        scale = 1.0 / math.sqrt(math.sqrt(self.n_state // self.num_heads))
         if self.training:
-            w = torch.matmul(q * scale, k * scale)
+            attention_weight = torch.matmul(query_states * scale, key_states * scale)
         else:
-            w = torch.matmul(q, k)
-            w.mul_(scale * scale)
-        wtype = w.dtype
-        w = w.float()
+            attention_weight = torch.matmul(query_states, key_states)
+            attention_weight.mul_(scale * scale)
+        wtype = attention_weight.dtype
+        attention_weight = attention_weight.float()
         if self.mask:
             # Generate appropriate mask to mask out all positions before current
             # Might take up lot of memory for dense, so can cache it
             mask = get_mask(
-                self.attn_mask, q.size(-2), k.size(-1), self.blocks, self.spread, w.device, sample, self.sample_t
+                self.attn_mask,
+                query_states.size(-2),
+                key_states.size(-1),
+                self.blocks,
+                self.spread,
+                attention_weight.device,
+                sample,
+                self.sample_t,
             )
             if mask is not None:
                 # print(mask)
-                w = w * mask + -1e9 * (1 - mask)
-            w = F.softmax(w, dim=-1).type(wtype)
+                attention_weight = attention_weight * mask + -1e9 * (1 - mask)
+            attention_prob = F.softmax(attention_weight, dim=-1).type(wtype)
         else:
-            w = F.softmax(w, dim=-1).type(wtype)
+            attention_prob = F.softmax(attention_weight, dim=-1).type(wtype)
         if self.record_attn:
-            self.w = w  # .float().cpu().numpy()
+            self.attention_prob = attention_prob  # .float().cpu().numpy()
             if self.attn_func == 7:
                 # only keep music queries and lyrics keys/values
-                self.w = self.w[:, :, self.prime_len :, : self.prime_len]
-        w = self.attn_dropout(w)
-        a = torch.matmul(w, v)
-        return a
+                self.attention_prob = self.attention_prob[:, :, self.prime_len :, : self.prime_len]
+        attention_prob = self.attn_dropout(attention_prob)
+        context_states = torch.matmul(attention_prob, value_states)
+        return context_states
 
-    def merge_heads(self, x):
-        x = x.permute(0, 2, 1, 3).contiguous()
-        new_x_shape = (*x.size()[:-2], x.size(-2) * x.size(-1))
-        return x.view(*new_x_shape)  # in Tensorflow implem: fct merge_states
+    def merge_heads(self, hidden_states):
+        hidden_states = hidden_states.permute(0, 2, 1, 3).contiguous()
+        new_hidden_states_shape = (*hidden_states.size()[:-2], hidden_states.size(-2) * hidden_states.size(-1))
+        return hidden_states.view(*new_hidden_states_shape)  # in Tensorflow implem: fct merge_states
 
-    def split_heads(self, x, k=False):
-        new_x_shape = (*x.size()[:-1], self.n_head, x.size(-1) // self.n_head)
-        x = x.view(*new_x_shape)  # in Tensorflow implem: fct split_states
+    def split_heads(self, hidden_states, k=False):
+        new_hidden_states_shape = (
+            *hidden_states.size()[:-1],
+            self.num_heads,
+            hidden_states.size(-1) // self.num_heads,
+        )
+        hidden_states = hidden_states.view(*new_hidden_states_shape)  # in Tensorflow implem: fct split_states
         if k:
-            return x.permute(0, 2, 3, 1)
+            return hidden_states.permute(0, 2, 3, 1)
         else:
-            return x.permute(0, 2, 1, 3)
+            return hidden_states.permute(0, 2, 1, 3)
 
     def dense_attn(self, query, key, value, sample):
         query = self.split_heads(query)
         key = self.split_heads(key, k=True)
         value = self.split_heads(value)
-        a = self._attn(query, key, value, sample)
-        a = self.merge_heads(a)
-        return a
+        context_states = self._attn(query, key, value, sample)
+        context_states = self.merge_heads(context_states)
+        return context_states
 
+    # TODO rename here too
     def block_attn(self, q, k, v, sample):
         _, block_ctx = (
             self.blocks,
@@ -1183,7 +1205,7 @@ class JukeboxBlock(nn.Module):
         self,
         width,
         n_ctx,
-        n_head,
+        num_heads,
         attn_dropout=0.0,
         resid_dropout=0.0,
         afn="gelu",
@@ -1207,7 +1229,7 @@ class JukeboxBlock(nn.Module):
             width=width,
             n_ctx=n_ctx,
             n_state=int(m_attn * width),
-            n_head=n_head,
+            num_heads=num_heads,
             attn_dropout=attn_dropout,
             resid_dropout=resid_dropout,
             scale=scale,
@@ -1237,18 +1259,22 @@ class JukeboxBlock(nn.Module):
         # TODO either support checkpointing for faster inference or get rid of this
         self.checkpoint_attn = checkpoint_attn
         self.checkpoint_mlp = checkpoint_mlp
-        
+
         self.width = width
         self.attn_func = attn_func
 
-    def forward(self, x, encoder_kv, sample=False):
-        a = self.attn(self.ln_0(x), encoder_kv, sample)
-        m = self.mlp(self.ln_1(x + a))
+    def forward(self, hidden_states, encoder_key_value, sample=False):
+        residuals = hidden_states
+        hidden_states = self.ln_0(hidden_states)
+        hidden_states = self.attn(hidden_states, encoder_key_value, sample)
+
+        output_states = self.ln_1(residuals + hidden_states)
+        output_states = self.mlp(output_states)
         if self.res_scale == 1.0:
-            h = x + a + m
+            output = residuals + hidden_states + output_states
         else:
-            h = x + self.res_scale * (a + m)
-        return h
+            output = residuals + self.res_scale * (hidden_states + output_states)
+        return output
 
 
 class JukeboxTransformer(nn.Module):
@@ -1256,7 +1282,7 @@ class JukeboxTransformer(nn.Module):
         self,
         width,
         n_ctx,
-        n_head,
+        num_heads,
         n_depth,
         attn_dropout=0.0,
         resid_dropout=0.0,
@@ -1285,7 +1311,7 @@ class JukeboxTransformer(nn.Module):
         if blocks is not None:
             self.block_ctx = n_ctx // blocks
         self.prime_len = prime_len
-        self.n_head = n_head
+        self.num_heads = num_heads
 
         res_scale = 1.0 / n_depth if res_scale else 1.0
 
@@ -1317,7 +1343,7 @@ class JukeboxTransformer(nn.Module):
             return JukeboxBlock(
                 width=width,
                 n_ctx=n_ctx,
-                n_head=n_head,
+                num_heads=num_heads,
                 attn_dropout=attn_dropout,
                 resid_dropout=resid_dropout,
                 afn=afn,
@@ -1367,29 +1393,29 @@ class JukeboxTransformer(nn.Module):
             for l in self._attn_mods:
                 l.attn.w = None
 
-    def forward(self, x, encoder_kv=None, sample=False, fp16=False, fp16_out=False):
+    def forward(self, hidden_states, encoder_kv=None, sample=False, fp16=False, fp16_out=False):
         if fp16:
-            x = x.half()
+            hidden_states = hidden_states.half()
 
         # Blocks
-        for i, l in enumerate(self._attn_mods):
-            if l.attn_func == 6:
-                x = l(x, encoder_kv=encoder_kv, sample=sample)
+        for i, attn_layer in enumerate(self._attn_mods):
+            if attn_layer.attn_func == 6:
+                hidden_states = attn_layer(hidden_states, encoder_kv=encoder_kv, sample=sample)
             else:
-                x = l(x, encoder_kv=None, sample=sample)
-            if l.attn.record_attn:
-                self.ws.append(l.attn.w)
+                hidden_states = attn_layer(hidden_states, encoder_kv=None, sample=sample)
+            if attn_layer.attn.record_attn:
+                self.ws.append(attn_layer.attn.w)
         if not fp16_out:
-            x = x.float()
-        return x
+            hidden_states = hidden_states.float()
+        return hidden_states
 
     def check_cache(self, n_samples, sample_t, fp16):
-        for l in self._attn_mods:
-            l.attn.check_cache(n_samples, sample_t, fp16)
+        for attn_layer in self._attn_mods:
+            attn_layer.attn.check_cache(n_samples, sample_t, fp16)
 
     def del_cache(self):
-        for l in self._attn_mods:
-            l.attn.del_cache()
+        for attn_layer in self._attn_mods:
+            attn_layer.attn.del_cache()
 
 
 class JukeboxPositionalEmbedding(nn.Module):
@@ -1408,6 +1434,7 @@ class JukeboxPositionalEmbedding(nn.Module):
         return pos_emb
 
 
+# Most important renaming has to happen here
 class JukeboxConditionalAutoregressive(nn.Module):
     def __init__(
         self,
@@ -1466,7 +1493,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         self.transformer = JukeboxTransformer(
             width=width,
             n_ctx=input_dims,
-            n_head=heads,
+            num_heads=heads,
             n_depth=depth,
             attn_dropout=attn_dropout,
             resid_dropout=resid_dropout,
@@ -1832,7 +1859,7 @@ class MusicTokenConditioner(nn.Module):
         self.x_emb = nn.Embedding(bins, out_width)
         nn.init.normal_(self.x_emb.weight, std=0.02 * init_scale)
 
-        # MusicTokenConditioner, takes as input either uper level tokens, upsamples them to feed them to the next level? 
+        # MusicTokenConditioner, takes as input either uper level tokens, upsamples them to feed them to the next level?
         self.cond = DecoderConvBock(
             self.width, self.width, down_t, stride_t, **block_kwargs, zero_out=zero_out, res_scale=res_scale
         )
@@ -1850,10 +1877,10 @@ class MusicTokenConditioner(nn.Module):
     # TODO rename to raw audio and hidden states
     def forward(self, music_tokens, raw_audio_conditionning=None):
         """
-            Args : 
-                - music_tokens : indexes of codebook vectors
-                - raw_audio_conditionning : used when prime sampling, raw audio information that conditions 
-                the generation
+        Args :
+            - music_tokens : indexes of codebook vectors
+            - raw_audio_conditionning : used when prime sampling, raw audio information that conditions
+            the generation
         """
         if raw_audio_conditionning is None:
             raw_audio_conditionning = 0.0
@@ -2045,7 +2072,7 @@ class JukeboxPrior(nn.Module):
             bins=config.l_bins,
             width=config.width[-level - 1],
             depth=config.depth[-level - 1],
-            heads=config.n_heads[-level - 1],
+            heads=config.num_headss[-level - 1],
             attn_order=config.attn_order[-level - 1],
             blocks=config.blocks,
             spread=config.spread,
@@ -2511,6 +2538,7 @@ def get_starts(total_length, n_ctx, hop_length):
         starts.append(start)
     return starts
 
+
 # TODO fix this, consumes too much RAM
 def get_alignment(x, music_tokens, labels, prior, level, fp16, hps):
     level = level - 1  # Top level used
@@ -2794,7 +2822,15 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 save_wav(logdir, level, metas=metas, aud=raw_audio, sr=self.config.sr)
                 if alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0:
                     empty_cache()
-                    alignments = get_alignment(raw_audio, music_tokens, labels[-1], self.priors[-1], level, sampling_kwargs[-1]["fp16"], self.config)
+                    alignments = get_alignment(
+                        raw_audio,
+                        music_tokens,
+                        labels[-1],
+                        self.priors[-1],
+                        level,
+                        sampling_kwargs[-1]["fp16"],
+                        self.config,
+                    )
                     pass  # consumes too much ram
         return music_tokens
 
