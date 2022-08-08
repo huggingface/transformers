@@ -39,6 +39,8 @@
     title: Ejecutar el entrenamiento en Amazon SageMaker
   - local: multilingual
     title: Modelos multilingües para inferencia
+  - local: converting_tensorflow_models
+    title: Convertir checkpoints de TensorFlow
   title: Guías prácticas
 - sections:
   - local: philosophy
