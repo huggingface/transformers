@@ -579,7 +579,7 @@ add `--fsdp "full_shard offload auto_wrap"` or `--fsdp "shard_grad_op offload au
   This specifies the transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` ....
   This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units. 
   Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 
-  Reamining layers including the shared embeddings are conviniently wrapped in same outermost FSDP unit.
+  Remaining layers including the shared embeddings are conviniently wrapped in same outermost FSDP unit.
   Therefore, use this for transformer based models.
   - For size based auto wrap policy, please add `--fsdp_min_num_params <number>` to command line arguments.
   It specifies FSDP's minimum number of parameters for auto wrapping.
