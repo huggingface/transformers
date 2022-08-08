@@ -10,26 +10,26 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Sumarización
+# Generación de resúmenes
 
 <Youtube id="yHnr5Dk2zCI"/>
 
-La sumarización crea una versión más corta de un documento o un artículo que resume toda su información importante. Junto con la traducción, es un ejemplo de una tarea que puede ser formulada como una tarea secuencia a secuencia. La sumarización puede ser:
+La generación de resúmenes (summarization, en inglés) crea una versión más corta de un documento o un artículo que resume toda su información importante. Junto con la traducción, es un ejemplo de una tarea que puede ser formulada como una tarea secuencia a secuencia. La generación de resúmenes puede ser:
 
 - Extractiva: Extrae la información más relevante de un documento.
 - Abstractiva: Genera un texto nuevo que captura la información más importante.
 
-Esta guía te mostrará cómo puedes hacer fine-tune del modelo [T5](https://huggingface.co/t5-small) sobre el subset de proyectos de ley del estado de California, dentro del dataset [BillSum](https://huggingface.co/datasets/billsum) para hacer sumarización abstractiva.
+Esta guía te mostrará cómo puedes hacer fine-tuning del modelo [T5](https://huggingface.co/t5-small) sobre el subset de proyectos de ley del estado de California, dentro del dataset [BillSum](https://huggingface.co/datasets/billsum) para hacer generación de resúmenes abstractiva.
 
 <Tip>
 
-Consulta la [página de la tarea](https://huggingface.co/tasks/summarization) de sumarización para obtener más información sobre sus modelos, datasets y métricas asociadas.
+Consulta la [página de la tarea](https://huggingface.co/tasks/summarization) de generación de resúmenes para obtener más información sobre sus modelos, datasets y métricas asociadas.
 
 </Tip>
 
 ## Carga el dataset BillSum
 
-Carga el dataset BillSum de la biblioteca 🤗 de datasets:
+Carga el dataset BillSum de la biblioteca 🤗 Datasets:
 
 ```py
 >>> from datasets import load_dataset
@@ -66,9 +66,9 @@ Carga el tokenizador T5 para procesar `text` y `summary`:
 
 La función de preprocesamiento necesita:
 
-1. Agregar un prefijo al input, una clave para que T5 sepa que se trata de una tarea de sumarización. Algunos modelos capaces de múltiples tareas de NLP requieren una clave que indique la tarea específica.
+1. Agregar un prefijo al input; una clave para que T5 sepa que se trata de una tarea de generación de resúmenes. Algunos modelos capaces de realizar múltiples tareas de NLP requieren una clave que indique la tarea específica.
 2. Usar el argumento `text_target` para tokenizar etiquetas.
-3. Truncar secuencias para que no sean más largas que la longitud máxima fijada por el parámetro max_length.
+3. Truncar secuencias para que no sean más largas que la longitud máxima fijada por el parámetro `max_length`.
 
 ```py
 >>> prefix = "summarize: "
@@ -90,7 +90,7 @@ Usa la función [`~datasets.Dataset.map`] de 🤗 Datasets para aplicar la funci
 >>> tokenized_billsum = billsum.map(preprocess_function, batched=True)
 ```
 
-Usa [`DataCollatorForSeq2Seq`] para crear un lote de ejemplos. Esto también *rellenará dinámicamente* tu texto y etiquetas a la dimensión del elemento más largo del lote para que de esta manera tengan largo uniforme. Si bien es posible rellenar tu texto en la función `tokenizer` mediante el argumento `padding=True`, el rellenado dinámico es más eficiente.
+Usa [`DataCollatorForSeq2Seq`] para crear un lote de ejemplos. Esto también *rellenará dinámicamente* tu texto y etiquetas a la dimensión del elemento más largo del lote para que tengan un largo uniforme. Si bien es posible rellenar tu texto en la función `tokenizer` mediante el argumento `padding=True`, el rellenado dinámico es más eficiente.
 
 <frameworkcontent>
 <pt>
@@ -123,15 +123,15 @@ Carga T5 con [`AutoModelForSeq2SeqLM`]:
 
 <Tip>
 
-Si no estás familiarizado con el proceso de realizar fine-tuning sobre un modelo con [`Trainer`], ¡mira el tutorial básico [aquí](../training#finetune-with-trainer)!
+Para familiarizarte con el proceso para realizar fine-tuning sobre un modelo con [`Trainer`], ¡mira el tutorial básico [aquí](../training#finetune-with-trainer)!
 
 </Tip>
 
 En este punto, solo faltan tres pasos:
 
 1. Definir tus hiperparámetros de entrenamiento en [`Seq2SeqTrainingArguments`].
-2. Pasarle los argumentos de entrenamiento a [`Seq2SeqTrainer`] junto con el modelo, dataset y el data collator.
-3. Realizar la llamada [`~Trainer.train`] para realizar el fine-tuning sobre tu modelo.
+2. Pasarle los argumentos de entrenamiento a [`Seq2SeqTrainer`] junto con el modelo, dataset y data collator.
+3. Llamar [`~Trainer.train`] para realizar el fine-tuning sobre tu modelo.
 
 ```py
 >>> training_args = Seq2SeqTrainingArguments(
@@ -159,7 +159,7 @@ En este punto, solo faltan tres pasos:
 ```
 </pt>
 <tf>
-Para realizar el fine-tuning de un modelo en TensorFlow, comienza por convertir tus datasets al formato `tf.data.Dataset` con [`~datasets.Dataset.to_tf_dataset`]. Especifica los inputs y etiquetas en `columns`, si es necesario mezclar el dataset, el tamaño de lote y el data collator:
+Para hacer fine-tuning de un modelo en TensorFlow, comienza por convertir tus datasets al formato `tf.data.Dataset` con [`~datasets.Dataset.to_tf_dataset`]. Especifica los inputs y etiquetas en `columns`, el tamaño de lote, el data collator, y si es necesario mezclar el dataset:
 
 ```py
 >>> tf_train_set = tokenized_billsum["train"].to_tf_dataset(
@@ -179,7 +179,7 @@ Para realizar el fine-tuning de un modelo en TensorFlow, comienza por convertir 
 
 <Tip>
 
-Si no estás familiarizado con realizar fine-tuning de modelos con Keras, ¡mira el tutorial básico [aquí](training#finetune-with-keras)!
+Para familiarizarte con el fine-tuning con Keras, ¡mira el tutorial básico [aquí](training#finetune-with-keras)!
 
 </Tip>
 
@@ -215,7 +215,7 @@ Llama a [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) par
 
 <Tip>
 
-Para un ejemplo con mayor profundidad de como hacer fine-tune de un modelo para sumarización, échale una mirada a la
+Para un ejemplo con mayor profundidad de cómo hacer fine-tuning a un modelo para generación de resúmenes, revisa la
 [notebook en PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization.ipynb)
 o a la [notebook en TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/summarization-tf.ipynb).
 
