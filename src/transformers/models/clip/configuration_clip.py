@@ -336,6 +336,17 @@ class CLIPOnnxConfig(OnnxConfig):
                 ("attention_mask", {0: "batch", 1: "sequence"})
             ]
         )
+    
+    @property
+    def outputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("logits_per_image", {0: "batch"}),
+                ("logits_per_text", {0: "batch"}),
+                ("text_embeds", {0: "batch"}),
+                ("image_embeds", {0: "batch"})   
+            ]
+        )
 
     @property
     def atol_for_validation(self) -> float:
