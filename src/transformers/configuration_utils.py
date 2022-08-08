@@ -21,7 +21,6 @@ import json
 import os
 import re
 import warnings
-from distutils.command.config import config
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from packaging import version
@@ -663,6 +662,7 @@ class PretrainedConfig(PushToHubMixin):
         # We remove them so they don't appear in `return_unused_kwargs`.
         kwargs.pop("_from_auto", None)
         kwargs.pop("_from_pipeline", None)
+        # The commit hash might have been updated in the `config_dict`, we don't want the kwargs to erase that update.
         if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
             kwargs["_commit_hash"] = config_dict["_commit_hash"]
 

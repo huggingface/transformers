@@ -43,7 +43,6 @@ from .utils import (
     cached_file,
     copy_func,
     extract_commit_hash,
-    get_file_from_repo,
     is_flax_available,
     is_offline_mode,
     is_tf_available,

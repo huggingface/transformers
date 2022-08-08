@@ -25,7 +25,7 @@ from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import cached_file, is_sentencepiece_available, is_tokenizers_available, logging
+from ...utils import cached_file, extract_commit_hash, is_sentencepiece_available, is_tokenizers_available, logging
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -407,9 +407,12 @@ def get_tokenizer_config(
     if resolved_config_file is None:
         logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
         return {}
+    commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
 
     with open(resolved_config_file, encoding="utf-8") as reader:
-        return json.load(reader)
+        result = json.load(reader)
+    result["_commit_hash"] = commit_hash
+    return result
 
 
 class AutoTokenizer:
@@ -536,6 +539,8 @@ class AutoTokenizer:
 
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
+        if "_commit_hash" in tokenizer_config:
+            kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
         config_tokenizer_class = tokenizer_config.get("tokenizer_class")
         tokenizer_auto_map = None
         if "auto_map" in tokenizer_config:

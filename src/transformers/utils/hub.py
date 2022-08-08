@@ -834,6 +834,7 @@ def get_checkpoint_shard_files(
     user_agent=None,
     revision=None,
     subfolder="",
+    _commit_hash=None,
 ):
     """
     For a given model:
@@ -847,6 +848,7 @@ def get_checkpoint_shard_files(
     """
     import json
 
+    print(_commit_hash)
     if not os.path.isfile(index_filename):
         raise ValueError(f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}.")
 
@@ -879,6 +881,7 @@ def get_checkpoint_shard_files(
                 user_agent=user_agent,
                 revision=revision,
                 subfolder=subfolder,
+                _commit_hash=_commit_hash,
             )
         # We have already dealt with RepositoryNotFoundError and RevisionNotFoundError when getting the index, so
         # we don't have to catch them here.

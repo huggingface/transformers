@@ -48,6 +48,7 @@ from transformers.testing_utils import (
     DUMMY_DIFF_TOKENIZER_IDENTIFIER,
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
+    RequestCounter,
     require_tokenizers,
     slow,
 )
@@ -340,3 +341,13 @@ class AutoTokenizerTest(unittest.TestCase):
             EnvironmentError, r"aaaaaa is not a valid git identifier \(branch name, tag name or commit id\)"
         ):
             _ = AutoTokenizer.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER, revision="aaaaaa")
+
+    def test_cached_tokenizer_has_minimum_calls_to_head(self):
+        # Make sure we have cached the tokenizer.
+        _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with RequestCounter() as counter:
+            _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+            self.assertEqual(counter.get_request_count, 0)
+            # We still have one extra call because the model does not have a added_tokens.json file
+            self.assertEqual(counter.head_request_count, 2)
+            self.assertEqual(counter.other_request_count, 0)

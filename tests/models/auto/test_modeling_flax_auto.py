@@ -15,7 +15,7 @@
 import unittest
 
 from transformers import AutoConfig, AutoTokenizer, BertConfig, TensorType, is_flax_available
-from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, require_flax, slow
+from transformers.testing_utils import DUMMY_UNKNOWN_IDENTIFIER, RequestCounter, require_flax, slow
 
 
 if is_flax_available():
@@ -99,3 +99,12 @@ class FlaxAutoModelTest(unittest.TestCase):
     def test_model_from_pt_suggestion(self):
         with self.assertRaisesRegex(EnvironmentError, "Use `from_pt=True` to load this model"):
             _ = FlaxAutoModel.from_pretrained("hf-internal-testing/tiny-bert-pt-only")
+
+    def test_cached_model_has_minimum_calls_to_head(self):
+        # Make sure we have cached the model.
+        _ = FlaxAutoModel.from_pretrained("hf-internal-testing/tiny-random-bert", from_pt=True)
+        with RequestCounter() as counter:
+            _ = FlaxAutoModel.from_pretrained("hf-internal-testing/tiny-random-bert", from_pt=True)
+            self.assertEqual(counter.get_request_count, 0)
+            self.assertEqual(counter.head_request_count, 1)
+            self.assertEqual(counter.other_request_count, 0)

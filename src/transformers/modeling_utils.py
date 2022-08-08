@@ -2017,6 +2017,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 user_agent=user_agent,
                 revision=revision,
                 subfolder=subfolder,
+                _commit_hash=commit_hash,
             )
 
         # load pt weights early so that we know which dtype to init the model under
