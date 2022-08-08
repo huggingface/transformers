@@ -17,12 +17,10 @@ import os
 from typing import List, Tuple, Union
 
 import numpy as np
-import PIL.Image
-import PIL.ImageOps
 
 import requests
 
-from .utils import is_flax_available, is_tf_available, is_torch_available
+from .utils import is_flax_available, is_tf_available, is_torch_available, is_vision_available
 from .utils.constants import (  # noqa: F401
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -30,6 +28,11 @@ from .utils.constants import (  # noqa: F401
     IMAGENET_STANDARD_STD,
 )
 from .utils.generic import ExplicitEnum, _is_jax, _is_tensorflow, _is_torch
+
+
+if is_vision_available:
+    import PIL.Image
+    import PIL.ImageOps
 
 
 ImageInput = Union[
