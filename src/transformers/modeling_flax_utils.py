@@ -633,7 +633,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             model_kwargs = kwargs
 
         if commit_hash is None:
-            commit_hash = config._commit_hash
+            commit_hash = getattr(config, "_commit_hash", None)
 
         # Add the dtype to model_kwargs
         model_kwargs["dtype"] = dtype
