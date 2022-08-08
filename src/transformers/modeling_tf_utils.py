@@ -2156,7 +2156,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
-        mirror = kwargs.pop("mirror", None)
+        _ = kwargs.pop("mirror", None)
         load_weight_prefix = kwargs.pop("load_weight_prefix", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -2270,7 +2270,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         # message.
                         has_file_kwargs = {
                             "revision": revision,
-                            "mirror": mirror,
                             "proxies": proxies,
                             "use_auth_token": use_auth_token,
                         }
@@ -2321,7 +2320,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 use_auth_token=use_auth_token,
                 user_agent=user_agent,
                 revision=revision,
-                mirror=mirror,
             )
 
         config.name_or_path = pretrained_model_name_or_path
