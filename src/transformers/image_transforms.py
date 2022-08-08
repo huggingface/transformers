@@ -186,8 +186,7 @@ def resize(
         data_format (`ChannelDimension`, *optional*, defaults to `None`):
             The channel dimension format of the output image. If `None`, will use the inferred format from the input.
         return_numpy (`bool`, *optional*, defaults to `True`):
-            Whether or not to return the resized image as a numpy array. If False a PIL.Image.Image object is
-            returned.
+            Whether or not to return the resized image as a numpy array. If False a PIL.Image.Image object is returned.
 
     Returns:
         image: A resized np.ndarray.
