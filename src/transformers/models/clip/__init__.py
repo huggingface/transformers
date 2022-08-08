@@ -29,7 +29,13 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_clip": ["CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "CLIPConfig", "CLIPTextConfig", "CLIPVisionConfig", "CLIPOnnxConfig"],
+    "configuration_clip": [
+        "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "CLIPConfig",
+        "CLIPTextConfig",
+        "CLIPVisionConfig",
+        "CLIPOnnxConfig",
+    ],
     "tokenization_clip": ["CLIPTokenizer"],
 }
 
@@ -95,7 +101,13 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_clip import CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, CLIPConfig, CLIPTextConfig, CLIPVisionConfig, CLIPOnnxConfig
+    from .configuration_clip import (
+        CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        CLIPConfig,
+        CLIPTextConfig,
+        CLIPVisionConfig,
+        CLIPOnnxConfig,
+    )
     from .tokenization_clip import CLIPTokenizer
 
     try:
