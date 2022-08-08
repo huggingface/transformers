@@ -38,29 +38,11 @@ from transformers import (
     TFAutoModelForSequenceClassification,
     TFTrainingArguments,
     set_seed,
-    create_optimizer
+    create_optimizer,
+    PushToHubCallback
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version, send_example_telemetry
-
-
-# region Helper functions
-
-
-class SavePretrainedCallback(tf.keras.callbacks.Callback):
-    # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
-    # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
-    # that saves the model with this method after each epoch.
-    def __init__(self, output_dir, **kwargs):
-        super().__init__()
-        self.output_dir = output_dir
-
-    def on_epoch_end(self, epoch, logs=None):
-        self.model.save_pretrained(self.output_dir)
-
-
-# endregion
-
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.22.0.dev0")
@@ -464,9 +446,41 @@ def main():
         model.compile(optimizer=optimizer, metrics=metrics, jit_compile=training_args.xla)
         # endregion
 
+        # region Preparing push_to_hub and model card
+        push_to_hub_model_id = training_args.push_to_hub_model_id
+        model_name = model_args.model_name_or_path.split('/')[-1]
+        if not push_to_hub_model_id:
+            push_to_hub_model_id = f"{model_name}-finetuned-{data_args.source_lang}-{data_args.target_lang}"
+
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "summarization"}
+        if data_args.dataset_name is not None:
+            model_card_kwargs["dataset_tags"] = data_args.dataset_name
+            if data_args.dataset_config_name is not None:
+                model_card_kwargs["dataset_args"] = data_args.dataset_config_name
+                model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            else:
+                model_card_kwargs["dataset"] = data_args.dataset_name
+
+        if data_args.lang is not None:
+            model_card_kwargs["language"] = data_args.lang
+
+        if training_args.push_to_hub:
+            callbacks = [
+                PushToHubCallback(
+                    output_dir=training_args.output_dir,
+                    model_id=push_to_hub_model_id,
+                    organization=training_args.push_to_hub_organization,
+                    token=training_args.push_to_hub_token,
+                    tokenizer=tokenizer,
+                    **model_card_kwargs
+                )
+            ]
+        else:
+            callbacks = []
+        # endregion
+
         # region Training and validation
         if training_args.do_train:
-            callbacks = [SavePretrainedCallback(output_dir=training_args.output_dir)]
             if training_args.do_eval and not data_args.task_name == "mnli":
                 # Do both evaluation and training in the Keras fit loop, unless the task is MNLI
                 # because MNLI has two validation sets
@@ -557,6 +571,10 @@ def main():
                             item = model.config.id2label[item]
                             writer.write(f"{index}\t{item}\n")
         # endregion
+
+        if training_args.output_dir is not None and not training_args.push_to_hub:
+            # If we're not pushing to hub, at least save a local copy when we're done
+            model.save_pretrained(training_args.output_dir)
 
 
 if __name__ == "__main__":

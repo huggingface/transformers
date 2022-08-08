@@ -39,7 +39,8 @@ from transformers import (
     TFAutoModelForQuestionAnswering,
     TFTrainingArguments,
     set_seed,
-    create_optimizer
+    create_optimizer,
+    PushToHubCallback
 )
 from transformers.utils import CONFIG_NAME, TF2_WEIGHTS_NAME, check_min_version, send_example_telemetry
 from utils_qa import postprocess_qa_predictions
@@ -687,6 +688,39 @@ def main():
 
         # endregion
 
+        # region Preparing push_to_hub and model card
+        push_to_hub_model_id = training_args.push_to_hub_model_id
+        model_name = model_args.model_name_or_path.split('/')[-1]
+        if not push_to_hub_model_id:
+            push_to_hub_model_id = f"{model_name}-finetuned-{data_args.source_lang}-{data_args.target_lang}"
+
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "summarization"}
+        if data_args.dataset_name is not None:
+            model_card_kwargs["dataset_tags"] = data_args.dataset_name
+            if data_args.dataset_config_name is not None:
+                model_card_kwargs["dataset_args"] = data_args.dataset_config_name
+                model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            else:
+                model_card_kwargs["dataset"] = data_args.dataset_name
+
+        if data_args.lang is not None:
+            model_card_kwargs["language"] = data_args.lang
+
+        if training_args.push_to_hub:
+            callbacks = [
+                PushToHubCallback(
+                    output_dir=training_args.output_dir,
+                    model_id=push_to_hub_model_id,
+                    organization=training_args.push_to_hub_organization,
+                    token=training_args.push_to_hub_token,
+                    tokenizer=tokenizer,
+                    **model_card_kwargs
+                )
+            ]
+        else:
+            callbacks = []
+        # endregion
+
         # region Training and Evaluation
 
         if training_args.do_train:
@@ -694,7 +728,7 @@ def main():
             # training datasets in this example, and so they don't have the same label structure.
             # As such, we don't pass them directly to Keras, but instead get model predictions to evaluate
             # after training.
-            model.fit(training_dataset, epochs=int(training_args.num_train_epochs))
+            model.fit(training_dataset, epochs=int(training_args.num_train_epochs), callbacks=callbacks)
 
         if training_args.do_eval:
             logger.info("*** Evaluation ***")
@@ -754,8 +788,9 @@ def main():
                 logging.info(f"{metric}: {value:.3f}")
         # endregion
 
-    if training_args.push_to_hub:
-        model.push_to_hub()
+    if training_args.output_dir is not None and not training_args.push_to_hub:
+        # If we're not pushing to hub, at least save a local copy when we're done
+        model.save_pretrained(training_args.output_dir)
 
 
 if __name__ == "__main__":

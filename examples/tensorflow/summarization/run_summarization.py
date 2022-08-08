@@ -43,6 +43,7 @@ from transformers import (
     set_seed,
     DataCollatorForSeq2Seq,
     KerasMetricCallback,
+    PushToHubCallback
 )
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, is_offline_mode, send_example_telemetry
@@ -612,6 +613,38 @@ def main():
             callbacks = []
         # endregion
 
+        # region Preparing push_to_hub and model card
+        push_to_hub_model_id = training_args.push_to_hub_model_id
+        model_name = model_args.model_name_or_path.split('/')[-1]
+        if not push_to_hub_model_id:
+            push_to_hub_model_id = f"{model_name}-finetuned-{data_args.source_lang}-{data_args.target_lang}"
+
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "summarization"}
+        if data_args.dataset_name is not None:
+            model_card_kwargs["dataset_tags"] = data_args.dataset_name
+            if data_args.dataset_config_name is not None:
+                model_card_kwargs["dataset_args"] = data_args.dataset_config_name
+                model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            else:
+                model_card_kwargs["dataset"] = data_args.dataset_name
+
+        if data_args.lang is not None:
+            model_card_kwargs["language"] = data_args.lang
+
+        if training_args.push_to_hub:
+            # Because this training can be quite long, we save once per epoch.
+            callbacks.append(
+                PushToHubCallback(
+                    output_dir=training_args.output_dir,
+                    model_id=push_to_hub_model_id,
+                    organization=training_args.push_to_hub_organization,
+                    token=training_args.push_to_hub_token,
+                    tokenizer=tokenizer,
+                    **model_card_kwargs
+                )
+            )
+        # endregion
+
         # region Training
         model.compile(optimizer=optimizer, jit_compile=training_args.xla)
 
@@ -657,7 +690,8 @@ def main():
             logger.info(result)
         # endregion
 
-        if training_args.output_dir is not None:
+        if training_args.output_dir is not None and not training_args.push_to_hub:
+            # If we're not pushing to hub, at least save a local copy when we're done
             model.save_pretrained(training_args.output_dir)
 
 

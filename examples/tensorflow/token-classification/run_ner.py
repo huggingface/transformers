@@ -21,7 +21,6 @@ without using a Trainer.
 import logging
 import random
 from dataclasses import dataclass, field
-from functools import partial
 from typing import Optional
 
 import datasets
@@ -41,7 +40,8 @@ from transformers import (
     TFTrainingArguments,
     create_optimizer,
     set_seed,
-    DataCollatorForTokenClassification
+    DataCollatorForTokenClassification,
+    PushToHubCallback,
 )
 from transformers.utils import send_example_telemetry
 from transformers.utils.versions import require_version
@@ -477,6 +477,40 @@ def main():
 
         # endregion
 
+        # region Preparing push_to_hub and model card
+        push_to_hub_model_id = training_args.push_to_hub_model_id
+        model_name = model_args.model_name_or_path.split('/')[-1]
+        if not push_to_hub_model_id:
+            push_to_hub_model_id = f"{model_name}-finetuned-{data_args.source_lang}-{data_args.target_lang}"
+
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "summarization"}
+        if data_args.dataset_name is not None:
+            model_card_kwargs["dataset_tags"] = data_args.dataset_name
+            if data_args.dataset_config_name is not None:
+                model_card_kwargs["dataset_args"] = data_args.dataset_config_name
+                model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            else:
+                model_card_kwargs["dataset"] = data_args.dataset_name
+
+        if data_args.lang is not None:
+            model_card_kwargs["language"] = data_args.lang
+
+        if training_args.push_to_hub:
+            callbacks = [
+                PushToHubCallback(
+                    output_dir=training_args.output_dir,
+                    model_id=push_to_hub_model_id,
+                    organization=training_args.push_to_hub_organization,
+                    token=training_args.push_to_hub_token,
+                    tokenizer=tokenizer,
+                    **model_card_kwargs
+                )
+            ]
+        else:
+            callbacks = []
+        # endregion
+
+
         # region Training
         logger.info("***** Running training *****")
         logger.info(f"  Num examples = {len(train_dataset)}")
@@ -489,6 +523,7 @@ def main():
             tf_train_dataset,
             validation_data=tf_eval_dataset,
             epochs=int(training_args.num_train_epochs),
+            callbacks=callbacks
         )
         # endregion
 
@@ -529,9 +564,9 @@ def main():
             logger.info(f"{key}: {val:.4f}")
         # endregion
 
-    if training_args.output_dir is not None:
+    if training_args.output_dir is not None and not training_args.push_to_hub:
+        # If we're not pushing to hub, at least save a local copy when we're done
         model.save_pretrained(training_args.output_dir)
-
 
 if __name__ == "__main__":
     main()
