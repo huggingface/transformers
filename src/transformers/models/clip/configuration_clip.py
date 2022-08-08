@@ -23,7 +23,6 @@ from typing import Any, Mapping, Union, Optional
 from transformers import TensorType
 from transformers.processing_utils import ProcessorMixin
 
-from ... import is_torch_available
 from ...onnx import OnnxConfig
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
