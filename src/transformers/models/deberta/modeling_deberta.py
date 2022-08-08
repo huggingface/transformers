@@ -711,7 +711,7 @@ class DisentangledSelfAttention(nn.Module):
         if "p2c" in self.pos_att_type:
             pos_query_layer = self.pos_q_proj(rel_embeddings)
             pos_query_layer = self.transpose_for_scores(pos_query_layer)
-            pos_query_layer /= torch.sqrt(torch.tensor(pos_query_layer.size(-1) * scale_factor, dtype=torch.float))
+            pos_query_layer /= torch.sqrt(torch.tensor(pos_query_layer.size(-1) * scale_factor, dtype=torch.half))
             if query_layer.size(-2) != key_layer.size(-2):
                 r_pos = build_relative_position(key_layer.size(-2), key_layer.size(-2), query_layer.device)
             else:
