@@ -630,6 +630,7 @@ class CLIPTextTransformer(nn.Module):
         if input_ids is None:
             raise ValueError("You have to specify either input_ids")
 
+        input_ids = input_ids.to(torch.int)  # for onnx compatibility, since onnx doesn't support int64
         input_shape = input_ids.size()
         input_ids = input_ids.view(-1, input_shape[-1])
 
@@ -1044,8 +1045,8 @@ class CLIPModel(CLIPPreTrainedModel):
         text_embeds = self.text_projection(text_embeds)
 
         # normalized features
-        image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
-        text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
+        image_embeds = image_embeds / image_embeds.norm(p=2, dim=1, keepdim=True)
+        text_embeds = text_embeds / text_embeds.norm(p=2, dim=1, keepdim=True)
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
