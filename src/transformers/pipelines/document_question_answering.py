@@ -357,14 +357,15 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         word_ids = model_outputs["word_ids"][0]
         for s, e, score in zip(starts, ends, scores):
             word_start, word_end = word_ids[s], word_ids[e]
-            answers.append(
-                {
-                    "score": score,
-                    "answer": " ".join(words[word_start : word_end + 1]),
-                    "start": word_start,
-                    "end": word_end,
-                }
-            )
+            if word_start is not None and word_end is not None:
+                answers.append(
+                    {
+                        "score": score,
+                        "answer": " ".join(words[word_start : word_end + 1]),
+                        "start": word_start,
+                        "end": word_end,
+                    }
+                )
 
         if handle_impossible_answer:
             answers.append({"score": min_null_score, "answer": "", "start": 0, "end": 0})
