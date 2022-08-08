@@ -747,8 +747,8 @@ def main():
     lr_scheduler = get_scheduler(
         name=args.lr_scheduler_type,
         optimizer=optimizer,
-        num_warmup_steps=args.num_warmup_steps * num_update_steps_per_epoch,
-        num_training_steps=args.max_train_steps * num_update_steps_per_epoch,
+        num_warmup_steps=args.num_warmup_steps * args.gradient_accumulation_steps,
+        num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
     )
 
     # Prepare everything with our `accelerator`.

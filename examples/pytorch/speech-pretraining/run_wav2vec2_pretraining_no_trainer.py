@@ -368,7 +368,7 @@ def main():
     send_example_telemetry("run_wav2vec2_pretraining_no_trainer", args)
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
-    accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
+    accelerator = Accelerator()
     logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
         datasets.utils.logging.set_verbosity_warning()
@@ -585,57 +585,60 @@ def main():
             )
             percent_masked = num_losses / sub_attention_mask.sum()
 
-            with accelerator.accumulate(model):
-                # forward
-                outputs = model(**batch)
-                loss = outputs.loss
-                accelerator.backward(loss)
+            # forward
+            outputs = model(**batch)
 
-                # make sure that `num_losses` is summed for distributed training
-                # and average gradients over losses of all devices
+            # divide loss by gradient accumulation steps since gradients
+            # are accumulated for multiple backward passes in PyTorch
+            loss = outputs.loss / args.gradient_accumulation_steps
+            accelerator.backward(loss)
+
+            # make sure that `num_losses` is summed for distributed training
+            # and average gradients over losses of all devices
+            if accelerator.state.num_processes > 1:
+                num_losses = accelerator.gather(num_losses).sum()
+                gradient_multiplier = accelerator.state.num_processes / num_losses
+                multiply_grads(model.module.parameters(), gradient_multiplier)
+            else:
+                multiply_grads(model.parameters(), 1 / num_losses)
+
+            # update step
+            if (step + 1) % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
+
+                # compute grad norm for monitoring
+                scale = (
+                    accelerator.scaler._scale.item()
+                    if hasattr(accelerator, "scaler") and accelerator.scaler is not None
+                    else 1
+                )
                 if accelerator.state.num_processes > 1:
-                    num_losses = accelerator.gather(num_losses).sum()
-                    gradient_multiplier = accelerator.state.num_processes / num_losses
-                    multiply_grads(model.module.parameters(), gradient_multiplier)
+                    grad_norm = get_grad_norm(model.module.parameters(), scale)
                 else:
-                    multiply_grads(model.parameters(), 1 / num_losses)
+                    grad_norm = get_grad_norm(model.parameters(), scale)
 
-                # Checks if the accelerator will perform an optimization step behind the scenes
-                if accelerator.sync_gradients:
-                    # compute grad norm for monitoring
-                    scale = (
-                        accelerator.scaler._scale.item()
-                        if hasattr(accelerator, "scaler") and accelerator.scaler is not None
-                        else 1
+                # update parameters
+                optimizer.step()
+                optimizer.zero_grad()
+
+                if not accelerator.optimizer_step_was_skipped:
+                    lr_scheduler.step()
+                elif accelerator.is_local_main_process:
+                    progress_bar.write(
+                        f"Gradients have overflown - skipping update step... Updating gradient scale to {scale}..."
                     )
-                    if accelerator.state.num_processes > 1:
-                        grad_norm = get_grad_norm(model.module.parameters(), scale)
-                    else:
-                        grad_norm = get_grad_norm(model.parameters(), scale)
 
-                    # update parameters
-                    optimizer.step()
-                    optimizer.zero_grad()
+                # update gumbel temperature
+                gumbel_temperature = max(
+                    args.max_gumbel_temperature * args.gumbel_temperature_decay**completed_steps,
+                    args.min_gumbel_temperature,
+                )
+                if hasattr(model, "module"):
+                    model.module.set_gumbel_temperature(gumbel_temperature)
+                else:
+                    model.set_gumbel_temperature(gumbel_temperature)
 
-                    if not accelerator.optimizer_step_was_skipped:
-                        lr_scheduler.step()
-                    elif accelerator.is_local_main_process:
-                        progress_bar.write(
-                            f"Gradients have overflown - skipping update step... Updating gradient scale to {scale}..."
-                        )
-
-                    # update gumbel temperature
-                    gumbel_temperature = max(
-                        args.max_gumbel_temperature * args.gumbel_temperature_decay**completed_steps,
-                        args.min_gumbel_temperature,
-                    )
-                    if hasattr(model, "module"):
-                        model.module.set_gumbel_temperature(gumbel_temperature)
-                    else:
-                        model.set_gumbel_temperature(gumbel_temperature)
-
-                    progress_bar.update(1)
-                    completed_steps += 1
+                progress_bar.update(1)
+                completed_steps += 1
 
             # 6. Log all results
             if (step + 1) % (args.gradient_accumulation_steps * args.logging_steps) == 0:
