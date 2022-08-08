@@ -1065,8 +1065,7 @@ class Swinv2Model(Swinv2PreTrainedModel):
         )
 
         sequence_output = encoder_outputs[0]
-        if self.layernorm is not None:
-            sequence_output = self.layernorm(sequence_output)
+        sequence_output = self.layernorm(sequence_output)
 
         pooled_output = None
         if self.pooler is not None:
