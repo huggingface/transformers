@@ -650,7 +650,6 @@ class DisentangledSelfAttention(nn.Module):
         scale = torch.sqrt(torch.tensor(query_layer.size(-1) * scale_factor, dtype=torch.float))
         query_layer = query_layer / torch.tensor(scale, dtype=query_layer.dtype)
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        # attention_scores = torch.matmul(torch.tensor(query_layer, dtype=key_layer.dtype), key_layer.transpose(-1, -2))
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
             rel_att = self.disentangled_att_bias(query_layer, key_layer, relative_pos, rel_embeddings, scale_factor)
@@ -667,7 +666,6 @@ class DisentangledSelfAttention(nn.Module):
         if self.talking_head:
             attention_probs = self.head_weights_proj(attention_probs.permute(0, 2, 3, 1)).permute(0, 3, 1, 2)
 
-        # context_layer = torch.matmul(attention_probs, torch.tensor(value_layer, dtype=attention_probs.dtype))
         context_layer = torch.matmul(attention_probs, value_layer)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (-1,)
@@ -701,9 +699,6 @@ class DisentangledSelfAttention(nn.Module):
         if "c2p" in self.pos_att_type:
             pos_key_layer = self.pos_proj(rel_embeddings)
             pos_key_layer = self.transpose_for_scores(pos_key_layer)
-            # c2p_att = torch.matmul(
-            #     torch.tensor(query_layer, dtype=pos_key_layer.dtype), pos_key_layer.transpose(-1, -2)
-            # )
             c2p_att = torch.matmul(query_layer, pos_key_layer.transpose(-1, -2))
             c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1)
             c2p_att = torch.gather(c2p_att, dim=-1, index=c2p_dynamic_expand(c2p_pos, query_layer, relative_pos))
