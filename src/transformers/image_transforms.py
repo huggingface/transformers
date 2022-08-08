@@ -16,18 +16,20 @@
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
-import PIL
 
-from transformers.utils.import_utils import is_tf_available, is_torch_available
+from transformers.utils.import_utils import is_tf_available, is_torch_available, is_vision_available
 
-from .image_utils import (
-    ChannelDimension,
-    get_image_size,
-    infer_channel_dimension_format,
-    is_jax_tensor,
-    is_tf_tensor,
-    is_torch_tensor,
-)
+if is_vision_available():
+    import PIL
+
+    from .image_utils import (
+        ChannelDimension,
+        get_image_size,
+        infer_channel_dimension_format,
+        is_jax_tensor,
+        is_tf_tensor,
+        is_torch_tensor,
+    )
 
 
 if TYPE_CHECKING:
