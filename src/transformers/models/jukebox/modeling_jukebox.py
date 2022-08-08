@@ -64,9 +64,9 @@ def empty_cache():
     torch.cuda.empty_cache()
 
 
-def get_range(hidden_states):
+def get_range(list):
     return tqdm(
-        hidden_states, leave=True, file=sys.stdout, bar_format="{n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
+        list, leave=True, file=sys.stdout, bar_format="{n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]"
     )
 
 
@@ -478,7 +478,7 @@ class JukeboxBottleneckBlock(nn.Module):
         # Preprocess
         hidden_states, prenorm = self.preprocess(hidden_states)
 
-        # Init key if not inited
+        # Init codebook if not inited
         if update_codebook and not self.init:
             self.init_codebook(hidden_states)
 
@@ -1241,7 +1241,7 @@ class JukeboxBlock(nn.Module):
             prime_len=prime_len,
         )
 
-        self.ln_0 = JukeboxLayerNorm(width)
+        self.layer_norm_0 = JukeboxLayerNorm(width)
         self.mlp = JukeboxMLP(
             width=width,
             n_state=int(m_mlp * width),
@@ -1250,7 +1250,7 @@ class JukeboxBlock(nn.Module):
             zero_out=zero_out,
             init_scale=init_scale,
         )
-        self.ln_1 = JukeboxLayerNorm(width)
+        self.layer_norm_1 = JukeboxLayerNorm(width)
         self.res_scale = res_scale
 
         # TODO either support checkpointing for faster inference or get rid of this
@@ -1262,10 +1262,10 @@ class JukeboxBlock(nn.Module):
 
     def forward(self, hidden_states, encoder_key_value, sample=False):
         residuals = hidden_states
-        hidden_states = self.ln_0(hidden_states)
+        hidden_states = self.layer_norm_0(hidden_states)
         hidden_states = self.attn(hidden_states, encoder_key_value, sample)
 
-        output_states = self.ln_1(residuals + hidden_states)
+        output_states = self.layer_norm_1(residuals + hidden_states)
         output_states = self.mlp(output_states)
         if self.res_scale == 1.0:
             output = residuals + hidden_states + output_states
@@ -1472,7 +1472,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         self.width = width
         self.depth = depth
 
-        # TODO  rename hidden_states to proper name
+        # TODO  rename x_emb to proper name, as well as x_out 
         self.x_emb = nn.Embedding(bins, width)
         nn.init.normal_(self.x_emb.weight, std=0.02 * init_scale)
         self.x_emb_dropout = nn.Dropout(emb_dropout)
@@ -1858,11 +1858,11 @@ class MusicTokenConditioner(nn.Module):
         nn.init.normal_(self.x_emb.weight, std=0.02 * init_scale)
 
         # MusicTokenConditioner, takes as input either uper level tokens, upsamples them to feed them to the next level?
-        self.cond = DecoderConvBock(
+        self.upsampler = DecoderConvBock(
             self.width, self.width, down_t, stride_t, **block_kwargs, zero_out=zero_out, res_scale=res_scale
         )
-        # TODO rename all ln to layer_norm
-        self.ln = JukeboxLayerNorm(self.width)
+        # TODO rename all layer_norm to layer_norm
+        self.layer_norm = JukeboxLayerNorm(self.width)
 
     def preprocess(self, hidden_states):
         hidden_states = hidden_states.permute(0, 2, 1)  # NTC -> NCT
@@ -1889,9 +1889,9 @@ class MusicTokenConditioner(nn.Module):
 
         # Run conditioner
         hidden_states = self.preprocess(hidden_states)
-        hidden_states = self.cond(hidden_states)
+        hidden_states = self.upsampler(hidden_states)
         hidden_states = self.postprocess(hidden_states)
-        hidden_states = self.ln(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
         return hidden_states
 
 
@@ -1964,12 +1964,12 @@ class RangeEmbedding(nn.Module):
         return self.emb(bins)
 
 
-# TODO rename y_bins and t_bins as well as y
+# TODO rename y_bins and timing_dims as well as y
 class LabelConditioner(nn.Module):
     def __init__(
         self,
-        y_bins,
-        t_bins,
+        metadata_dims,
+        timing_dims,
         sr,
         min_duration,
         max_duration,
@@ -1982,7 +1982,7 @@ class LabelConditioner(nn.Module):
         super().__init__()
         self.n_time = n_time
         self.out_width = out_width
-        bow_genre_bins, artist_bins = y_bins
+        bow_genre_bins, artist_bins = metadata_dims
         self.max_bow_genre_size = max_bow_genre_size
         self.bow_genre_emb = SimpleEmbedding(bow_genre_bins, out_width, init_scale)
         self.artist_emb = SimpleEmbedding(artist_bins, out_width, init_scale)
@@ -1995,10 +1995,10 @@ class LabelConditioner(nn.Module):
             )  # Relative pos
             assert len(t_ranges) == 3, f"Expecting (total, absolute, relative) ranges, got {t_ranges}"
             total_length_range, absolute_pos_range, relative_pos_range = t_ranges
-            self.total_length_emb = RangeEmbedding(1, t_bins, total_length_range, out_width, init_scale)
-            self.absolute_pos_emb = RangeEmbedding(n_time, t_bins, absolute_pos_range, out_width, init_scale)
+            self.total_length_emb = RangeEmbedding(1, timing_dims, total_length_range, out_width, init_scale)
+            self.absolute_pos_emb = RangeEmbedding(n_time, timing_dims, absolute_pos_range, out_width, init_scale)
             self.relative_pos_emb = RangeEmbedding(
-                n_time, t_bins, relative_pos_range, out_width, init_scale, clamp=True
+                n_time, timing_dims, relative_pos_range, out_width, init_scale, clamp=True
             )
 
     def forward(self, metadata):
@@ -2122,8 +2122,8 @@ class JukeboxPrior(nn.Module):
         metadata_conditioning_kwargs = dict(
             out_width=config.width[-level - 1],
             init_scale=config.init_scale[-level - 1],
-            y_bins=config.y_bins[-level - 1],
-            t_bins=config.t_bins,
+            metadata_dims=config.y_bins[-level - 1], # rename to metadata_bins
+            timing_dims=config.t_bins, # rename to timing_dims
             sr=config.sr,
             min_duration=config.min_duration,
             max_duration=config.max_duration,
@@ -2195,7 +2195,7 @@ class JukeboxPrior(nn.Module):
                     input_shape=prime_input_shape, audio_conditioning=False, metadata_conditioning=False, only_encode=True, **prime_kwargs
                 )
                 self.prime_state_proj = JukeboxConv1D(self.prime_acts_width, self.prime_state_width)
-                self.prime_state_ln = JukeboxLayerNorm(self.prime_state_width)
+                self.prime_state_layer_norm = JukeboxLayerNorm(self.prime_state_width)
                 self.prime_bins = prime_kwargs["bins"]
                 self.prime_x_out = nn.Linear(self.prime_state_width, self.prime_bins, bias=False)
                 nn.init.normal_(self.prime_x_out.weight, std=0.02 * prior_kwargs["init_scale"])
@@ -2406,7 +2406,7 @@ class JukeboxPrior(nn.Module):
             if sample:
                 self.prime_prior = self.prime_prior.to(prime.device)
             prime_acts = self.prime_prior(prime, None, None, None, fp16=fp16)
-            encoder_key_value = self.prime_state_ln(self.prime_state_proj(prime_acts))
+            encoder_key_value = self.prime_state_layer_norm(self.prime_state_proj(prime_acts))
             if sample:
                 self.prime_prior.cpu()
                 if fp16:
