@@ -20,6 +20,7 @@ import unittest
 
 import numpy as np
 
+from huggingface_hub import hf_hub_download
 from transformers import ConvNextMaskRCNNConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -271,3 +272,63 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
             dtype=np.float32,
         )
         self.assertTrue(np.allclose(bbox_results[15], expected_slice, atol=1e-4))
+
+    @slow
+    def test_training_object_detection_head(self):
+        # TODO update to appropriate organization
+        model = ConvNextMaskRCNNForObjectDetection.from_pretrained("nielsr/convnext-tiny-maskrcnn").to(torch_device)
+
+        # TODO use feature extractor instead?
+        local_path = hf_hub_download(repo_id="nielsr/init-files", filename="pixel_values.pt")
+        img = torch.load(local_path).unsqueeze(0)
+        img_metas = [
+            {
+                "filename": "./drive/MyDrive/ConvNeXT MaskRCNN/COCO/val2017/000000039769.jpg",
+                "ori_filename": "000000039769.jpg",
+                "ori_shape": (480, 640, 3),
+                "img_shape": (480, 640, 3),
+                "pad_shape": (480, 640, 3),
+                "scale_factor": np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32),
+                "flip": False,
+                "flip_direction": None,
+                "img_norm_cfg": {
+                    "mean": np.array([123.675, 116.28, 103.53], dtype=np.float32),
+                    "std": np.array([58.395, 57.12, 57.375], dtype=np.float32),
+                    "to_rgb": True,
+                },
+            },
+            {
+                "filename": "./drive/MyDrive/ConvNeXT MaskRCNN/COCO/val2017/000000039769.jpg",
+                "ori_filename": "000000039769.jpg",
+                "ori_shape": (480, 640, 3),
+                "img_shape": (704, 939, 3),
+                "pad_shape": (704, 960, 3),
+                "scale_factor": np.array([1.4671875, 1.4666667, 1.4671875, 1.4666667], dtype=np.float32),
+                "flip": False,
+                "flip_direction": None,
+                "img_norm_cfg": {
+                    "mean": np.array([123.675, 116.28, 103.53], dtype=np.float32),
+                    "std": np.array([58.395, 57.12, 57.375], dtype=np.float32),
+                    "to_rgb": True,
+                },
+            },
+        ]
+
+        labels = dict()
+        local_path = hf_hub_download(repo_id="nielsr/init-files", filename="boxes.pt")
+        labels["gt_bboxes"] = [torch.load(local_path).to(torch_device)]
+        local_path = hf_hub_download(repo_id="nielsr/init-files", filename="labels.pt")
+        labels["gt_labels"] = [torch.load(local_path).to(torch_device)]
+        local_path = hf_hub_download(repo_id="nielsr/init-files", filename="masks.pt")
+        labels["gt_masks"] = [torch.load(local_path).to(torch_device)]
+        labels["gt_bboxes_ignore"] = None
+        img_metas = [{"pad_shape": img.shape[::-1], "img_shape": img.shape[::-1]}]
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(img.to(torch_device), img_metas=img_metas, labels=labels)
+            losses = outputs.losses
+
+        # TODO verify the results
+        print(losses)
+        raise NotImplementedError("To do")
