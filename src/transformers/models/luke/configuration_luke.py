@@ -149,8 +149,8 @@ class LukeOnnxConfig(OnnxConfig):
                 ("input_ids", {0: "batch", 1: "sequence"}),
                 ("attention_mask", {0: "batch", 1: "sequence"}),
                 ("entity_ids", {0: "batch", 1: "entities"}),
-                ("entity_position_ids", {0: "batch", 1: "entities", 2: "entity_embedding"}),
                 ("entity_attention_mask", {0: "batch", 1: "entities"}),
+                ("entity_position_ids", {0: "batch", 1: "entities", 2: "entity_embeddings"}),
             ]
         )
 
@@ -167,6 +167,7 @@ class LukeOnnxConfig(OnnxConfig):
         entity_spans=[[0, 5], [8, 10]],
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
+
         # Copied from OnnxConfig.generate_dummy_inputs
         # Did not use super(OnnxConfigWithPast, self).generate_dummy_inputs for code clarity.
         # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX

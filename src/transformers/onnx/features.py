@@ -9,9 +9,9 @@ from .config import OnnxConfig
 
 # Entity-Pair, Entity-Span and Entity Classification Heads are not supported by AutoModel Factory
 from transformers.models.luke import (
-    LukeForEntityClassification,
+    # LukeForEntityClassification,
     LukeForEntityPairClassification,
-    LukeForEntitySpanClassification,
+    # LukeForEntitySpanClassification,
 )
 
 if TYPE_CHECKING:
@@ -34,6 +34,7 @@ if is_torch_available():
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
         AutoModelForTokenClassification,
+        AutoModelForEntityPairClassification,
     )
 if is_tf_available():
     from transformers.models.auto import (
@@ -100,9 +101,9 @@ class FeaturesManager:
             "image-classification": AutoModelForImageClassification,
             "image-segmentation": AutoModelForImageSegmentation,
             "masked-im": AutoModelForMaskedImageModeling,
-            "entity-classification": LukeForEntityClassification,
-            "entity-pair-classification": LukeForEntityPairClassification,
-            "entity-span-classification": LukeForEntitySpanClassification,
+            # "entity-classification": LukeForEntityClassification,
+            "entity-pair-classification": AutoModelForEntityPairClassification,
+            # "entity-span-classification": LukeForEntitySpanClassification,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -114,9 +115,6 @@ class FeaturesManager:
             "token-classification": TFAutoModelForTokenClassification,
             "multiple-choice": TFAutoModelForMultipleChoice,
             "question-answering": TFAutoModelForQuestionAnswering,
-            "entity-classification": LukeForEntityClassification,
-            "entity-pair-classification": LukeForEntityPairClassification,
-            "entity-span-classification": LukeForEntitySpanClassification,
         }
 
     # Set of model topologies we support associated to the features supported by each topology and the factory
@@ -358,9 +356,9 @@ class FeaturesManager:
         "luke": supported_features_mapping(
             "default",
             "masked-lm",
-            "entity-classification",
+            #            "entity-classification",
             "entity-pair-classification",
-            "entity-span-classification",
+            #            "entity-span-classification",
             onnx_config_cls="models.luke.LukeOnnxConfig",
         ),
         "marian": supported_features_mapping(
