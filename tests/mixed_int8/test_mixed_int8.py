@@ -41,7 +41,7 @@ class BaseMixedInt8Test(unittest.TestCase):
 
     # We need to test on relatively large models (aka >1b parameters otherwise the quantiztion may not work as expected)
     # Therefore here we use only bloom-1b3 to test our module
-    model_name = "bigscience/bloom-1b3"
+    model_name = "bigscience/bloom-1b7"
 
     # Constant values
     EXPECTED_RELATIVE_DIFFERENCE = (

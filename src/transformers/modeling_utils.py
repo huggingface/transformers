@@ -2216,8 +2216,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
             if load_in_8bit:
-                if "cpu" in device_map.values() or "disk" in device_map.values():
+                # The LM head can stay on disk / CPU
+                device_map_without_lm_head = {key: device_map[key] for key in device_map.keys() if key != "lm_head"}
+                if "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
                     raise ValueError("8-bit operations on `bitsandbytes` are not supported under CPU!")
+                del device_map_without_lm_head
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
