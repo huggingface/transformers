@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 import numpy as np
 import PIL
 
-from transformers.utils.import_utils import is_flax_available, is_tf_available, is_torch_available
+from transformers.utils.import_utils import is_tf_available, is_torch_available
 
 from .image_utils import (
     ChannelDimension,
@@ -35,8 +35,6 @@ if TYPE_CHECKING:
         import torch
     if is_tf_available():
         import tensorflow as tf
-    if is_flax_available():
-        import jax.numpy as jnp
 
 
 def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDimension, str]) -> np.ndarray:
@@ -188,8 +186,7 @@ def resize(
         data_format (`ChannelDimension`, *optional*, defaults to `None`):
             The channel dimension format of the output image. If `None`, will use the inferred format from the input.
         return_numpy (`bool`, *optional*, defaults to `True`):
-            Whether or not to return the resized image as a numpy array. If False a PIL.Image.Image object is
-            returned.
+            Whether or not to return the resized image as a numpy array. If False a PIL.Image.Image object is returned.
 
     Returns:
         image: A resized np.ndarray.
