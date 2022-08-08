@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from numpy import isin
 
+from huggingface_hub.file_download import http_get
+
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
@@ -33,7 +35,7 @@ from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, Aut
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_fast import PreTrainedTokenizerFast
-from ..utils import HUGGINGFACE_CO_RESOLVE_ENDPOINT, http_get, is_tf_available, is_torch_available, logging
+from ..utils import HUGGINGFACE_CO_RESOLVE_ENDPOINT, is_tf_available, is_torch_available, logging
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -81,6 +83,7 @@ if is_tf_available():
         TF_MODEL_WITH_LM_HEAD_MAPPING,
         TFAutoModel,
         TFAutoModelForCausalLM,
+        TFAutoModelForImageClassification,
         TFAutoModelForMaskedLM,
         TFAutoModelForQuestionAnswering,
         TFAutoModelForSeq2SeqLM,
@@ -282,9 +285,14 @@ SUPPORTED_TASKS = {
     },
     "image-classification": {
         "impl": ImageClassificationPipeline,
-        "tf": (),
+        "tf": (TFAutoModelForImageClassification,) if is_tf_available() else (),
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("google/vit-base-patch16-224", "5dca96d")}},
+        "default": {
+            "model": {
+                "pt": ("google/vit-base-patch16-224", "5dca96d"),
+                "tf": ("google/vit-base-patch16-224", "5dca96d"),
+            }
+        },
         "type": "image",
     },
     "image-segmentation": {
@@ -305,6 +313,11 @@ SUPPORTED_TASKS = {
 
 NO_FEATURE_EXTRACTOR_TASKS = set()
 NO_TOKENIZER_TASKS = set()
+# Those model configs are special, they are generic over their task, meaning
+# any tokenizer/feature_extractor might be use for a given model so we cannot
+# use the statically defined TOKENIZER_MAPPING and FEATURE_EXTRACTOR_MAPPING to
+# see if the model defines such objects or not.
+MULTI_MODEL_CONFIGS = {"VisionTextDualEncoderConfig", "SpeechEncoderDecoderConfig"}
 for task, values in SUPPORTED_TASKS.items():
     if values["type"] == "text":
         NO_FEATURE_EXTRACTOR_TASKS.add(task)
@@ -374,8 +387,9 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             - `"zero-shot-image-classification"`
 
     Returns:
-        (task_defaults`dict`, task_options: (`tuple`, None)) The actual dictionary required to initialize the pipeline
-        and some extra task options for parametrized tasks like "translation_XX_to_YY"
+        (normalized_task: `str`, task_defaults: `dict`, task_options: (`tuple`, None)) The normalized task name
+        (removed alias and options). The actual dictionary required to initialize the pipeline and some extra task
+        options for parametrized tasks like "translation_XX_to_YY"
 
 
     """
@@ -493,7 +507,7 @@ def pipeline(
             Whether or not to use a Fast tokenizer if possible (a [`PreTrainedTokenizerFast`]).
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`).
+            when running `huggingface-cli login` (stored in `~/.huggingface`).
         device_map (`str` or `Dict[str, Union[int, str, torch.device]`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
             `device_map="auto"` to compute the most optimized `device_map` automatically. [More
@@ -594,6 +608,7 @@ def pipeline(
 
     # Retrieve the task
     if task in custom_tasks:
+        normalized_task = task
         targeted_task, task_options = clean_custom_task(custom_tasks[task])
         if pipeline_class is None:
             if not trust_remote_code:
@@ -608,7 +623,7 @@ def pipeline(
                 model, module_file + ".py", class_name, revision=revision, use_auth_token=use_auth_token
             )
     else:
-        targeted_task, task_options = check_task(task)
+        normalized_task, targeted_task, task_options = check_task(task)
         if pipeline_class is None:
             pipeline_class = targeted_task["impl"]
 
@@ -661,12 +676,36 @@ def pipeline(
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
 
+    if (
+        tokenizer is None
+        and not load_tokenizer
+        and normalized_task not in NO_TOKENIZER_TASKS
+        # Using class name to avoid importing the real class.
+        and model_config.__class__.__name__ in MULTI_MODEL_CONFIGS
+    ):
+        # This is a special category of models, that are fusions of multiple models
+        # so the model_config might not define a tokenizer, but it seems to be
+        # necessary for the task, so we're force-trying to load it.
+        load_tokenizer = True
+    if (
+        feature_extractor is None
+        and not load_feature_extractor
+        and normalized_task not in NO_FEATURE_EXTRACTOR_TASKS
+        # Using class name to avoid importing the real class.
+        and model_config.__class__.__name__ in MULTI_MODEL_CONFIGS
+    ):
+        # This is a special category of models, that are fusions of multiple models
+        # so the model_config might not define a tokenizer, but it seems to be
+        # necessary for the task, so we're force-trying to load it.
+        load_feature_extractor = True
+
     if task in NO_TOKENIZER_TASKS:
         # These will never require a tokenizer.
         # the model on the other hand might have a tokenizer, but
         # the files could be missing from the hub, instead of failing
         # on such repos, we just force to not load it.
         load_tokenizer = False
+
     if task in NO_FEATURE_EXTRACTOR_TASKS:
         load_feature_extractor = False
 
