@@ -22,6 +22,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+import json
 
 import numpy as np
 from datasets import load_dataset
@@ -420,6 +421,13 @@ def main():
             if key not in datasets:
                 tf_data[key] = None
                 continue
+            if (
+                    (key == 'train' and not training_args.do_train)
+                    or (key == 'validation' and not training_args.do_eval)
+                    or (key == 'test' and not training_args.do_predict)
+            ):
+                tf_data[key] = None
+                continue
             if key in ("train", "validation"):
                 assert "label" in datasets[key].features, f"Missing labels from {key} data!"
             if key == "train":
@@ -523,15 +531,21 @@ def main():
                 epochs=int(training_args.num_train_epochs),
                 callbacks=callbacks,
             )
-        elif tf_data["validation"] is not None:
-            # If there's a validation dataset but no training set, just evaluate the metrics
+        if tf_data["validation"] is not None:
             logger.info("Computing metrics on validation data...")
             if is_regression:
                 loss = model.evaluate(tf_data["validation"])
-                logger.info(f"Loss: {loss:.5f}")
+                logger.info(f"Eval loss: {loss:.5f}")
             else:
                 loss, accuracy = model.evaluate(tf_data["validation"])
-                logger.info(f"Loss: {loss:.5f}, Accuracy: {accuracy * 100:.4f}%")
+                logger.info(f"Eval loss: {loss:.5f}, Eval accuracy: {accuracy * 100:.4f}%")
+            if training_args.output_dir is not None:
+                output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+                eval_dict = {"eval_loss": loss}
+                if not is_regression:
+                    eval_dict["eval_accuracy"] = accuracy
+                with open(output_eval_file, "w") as writer:
+                    writer.write(json.dumps(eval_dict))
         # endregion
 
         # region Prediction

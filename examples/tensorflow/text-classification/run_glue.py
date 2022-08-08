@@ -21,6 +21,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
+import json
 
 import numpy as np
 import tensorflow as tf
@@ -447,7 +448,8 @@ def main():
                 adam_global_clipnorm=training_args.max_grad_norm,
             )
         else:
-            optimizer = schedule = None
+            optimizer = 'adam'  # Just write anything because we won't be using it
+            schedule = None
         if is_regression:
             metrics = []
         else:
@@ -461,14 +463,8 @@ def main():
         if not push_to_hub_model_id:
             push_to_hub_model_id = f"{model_name}-finetuned-glue"
 
-        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "summarization"}
-        if data_args.dataset_name is not None:
-            model_card_kwargs["dataset_tags"] = data_args.dataset_name
-            if data_args.dataset_config_name is not None:
-                model_card_kwargs["dataset_args"] = data_args.dataset_config_name
-                model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
-            else:
-                model_card_kwargs["dataset"] = data_args.dataset_name
+        model_card_kwargs = dict()
+        model_card_kwargs["task_name"] = data_args.task_name
 
         if training_args.push_to_hub:
             callbacks = [
@@ -529,6 +525,10 @@ def main():
                 eval_metrics = compute_metrics(eval_predictions, raw_dataset["label"])
                 print(f"Evaluation metrics ({task}):")
                 print(eval_metrics)
+                if training_args.output_dir is not None:
+                    output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+                    with open(output_eval_file, "w") as writer:
+                        writer.write(json.dumps(eval_metrics))
 
         # endregion
 
