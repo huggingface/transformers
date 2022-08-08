@@ -649,7 +649,6 @@ class DisentangledSelfAttention(nn.Module):
         scale_factor = 1 + len(self.pos_att_type)
         scale = torch.sqrt(torch.tensor(query_layer.size(-1) * scale_factor, dtype=torch.float))
         query_layer = query_layer / scale
-        # attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         attention_scores = torch.matmul(torch.tensor(query_layer, dtype=key_layer.dtype), key_layer.transpose(-1, -2))
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
@@ -718,8 +717,6 @@ class DisentangledSelfAttention(nn.Module):
             else:
                 r_pos = relative_pos
             p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
-            print(f"The type of key_layer is {key_layer.dtype}")
-            print(f"The type of pos_query_layer is {pos_query_layer.dtype}")
             p2c_att = torch.matmul(key_layer, torch.tensor(pos_query_layer.transpose(-1, -2), dtype=key_layer.dtype))
             p2c_att = torch.gather(
                 p2c_att, dim=-1, index=p2c_dynamic_expand(p2c_pos, query_layer, key_layer)
