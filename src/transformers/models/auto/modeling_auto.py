@@ -642,6 +642,13 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+MODEL_FOR_ENTITY_PAIR_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    # Model for Entity Pair Classification
+    [
+        ("luke", "LukeForEntityPairClassification"),
+    ]
+)
+
 MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Multiple Choice mapping
@@ -803,6 +810,10 @@ MODEL_FOR_AUDIO_FRAME_CLASSIFICATION_MAPPING = _LazyAutoMapping(
 )
 MODEL_FOR_AUDIO_XVECTOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES)
 
+MODEL_FOR_ENTITY_PAIR_CLASSIFICATION_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, MODEL_FOR_ENTITY_PAIR_CLASSIFICATION_MAPPING_NAMES
+)
+
 
 class AutoModel(_BaseAutoModelClass):
     _model_mapping = MODEL_MAPPING
@@ -855,6 +866,17 @@ class AutoModelForSequenceClassification(_BaseAutoModelClass):
 
 AutoModelForSequenceClassification = auto_class_update(
     AutoModelForSequenceClassification, head_doc="sequence classification"
+)
+
+
+class AutoModelForEntityPairClassification(_BaseAutoModelClass):
+    _model_mapping = MODEL_FOR_ENTITY_PAIR_CLASSIFICATION_MAPPING
+
+
+AutoModelForEntityPairClassification = auto_class_update(
+    AutoModelForEntityPairClassification,
+    head_doc="entity pair classification",
+    checkpoint_for_example="studio-ousia/luke-base",
 )
 
 

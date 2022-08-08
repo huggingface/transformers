@@ -66,6 +66,7 @@ else:
         "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
         "MODEL_FOR_VISION_2_SEQ_MAPPING",
         "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
+        "MODEL_FOR_ENTITY_PAIR_CLASSIFICATION",
         "MODEL_MAPPING",
         "MODEL_WITH_LM_HEAD_MAPPING",
         "AutoModel",
@@ -94,6 +95,7 @@ else:
         "AutoModelForVision2Seq",
         "AutoModelForVisualQuestionAnswering",
         "AutoModelWithLMHead",
+        "AutoModelForEntityPairClassification",
     ]
 
 try:
@@ -209,6 +211,7 @@ if TYPE_CHECKING:
             MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
             MODEL_FOR_VISION_2_SEQ_MAPPING,
             MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_ENTITY_PAIR_CLASSIFICATION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
@@ -237,6 +240,7 @@ if TYPE_CHECKING:
             AutoModelForVision2Seq,
             AutoModelForVisualQuestionAnswering,
             AutoModelWithLMHead,
+            AutoModelForEntityPairClassification,
         )
 
     try:

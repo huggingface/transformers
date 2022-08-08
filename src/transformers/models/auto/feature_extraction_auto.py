@@ -55,6 +55,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("layoutlmv2", "LayoutLMv2FeatureExtractor"),
         ("layoutlmv3", "LayoutLMv3FeatureExtractor"),
         ("levit", "LevitFeatureExtractor"),
+        ("luke", "LukeFeatureExtractor"),
         ("maskformer", "MaskFormerFeatureExtractor"),
         ("mctct", "MCTCTFeatureExtractor"),
         ("mobilevit", "MobileViTFeatureExtractor"),
