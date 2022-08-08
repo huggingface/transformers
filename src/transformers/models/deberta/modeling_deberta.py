@@ -701,10 +701,9 @@ class DisentangledSelfAttention(nn.Module):
         if "c2p" in self.pos_att_type:
             pos_key_layer = self.pos_proj(rel_embeddings)
             pos_key_layer = self.transpose_for_scores(pos_key_layer)
-            # c2p_att = torch.matmul(
-            #     torch.tensor(query_layer, dtype=pos_key_layer.dtype), pos_key_layer.transpose(-1, -2)
-            # )
-            c2p_att = torch.matmul(query_layer, pos_key_layer.transpose(-1, -2))
+            c2p_att = torch.matmul(
+                torch.tensor(query_layer, dtype=pos_key_layer.dtype), pos_key_layer.transpose(-1, -2)
+            )
             c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1)
             c2p_att = torch.gather(c2p_att, dim=-1, index=c2p_dynamic_expand(c2p_pos, query_layer, relative_pos))
             score += c2p_att
