@@ -633,7 +633,10 @@ def main():
         push_to_hub_model_id = training_args.push_to_hub_model_id
         model_name = model_args.model_name_or_path.split('/')[-1]
         if not push_to_hub_model_id:
-            push_to_hub_model_id = f"{model_name}-finetuned-{data_args.source_lang}-{data_args.target_lang}"
+            if data_args.dataset_name is not None:
+                push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
+            else:
+                push_to_hub_model_id = f"{model_name}-finetuned-summarization"
 
         model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "summarization"}
         if data_args.dataset_name is not None:
