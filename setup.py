@@ -144,7 +144,6 @@ _deps = [
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
-    "resampy<0.3.1",
     "rjieba",
     "rouge-score",
     "sacrebleu>=1.4.12,<2.0.0",
@@ -270,7 +269,7 @@ extras["sigopt"] = deps_list("sigopt")
 extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "resampy")  # resampy can be removed once unpinned.
+extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer")
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
