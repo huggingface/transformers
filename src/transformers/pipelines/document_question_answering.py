@@ -195,7 +195,9 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             - **answer** (`str`) -- The answer to the question.
         """
         if isinstance(question, str):
-            inputs = {"question": question, "image": image, "word_boxes": word_boxes}
+            inputs = {"question": question, "image": image}
+            if word_boxes is not None:
+                inputs["word_boxes"] = word_boxes
         else:
             inputs = image
         return super().__call__(inputs, **kwargs)
