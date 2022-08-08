@@ -504,9 +504,6 @@ def main():
             else:
                 model_card_kwargs["dataset"] = data_args.dataset_name
 
-        if data.args.get("lang", None) is not None:
-            model_card_kwargs["language"] = data_args.lang
-
         if training_args.push_to_hub:
             callbacks = [
                 PushToHubCallback(
