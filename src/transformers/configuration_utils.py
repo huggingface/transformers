@@ -351,6 +351,8 @@ class PretrainedConfig(PushToHubMixin):
 
         # Name or path to the pretrained checkpoint
         self._name_or_path = str(kwargs.pop("name_or_path", ""))
+        # Config hash
+        self._config_hash = kwargs.pop("_config_hash", None)
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
