@@ -332,8 +332,8 @@ class CLIPOnnxConfig(OnnxConfig):
         return OrderedDict(
             [
                 ("input_ids", {0: "batch", 1: "sequence"}), 
-                ("attention_mask", {0: "batch", 1: "sequence"}), 
-                ("pixel_values", {0: "batch"})
+                ("pixel_values", {0: "batch"}),
+                ("attention_mask", {0: "batch", 1: "sequence"})
             ]
         )
 
