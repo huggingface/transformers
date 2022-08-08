@@ -571,6 +571,12 @@ def main():
                 metrics = metric.compute(predictions=decoded_preds, references=decoded_labels)
                 return {"bleu": metrics["score"]}
 
+            # The KerasMetricCallback allows metrics that are too complex to write as standard Keras metrics
+            # to be computed each epoch. Any Python code can be included in the metric_fn. This is especially
+            # useful for metrics like BLEU and ROUGE that perform string comparisons on decoded model outputs.
+            # For more information, see the docs at
+            # https://huggingface.co/docs/transformers/main_classes/keras_callbacks#transformers.KerasMetricCallback
+
             metric_callback = KerasMetricCallback(
                 metric_fn=compute_metrics,
                 eval_dataset=tf_eval_dataset,
