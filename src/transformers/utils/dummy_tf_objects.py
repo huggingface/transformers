@@ -279,6 +279,9 @@ TF_MODEL_FOR_PRETRAINING_MAPPING = None
 TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = None
 
 
+TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING = None
+
+
 TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING = None
 
 
@@ -864,6 +867,44 @@ class TFDebertaV2Model(metaclass=DummyObject):
 
 
 class TFDebertaV2PreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+TF_DEIT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFDeiTForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFDeiTForImageClassificationWithTeacher(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFDeiTForMaskedImageModeling(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFDeiTModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFDeiTPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
@@ -1786,6 +1827,30 @@ class TFRemBertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_RESNET_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFResNetForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFResNetModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFResNetPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -1912,6 +1977,44 @@ class TFRoFormerModel(metaclass=DummyObject):
 
 
 class TFRoFormerPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFSegformerDecodeHead(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSegformerForImageClassification(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSegformerForSemanticSegmentation(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSegformerModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFSegformerPreTrainedModel(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):

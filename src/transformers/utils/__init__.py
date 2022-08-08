@@ -22,6 +22,7 @@
 from packaging import version
 
 from .. import __version__
+from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from .doc import (
     add_code_sample_docstrings,
     add_end_docstrings,
@@ -42,6 +43,7 @@ from .generic import (
     is_tensor,
     to_numpy,
     to_py_obj,
+    working_or_temp_dir,
 )
 from .hub import (
     CLOUDFRONT_DISTRIB_PREFIX,
@@ -58,6 +60,7 @@ from .hub import (
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
+    cached_file,
     cached_path,
     default_cache_path,
     define_sagemaker_information,
@@ -74,6 +77,7 @@ from .hub import (
     is_local_clone,
     is_offline_mode,
     is_remote_url,
+    move_cache,
     send_example_telemetry,
     url_to_filename,
 )
@@ -87,6 +91,7 @@ from .import_utils import (
     DummyObject,
     OptionalDependencyNotAvailable,
     _LazyModule,
+    ccl_version,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
@@ -109,6 +114,7 @@ from .import_utils import (
     is_pytesseract_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
+    is_sacremoses_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_scatter_available,
@@ -132,6 +138,7 @@ from .import_utils import (
     is_torch_fx_available,
     is_torch_fx_proxy,
     is_torch_onnx_dict_inputs_support_available,
+    is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
