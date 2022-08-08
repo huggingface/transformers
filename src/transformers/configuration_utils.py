@@ -21,13 +21,22 @@ import json
 import os
 import re
 import warnings
+from distutils.command.config import config
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from packaging import version
 
 from . import __version__
 from .dynamic_module_utils import custom_object_save
-from .utils import CONFIG_NAME, PushToHubMixin, cached_file, copy_func, is_torch_available, logging
+from .utils import (
+    CONFIG_NAME,
+    PushToHubMixin,
+    cached_file,
+    copy_func,
+    extract_commit_hash,
+    is_torch_available,
+    logging,
+)
 
 
 logger = logging.get_logger(__name__)
@@ -539,6 +548,8 @@ class PretrainedConfig(PushToHubMixin):
         original_kwargs = copy.deepcopy(kwargs)
         # Get config dict associated with the base config file
         config_dict, kwargs = cls._get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if "_commit_hash" in config_dict:
+            original_kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
         # That config file may point us toward another config file to use.
         if "configuration_files" in config_dict:
@@ -564,6 +575,7 @@ class PretrainedConfig(PushToHubMixin):
         subfolder = kwargs.pop("subfolder", "")
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
+        commit_hash = kwargs.pop("_commit_hash", None)
 
         if trust_remote_code is True:
             logger.warning(
@@ -599,7 +611,9 @@ class PretrainedConfig(PushToHubMixin):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
+                    _commit_hash=commit_hash,
                 )
+                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -616,6 +630,7 @@ class PretrainedConfig(PushToHubMixin):
         try:
             # Load config dict
             config_dict = cls._dict_from_json_file(resolved_config_file)
+            config_dict["_commit_hash"] = commit_hash
         except (json.JSONDecodeError, UnicodeDecodeError):
             raise EnvironmentError(
                 f"It looks like the config file at '{resolved_config_file}' is not a valid JSON file."
@@ -648,6 +663,8 @@ class PretrainedConfig(PushToHubMixin):
         # We remove them so they don't appear in `return_unused_kwargs`.
         kwargs.pop("_from_auto", None)
         kwargs.pop("_from_pipeline", None)
+        if "_commit_hash" in kwargs and "_commit_hash" in config_dict:
+            kwargs["_commit_hash"] = config_dict["_commit_hash"]
 
         config = cls(**config_dict)
 
@@ -751,6 +768,8 @@ class PretrainedConfig(PushToHubMixin):
             output["model_type"] = self.__class__.model_type
         if "_auto_class" in output:
             del output["_auto_class"]
+        if "_commit_hash" in output:
+            del output["_commit_hash"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__

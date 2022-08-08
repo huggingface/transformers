@@ -1795,6 +1795,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", None)
         subfolder = kwargs.pop("subfolder", "")
+        commit_hash = kwargs.pop("_commit_hash", None)
 
         if trust_remote_code is True:
             logger.warning(
@@ -1851,6 +1852,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         else:
             model_kwargs = kwargs
+
+        if commit_hash is None:
+            commit_hash = config._commit_hash
 
         # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
         # index of the files.
@@ -1938,6 +1942,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         revision=revision,
                         subfolder=subfolder,
                         _raise_exceptions_for_missing_entries=False,
+                        _commit_hash=commit_hash,
                     )
                     resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 

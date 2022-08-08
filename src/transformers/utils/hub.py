@@ -200,11 +200,26 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     return ua
 
 
-def try_to_load_from_cache(cache_dir, repo_id, filename, revision=None):
+def extract_commit_hash(resolved_file, commit_hash):
+    """
+    Extracts the commit hash from a resolved filename toward a cache file.
+    """
+    if resolved_file is None or commit_hash is not None:
+        return commit_hash
+
+    search = re.search(r"snapshots/([^/]+)/", resolved_file)
+    if search is None:
+        return None
+    return search.groups()[0]
+
+
+def try_to_load_from_cache(cache_dir, repo_id, filename, revision=None, commit_hash=None):
     """
     Explores the cache to return the latest cached file for a given revision.
     """
-    if revision is None:
+    if commit_hash is not None and revision is not None:
+        raise ValueError("`commit_hash` and `revision` are mutually exclusive, pick one only.")
+    if revision is None and commit_hash is None:
         revision = "main"
 
     model_id = repo_id.replace("/", "--")
@@ -216,18 +231,19 @@ def try_to_load_from_cache(cache_dir, repo_id, filename, revision=None):
         if not os.path.isdir(os.path.join(model_cache, subfolder)):
             return None
 
-    # Resolve refs (for instance to convert main to the associated commit sha)
-    cached_refs = os.listdir(os.path.join(model_cache, "refs"))
-    if revision in cached_refs:
-        with open(os.path.join(model_cache, "refs", revision)) as f:
-            revision = f.read()
+    if commit_hash is None:
+        # Resolve refs (for instance to convert main to the associated commit sha)
+        cached_refs = os.listdir(os.path.join(model_cache, "refs"))
+        if revision in cached_refs:
+            with open(os.path.join(model_cache, "refs", revision)) as f:
+                commit_hash = f.read()
 
     cached_shas = os.listdir(os.path.join(model_cache, "snapshots"))
-    if revision not in cached_shas:
+    if commit_hash not in cached_shas:
         # No cache for this revision and we won't try to return a random revision
         return None
 
-    cached_file = os.path.join(model_cache, "snapshots", revision, filename)
+    cached_file = os.path.join(model_cache, "snapshots", commit_hash, filename)
     return cached_file if os.path.isfile(cached_file) else None
 
 
@@ -265,8 +281,9 @@ def cached_file(
     local_files_only: bool = False,
     subfolder: str = "",
     user_agent: Optional[Union[str, Dict[str, str]]] = None,
-    _raise_exceptions_for_missing_entries=True,
-    _raise_exceptions_for_connection_errors=True,
+    _raise_exceptions_for_missing_entries: bool = True,
+    _raise_exceptions_for_connection_errors: bool = True,
+    _commit_hash: Optional[str] = None,
 ):
     """
     Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
@@ -318,6 +335,13 @@ def cached_file(
     # Download a model weight from the Hub and cache it.
     model_weights_file = cached_file("bert-base-uncased", "pytorch_model.bin")
     ```"""
+    # Private arguments
+    #     _raise_exceptions_for_missing_entries: if False, do not raise an exception for missing entries but return
+    #         None.
+    #     _raise_exceptions_for_connection_errors: if False, do not raise an exception for connection errors but return
+    #         None.
+    #     _commit_hash: passed when we are chaining several calls to various files (e.g. when loading a tokenizer or
+    #         a pipeline). If files are cached for this commit hash, avoid calls to head and get from the cache.
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
@@ -339,6 +363,13 @@ def cached_file(
         cache_dir = TRANSFORMERS_CACHE
     if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
+
+    if _commit_hash is not None:
+        # If the file is cached under that commit hash, we return it directly.
+        resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, commit_hash=_commit_hash)
+        if resolved_file is not None:
+            return resolved_file
+
     user_agent = http_user_agent(user_agent)
     try:
         # Load from URL or cache if already cached
