@@ -1,3 +1,4 @@
+import types
 import warnings
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
@@ -22,8 +23,11 @@ if is_tf_available():
 
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
+    Dataset = None
+
 if is_torch_available():
     import torch
+    from torch.utils.data import Dataset
 
     from ..models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
@@ -81,6 +85,11 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
                 raise ValueError("Arguments can't be understood")
         else:
             raise ValueError(f"Unknown arguments {kwargs}")
+
+        # When user is sending a generator we need to trust it's a valid example
+        generator_types = (types.GeneratorType, Dataset) if Dataset is not None else (types.GeneratorType,)
+        if isinstance(inputs, generator_types):
+            return inputs
 
         # Normalize inputs
         if isinstance(inputs, dict):
@@ -245,12 +254,18 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         """
 
         # Convert inputs to features
+
         examples = self._args_parser(*args, **kwargs)
-        if len(examples) == 1:
+        if isinstance(examples, (list, tuple)) and len(examples) == 1:
             return super().__call__(examples[0], **kwargs)
         return super().__call__(examples, **kwargs)
 
     def preprocess(self, example, padding="do_not_pad", doc_stride=None, max_question_len=64, max_seq_len=None):
+        # XXX: This is specal, args_parser will not handle anything generator or dataset like
+        # For those we expect user to send a simple valid example either directly as a SquadExample or simple dict.
+        # So we still need a little sanitation here.
+        if isinstance(example, dict):
+            example = SquadExample(None, example["question"], example["context"], None, None, None)
 
         if max_seq_len is None:
             max_seq_len = min(self.tokenizer.model_max_length, 384)
