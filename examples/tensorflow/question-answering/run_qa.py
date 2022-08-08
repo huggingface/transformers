@@ -611,6 +611,7 @@ def main():
 
         dataset_options = tf.data.Options()
         dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+        num_replicas = training_args.strategy.num_replicas_in_sync
 
         # region Load model and prepare datasets
         if checkpoint is None:
@@ -629,7 +630,7 @@ def main():
             training_dataset = model.prepare_tf_dataset(
                 processed_datasets["train"],
                 shuffle=True,
-                batch_size=training_args.per_device_train_batch_size,
+                batch_size=training_args.per_device_train_batch_size * num_replicas,
                 tokenizer=tokenizer,
             )
 
@@ -661,11 +662,12 @@ def main():
             model.compile(optimizer=None, jit_compile=training_args.xla, metrics=['accuracy'])
             training_dataset = None
 
+
         if training_args.do_eval:
             eval_dataset = model.prepare_tf_dataset(
                 processed_datasets["validation"],
                 shuffle=False,
-                batch_size=training_args.per_device_train_batch_size,
+                batch_size=training_args.per_device_train_batch_size * num_replicas,
                 tokenizer=tokenizer,
             )
             eval_dataset = eval_dataset.with_options(dataset_options)
@@ -676,7 +678,7 @@ def main():
             predict_dataset = model.prepare_tf_dataset(
                 processed_datasets["test"],
                 shuffle=False,
-                batch_size=training_args.per_device_train_batch_size,
+                batch_size=training_args.per_device_eval_batch_size * num_replicas,
                 tokenizer=tokenizer,
             )
             predict_dataset = predict_dataset.with_options(dataset_options)

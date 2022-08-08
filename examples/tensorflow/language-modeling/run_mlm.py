@@ -508,7 +508,7 @@ def main():
             eval_dataset,
             # labels are passed as input, as we will use the model's internal loss
             shuffle=False,
-            batch_size=num_replicas * training_args.per_device_train_batch_size,
+            batch_size=num_replicas * training_args.per_device_eval_batch_size,
             collate_fn=data_collator,
             drop_remainder=True,
         ).with_options(options)

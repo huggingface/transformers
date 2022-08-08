@@ -398,6 +398,7 @@ def main():
         # region Convert data to a tf.data.Dataset
         dataset_options = tf.data.Options()
         dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+        num_replicas = training_args.strategy.num_replicas_in_sync
 
         tf_data = dict()
         max_samples = {
@@ -415,10 +416,10 @@ def main():
                 assert "label" in datasets[key].features, f"Missing labels from {key} data!"
             if key == "train":
                 shuffle = True
-                batch_size = training_args.per_device_train_batch_size
+                batch_size = training_args.per_device_train_batch_size * num_replicas
             else:
                 shuffle = False
-                batch_size = training_args.per_device_eval_batch_size
+                batch_size = training_args.per_device_eval_batch_size * num_replicas
             samples_limit = max_samples[key]
             dataset = datasets[key]
             if samples_limit is not None:

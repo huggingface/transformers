@@ -460,7 +460,7 @@ def main():
         tf_eval_dataset = model.prepare_tf_dataset(
             eval_dataset,
             shuffle=False,
-            batch_size=num_replicas * training_args.per_device_train_batch_size,
+            batch_size=num_replicas * training_args.per_device_eval_batch_size,
             drop_remainder=True,
         ).with_options(options)
         # endregion
