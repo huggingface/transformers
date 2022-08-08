@@ -722,9 +722,7 @@ class DisentangledSelfAttention(nn.Module):
             p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
             print(f"The type of key_layer is {key_layer.dtype}")
             print(f"The type of pos_query_layer is {pos_query_layer.dtype}")
-            p2c_att = torch.matmul(
-                torch.tensor(key_layer, dtype=pos_query_layer.dtype), pos_query_layer.transpose(-1, -2)
-            )
+            p2c_att = torch.matmul(key_layer, torch.tensor(pos_query_layer.transpose(-1, -2), dtype=key_layer.dtype))
             p2c_att = torch.gather(
                 p2c_att, dim=-1, index=p2c_dynamic_expand(p2c_pos, query_layer, key_layer)
             ).transpose(-1, -2)
