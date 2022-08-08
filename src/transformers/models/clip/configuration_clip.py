@@ -17,15 +17,15 @@
 import copy
 import os
 from collections import OrderedDict
+from typing import TYPE_CHECKING, Any, Mapping, Optional, Union
 
-from typing import TYPE_CHECKING, Any, Mapping, Union, Optional
 
 if TYPE_CHECKING:
     from ...processing_utils import ProcessorMixin
     from ...utils import TensorType
 
-from ...onnx import OnnxConfig
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 

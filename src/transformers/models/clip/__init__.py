@@ -32,9 +32,9 @@ _import_structure = {
     "configuration_clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPConfig",
+        "CLIPOnnxConfig",
         "CLIPTextConfig",
         "CLIPVisionConfig",
-        "CLIPOnnxConfig",
     ],
     "tokenization_clip": ["CLIPTokenizer"],
 }
@@ -104,9 +104,9 @@ if TYPE_CHECKING:
     from .configuration_clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPConfig,
+        CLIPOnnxConfig,
         CLIPTextConfig,
         CLIPVisionConfig,
-        CLIPOnnxConfig,
     )
     from .tokenization_clip import CLIPTokenizer
 
