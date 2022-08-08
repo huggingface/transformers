@@ -229,7 +229,7 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
     """
     q_ids = torch.arange(0, query_size)
     k_ids = torch.arange(0, key_size)
-    rel_pos_ids = q_ids[:, None] - k_ids.repeat(q_ids.shape[0], 1)
+    rel_pos_ids = q_ids[:, None] - k_ids.repeat(query_size, 1)
     if bucket_size > 0 and max_position > 0:
         rel_pos_ids = make_log_bucket_position(rel_pos_ids, bucket_size, max_position)
     rel_pos_ids = rel_pos_ids.to(torch.long)
