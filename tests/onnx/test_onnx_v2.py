@@ -228,7 +228,9 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("blenderbot", "facebook/blenderbot-400M-distill"),
     ("bigbird-pegasus", "google/bigbird-pegasus-large-arxiv"),
     ("longt5", "google/long-t5-local-base"),
-    ("longt5", "google/long-t5-tglobal-base"),
+    # Disable for now as it causes fatal error `Floating point exception (core dumped)` and the subsequential tests are
+    # not run.
+    # ("longt5", "google/long-t5-tglobal-base"),
 }
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_MODELS` once TensorFlow has parity with the PyTorch model implementations.

@@ -287,7 +287,7 @@ def cached_file(
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`).
+            when running `huggingface-cli login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -441,7 +441,7 @@ def get_file_from_repo(
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`).
+            when running `huggingface-cli login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -648,8 +648,8 @@ class PushToHubMixin:
                 Whether or not the repository created should be private (requires a paying subscription).
             use_auth_token (`bool` or `str`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `transformers-cli login` (stored in `~/.huggingface`). Will default to `True` if
-                `repo_url` is not specified.
+                when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
+                is not specified.
             max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
                 Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
                 will then be each of size lower than this size. If expressed as a string, needs to be digits followed
@@ -1024,7 +1024,7 @@ if cache_version < 1:
         )
     else:
         logger.warn(
-            "The cache for model files in Transformers v4.22.0 has been udpated. Migrating your old cache. This is a "
+            "The cache for model files in Transformers v4.22.0 has been updated. Migrating your old cache. This is a "
             "one-time only operation. You can interrupt this and resume the migration later on by calling "
             "`transformers.utils.move_cache()`."
         )
