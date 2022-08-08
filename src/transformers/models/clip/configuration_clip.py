@@ -18,10 +18,11 @@ import copy
 import os
 from collections import OrderedDict
 
-from typing import Any, Mapping, Union, Optional
+from typing import TYPE_CHECKING, Any, Mapping, Union, Optional
 
-from transformers import TensorType
-from transformers.processing_utils import ProcessorMixin
+if TYPE_CHECKING:
+    from ...processing_utils import ProcessorMixin
+    from ...utils import TensorType
 
 from ...onnx import OnnxConfig
 from ...configuration_utils import PretrainedConfig
@@ -353,8 +354,8 @@ class CLIPOnnxConfig(OnnxConfig):
 
     def generate_dummy_inputs(
         self,
-        processor: ProcessorMixin,
-        framework: Optional[TensorType] = None,
+        processor: "ProcessorMixin",
+        framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
 
         text_input_dict = super().generate_dummy_inputs(processor.tokenizer, framework=framework)
