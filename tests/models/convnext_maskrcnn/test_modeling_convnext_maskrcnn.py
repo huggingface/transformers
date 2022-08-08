@@ -275,6 +275,12 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_training_object_detection_head(self):
+        # make random mask reproducible
+        # note that the same seed on CPU and on GPU doesn’t mean they spew the same random number sequences,
+        # as they both have fairly different PRNGs (for efficiency reasons).
+        # source: https://discuss.pytorch.org/t/random-seed-that-spans-across-devices/19735
+        torch.manual_seed(2)
+
         # TODO update to appropriate organization
         model = ConvNextMaskRCNNForObjectDetection.from_pretrained("nielsr/convnext-tiny-maskrcnn").to(torch_device)
 
@@ -329,6 +335,12 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
             outputs = model(img.to(torch_device), img_metas=img_metas, labels=labels)
             losses = outputs.losses
 
-        # TODO verify the results
-        print(losses)
-        raise NotImplementedError("To do")
+        # verify the losses
+        expected_loss_gpu = {
+            "loss_cls": torch.tensor(0.1540, device=torch_device),
+            "loss_bbox": torch.tensor(0.0940, device=torch_device),
+            "acc": torch.tensor([93.5547], device=torch_device),
+            "loss_mask": torch.tensor([0.1787], device=torch_device),
+        }
+        for key, value in expected_loss_gpu.items():
+            self.assertTrue(torch.allclose(losses[key], value, atol=1e-4))
