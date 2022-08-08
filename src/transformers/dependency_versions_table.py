@@ -50,7 +50,6 @@ deps = {
     "ray[tune]": "ray[tune]",
     "regex": "regex!=2019.12.17",
     "requests": "requests",
-    "resampy": "resampy<0.3.1",
     "rjieba": "rjieba",
     "rouge-score": "rouge-score",
     "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
