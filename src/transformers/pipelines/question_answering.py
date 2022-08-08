@@ -87,7 +87,8 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
             raise ValueError(f"Unknown arguments {kwargs}")
 
         # When user is sending a generator we need to trust it's a valid example
-        if isinstance(inputs, (types.GeneratorType, Dataset)):
+        generator_types = (types.GeneratorType, Dataset) if Dataset is not None else (types.GeneratorType,)
+        if isinstance(inputs, generator_types):
             return inputs
 
         # Normalize inputs
