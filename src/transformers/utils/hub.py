@@ -26,8 +26,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-import traceback
 import time
+import traceback
 import warnings
 from contextlib import contextmanager
 from functools import partial
