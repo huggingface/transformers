@@ -488,7 +488,7 @@ class JukeboxBottleneckBlock(nn.Module):
 
         # Update embeddings
         if update_codebook:
-            update_metrics = self.update_codebook(hidden_states, latent_states)
+            update_metrics = self.update_codebook(hidden_states, music_tokens)
         else:
             update_metrics = {}
 
@@ -499,8 +499,8 @@ class JukeboxBottleneckBlock(nn.Module):
         dequantised_states = hidden_states + (dequantised_states - hidden_states).detach()
 
         # Postprocess
-        latent_states, dequantised_states = self.postprocess(latent_states, dequantised_states, (samples, seq_length))
-        return latent_states, dequantised_states, commit_loss, dict(fit=fit, pn=prenorm, **update_metrics)
+        music_tokens, dequantised_states = self.postprocess(music_tokens, dequantised_states, (samples, seq_length))
+        return music_tokens, dequantised_states, commit_loss, dict(fit=fit, pn=prenorm, **update_metrics)
 
 
 class JukeboxBottleneck(nn.Module):
@@ -1839,6 +1839,7 @@ def split_chunks(length, chunk_size):
     return chunk_sizes
 
 
+# second most important renaming
 class MusicTokenConditioner(nn.Module):
     """
     The MusicTokenConditioner takes music tokens as an input (coresponding to vocabularies in the VQ-VAE codebook) and
@@ -2540,9 +2541,9 @@ def get_starts(total_length, n_ctx, hop_length):
 
 
 # TODO fix this, consumes too much RAM
-def get_alignment(x, music_tokens, labels, prior, level, fp16, hps):
+def get_alignment(music_tokens, labels, prior, level, fp16, hps):
     level = level - 1  # Top level used
-    n_ctx, n_tokens = prior.n_ctx, prior.n_tokens
+    n_ctx = prior.n_ctx
     tokens = music_tokens[level]
     bs, total_length = tokens.shape[0], tokens.shape[1]
     if total_length < n_ctx:
@@ -2641,6 +2642,7 @@ def load_prompts(audio_files, duration, hps):
     return raw_audio
 
 
+# a little bit of renaming to do here, especially regarind "z"
 @add_start_docstrings(
     "The bare JUKEBOX Model from which you can sample",
     JUKEBOX_START_DOCSTRING,
@@ -2823,7 +2825,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 if alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0:
                     empty_cache()
                     alignments = get_alignment(
-                        raw_audio,
                         music_tokens,
                         labels[-1],
                         self.priors[-1],
