@@ -1659,7 +1659,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 Whether or not to only look at local files (i.e., do not try to download the model).
             use_auth_token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `transformers-cli login` (stored in `~/.huggingface`).
+                when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -1784,7 +1784,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
-        mirror = kwargs.pop("mirror", None)
+        _ = kwargs.pop("mirror", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         _fast_init = kwargs.pop("_fast_init", True)
@@ -1955,7 +1955,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         # message.
                         has_file_kwargs = {
                             "revision": revision,
-                            "mirror": mirror,
                             "proxies": proxies,
                             "use_auth_token": use_auth_token,
                         }
@@ -2012,7 +2011,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 use_auth_token=use_auth_token,
                 user_agent=user_agent,
                 revision=revision,
-                mirror=mirror,
                 subfolder=subfolder,
             )
 

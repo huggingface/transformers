@@ -157,7 +157,7 @@ Here we get a list of objects detected in the image, with a box surrounding the 
 
 You can learn more about the tasks supported by the `pipeline` API in [this tutorial](https://huggingface.co/docs/transformers/task_summary).
 
-To download and use any of the pretrained models on your given task, all it takes is three lines of code. Here is the PyTorch version:
+In addition to `pipeline`, to download and use any of the pretrained models on your given task, all it takes is three lines of code. Here is the PyTorch version:
 ```python
 >>> from transformers import AutoTokenizer, AutoModel
 
@@ -181,7 +181,7 @@ And here is the equivalent code for TensorFlow:
 
 The tokenizer is responsible for all the preprocessing the pretrained model expects, and can be called directly on a single string (as in the above examples) or a list. It will output a dictionary that you can use in downstream code or simply directly pass to your model using the ** argument unpacking operator.
 
-The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or a [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) (depending on your backend) which you can use normally. [This tutorial](https://huggingface.co/docs/transformers/training) explains how to integrate such a model into a classic PyTorch or TensorFlow training loop, or how to use our `Trainer` API to quickly fine-tune on a new dataset.
+The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or a [TensorFlow `tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) (depending on your backend) which you can use as usual. [This tutorial](https://huggingface.co/docs/transformers/training) explains how to integrate such a model into a classic PyTorch or TensorFlow training loop, or how to use our `Trainer` API to quickly fine-tune on a new dataset.
 
 ## Why should I use transformers?
 
@@ -194,7 +194,7 @@ The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/sta
 1. Lower compute costs, smaller carbon footprint:
     - Researchers can share trained models instead of always retraining.
     - Practitioners can reduce compute time and production costs.
-    - Dozens of architectures with over 20,000 pretrained models, some in more than 100 languages.
+    - Dozens of architectures with over 60,000 pretrained models across all modalities.
 
 1. Choose the right framework for every part of a model's lifetime:
     - Train state-of-the-art models in 3 lines of code.
@@ -209,7 +209,7 @@ The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/sta
 ## Why shouldn't I use transformers?
 
 - This library is not a modular toolbox of building blocks for neural nets. The code in the model files is not refactored with additional abstractions on purpose, so that researchers can quickly iterate on each of the models without diving into additional abstractions/files.
-- The training API is not intended to work on any model but is optimized to work with the models provided by the library. For generic machine learning loops, you should use another library.
+- The training API is not intended to work on any model but is optimized to work with the models provided by the library. For generic machine learning loops, you should use another library (possibly, [Accelerate](https://huggingface.co/docs/accelerate)).
 - While we strive to present as many use cases as possible, the scripts in our [examples folder](https://github.com/huggingface/transformers/tree/main/examples) are just that: examples. It is expected that they won't work out-of-the box on your specific problem and that you will be required to change a few lines of code to adapt them to your needs.
 
 ## Installation

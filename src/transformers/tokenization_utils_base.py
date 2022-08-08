@@ -1596,7 +1596,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             use_auth_token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `transformers-cli login` (stored in `~/.huggingface`).
+                when running `huggingface-cli login` (stored in `~/.huggingface`).
             local_files_only (`bool`, *optional*, defaults to `False`):
                 Whether or not to only rely on local files and not to attempt to download any files.
             revision (`str`, *optional*, defaults to `"main"`):
@@ -1713,7 +1713,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         resolved_vocab_files = {}
         unresolved_files = []
         for file_id, file_path in vocab_files.items():
-            print(file_id, file_path)
             if file_path is None:
                 resolved_vocab_files[file_id] = None
             else:
