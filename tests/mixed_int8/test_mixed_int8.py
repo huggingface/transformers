@@ -49,7 +49,7 @@ class BaseMixedInt8Test(unittest.TestCase):
     )
 
     input_text = "Hello my name is"
-    EXPECTED_OUTPUT = "Hello my name is John.\nI am a friend of your father.\n"
+    EXPECTED_OUTPUT = "Hello my name is John.\nI am a friend of the family.\n"
     MAX_NEW_TOKENS = 10
 
     def setUp(self):
