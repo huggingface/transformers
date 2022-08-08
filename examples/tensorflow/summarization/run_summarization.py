@@ -536,6 +536,16 @@ def main():
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
+
+        # model.prepare_tf_dataset() wraps a Hugging Face dataset in a tf.data.Dataset which is ready to use in
+        # training. This is the recommended way to use a Hugging Face dataset when training with Keras. You can also
+        # use the lower-level dataset.to_tf_dataset() method, but you will have to specify things like column names
+        # yourself if you use this method, whereas they are automatically inferred from the model input names when
+        # using model.prepare_tf_dataset()
+        # For more info see the docs:
+        # https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.TFPreTrainedModel.prepare_tf_dataset
+        # https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.to_tf_dataset
+
         tf_train_dataset = model.prepare_tf_dataset(
             train_dataset,
             collate_fn=data_collator,
@@ -674,6 +684,7 @@ def main():
             # Do a standalone evaluation run
             logger.info("Evaluation...")
 
+            # Compiling generation with XLA yields enormous speedups, see https://huggingface.co/blog/tf-xla-generate
             @tf.function(jit_compile=True)
             def generate(**kwargs):
                 return model.generate(**kwargs)
