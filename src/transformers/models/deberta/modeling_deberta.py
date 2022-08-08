@@ -187,6 +187,8 @@ class XDropout(torch.autograd.Function):
 
     @staticmethod
     def symbolic(g: torch._C.Graph, input: torch._C.Value, local_ctx: Union[float, DropoutContext]) -> torch._C.Value:
+        from torch.onnx import symbolic_opset12
+
         dropout_p = local_ctx
         if isinstance(local_ctx, DropoutContext):
             dropout_p = local_ctx.dropout
