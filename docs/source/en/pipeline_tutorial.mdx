@@ -12,7 +12,7 @@ specific language governing permissions and limitations under the License.
 
 # Pipelines for inference
 
-The [`pipeline`] makes it simple to use any model from the [Hub](https://huggingface.co/models) for inference on any language, computer vision, speech, and multimodal tasks. Even if you don't have experience with a specific modality or familiar with the underlying code behind the models, you can still use them for inference with the [`pipeline`]! This tutorial will teach you to:
+The [`pipeline`] makes it simple to use any model from the [Hub](https://huggingface.co/models) for inference on any language, computer vision, speech, and multimodal tasks. Even if you don't have experience with a specific modality or aren't familiar with the underlying code behind the models, you can still use them for inference with the [`pipeline`]! This tutorial will teach you to:
 
 * Use a [`pipeline`] for inference.
 * Use a specific tokenizer or model.
@@ -26,7 +26,7 @@ Take a look at the [`pipeline`] documentation for a complete list of supported t
 
 ## Pipeline usage
 
-While each task has an associated [`pipeline`], it is simpler to use the general [`pipeline`] abstraction which contains all the task-specific pipelines. The [`pipeline`] automatically loads a default model and tokenizer capable of inference for your task. 
+While each task has an associated [`pipeline`], it is simpler to use the general [`pipeline`] abstraction which contains all the task-specific pipelines. The [`pipeline`] automatically loads a default model and a preprocessing class capable of inference for your task.
 
 1. Start by creating a [`pipeline`] and specify an inference task:
 
