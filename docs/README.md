@@ -43,7 +43,7 @@ Once you have setup the `doc-builder` and additional packages, you can generate 
 typing the following command:
 
 ```bash
-doc-builder build transformers docs/source/ --build_dir ~/tmp/test-build
+doc-builder build transformers docs/source/en/ --build_dir ~/tmp/test-build
 ```
 
 You can adapt the `--build_dir` to set any temporary folder that you prefer. This command will create it and generate

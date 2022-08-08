@@ -377,6 +377,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     ],
     "optimization.py": "optimization/test_optimization.py",
     "optimization_tf.py": "optimization/test_optimization_tf.py",
+    "pipelines/__init__.py": "pipelines/test_pipelines_*.py",
     "pipelines/base.py": "pipelines/test_pipelines_*.py",
     "pipelines/text2text_generation.py": [
         "pipelines/test_pipelines_text2text_generation.py",

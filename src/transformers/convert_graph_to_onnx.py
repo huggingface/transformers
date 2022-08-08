@@ -273,6 +273,8 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
     import torch
     from torch.onnx import export
 
+    from .pytorch_utils import is_torch_less_than_1_11
+
     print(f"Using framework PyTorch: {torch.__version__}")
 
     with torch.no_grad():
@@ -281,7 +283,7 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
 
         # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
         # so we check the torch version for backwards compatibility
-        if parse(torch.__version__) <= parse("1.10.99"):
+        if is_torch_less_than_1_11:
             export(
                 nlp.model,
                 model_args,

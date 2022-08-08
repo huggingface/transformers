@@ -1352,8 +1352,8 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             loss_ = loss_fct(real, pred)
             mask = tf.cast(mask, dtype=loss_.dtype)
             loss_ *= mask
-
-            return tf.reduce_sum(loss_) / tf.reduce_sum(mask)
+            reduced_masked_loss = tf.reduce_sum(loss_) / tf.reduce_sum(mask)
+            return tf.reshape(reduced_masked_loss, (1,))
 
         main_loss = masked_loss(labels, upsampled_logits)
         auxiliary_loss = masked_loss(labels, upsampled_auxiliary_logits)
