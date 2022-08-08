@@ -146,8 +146,6 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
         [[-0.0836, -0.1298, -0.1237], [-0.0743, -0.1090, -0.0873], [-0.0231, 0.0851, 0.0792]]
     )
     assert torch.allclose(outputs.hidden_states[-1][0, 0, :3, :3], expected_slice, atol=1e-3)
-    print("Looks ok!")
-    # assert logits.shape == expected_shape
 
     # filter results
     bbox_results = outputs.results[0][0]
@@ -160,8 +158,10 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
     predicted_classes = [det[0] for det in detections]
     assert predicted_classes == [15, 15, 57, 57, 59, 65, 65, 79]
     predicted_bbox = detections[0][1]
-    print("Predicted bbox:", predicted_bbox)
-    # assert np.testing.assert_allclose(predicted_bbox, np.array([17.905708, 55.41647, 318.95575, 470.25925, 0.9981325], dtype=np.float32), atol=10)
+    assert np.allclose(
+        predicted_bbox, np.array([17.905708, 55.41647, 318.95575, 470.25925, 0.9981325], dtype=np.float32), atol=10
+    )
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)

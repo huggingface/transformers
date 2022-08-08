@@ -18,9 +18,11 @@
 import inspect
 import unittest
 
+import numpy as np
+
 from transformers import ConvNextMaskRCNNConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -28,6 +30,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
+    import torchvision.transforms as T
 
     from transformers import ConvNextMaskRCNNForObjectDetection, ConvNextMaskRCNNModel
     from transformers.models.convnext_maskrcnn.modeling_convnext_maskrcnn import (
@@ -37,8 +40,6 @@ if is_torch_available():
 
 if is_vision_available():
     from PIL import Image
-
-    from transformers import AutoFeatureExtractor
 
 
 class ConvNextMaskRCNNModelTester:
@@ -234,12 +235,39 @@ def prepare_img():
 @require_torch
 @require_vision
 class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
-    @cached_property
-    def default_feature_extractor(self):
-        return (
-            AutoFeatureExtractor.from_pretrained("facebook/convnext-tiny-maskrcnn") if is_vision_available() else None
+    @slow
+    def test_inference_object_detection_head(self):
+        # TODO update to appropriate organization
+        model = ConvNextMaskRCNNForObjectDetection.from_pretrained("nielsr/convnext-tiny-maskrcnn").to(torch_device)
+
+        # TODO use feature extractor instead?
+        transforms = T.Compose(
+            [T.Resize(800), T.ToTensor(), T.Normalize(mean=(0.485, 0.456, 0.406), std=(0.229, 0.224, 0.225))]
         )
 
-    @slow
-    def test_inference_image_classification_head(self):
-        raise NotImplementedError("To do")
+        image = prepare_img()
+        pixel_values = transforms(image).unsqueeze(0).to(torch_device)
+        img_metas = [
+            dict(
+                img_shape=(800, 1067, 3),
+                scale_factor=np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
+                ori_shape=(480, 640, 3),
+            )
+        ]
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(pixel_values, img_metas=img_metas)
+            bbox_results = outputs.results[0][0]
+
+        # verify the results
+        self.assertEqual(len(bbox_results), 80)
+
+        expected_slice = np.array(
+            [
+                [17.905682, 55.41647, 318.95575, 470.2593, 0.9981325],
+                [336.97797, 18.415943, 632.41956, 381.94666, 0.99591476],
+            ],
+            dtype=np.float32,
+        )
+        self.assertTrue(np.allclose(bbox_results[15], expected_slice, atol=1e-4))
