@@ -702,7 +702,7 @@ class DisentangledSelfAttention(nn.Module):
             pos_key_layer = self.pos_proj(rel_embeddings)
             pos_key_layer = self.transpose_for_scores(pos_key_layer)
             print(f"The type of query_layer is {query_layer.dtype}")
-            print(f"The type of pos_query_layer is {pos_query_layer.dtype}")
+            print(f"The type of pos_key_layer is {pos_key_layer.dtype}")
             # c2p_att = torch.matmul(query_layer, torch.tensor(pos_key_layer.transpose(-1, -2), dtype=query_layer.dtype, device=query_layer.device))
             c2p_att = torch.matmul(
                 torch.tensor(query_layer, dtype=pos_key_layer.dtype), pos_key_layer.transpose(-1, -2)
