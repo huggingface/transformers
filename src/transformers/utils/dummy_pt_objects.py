@@ -420,6 +420,8 @@ MODEL_MAPPING = None
 
 MODEL_WITH_LM_HEAD_MAPPING = None
 
+MODEL_FOR_ENTITY_PAIR_CLASSIFICATION_MAPPING = None
+
 
 class AutoModel(metaclass=DummyObject):
     _backends = ["torch"]
@@ -590,6 +592,13 @@ class AutoModelForVision2Seq(metaclass=DummyObject):
 
 
 class AutoModelForVisualQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForEntityPairClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

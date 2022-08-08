@@ -66,6 +66,7 @@ from .token_classification import (
     TokenClassificationPipeline,
 )
 from .visual_question_answering import VisualQuestionAnsweringPipeline
+from .entity_pair_classification import EntityPairClassificationPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
 
@@ -101,6 +102,7 @@ if is_torch_available():
         MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
+        MODEL_FOR_ENTITY_PAIR_CLASSIFICATION_MAPPING,
         AutoModel,
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
@@ -117,6 +119,7 @@ if is_torch_available():
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
         AutoModelForVisualQuestionAnswering,
+        AutoModelForEntityPairClassification,
     )
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -198,6 +201,15 @@ SUPPORTED_TASKS = {
                 "pt": ("google/tapas-base-finetuned-wtq", "69ceee2"),
                 "tf": ("google/tapas-base-finetuned-wtq", "69ceee2"),
             },
+        },
+        "type": "text",
+    },
+    "entity-pair-classification": {
+        "impl": EntityPairClassificationPipeline,
+        "pt": (AutoModelForEntityPairClassification,) if is_torch_available() else (),
+        "tf": (),
+        "default": {
+            "model": {"pt": {"studio-ousia/luke-base", "7438924"}},
         },
         "type": "text",
     },
