@@ -43,15 +43,10 @@ from .models.auto.modeling_auto import (
 )
 from .training_args import ParallelMode
 from .utils import (
-    CONFIG_NAME,
     MODEL_CARD_NAME,
-    TF2_WEIGHTS_NAME,
-    WEIGHTS_NAME,
-    cached_path,
-    hf_bucket_url,
+    cached_file,
     is_datasets_available,
     is_offline_mode,
-    is_remote_url,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
@@ -153,11 +148,6 @@ class ModelCard:
                 A dictionary of proxy servers to use by protocol or endpoint, e.g.: {'http': 'foo.bar:3128',
                 'http://hostname': 'foo.bar:4012'}. The proxies are used on each request.
 
-            find_from_standard_name: (*optional*) boolean, default True:
-                If the pretrained_model_name_or_path ends with our standard model or config filenames, replace them
-                with our standard modelcard filename. Can be used to directly feed a model/config url and access the
-                colocated modelcard.
-
             return_unused_kwargs: (*optional*) bool:
 
                 - If False, then this function returns just the final model card object.
@@ -168,21 +158,15 @@ class ModelCard:
         Examples:
 
         ```python
-        modelcard = ModelCard.from_pretrained(
-            "bert-base-uncased"
-        )  # Download model card from huggingface.co and cache.
-        modelcard = ModelCard.from_pretrained(
-            "./test/saved_model/"
-        )  # E.g. model card was saved using *save_pretrained('./test/saved_model/')*
+        # Download model card from huggingface.co and cache.
+        modelcard = ModelCard.from_pretrained("bert-base-uncased")
+        # Model card was saved using *save_pretrained('./test/saved_model/')*
+        modelcard = ModelCard.from_pretrained("./test/saved_model/")
         modelcard = ModelCard.from_pretrained("./test/saved_model/modelcard.json")
         modelcard = ModelCard.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
         ```"""
-        # This imports every model so let's do it dynamically here.
-        from transformers.models.auto.configuration_auto import ALL_PRETRAINED_CONFIG_ARCHIVE_MAP
-
         cache_dir = kwargs.pop("cache_dir", None)
         proxies = kwargs.pop("proxies", None)
-        find_from_standard_name = kwargs.pop("find_from_standard_name", True)
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
         from_pipeline = kwargs.pop("_from_pipeline", None)
 
@@ -190,37 +174,30 @@ class ModelCard:
         if from_pipeline is not None:
             user_agent["using_pipeline"] = from_pipeline
 
-        if pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
-            # For simplicity we use the same pretrained url than the configuration files
-            # but with a different suffix (modelcard.json). This suffix is replaced below.
-            model_card_file = ALL_PRETRAINED_CONFIG_ARCHIVE_MAP[pretrained_model_name_or_path]
-        elif os.path.isdir(pretrained_model_name_or_path):
-            model_card_file = os.path.join(pretrained_model_name_or_path, MODEL_CARD_NAME)
-        elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
-            model_card_file = pretrained_model_name_or_path
+        is_local = os.path.isdir(pretrained_model_name_or_path)
+        if os.path.isfile(pretrained_model_name_or_path):
+            resolved_model_card_file = pretrained_model_name_or_path
+            is_local = True
         else:
-            model_card_file = hf_bucket_url(pretrained_model_name_or_path, filename=MODEL_CARD_NAME, mirror=None)
+            try:
+                # Load from URL or cache if already cached
+                resolved_model_card_file = cached_file(
+                    pretrained_model_name_or_path,
+                    filename=MODEL_CARD_NAME,
+                    cache_dir=cache_dir,
+                    proxies=proxies,
+                    user_agent=user_agent,
+                )
+                if is_local:
+                    logger.info(f"loading model card file {resolved_model_card_file}")
+                else:
+                    logger.info(f"loading model card file {MODEL_CARD_NAME} from cache at {resolved_model_card_file}")
+                # Load model card
+                modelcard = cls.from_json_file(resolved_model_card_file)
 
-        if find_from_standard_name or pretrained_model_name_or_path in ALL_PRETRAINED_CONFIG_ARCHIVE_MAP:
-            model_card_file = model_card_file.replace(CONFIG_NAME, MODEL_CARD_NAME)
-            model_card_file = model_card_file.replace(WEIGHTS_NAME, MODEL_CARD_NAME)
-            model_card_file = model_card_file.replace(TF2_WEIGHTS_NAME, MODEL_CARD_NAME)
-
-        try:
-            # Load from URL or cache if already cached
-            resolved_model_card_file = cached_path(
-                model_card_file, cache_dir=cache_dir, proxies=proxies, user_agent=user_agent
-            )
-            if resolved_model_card_file == model_card_file:
-                logger.info(f"loading model card file {model_card_file}")
-            else:
-                logger.info(f"loading model card file {model_card_file} from cache at {resolved_model_card_file}")
-            # Load model card
-            modelcard = cls.from_json_file(resolved_model_card_file)
-
-        except (EnvironmentError, json.JSONDecodeError):
-            # We fall back on creating an empty model card
-            modelcard = cls()
+            except (EnvironmentError, json.JSONDecodeError):
+                # We fall back on creating an empty model card
+                modelcard = cls()
 
         # Update model card with kwargs if needed
         to_remove = []

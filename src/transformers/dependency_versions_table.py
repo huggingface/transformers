@@ -68,7 +68,7 @@ deps = {
     "timeout-decorator": "timeout-decorator",
     "timm": "timm",
     "tokenizers": "tokenizers>=0.11.1,!=0.11.3,<0.13",
-    "torch": "torch>=1.0,<1.12",
+    "torch": "torch>=1.0,!=0.12.0",
     "torchaudio": "torchaudio",
     "pyctcdecode": "pyctcdecode>=0.3.0",
     "tqdm": "tqdm>=4.27",

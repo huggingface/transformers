@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from numpy import isin
 
+from huggingface_hub.file_download import http_get
+
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
@@ -33,7 +35,7 @@ from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, Aut
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_fast import PreTrainedTokenizerFast
-from ..utils import HUGGINGFACE_CO_RESOLVE_ENDPOINT, http_get, is_tf_available, is_torch_available, logging
+from ..utils import HUGGINGFACE_CO_RESOLVE_ENDPOINT, is_tf_available, is_torch_available, logging
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -505,7 +507,7 @@ def pipeline(
             Whether or not to use a Fast tokenizer if possible (a [`PreTrainedTokenizerFast`]).
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`).
+            when running `huggingface-cli login` (stored in `~/.huggingface`).
         device_map (`str` or `Dict[str, Union[int, str, torch.device]`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
             `device_map="auto"` to compute the most optimized `device_map` automatically. [More

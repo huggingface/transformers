@@ -126,6 +126,18 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
 
     @require_torch
+    def test_small_model_pt_iterator(self):
+        # https://github.com/huggingface/transformers/issues/18510
+        pipe = pipeline(model="sshleifer/tiny-distilbert-base-cased-distilled-squad", batch_size=16, framework="pt")
+
+        def data():
+            for i in range(10):
+                yield {"question": "Where was HuggingFace founded ?", "context": "HuggingFace was founded in Paris."}
+
+        for outputs in pipe(data()):
+            self.assertEqual(nested_simplify(outputs), {"score": 0.01, "start": 0, "end": 11, "answer": "HuggingFace"})
+
+    @require_torch
     def test_small_model_pt_softmax_trick(self):
         question_answerer = pipeline(
             "question-answering", model="sshleifer/tiny-distilbert-base-cased-distilled-squad"

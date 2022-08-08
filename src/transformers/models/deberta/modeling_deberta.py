@@ -187,6 +187,8 @@ class XDropout(torch.autograd.Function):
 
     @staticmethod
     def symbolic(g: torch._C.Graph, input: torch._C.Value, local_ctx: Union[float, DropoutContext]) -> torch._C.Value:
+        from torch.onnx import symbolic_opset12
+
         dropout_p = local_ctx
         if isinstance(local_ctx, DropoutContext):
             dropout_p = local_ctx.dropout
@@ -198,7 +200,7 @@ class XDropout(torch.autograd.Function):
         # Once https://github.com/pytorch/pytorch/issues/78391 is fixed, do something like:
         # if opset_version < 12:
         #   return torch.onnx.symbolic_opset9.dropout(g, input, dropout_p, train)
-        return torch.onnx.symbolic_opset12.dropout(g, input, dropout_p, train)
+        return symbolic_opset12.dropout(g, input, dropout_p, train)
 
 
 class StableDropout(nn.Module):

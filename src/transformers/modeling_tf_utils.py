@@ -2096,7 +2096,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 Whether or not to only look at local files (e.g., not try doanloading the model).
             use_auth_token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `transformers-cli login` (stored in `~/.huggingface`).
+                when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -2156,7 +2156,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
-        mirror = kwargs.pop("mirror", None)
+        _ = kwargs.pop("mirror", None)
         load_weight_prefix = kwargs.pop("load_weight_prefix", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
@@ -2270,7 +2270,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         # message.
                         has_file_kwargs = {
                             "revision": revision,
-                            "mirror": mirror,
                             "proxies": proxies,
                             "use_auth_token": use_auth_token,
                         }
@@ -2321,7 +2320,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 use_auth_token=use_auth_token,
                 user_agent=user_agent,
                 revision=revision,
-                mirror=mirror,
             )
 
         config.name_or_path = pretrained_model_name_or_path
@@ -2472,8 +2470,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 Whether or not the repository created should be private (requires a paying subscription).
             use_auth_token (`bool` or `str`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `transformers-cli login` (stored in `~/.huggingface`). Will default to `True` if
-                `repo_url` is not specified.
+                when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
+                is not specified.
             max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
                 Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
                 will then be each of size lower than this size. If expressed as a string, needs to be digits followed

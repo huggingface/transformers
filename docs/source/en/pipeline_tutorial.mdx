@@ -67,7 +67,7 @@ Any additional parameters for your task can also be included in the [`pipeline`]
 
 ### Choose a model and tokenizer
 
-The [`pipeline`] accepts any model from the [Model Hub](https://huggingface.co/models). There are tags on the Model Hub that allow you to filter for a model you'd like to use for your task. Once you've picked an appropriate model, load it with the corresponding `AutoModelFor` and [`AutoTokenizer'] class. For example, load the [`AutoModelForCausalLM`] class for a causal language modeling task:
+The [`pipeline`] accepts any model from the [Model Hub](https://huggingface.co/models). There are tags on the Model Hub that allow you to filter for a model you'd like to use for your task. Once you've picked an appropriate model, load it with the corresponding `AutoModelFor` and [`AutoTokenizer`] class. For example, load the [`AutoModelForCausalLM`] class for a causal language modeling task:
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
