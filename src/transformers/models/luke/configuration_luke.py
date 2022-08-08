@@ -15,7 +15,11 @@
 """ LUKE configuration"""
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...utils import logging, TensorType
+from typing import Mapping, OrderedDict, Optional, Any
+from ...onnx import OnnxConfig
+from ...onnx.utils import compute_effective_axis_dimension
+from ... import PreTrainedTokenizer
 
 
 logger = logging.get_logger(__name__)
@@ -135,3 +139,48 @@ class LukeConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.use_entity_aware_attention = use_entity_aware_attention
         self.classifier_dropout = classifier_dropout
+
+
+class LukeOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("input_ids", {0: "batch", 1: "sequence"}),
+                ("attention_mask", {0: "batch", 1: "sequence"}),
+                ("entity_ids", {0: "batch", 1: "entities"}),
+                ("entity_position_ids", {0: "batch", 1: "entities", 2: "entity_embedding"}),
+                ("entity_attention_mask", {0: "batch", 1: "entities"}),
+            ]
+        )
+
+    @property
+    def default_onnx_opset(self) -> int:
+        return 13
+
+    def generate_dummy_inputs(
+        self,
+        tokenizer: PreTrainedTokenizer,
+        batch_size: int = -1,
+        seq_length: int = -1,
+        is_pair: bool = False,
+        entity_spans=[[0, 5], [8, 10]],
+        framework: Optional[TensorType] = None,
+    ) -> Mapping[str, Any]:
+        # Copied from OnnxConfig.generate_dummy_inputs
+        # Did not use super(OnnxConfigWithPast, self).generate_dummy_inputs for code clarity.
+        # If dynamic axis (-1) we forward with a fixed dimension of 2 samples to avoid optimizations made by ONNX
+        batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
+
+        # If dynamic axis (-1) we forward with a fixed dimension of 8 tokens to avoid optimizations made by ONNX
+        seq_length = compute_effective_axis_dimension(seq_length, fixed_dimension=OnnxConfig.default_fixed_sequence)
+
+        # Creating entity pair Tuples of the required batch size
+        entity_span_batch = []
+        entity_spans = [tuple(x) for x in entity_spans]
+        entity_span_batch += [entity_spans] * batch_size
+
+        # Generate dummy inputs according to compute batch and sequence
+        dummy_input = [" ".join([tokenizer.unk_token]) * seq_length] * batch_size
+
+        return dict(tokenizer(dummy_input, entity_spans=entity_span_batch, return_tensors=framework))

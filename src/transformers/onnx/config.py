@@ -102,6 +102,9 @@ class OnnxConfig(ABC):
         "seq2seq-lm": OrderedDict({"logits": {0: "batch", 1: "decoder_sequence"}}),
         "sequence-classification": OrderedDict({"logits": {0: "batch"}}),
         "token-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
+        "entity-classification": OrderedDict({"logits": {0: "batch"}}),
+        "entity-pair-classification": OrderedDict({"logits": {0: "batch"}}),
+        "entity-span-classification": OrderedDict({"logits": {0: "batch"}}),
     }
 
     def __init__(self, config: "PretrainedConfig", task: str = "default", patching_specs: List[PatchingSpec] = None):

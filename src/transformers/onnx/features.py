@@ -7,6 +7,12 @@ from .. import PretrainedConfig, is_tf_available, is_torch_available
 from ..utils import logging
 from .config import OnnxConfig
 
+# Entity-Pair, Entity-Span and Entity Classification Heads are not supported by AutoModel Factory
+from transformers.models.luke import (
+    LukeForEntityClassification,
+    LukeForEntityPairClassification,
+    LukeForEntitySpanClassification,
+)
 
 if TYPE_CHECKING:
     from transformers import PreTrainedModel, TFPreTrainedModel
@@ -94,6 +100,9 @@ class FeaturesManager:
             "image-classification": AutoModelForImageClassification,
             "image-segmentation": AutoModelForImageSegmentation,
             "masked-im": AutoModelForMaskedImageModeling,
+            "entity-classification": LukeForEntityClassification,
+            "entity-pair-classification": LukeForEntityPairClassification,
+            "entity-span-classification": LukeForEntitySpanClassification,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -105,6 +114,9 @@ class FeaturesManager:
             "token-classification": TFAutoModelForTokenClassification,
             "multiple-choice": TFAutoModelForMultipleChoice,
             "question-answering": TFAutoModelForQuestionAnswering,
+            "entity-classification": LukeForEntityClassification,
+            "entity-pair-classification": LukeForEntityPairClassification,
+            "entity-span-classification": LukeForEntitySpanClassification,
         }
 
     # Set of model topologies we support associated to the features supported by each topology and the factory
@@ -342,6 +354,14 @@ class FeaturesManager:
             "seq2seq-lm",
             "seq2seq-lm-with-past",
             onnx_config_cls="models.longt5.LongT5OnnxConfig",
+        ),
+        "luke": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "entity-classification",
+            "entity-pair-classification",
+            "entity-span-classification",
+            onnx_config_cls="models.luke.LukeOnnxConfig",
         ),
         "marian": supported_features_mapping(
             "default",
