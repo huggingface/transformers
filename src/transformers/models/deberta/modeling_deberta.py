@@ -649,8 +649,8 @@ class DisentangledSelfAttention(nn.Module):
         scale_factor = 1 + len(self.pos_att_type)
         scale = torch.sqrt(torch.tensor(query_layer.size(-1) * scale_factor, dtype=torch.float))
         query_layer = query_layer / scale
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-        # attention_scores = torch.matmul(query_layer, torch.tensor(key_layer.transpose(-1, -2), dtype=query_layer.dtype, device=query_layer.device))
+        # attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
+        attention_scores = torch.matmul(torch.tensor(query_layer, dtype=key_layer.dtype), key_layer.transpose(-1, -2))
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
             rel_att = self.disentangled_att_bias(query_layer, key_layer, relative_pos, rel_embeddings, scale_factor)
