@@ -48,6 +48,7 @@ from .generation_stopping_criteria import (
     MaxLengthCriteria,
     MaxTimeCriteria,
     StoppingCriteria,
+    EndOfStringCriteria,
     StoppingCriteriaList,
     validate_stopping_criteria,
 )
@@ -770,13 +771,15 @@ class GenerationMixin:
         return processors
 
     def _get_stopping_criteria(
-        self, max_length: Optional[int], max_time: Optional[float], stopping_criteria: Optional[StoppingCriteriaList]
+        self, max_length: Optional[int], max_time: Optional[float], eos_token_id: Optional[int], stopping_criteria: Optional[StoppingCriteriaList]
     ) -> StoppingCriteriaList:
         criteria = StoppingCriteriaList()
         if max_length is not None:
             criteria.append(MaxLengthCriteria(max_length=max_length))
         if max_time is not None:
             criteria.append(MaxTimeCriteria(max_time=max_time))
+        if eos_token_id is not None:
+            criteria.append(EndOfStringCriteria(eos_token_id=eos_token_id))
         criteria = self._merge_criteria_processor_list(criteria, stopping_criteria)
         return criteria
 
@@ -1280,9 +1283,8 @@ class GenerationMixin:
 
         # 8. prepare stopping criteria
         stopping_criteria = self._get_stopping_criteria(
-            max_length=max_length, max_time=max_time, stopping_criteria=stopping_criteria
+            max_length=max_length, max_time=max_time, eos_token_id=eos_token_id, stopping_criteria=stopping_criteria
         )
-
         # 9. go into different generation modes
         if is_greedy_gen_mode:
             if num_return_sequences > 1:

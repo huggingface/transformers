@@ -81,7 +81,7 @@ class Text2TextGenerationPipeline(Pipeline):
             stop_sequence_ids = self.tokenizer.encode(
                 stop_sequence
             )
-            if len(stop_sequence_ids) > 1:
+            if len(stop_sequence_ids) > 3:
                 warnings.warn(f"Stopping on a multiple token sequence is not yet supported on transformers. The first token of the stop sequence will be used as the stop sequence string in the interim.")
             generate_kwargs["eos_token_id"] = stop_sequence_ids[1]
         return preprocess_params, forward_params, postprocess_params
@@ -156,7 +156,6 @@ class Text2TextGenerationPipeline(Pipeline):
         return inputs
 
     def _forward(self, model_inputs, **generate_kwargs):
-        breakpoint()
         if self.framework == "pt":
             in_b, input_length = model_inputs["input_ids"].shape
         elif self.framework == "tf":
