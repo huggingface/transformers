@@ -1424,6 +1424,7 @@ class UniSpeechForCTC(UniSpeechPreTrainedModel):
 
         loss = None
         if labels is not None:
+
             if labels.max() >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 

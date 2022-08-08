@@ -1862,6 +1862,7 @@ class FlaxBigBirdForPreTrainingModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
+
         # Model
         outputs = self.bert(
             input_ids,
