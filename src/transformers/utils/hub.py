@@ -133,6 +133,8 @@ def get_cached_models(cache_dir: Union[str, Path] = None) -> List[Tuple]:
         cache_dir = TRANSFORMERS_CACHE
     elif isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
+    if not os.path.isdir(cache_dir):
+        return []
 
     cached_models = []
     for file in os.listdir(cache_dir):
@@ -210,6 +212,9 @@ def try_to_load_from_cache(cache_dir, repo_id, filename, revision=None):
     if not os.path.isdir(model_cache):
         # No cache for this model
         return None
+    for subfolder in ["refs", "snapshots"]:
+        if not os.path.isdir(os.path.join(model_cache, subfolder)):
+            return None
 
     # Resolve refs (for instance to convert main to the associated commit sha)
     cached_refs = os.listdir(os.path.join(model_cache, "refs"))
@@ -873,6 +878,8 @@ def get_all_cached_files(cache_dir=None):
         cache_dir = TRANSFORMERS_CACHE
     else:
         cache_dir = str(cache_dir)
+    if not os.path.isdir(cache_dir):
+        return []
 
     cached_files = []
     for file in os.listdir(cache_dir):
