@@ -1040,7 +1040,7 @@ class TrainingArguments:
             self.greater_is_better = self.metric_for_best_model not in ["loss", "eval_loss"]
         if self.run_name is None:
             self.run_name = self.output_dir
-        if self.framework == "pt":
+        if self.framework == "pt" and is_torch_available():
             if self.fp16_backend and self.fp16_backend != "auto":
                 warnings.warn(
                     "`fp16_backend` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
@@ -1085,7 +1085,7 @@ class TrainingArguments:
             self.optim = OptimizerNames.ADAFACTOR
 
         if (
-            self.framework == "pt"
+            self.framework == "pt" and is_torch_available()
             and (self.device.type != "cuda")
             and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
             and (self.fp16 or self.fp16_full_eval)
@@ -1096,7 +1096,7 @@ class TrainingArguments:
             )
 
         if (
-            self.framework == "pt"
+            self.framework == "pt" and is_torch_available()
             and (self.device.type != "cuda")
             and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
             and (self.device.type != "cpu")
@@ -1107,7 +1107,7 @@ class TrainingArguments:
                 " (`--bf16_full_eval`) can only be used on CUDA or CPU devices."
             )
 
-        if self.framework == "pt" and self.tf32 is not None:
+        if self.framework == "pt" and is_torch_available() and self.tf32 is not None:
             if self.tf32:
                 if is_torch_tf32_available():
                     torch.backends.cuda.matmul.allow_tf32 = True
