@@ -543,8 +543,10 @@ def _load_state_dict_into_meta_model(
             param_name = param_name[len(start_prefix) :]
 
         module_name = param_name
-        # We convert floating dtypes to the `dtype` passed.
-        if dtype is not None and not str(param.dtype).startswith("torch.int"):
+
+        # We convert floating dtypes to the `dtype` passed.We want to keep the buffers/params
+        # in int/uint/bool and not cast them.
+        if dtype is not None and torch.is_floating_point(param):
             param = param.to(dtype)
 
         if device_map is None:
