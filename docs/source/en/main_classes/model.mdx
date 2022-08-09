@@ -166,9 +166,11 @@ model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto",
 The implementation supports multi-GPU setup thanks to `accelerate` as backend. If you want to control the GPU memory you want to allocate for each GPU, you can use the `max_memory` argument as follows:
 (If allocating `1GB` into GPU-0 and `2GB` into GPU-1, you can use `max_memory={0:"1GB", 1:"2GB"}`)
 ```py
-max_memory_mapping={0:"1GB", 1:"2GB"}
+max_memory_mapping = {0: "1GB", 1: "2GB"}
 model_name = "bigscience/bloom-2b5"
-model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True, max_memory=max_memory_mapping)
+model_8bit = AutoModelForCausalLM.from_pretrained(
+    model_name, device_map="auto", load_in_8bit=True, max_memory=max_memory_mapping
+)
 ```
 
 

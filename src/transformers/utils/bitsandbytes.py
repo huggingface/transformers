@@ -125,9 +125,8 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head"):
 
 def get_key_to_not_convert(model):
     r"""
-    An utility function to get the key of the module to keep in full precision if any
-    For example for CausalLM modules we may want to keep the lm_head in full precision
-    for numerical stability reasons.
+    An utility function to get the key of the module to keep in full precision if any For example for CausalLM modules
+    we may want to keep the lm_head in full precision for numerical stability reasons.
 
     Parameters:
     model (`torch.nn.Module`):

@@ -15,7 +15,7 @@
 import gc
 import unittest
 
-from transformers import AutoModel, AutoModelForSequenceClassification, AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import AutoModel, AutoModelForCausalLM, AutoModelForSequenceClassification, AutoTokenizer, pipeline
 from transformers.testing_utils import (
     is_torch_available,
     require_accelerate,
@@ -108,7 +108,9 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
         self.model_name = "bigscience/bloom-560m"
         # Models and tokenizer
         self.base_model = AutoModel.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
-        self.sequence_model = AutoModelForSequenceClassification.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        self.sequence_model = AutoModelForSequenceClassification.from_pretrained(
+            self.model_name, load_in_8bit=True, device_map="auto"
+        )
         self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
 
     def tearDown(self):
@@ -122,11 +124,11 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
 
         gc.collect()
         torch.cuda.empty_cache()
-    
+
     def test_correct_head_class(self):
         r"""
-        A simple test to check if the last modules for some classes (AutoModelForCausalLM or SequenceClassification) 
-        are kept in their native class. 
+        A simple test to check if the last modules for some classes (AutoModelForCausalLM or SequenceClassification)
+        are kept in their native class.
         """
         from bitsandbytes.nn import Int8Params
 
@@ -136,6 +138,7 @@ class MixedInt8ModelClassesTest(BaseMixedInt8Test):
         # Other heads should be nn.Parameter
         self.assertTrue(self.model_8bit.lm_head.weight.__class__ == torch.nn.Parameter)
         self.assertTrue(self.sequence_model.score.weight.__class__ == torch.nn.Parameter)
+
 
 class MixedInt8TestPipeline(BaseMixedInt8Test):
     def setUp(self):
