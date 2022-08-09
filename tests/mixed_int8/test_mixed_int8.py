@@ -15,7 +15,7 @@
 import gc
 import unittest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
+from transformers import AutoModel, AutoModelForSequenceClassification, AutoModelForCausalLM, AutoTokenizer, pipeline
 from transformers.testing_utils import (
     is_torch_available,
     require_accelerate,
@@ -100,6 +100,42 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
+
+class MixedInt8ModelClassesTest(BaseMixedInt8Test):
+    def setUp(self):
+        super().setUp()
+        # model_name
+        self.model_name = "bigscience/bloom-560m"
+        # Models and tokenizer
+        self.base_model = AutoModel.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        self.sequence_model = AutoModelForSequenceClassification.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+        self.model_8bit = AutoModelForCausalLM.from_pretrained(self.model_name, load_in_8bit=True, device_map="auto")
+
+    def tearDown(self):
+        r"""
+        TearDown function needs to be called at the end of each test to free the GPU memory and cache, also to
+        avoid unexpected behaviors. Please see: https://discuss.pytorch.org/t/how-can-we-release-gpu-memory-cache/14530/27
+        """
+        del self.base_model
+        del self.sequence_model
+        del self.model_8bit
+
+        gc.collect()
+        torch.cuda.empty_cache()
+    
+    def test_correct_head_class(self):
+        r"""
+        A simple test to check if the last modules for some classes (AutoModelForCausalLM or SequenceClassification) 
+        are kept in their native class. 
+        """
+        from bitsandbytes.nn import Int8Params
+
+        # last param of a base model should be a linear8bit module
+        self.assertTrue(self.base_model.h[-1].mlp.dense_4h_to_h.weight.__class__ == Int8Params)
+
+        # Other heads should be nn.Parameter
+        self.assertTrue(self.model_8bit.lm_head.weight.__class__ == torch.nn.Parameter)
+        self.assertTrue(self.sequence_model.score.weight.__class__ == torch.nn.Parameter)
 
 class MixedInt8TestPipeline(BaseMixedInt8Test):
     def setUp(self):
