@@ -176,14 +176,14 @@ class JukeboxConfig(PretrainedConfig):
         cond_zero_out=False,
         # args for the priors, 3 priors
         n_ctx=(8192, 8192, 8192),
-        t_bins=128,
+        t_bins=128, # TODO rename to timing_embed_dim
         downs_t=(3, 2, 2),
         strides_t=(2, 2, 2),
         single_enc_dec=[True, False, False],
         labels=False,
         merged_decoder=[True, False, False],
         priors_width=[4096, 2048, 1024],
-        l_bins=256,
+        latent_dim=2048,
         width=[4800, 1920, 128],
         depth=[79, 72, 72],
         n_heads=[8, 1, 1],
@@ -224,7 +224,7 @@ class JukeboxConfig(PretrainedConfig):
         m_attn=0.25,
         n_vocab=80,
         cond_m_conv=1,
-        max_bow_genre_size=1,  # this should only be in the tokenizer
+        max_bow_genre_size=1,  # TODO this should only be in the tokenizer
         name="AudioSamples",
         init_std=0.2,
         **kwargs,
@@ -300,8 +300,8 @@ class JukeboxConfig(PretrainedConfig):
         self.vq_vae_lmu = vq_vae_lmu
 
         self.vq_vae_commit = vq_vae_commit
-        self.spectral = spectral
-        self.multispectral = multispectral
+        # self.spectral = spectral
+        # self.multispectral = multispectral
 
         self.vq_vae_conv_block_depth = vq_vae_conv_block_depth
         self.vq_vae_conv_block_width = vq_vae_conv_block_width
@@ -316,7 +316,7 @@ class JukeboxConfig(PretrainedConfig):
         self.cond_zero_out = cond_zero_out
         self.n_ctx = n_ctx
         self.t_bins = t_bins
-        self.l_bins = l_bins
+        self.latent_dim = latent_dim
         self.downs_t = downs_t
         self.strides_t = strides_t
         self.single_enc_dec = single_enc_dec
