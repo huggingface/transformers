@@ -73,7 +73,7 @@ def infer_channel_dimension_format(image: np.ndarray) -> ChannelDimension:
     elif image.ndim == 4:
         first_dim, last_dim = 1, 3
     else:
-        raise ValueError("Unsupported number of image dimensions: {}".format(image.ndim))
+        raise ValueError(f"Unsupported number of image dimensions: {image.ndim}")
 
     if image.shape[first_dim] in (1, 3):
         return ChannelDimension.FIRST

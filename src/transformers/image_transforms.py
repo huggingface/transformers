@@ -206,9 +206,9 @@ def resize(
         # PIL expects image to have channels last
         image = to_channel_dimension_format(image, ChannelDimension.LAST)
         image = to_pil_image(image)
-    h, w = size
+    height, width = size
     # PIL images are in the format (width, height)
-    resized_image = image.resize((w, h), resample=resample)
+    resized_image = image.resize((width, height), resample=resample)
 
     if return_numpy:
         resized_image = np.array(resized_image)
