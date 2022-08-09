@@ -162,7 +162,7 @@ class GroupViTVisionConfig(PretrainedConfig):
             The number of layers in each encoder block.
         num_group_tokens (`List[int]`, *optional*, defaults to [64, 8, 0]):
             The number of group tokens for each stage.
-        num_output_groups (`List[int]`, *optional*, defaults to [64, 8, 0]):
+        num_output_groups (`List[int]`, *optional*, defaults to [64, 8, 8]):
             The number of output groups for each stage, 0 means no group.
         num_attention_heads (`int`, *optional*, defaults to 6):
             Number of attention heads for each attention layer in the Transformer encoder.
