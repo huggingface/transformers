@@ -229,6 +229,12 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.data2vec.Data2VecTextOnnxConfig",
         ),
+        "data2vec-vision": supported_features_mapping(
+            "default",
+            "image-classification",
+            "image-segmentation",
+            onnx_config_cls="models.data2vec.Data2VecVisionOnnxConfig",
+        ),
         "deberta": supported_features_mapping(
             "default",
             "masked-lm",
