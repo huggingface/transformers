@@ -176,7 +176,7 @@ class JukeboxConfig(PretrainedConfig):
         cond_zero_out=False,
         # args for the priors, 3 priors
         n_ctx=(8192, 8192, 8192),
-        t_bins=128, # TODO rename to timing_embed_dim
+        t_bins=128,  # TODO rename to timing_embed_dim
         downs_t=(3, 2, 2),
         strides_t=(2, 2, 2),
         single_enc_dec=[True, False, False],

@@ -16,6 +16,7 @@
 
 
 import argparse
+import os
 from pathlib import Path
 
 import torch
@@ -23,7 +24,7 @@ import torch
 import requests
 from transformers import JukeboxConfig, JukeboxModel
 from transformers.utils import logging
-import os
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -54,33 +55,35 @@ MODEL_MAPPING = {
     ],
 }
 
-def replace_key(key) : 
-    if ".k." in key:   # replace vqvae.X.k with vqvae.X.codebook
+
+def replace_key(key):
+    if ".k." in key:  # replace vqvae.X.k with vqvae.X.codebook
         return key.replace(".k.", ".codebook.")
     elif ".y_emb." in key:
-            key = key.replace(".y_emb.", ".metadata_embedding.")
-      
-          
-# TODO right a clean conversion code using regex or replace 
-# depending on the most appropriate choice            
+        key = key.replace(".y_emb.", ".metadata_embedding.")
+
+
+# TODO right a clean conversion code using regex or replace
+# depending on the most appropriate choice
 def fix_jukebox_keys(state_dict, model_state_dict):
     new_dict = {}
-    model_unformatted_keys = {".".join(k.split('.')[2:]) for k in model_state_dict.keys()}
-    import re 
-    model_to_conv = {1:"conv1d_1", 3:"conv1d_2"}
+    model_unformatted_keys = {".".join(k.split(".")[2:]) for k in model_state_dict.keys()}
+    import re
+
+    model_to_conv = {1: "conv1d_1", 3: "conv1d_2"}
     re_cond_block = re.compile("conditioner_blocks.([\d]).cond.model.([\d]).([\d]).model.([\d])")
     groups = re_cond_block.match(original_key).groups()
     block_index = int(groups[0]) * 2 + int(groups[1])
     re_new_key = f"conditioner_blocks.{groups[0]}.upsampler.upsample_block.{block_index}.resnet_block.{model_to_conv[groups[-1]]}"
-    
-    re_cond_block.sub(re_new_key,original_key)
-    
+
+    re_cond_block.sub(re_new_key, original_key)
+
     for original_key, value in state_dict.items():
         key = original_key
-        
+
         if ".k." in key:
             key = key.replace(".k.", ".codebook.")
-        
+
         elif ".y_emb." in key:
             key = key.replace(".y_emb.", ".metadata_embedding.")
         else:
@@ -89,49 +92,23 @@ def fix_jukebox_keys(state_dict, model_state_dict):
                 if len(wo_model[1].split(".")) <= 3:
                     key = wo_model[0] + "proj_out." + wo_model[1].split(".")[-1]
                 else:
-                    block_index = str(
-                        int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2])
-                    )
-                    key = (
-                        wo_model[0]
-                        + "downsample_block."
-                        + block_index
-                        + "."
-                        + wo_model[1].split(".")[-1]
-                    )
+                    block_index = str(int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]))
+                    key = wo_model[0] + "downsample_block." + block_index + "." + wo_model[1].split(".")[-1]
             elif len(wo_model) == 2 and "decoders" in key:
                 if len(wo_model[1].split(".")) <= 3:
                     key = wo_model[0] + "proj_in." + wo_model[1].split(".")[-1]
                 else:
-                    block_index = str(
-                        int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]) - 2
-                    )
-                    key = (
-                        wo_model[0]
-                        + "upsample_block."
-                        + block_index
-                        + "."
-                        + wo_model[1].split(".")[-1]
-                    )
+                    block_index = str(int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]) - 2)
+                    key = wo_model[0] + "upsample_block." + block_index + "." + wo_model[1].split(".")[-1]
             elif len(wo_model) == 2 and "cond.model." in key:
                 if len(wo_model[1].split(".")) <= 3:
                     key = wo_model[0] + "proj_in." + wo_model[1].split(".")[-1]
                 else:
-                    block_index = str(
-                        int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]) - 2
-                    )
-                    key = (
-                        wo_model[0]
-                        + "upsample_block."
-                        + block_index
-                        + "."
-                        + wo_model[1].split(".")[-1]
-                    )
+                    block_index = str(int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]) - 2)
+                    key = wo_model[0] + "upsample_block." + block_index + "." + wo_model[1].split(".")[-1]
             elif len(wo_model) == 3 and "priors" in key:
                 # should also rename cond to low_lvl_conditioner
-                block_index = str(
-                    int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]) - 2
-                )
+                block_index = str(int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]) - 2)
                 key = (
                     wo_model[0]
                     + "upsample_block."
@@ -148,9 +125,7 @@ def fix_jukebox_keys(state_dict, model_state_dict):
                 # vqvae.decoders.0.level_blocks.0.model.1.0.model.1.model.3.bias
                 # to
                 # vqvae.decoders.1.level_blocks.0.upsample_block.1.resnet_blocks.2.conv1d_2.weight
-                block_index = str(
-                    int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]) - 2
-                )
+                block_index = str(int(wo_model[1].split(".")[1]) * 2 + int(wo_model[1].split(".")[2]) - 2)
                 key = (
                     wo_model[0]
                     + "upsample_block."
@@ -180,24 +155,24 @@ def fix_jukebox_keys(state_dict, model_state_dict):
                 key = key.replace(".model.3.bias", ".conv1d_2.bias")
             elif key.endswith(".model.3.weight") and len(key.split(".")) > 10:
                 key = key.replace(".model.3.weight", ".conv1d_2.weight")
-                
-        if ".cond." in key : 
+
+        if ".cond." in key:
             key = key.replace(".cond.", ".upsampler.")
-        if ".ln" in key : 
+        if ".ln" in key:
             key = key.replace(".ln", ".layer_norm")
-        if "_ln" in key : 
+        if "_ln" in key:
             key = key.replace("_ln", "_layer_norm")
         if "prime_prior" in key:
-            key = key.replace("prime_prior","lyric_encoder")
+            key = key.replace("prime_prior", "lyric_encoder")
         if "prime_x_out" in key:
-            key = key.replace("prime_x_out","lyric_enc_proj_out")
+            key = key.replace("prime_x_out", "lyric_enc_proj_out")
         # if "x_emb" in key:
         #     key = key.replace("x_emb","lyric_enc_proj_out")
         if not "conditioner_blocks" in key and "x_emb" in key:
-            key = key.replace("x_emb","lyric_enc.proj_out")
+            key = key.replace("x_emb", "lyric_enc.proj_out")
         if key not in model_unformatted_keys:
             print(f"failed converting {original_key} to {key}, does not match")
-        
+
         # elif value.shape != model_state_dict[key].shape:
         #     print(
         #         f"{original_key}-> {key} : \nshape {model_unformatted_keys[key].shape} and"
@@ -216,7 +191,7 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
     for file in MODEL_MAPPING[model_name]:
         if not os.path.isfile(f"{pytorch_dump_folder_path}/{file.split('/')[-1]}"):
             r = requests.get(f"{PREFIX}{file}", allow_redirects=True)
-            os.makedirs(f"{pytorch_dump_folder_path}/",exist_ok=True)
+            os.makedirs(f"{pytorch_dump_folder_path}/", exist_ok=True)
             open(f"{pytorch_dump_folder_path}/{file.split('/')[-1]}", "wb").write(r.content)
 
     vqvae, *priors = MODEL_MAPPING[model_name.split("/")[-1]]
@@ -224,7 +199,7 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
         "model"
     ]
 
-    config = JukeboxConfig.from_pretrained("ArthurZ/"+model_name)
+    config = JukeboxConfig.from_pretrained("ArthurZ/" + model_name)
     model = JukeboxModel(config)
 
     weight_dict = []
@@ -266,7 +241,10 @@ if __name__ == "__main__":
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default="converted_model", type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default="converted_model",
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     args = parser.parse_args()
     convert_openai_checkpoint(args.model_name, args.pytorch_dump_folder_path)
