@@ -82,7 +82,7 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
             module._parameters[tensor_name] = new_value
 
 
-def replace_8bit_linear(model, threshold=6.0):
+def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head"):
     """
     A helper function to replace all `torch.nn.Linear` modules by `bnb.nn.Linear8bit` modules from the `bitsandbytes`
     library. This will enable running your models using mixed int8 precision as described by the paper `GPT3.int8():
@@ -103,12 +103,15 @@ def replace_8bit_linear(model, threshold=6.0):
         threshold (`float`, *optional*, defaults to 6.0):
             `int8_threshold` for outlier detection as described in the formentioned paper. This parameters is set to
             `6.0` as described by the paper.
+        modules_to_not_convert (`str`, *optional*, defaults to `lm_head`):
+            Name of the module to not convert in `Linear8bitLt`. In practice we keep the `lm_head` in full precision
+            for numerical stability reasons.
     """
     for name, module in model.named_children():
         if len(list(module.children())) > 0:
-            replace_8bit_linear(module, threshold)
+            replace_8bit_linear(module, threshold, modules_to_not_convert)
 
-        if isinstance(module, nn.Linear) and name != "lm_head":
+        if isinstance(module, nn.Linear) and name != modules_to_not_convert:
             with init_empty_weights():
                 model._modules[name] = bnb.nn.Linear8bitLt(
                     module.in_features,
@@ -118,3 +121,28 @@ def replace_8bit_linear(model, threshold=6.0):
                     threshold=threshold,
                 )
     return model
+
+
+def get_key_to_not_convert(model):
+    r"""
+    An utility function to get the key of the module to keep in full precision if any
+    For example for CausalLM modules we may want to keep the lm_head in full precision
+    for numerical stability reasons.
+
+    Parameters:
+    model (`torch.nn.Module`):
+        Input model
+    """
+
+    # Compute the number of parameters between the base model and the full model
+    n_params_base = sum(p.numel() for p in model.base_model.parameters() if p.requires_grad)
+    n_params_full = sum(p.numel() for p in model.parameters() if p.requires_grad)
+
+    # if they have the same number of parameters they are the same model - no attached head
+    if n_params_base == n_params_full:
+        return ""
+
+    # otherwise they have an attached head
+    list_modules = list(model.named_parameters())
+    last_name = list_modules[-1][0]
+    return last_name.split(".")[0]
