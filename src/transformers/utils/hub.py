@@ -952,7 +952,6 @@ def move_to_new_cache(file, repo, filename, revision, etag, commit_hash):
 
     # blobs
     os.makedirs(os.path.join(repo, "blobs"), exist_ok=True)
-    # TODO: replace copy by move when all works well.
     blob_path = os.path.join(repo, "blobs", etag)
     shutil.move(file, blob_path)
 
