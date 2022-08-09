@@ -70,6 +70,8 @@ class TFCvtDropPath(tf.keras.layers.Layer):
 
 
 class TFCvtEmbeddings(tf.keras.layers.Layer):
+    """Construct the Convolutional Token Embeddings."""
+
     def __init__(
         self,
         config: CvtConfig,
@@ -98,6 +100,8 @@ class TFCvtEmbeddings(tf.keras.layers.Layer):
 
 
 class TFCvtConvEmbeddings(tf.keras.layers.Layer):
+    """Image to Conv Embedding. This convolutional operation aims to model local spatial contexts."""
+
     def __init__(self, config: CvtConfig, patch_size: int, embed_dim: int, stride: int, padding: int, **kwargs):
         super().__init__(**kwargs)
         self.pad_value = padding
@@ -142,6 +146,8 @@ class TFCvtConvEmbeddings(tf.keras.layers.Layer):
 
 
 class TFCvtSelfAttentionConvProjection(tf.keras.layers.Layer):
+    """Convolutional projection layer."""
+
     def __init__(self, config: CvtConfig, kernel_size: int, stride: int, padding: int, **kwargs):
         super().__init__(**kwargs)
         self.pad_value = padding
@@ -170,6 +176,8 @@ class TFCvtSelfAttentionConvProjection(tf.keras.layers.Layer):
 
 
 class TFCvtSelfAttentionLinearProjection(tf.keras.layers.Layer):
+    """Linear projection layer used to flatten tokens into 1D."""
+
     def call(self, hidden_state: tf.Tensor) -> tf.Tensor:
         # rearrange " b c h w -> b (h w) c"
         batch_size, num_channels, height, width = shape_list(hidden_state)
@@ -180,6 +188,8 @@ class TFCvtSelfAttentionLinearProjection(tf.keras.layers.Layer):
 
 
 class TFCvtSelfAttentionProjection(tf.keras.layers.Layer):
+    """Convolutional Projection for Attention."""
+
     def __init__(
         self,
         config: CvtConfig,
@@ -207,6 +217,11 @@ class TFCvtSelfAttentionProjection(tf.keras.layers.Layer):
 
 
 class TFCvtSelfAttention(tf.keras.layers.Layer):
+    """
+    Self-attention layer. A depth-wise separable convolution operation (Convolutional Projection), 
+    is applied for query, key, and value embeddings.
+    """
+
     def __init__(
         self,
         config: CvtConfig,
@@ -319,7 +334,7 @@ class TFCvtSelfAttention(tf.keras.layers.Layer):
 
 
 class TFCvtSelfOutput(tf.keras.layers.Layer):
-    """Output of the Attention layer."""
+    """Output of the Attention layer (MLP)."""
 
     def __init__(self, config: CvtConfig, embed_dim: int, drop_rate: float, **kwargs):
         super().__init__(**kwargs)
@@ -335,6 +350,8 @@ class TFCvtSelfOutput(tf.keras.layers.Layer):
 
 
 class TFCvtAttention(tf.keras.layers.Layer):
+    """Attention layer. First chunk of the convolutional transformer block."""
+
     def __init__(
         self,
         config: CvtConfig,
@@ -378,6 +395,8 @@ class TFCvtAttention(tf.keras.layers.Layer):
 
 
 class TFCvtIntermediate(tf.keras.layers.Layer):
+    """Intermediate dense layer. Second chunk of the convolutional transformer block."""
+
     def __init__(self, config: CvtConfig, embed_dim: int, mlp_ratio: int, **kwargs):
         super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(
@@ -393,6 +412,10 @@ class TFCvtIntermediate(tf.keras.layers.Layer):
 
 
 class TFCvtOutput(tf.keras.layers.Layer):
+    """
+    Output of the Convolutional Transformer Block (last chunk). It consists of a MLP and a residual connection.
+    """
+
     def __init__(self, config: CvtConfig, embed_dim: int, drop_rate: int, **kwargs):
         super().__init__(**kwargs)
         self.dense = tf.keras.layers.Dense(
@@ -408,6 +431,12 @@ class TFCvtOutput(tf.keras.layers.Layer):
 
 
 class TFCvtLayer(tf.keras.layers.Layer):
+    """
+    Convolutional Transformer Block composed by attention layers, normalization and multi-layer perceptrons (mlps). It
+    consists of 3 chunks : an attention layer, an intermediate dense layer and an output layer. This corresponds to the
+    `Block` class in the original implementation.
+    """
+
     def __init__(
         self,
         config: CvtConfig,
@@ -450,6 +479,7 @@ class TFCvtLayer(tf.keras.layers.Layer):
             if drop_path_rate > 0.0
             else tf.keras.layers.Activation("linear", name="drop_path")
         )
+        # Using the same default epsilon as PyTorch
         self.layernorm_before = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_before")
         self.layernorm_after = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_after")
 
@@ -477,6 +507,17 @@ class TFCvtLayer(tf.keras.layers.Layer):
 
 
 class TFCvtStage(tf.keras.layers.Layer):
+    """
+    Cvt stage (encoder block). Each stage has 2 parts : 
+    - (1) A Convolutional Token Embedding layer
+    - (2) A Convolutional Transformer Block (layer).
+    The classification token is added only in the last stage.
+
+    Args:
+        config ([`CvtConfig`]): Model configuration class.
+        stage (`int`): Stage number.
+    """
+
     def __init__(self, config: CvtConfig, stage: int, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -549,6 +590,14 @@ class TFCvtStage(tf.keras.layers.Layer):
 
 
 class TFCvtEncoder(tf.keras.layers.Layer):
+    """
+    Convolutional Vision Transformer encoder. CVT has 3 stages of encoder blocks with their respective number of layers
+    (depth) being 1, 2 and 10.
+
+    Args:
+        config ([`CvtConfig`]): Model configuration class.
+    """
+
     config_class = CvtConfig
 
     def __init__(self, config: CvtConfig, **kwargs):
@@ -585,6 +634,8 @@ class TFCvtEncoder(tf.keras.layers.Layer):
 
 @keras_serializable
 class TFCvtMainLayer(tf.keras.layers.Layer):
+    """Construct the Cvt model."""
+
     config_class = CvtConfig
 
     def __init__(self, config: CvtConfig, **kwargs):
@@ -605,7 +656,7 @@ class TFCvtMainLayer(tf.keras.layers.Layer):
         # pixel_values = tf.transpose(pixel_values, perm=(0, 3, 1, 2))
         # tried reshaping to to `NHWC` directly in main layer and using this format
         # throughout the model, but even though I get the same predictions as torch 
-        # CVT model, our sequence_output have an absolute difference > 100
+        # CVT model, our sequence_output has an absolute difference > 100 with torch prediction
         
         encoder_outputs = self.encoder(
             pixel_values,
@@ -669,6 +720,57 @@ class TFCvtPreTrainedModel(TFPreTrainedModel):
         return self.serving_output(output)
 
 
+TFCVT_START_DOCSTRING = r"""
+
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
+
+    <Tip>
+
+    TF 2.0 models accepts two formats as inputs:
+
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional arguments.
+
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
+    tensors in the first argument of the model call function: `model(inputs)`.
+
+    </Tip>
+
+    Args:
+        config ([`CvtConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+TFCVT_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
+            [`AutoFeatureExtractor.__call__`] for details.
+
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
+        training (`bool`, *optional*, defaults to `False``):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
+"""
+
+
+@add_start_docstrings(
+    "The bare Cvt Model transformer outputting raw hidden-states without any specific head on top.",
+    TFCVT_START_DOCSTRING,
+)
 class TFCvtModel(TFCvtPreTrainedModel):
     def __init__(self, config: CvtConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -676,6 +778,8 @@ class TFCvtModel(TFCvtPreTrainedModel):
         self.cvt = TFCvtMainLayer(config, name="cvt")
 
     @unpack_inputs
+    @add_start_docstrings_to_model_forward(TFCVT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFBaseModelOutputWithCLSToken, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
@@ -683,6 +787,26 @@ class TFCvtModel(TFCvtPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithCLSToken, Tuple[tf.Tensor]]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoFeatureExtractor, TFCvtModel
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/cvt-13")
+        >>> model = TFCvtModel.from_pretrained("microsoft/cvt-13", from_pt=True)
+
+        >>> inputs = feature_extractor(images=image, return_tensors="tf")
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
 
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
@@ -712,14 +836,25 @@ class TFCvtModel(TFCvtPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    Cvt Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+    the [CLS] token) e.g. for ImageNet.
+    """,
+    TFCVT_START_DOCSTRING,
+)
 class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: CvtConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
         self.num_labels = config.num_labels
         self.cvt = TFCvtMainLayer(config, name="cvt")
-        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
-
+        # In the original implementation the authors use epsilon=1e-5 for Layer Normalization.
+        # Pytorch CVT model doesn't seem to use config.layer_norm_ep
+        # Therefore we will be using the same epsilon as in Pytorch CVT model.
+        # What is the use of config.layer_norm_eps ?
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm")
+        
         # Classifier head
         self.classifier = tf.keras.layers.Dense(
             units=config.num_labels,
@@ -730,6 +865,8 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
         )
 
     @unpack_inputs
+    @add_start_docstrings_to_model_forward(TFCVT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFImageClassifierOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
@@ -738,6 +875,35 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ) -> Union[TFImageClassifierOutputWithNoAttention, Tuple[tf.Tensor]]:
+        r"""
+        labels (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoFeatureExtractor, TFCvtForImageClassification
+        >>> import tensorflow as tf
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/cvt-13")
+        >>> model = TFCvtForImageClassification.from_pretrained("microsoft/cvt-13", from_pt=True)
+
+        >>> inputs = feature_extractor(images=image, return_tensors="tf")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_class_idx = tf.math.argmax(logits, axis=-1)[0]
+        >>> print("Predicted class:", model.config.id2label[int(predicted_class_idx)])
+        ```"""
 
         outputs = self.cvt(
             pixel_values,

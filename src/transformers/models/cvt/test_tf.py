@@ -1,16 +1,10 @@
-from transformers import AutoFeatureExtractor, CvtForImageClassification, CvtModel, CvtConfig
-
-# from modeling_cvt import CvtForImageClassification
-from transformers import ResNetForImageClassification, ResNetModel, TFResNetForImageClassification, TFResNetModel
-from transformers import TFCvtForImageClassification, TFCvtModel
-import tensorflow as tf
-from datasets import load_dataset
-from transformers.modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
-import numpy as np
 import json
-from collections import OrderedDict
+import numpy as np
 import torch
-
+import tensorflow as tf
+from transformers import AutoFeatureExtractor, CvtForImageClassification, CvtModel
+from transformers import TFCvtForImageClassification, TFCvtModel
+from datasets import load_dataset
 
 dataset = load_dataset("huggingface/cats-image")
 image = dataset["test"]["image"][0]
