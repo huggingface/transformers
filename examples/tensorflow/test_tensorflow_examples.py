@@ -110,6 +110,8 @@ class ExamplesTests(TestCasePlus):
 
         with patch.object(sys, "argv", testargs):
             run_text_classification.main()
+            # Reset the mixed precision policy so we don't break other tests
+            tf.keras.mixed_precision.set_global_policy("float32")
             result = get_results(tmp_dir)
             self.assertGreaterEqual(result["eval_accuracy"], 0.75)
 
