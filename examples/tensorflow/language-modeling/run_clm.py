@@ -563,52 +563,44 @@ def main():
         # endregion
 
         # region Training and validation
-        if training_args.do_train:
-            logger.info("***** Running training *****")
-            logger.info(f"  Num examples = {len(train_dataset)}")
-            logger.info(f"  Num Epochs = {training_args.num_train_epochs}")
-            logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
-            logger.info(f"  Total train batch size = {training_args.per_device_train_batch_size * num_replicas}")
+        logger.info("***** Running training *****")
+        logger.info(f"  Num examples = {len(train_dataset)}")
+        logger.info(f"  Num Epochs = {training_args.num_train_epochs}")
+        logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
+        logger.info(f"  Total train batch size = {training_args.per_device_train_batch_size * num_replicas}")
 
-            # For long training runs, you may wish to use the PushToHub() callback here to save intermediate checkpoints
-            # to the Hugging Face Hub rather than just pushing the finished model.
-            # See https://huggingface.co/docs/transformers/main_classes/keras_callbacks#transformers.PushToHubCallback
+        # For long training runs, you may wish to use the PushToHub() callback here to save intermediate checkpoints
+        # to the Hugging Face Hub rather than just pushing the finished model.
+        # See https://huggingface.co/docs/transformers/main_classes/keras_callbacks#transformers.PushToHubCallback
 
-            history = model.fit(
-                tf_train_dataset,
-                validation_data=tf_eval_dataset if training_args.do_eval else None,
-                epochs=int(training_args.num_train_epochs),
-                callbacks=callbacks,
-            )
-            train_loss = history.history["loss"][-1]
-            try:
-                train_perplexity = math.exp(train_loss)
-            except OverflowError:
-                train_perplexity = math.inf
-            logger.info(f"  Final train loss: {train_loss:.3f}")
-            logger.info(f"  Final train perplexity: {train_perplexity:.3f}")
-
-        if training_args.do_eval:
-            if not training_args.do_train:
-                validation_loss = model.evaluate(tf_eval_dataset)
-            else:
-                validation_loss = history.history["val_loss"][-1]
-            try:
-                validation_perplexity = math.exp(validation_loss)
-            except OverflowError:
-                validation_perplexity = math.inf
-            logger.info(f"  Final validation loss: {validation_loss:.3f}")
-            logger.info(f"  Final validation perplexity: {validation_perplexity:.3f}")
+        history = model.fit(
+            tf_train_dataset,
+            validation_data=tf_eval_dataset,
+            epochs=int(training_args.num_train_epochs),
+            callbacks=callbacks,
+        )
+        train_loss = history.history["loss"][-1]
+        try:
+            train_perplexity = math.exp(train_loss)
+        except OverflowError:
+            train_perplexity = math.inf
+        logger.info(f"  Final train loss: {train_loss:.3f}")
+        logger.info(f"  Final train perplexity: {train_perplexity:.3f}")
+        validation_loss = history.history["val_loss"][-1]
+        try:
+            validation_perplexity = math.exp(validation_loss)
+        except OverflowError:
+            validation_perplexity = math.inf
+        logger.info(f"  Final validation loss: {validation_loss:.3f}")
+        logger.info(f"  Final validation perplexity: {validation_perplexity:.3f}")
 
         if training_args.output_dir is not None:
             output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
             results_dict = dict()
-            if training_args.do_train:
-                results_dict["train_loss"] = train_loss
-                results_dict["train_perplexity"] = train_perplexity
-            if training_args.do_eval:
-                results_dict["eval_loss"] = validation_loss
-                results_dict["eval_perplexity"] = validation_perplexity
+            results_dict["train_loss"] = train_loss
+            results_dict["train_perplexity"] = train_perplexity
+            results_dict["eval_loss"] = validation_loss
+            results_dict["eval_perplexity"] = validation_perplexity
             with open(output_eval_file, "w") as writer:
                 writer.write(json.dumps(results_dict))
         # endregion
