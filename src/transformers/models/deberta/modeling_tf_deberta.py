@@ -101,27 +101,6 @@ class TFDebertaXSoftmax(tf.keras.layers.Layer):
         return output
 
 
-def get_mask(input, dropout):
-    mask = tf.cast(
-        1 - tf.compat.v1.distributions.Bernoulli(probs=1 - dropout).sample(sample_shape=shape_list(input)), tf.bool
-    )
-    return mask, dropout
-
-
-@tf.custom_gradient
-def TFDebertaXDropout(input, local_ctx):
-    mask, dropout = get_mask(input, local_ctx)
-    scale = tf.convert_to_tensor(1.0 / (1 - dropout), dtype=tf.float32)
-    input = tf.cond(dropout > 0, lambda: tf.where(mask, 0.0, input) * scale, lambda: input)
-
-    def custom_grad(upstream_grad):
-        return tf.cond(
-            scale > 1, lambda: (tf.where(mask, 0.0, upstream_grad) * scale, None), lambda: (upstream_grad, None)
-        )
-
-    return input, custom_grad
-
-
 class TFDebertaStableDropout(tf.keras.layers.Layer):
     """
     Optimized dropout module for stabilizing the training
@@ -134,9 +113,26 @@ class TFDebertaStableDropout(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.drop_prob = tf.convert_to_tensor(drop_prob, dtype=tf.float32)
 
+    @tf.custom_gradient
+    def xdropout(self, input):
+        """
+        Applies dropout to the input, as vanilla dropout, but also scales the remaining elements up by 1/drop_prob.
+        """
+        mask = tf.cast(
+            1 - tf.compat.v1.distributions.Bernoulli(probs=1 - self.drop_prob).sample(sample_shape=shape_list(input)),
+            tf.bool,
+        )
+        scale = tf.convert_to_tensor(1.0 / (1 - self.drop_prob), dtype=tf.float32)
+        input = tf.cond(self.drop_prob > 0, lambda: tf.where(mask, 0.0, input) * scale, lambda: input)
+
+        def grad(upstream):
+            return tf.cond(scale > 1, lambda: tf.where(mask, 0.0, upstream) * scale, lambda: upstream)
+
+        return input, grad
+
     def call(self, inputs: tf.Tensor, training: tf.Tensor = False):
-        if training and self.drop_prob > 0:
-            return TFDebertaXDropout(inputs, self.drop_prob)
+        if training:
+            return self.xdropout(inputs)
         return inputs
 
 
