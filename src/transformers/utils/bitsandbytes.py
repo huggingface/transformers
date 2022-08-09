@@ -104,13 +104,13 @@ def replace_8bit_linear(model, threshold=6.0):
             `int8_threshold` for outlier detection as described in the formentioned paper. This parameters is set to
             `6.0` as described by the paper.
     """
-    for n, module in model.named_children():
+    for name, module in model.named_children():
         if len(list(module.children())) > 0:
             replace_8bit_linear(module, threshold)
 
-        if isinstance(module, nn.Linear) and n != "lm_head":
+        if isinstance(module, nn.Linear) and name != "lm_head":
             with init_empty_weights():
-                model._modules[n] = bnb.nn.Linear8bitLt(
+                model._modules[name] = bnb.nn.Linear8bitLt(
                     module.in_features,
                     module.out_features,
                     module.bias is not None,
