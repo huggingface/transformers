@@ -252,6 +252,18 @@ def _patch_hf_hub_tqdm():
     yield
     huggingface_hub.file_download.tqdm = old_tqdm
 
+def get_redirected_link(repo_id):
+    r"""
+    Tries to get a redirected link, otherwise return the same repo_id.
+    Code inspired from: https://stackoverflow.com/questions/20475552/python-requests-library-redirect-new-url
+    """
+    temp_link = f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{repo_id}"
+    try:
+        r = requests.head(temp_link, allow_redirects=True)
+        repo_id = r.url.split(HUGGINGFACE_CO_RESOLVE_ENDPOINT)[-1][1:]
+    except ValueError:
+        pass # Do nothing if the link is not redirected
+    return repo_id
 
 def cached_file(
     path_or_repo_id: Union[str, os.PathLike],
@@ -341,6 +353,9 @@ def cached_file(
         cache_dir = str(cache_dir)
     user_agent = http_user_agent(user_agent)
     try:
+        # Load from redirected link if necessary
+        path_or_repo_id = get_redirected_link(path_or_repo_id)
+
         # Load from URL or cache if already cached
         with _patch_hf_hub_tqdm():
             resolved_file = hf_hub_download(
