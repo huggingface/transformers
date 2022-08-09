@@ -133,13 +133,7 @@ def get_key_to_not_convert(model):
     model (`torch.nn.Module`):
         Input model
     """
-
-    # Compute the number of parameters between the base model and the full model
-    n_params_base = sum(p.numel() for p in model.base_model.parameters() if p.requires_grad)
-    n_params_full = sum(p.numel() for p in model.parameters() if p.requires_grad)
-
-    # if they have the same number of parameters they are the same model - no attached head
-    if n_params_base == n_params_full:
+    if not hasattr(model, model.base_model_prefix):
         return ""
 
     # otherwise they have an attached head
