@@ -481,9 +481,7 @@ class FlaxT5LayerSelfAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        key_value_states=None,
         position_bias=None,
-        use_cache=False,
         output_attentions=False,
         deterministic=True,
         init_cache=False,
@@ -612,7 +610,6 @@ class FlaxT5LayerCollection(nn.Module):
     config: T5Config
     has_relative_attention_bias: bool
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
-    gradient_checkpointing: bool = False
 
     def setup(self):
         self.layer = FlaxT5Block(
@@ -628,7 +625,6 @@ class FlaxT5LayerCollection(nn.Module):
         encoder_attention_mask=None,
         encoder_decoder_position_bias=None,
         output_attentions=False,
-        return_dict=True,
         deterministic=True,
         init_cache=False,
     ):
@@ -653,14 +649,13 @@ class FlaxT5BlockCollection(nn.Module):
     def setup(self):
         self.causal = self.config.causal
         if self.gradient_checkpointing:
-            FlaxT5CheckpointLayer = remat(FlaxT5LayerCollection, static_argnums=(6, 7, 8, 9))
+            FlaxT5CheckpointLayer = remat(FlaxT5LayerCollection, static_argnums=(6, 7, 8))
             self.blocks = [
                 FlaxT5CheckpointLayer(
                     self.config,
                     has_relative_attention_bias=(i == 0),
                     dtype=self.dtype,
                     name=str(i),
-                    gradient_checkpointing=self.gradient_checkpointing,
                 )
                 for i in range(self.config.num_layers)
             ]
@@ -671,7 +666,6 @@ class FlaxT5BlockCollection(nn.Module):
                     has_relative_attention_bias=(i == 0),
                     dtype=self.dtype,
                     name=str(i),
-                    gradient_checkpointing=self.gradient_checkpointing,
                 )
                 for i in range(self.config.num_layers)
             ]
@@ -684,7 +678,6 @@ class FlaxT5BlockCollection(nn.Module):
         encoder_attention_mask=None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-        return_dict: bool = True,
         deterministic: bool = True,
         init_cache: bool = False,
     ):
@@ -707,7 +700,6 @@ class FlaxT5BlockCollection(nn.Module):
                 encoder_attention_mask,
                 encoder_decoder_position_bias,
                 output_attentions,
-                return_dict,
                 deterministic,
                 init_cache,
             )
@@ -1330,7 +1322,7 @@ class FlaxT5Module(nn.Module):
         encoder_outputs=None,
         output_attentions=None,
         output_hidden_states=None,
-        return_dict: bool = True,
+        return_dict=None,
         deterministic: bool = True,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
