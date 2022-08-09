@@ -14,8 +14,8 @@
 # limitations under the License.
 """ PyTorch TimeSeriesTransformer model. """
 
-import math
 import copy
+from dataclasses import dataclass
 import random
 from typing import Optional, Tuple, List
 
@@ -106,6 +106,69 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     inverted_mask = 1.0 - expanded_mask
 
     return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
+
+
+@dataclass
+class Seq2SeqTSModelOutput(Seq2SeqModelOutput):
+    """
+    Base class for model encoder's outputs that also contains : pre-computed hidden states that can speed up sequential
+    decoding.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the decoder of the model.
+
+            If `past_key_values` is used only the last hidden-state of the sequences of shape `(batch_size, 1,
+            hidden_size)` is output.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the decoder at the output of each layer plus the optional initial embedding outputs.
+        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
+        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
+        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the encoder at the output of each layer plus the optional initial embedding outputs.
+        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        scale
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    scale: Optional[float] = None
 
 
 # class TimeSeriesTransformerLearnedPositionalEmbedding(nn.Embedding):
@@ -1117,23 +1180,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         self.encoder = TimeSeriesTransformerEncoder(config)
         self.decoder = TimeSeriesTransformerDecoder(config)
 
-        # self.transformer = nn.Transformer(
-        #     d_model=self.d_model,
-        #     nhead=config.nhead,
-        #     num_encoder_layers=config.encoder_layers,
-        #     num_decoder_layers=config.decoder_layers,
-        #     dim_feedforward=config.ffn_dim,
-        #     dropout=config.dropout,
-        #     activation=config.activation_function,
-        #     batch_first=True,
-        # )
-
-        # # causal decoder tgt mask
-        # self.register_buffer(
-        #     "tgt_mask",
-        #     self.transformer.generate_square_subsequent_mask(config.prediction_length),
-        # )
-
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1245,12 +1291,15 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
         return transformer_inputs, scale, static_feat
 
-    def output_params(self, transformer_inputs):
+    def enc_dec_outputs(self, transformer_inputs):
         enc_input = transformer_inputs[:, : self.config.context_length, ...]
         dec_input = transformer_inputs[:, self.config.context_length :, ...]
 
         encoder_outputs = self.encoder(inputs_embeds=enc_input)
-        return self.decoder(inputs_embeds=dec_input, encoder_hidden_states=encoder_outputs.last_hidden_state)
+        decoder_outputs = self.decoder(
+            inputs_embeds=dec_input, encoder_hidden_states=encoder_outputs.last_hidden_state
+        )
+        return encoder_outputs, decoder_outputs
 
     def get_input_embeddings(self):
         return self.shared
@@ -1269,7 +1318,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     @add_start_docstrings_to_model_forward(TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Seq2SeqModelOutput,
+        output_type=Seq2SeqTSModelOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -1281,6 +1330,8 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         past_observed_values: torch.Tensor,
         future_time_feat: Optional[torch.Tensor] = None,
         future_target: Optional[torch.Tensor] = None,
+        encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        return_dict: Optional[bool] = None,
     ):
         transformer_inputs, scale, _ = self.create_network_inputs(
             feat_static_cat,
@@ -1291,30 +1342,43 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             future_time_feat,
             future_target,
         )
-        dec_output = self.output_params(transformer_inputs)
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        if encoder_outputs is None:
+            enc_input = transformer_inputs[:, : self.config.context_length, ...]
+            encoder_outputs = self.encoder(inputs_embeds=enc_input)
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs,
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
 
-        return dec_output.last_hidden_state, scale
+        dec_input = transformer_inputs[:, self.config.context_length :, ...]
+        decoder_outputs = self.decoder(
+            inputs_embeds=dec_input, encoder_hidden_states=encoder_outputs.last_hidden_state
+        )
 
-        # return Seq2SeqModelOutput(
-        #     last_hidden_state=decoder_outputs.last_hidden_state,
-        #     past_key_values=decoder_outputs.past_key_values,
-        #     decoder_hidden_states=decoder_outputs.hidden_states,
-        #     decoder_attentions=decoder_outputs.attentions,
-        #     cross_attentions=decoder_outputs.cross_attentions,
-        #     encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-        #     encoder_hidden_states=encoder_outputs.hidden_states,
-        #     encoder_attentions=encoder_outputs.attentions,
-        # )
+        return Seq2SeqTSModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+            scale=scale,
+        )
 
 
 class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
         self.config = config
-        self.transformer = TimeSeriesTransformerModel(config)
+        self.model = TimeSeriesTransformerModel(config)
         if config.distribution_output == "student_t":
             self.distribution_output = StudentTOutput()
-            self.param_proj = self.distribution_output.get_args_proj(self.transformer.config.d_model)
+            self.param_proj = self.distribution_output.get_args_proj(self.model.config.d_model)
             self.target_shape = self.distribution_output.event_shape
 
         if config.loss == "nll":
@@ -1346,7 +1410,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
 
         if future_target is not None and future_observed_values is not None:
             # training
-            dec_output, scale = self.transformer(
+            outputs = self.model(
                 feat_static_cat,
                 feat_static_real,
                 past_time_feat,
@@ -1355,8 +1419,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
                 future_time_feat,
                 future_target,
             )
-            params = self.output_params(dec_output)
-            distr = self.output_distribution(params, scale)
+            params = self.output_params(outputs.last_hidden_state)
+            distr = self.output_distribution(params, outputs.scale)
 
             loss = self.loss(distr, future_target)
 
@@ -1368,8 +1432,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             return weighted_average(loss, weights=loss_weights)
         else:
             # prediction
-            encoder = self.transformer.get_encoder()
-            decoder = self.transformer.get_decoder()
+            encoder = self.model.get_encoder()
+            decoder = self.model.get_decoder()
 
             num_parallel_samples = self.config.num_parallel_samples
 
