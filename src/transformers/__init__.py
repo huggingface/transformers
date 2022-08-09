@@ -2357,6 +2357,13 @@ else:
             "TFCTRLPreTrainedModel",
         ]
     )
+    _import_structure["models.cvt"].extend(
+        [
+            "TFCvtForImageClassification",
+            "TFCvtModel",
+            "TFCvtPreTrainedModel",
+        ]
+    )
     _import_structure["models.data2vec"].extend(
         [
             "TFData2VecVisionForImageClassification",
@@ -5022,6 +5029,7 @@ if TYPE_CHECKING:
             TFCTRLModel,
             TFCTRLPreTrainedModel,
         )
+        from .models.cvt import TFCvtForImageClassification, TFCvtModel, TFCvtPreTrainedModel
         from .models.data2vec import (
             TFData2VecVisionForImageClassification,
             TFData2VecVisionForSemanticSegmentation,

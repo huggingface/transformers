@@ -88,7 +88,10 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="",
 
     # The SeparableConv1D TF layer contains two weights that are translated to PyTorch Conv1D here
     if tf_name[-1] == "pointwise_kernel" or tf_name[-1] == "depthwise_kernel":
-        tf_name[-1] = tf_name[-1].replace("_kernel", ".weight")
+        if tf_name[0] == "cvt":
+            tf_name[-1] = "weight"
+        else:
+            tf_name[-1] = tf_name[-1].replace("_kernel", ".weight")
 
     # Remove prefix if needed
     tf_name = ".".join(tf_name)
