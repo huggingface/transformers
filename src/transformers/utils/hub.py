@@ -261,8 +261,8 @@ def get_redirected_link(repo_id):
     temp_link = f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/{repo_id}"
     try:
         r = requests.head(temp_link, allow_redirects=True)
-        repo_id = r.url.split(HUGGINGFACE_CO_RESOLVE_ENDPOINT)[-1][1:]
-    except ValueError:
+        repo_id = r.url.replace(f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/", "")
+    except BaseException:
         pass  # Do nothing if the link is not redirected
     return repo_id
 
