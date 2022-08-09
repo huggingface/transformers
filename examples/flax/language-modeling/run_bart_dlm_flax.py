@@ -810,7 +810,7 @@ def main():
 
         # true loss = total loss / total samples
         loss = jax.lax.psum(loss, "batch")
-        loss = jax.tree_map(lambda x: x / num_labels, loss)
+        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
 
         # true grad = total grad / total samples
         grad = jax.lax.psum(grad, "batch")
