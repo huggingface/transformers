@@ -162,6 +162,13 @@ class TFCvtModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    @unittest.skipIf(
+        not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,
+        reason="TF (<=2.8) does not support backprop for grouped convolutions on CPU.",
+    )
+    def test_dataset_conversion(self):
+        super().test_dataset_conversion()
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -173,6 +180,38 @@ class TFCvtModelTest(TFModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            hidden_states = outputs.hidden_states
+
+            expected_num_layers = len(self.model_tester.depth)
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            # verify the first hidden states (first block)
+            self.assertListEqual(
+                list(hidden_states[0].shape[-3:]),
+                [
+                    self.model_tester.embed_dim[0],
+                    self.model_tester.image_size // 4,
+                    self.model_tester.image_size // 4,
+                ],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -193,3 +232,29 @@ class TFCvtModelTest(TFModelTesterMixin, unittest.TestCase):
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
+
+
+@require_tf
+@require_vision
+class TFCvtModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_feature_extractor(self):
+        return AutoFeatureExtractor.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0], from_pt=True)
+
+    @slow
+    def test_inference_image_classification_head(self):
+        model = TFCvtForImageClassification.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0], from_pt=True)
+
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        inputs = feature_extractor(images=image, return_tensors="tf")
+
+        # forward pass
+        outputs = model(**inputs)
+
+        # verify the logits
+        expected_shape = tf.TensorShape((1, 1000))
+        self.assertEqual(outputs.logits.shape, expected_shape)
+
+        expected_slice = tf.constant([0.9285, 0.9015, -0.3150])
+        self.assertTrue(np.allclose(outputs.logits[0, :3].numpy(), expected_slice, atol=1e-4))

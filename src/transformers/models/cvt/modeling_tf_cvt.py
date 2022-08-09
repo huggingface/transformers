@@ -218,8 +218,8 @@ class TFCvtSelfAttentionProjection(tf.keras.layers.Layer):
 
 class TFCvtSelfAttention(tf.keras.layers.Layer):
     """
-    Self-attention layer. A depth-wise separable convolution operation (Convolutional Projection), 
-    is applied for query, key, and value embeddings.
+    Self-attention layer. A depth-wise separable convolution operation (Convolutional Projection), is applied for
+    query, key, and value embeddings.
     """
 
     def __init__(
@@ -508,7 +508,7 @@ class TFCvtLayer(tf.keras.layers.Layer):
 
 class TFCvtStage(tf.keras.layers.Layer):
     """
-    Cvt stage (encoder block). Each stage has 2 parts : 
+    Cvt stage (encoder block). Each stage has 2 parts :
     - (1) A Convolutional Token Embedding layer
     - (2) A Convolutional Transformer Block (layer).
     The classification token is added only in the last stage.
@@ -655,9 +655,9 @@ class TFCvtMainLayer(tf.keras.layers.Layer):
             raise ValueError("You have to specify pixel_values")
         # pixel_values = tf.transpose(pixel_values, perm=(0, 3, 1, 2))
         # tried reshaping to to `NHWC` directly in main layer and using this format
-        # throughout the model, but even though I get the same predictions as torch 
+        # throughout the model, but even though I get the same predictions as torch
         # CVT model, our sequence_output has an absolute difference > 100 with torch prediction
-        
+
         encoder_outputs = self.encoder(
             pixel_values,
             output_hidden_states=output_hidden_states,
@@ -854,7 +854,7 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
         # Therefore we will be using the same epsilon as in Pytorch CVT model.
         # What is the use of config.layer_norm_eps ?
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm")
-        
+
         # Classifier head
         self.classifier = tf.keras.layers.Dense(
             units=config.num_labels,
@@ -932,14 +932,7 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return TFImageClassifierOutputWithNoAttention(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states
-        )
+        return TFImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
     def serving_output(self, output: TFImageClassifierOutputWithNoAttention) -> TFImageClassifierOutputWithNoAttention:
-        return TFImageClassifierOutputWithNoAttention(
-            logits=output.logits,
-            hidden_states=output.hidden_states
-        )
+        return TFImageClassifierOutputWithNoAttention(logits=output.logits, hidden_states=output.hidden_states)
