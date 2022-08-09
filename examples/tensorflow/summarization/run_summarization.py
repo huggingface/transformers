@@ -23,6 +23,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
+import json
 
 import datasets
 import nltk  # Here to have a nice missing dependency error message early on
@@ -663,7 +664,7 @@ def main():
 
         # region Training
         model.compile(optimizer=optimizer, jit_compile=training_args.xla)
-
+        eval_metrics = None
         if training_args.do_train:
             logger.info("***** Running training *****")
             logger.info(f"  Num examples = {len(train_dataset)}")
@@ -675,7 +676,8 @@ def main():
             if training_args.xla and not data_args.pad_to_max_length:
                 logger.warning("XLA training may be slow at first when --pad_to_max_length is not set "
                                "until all possible shapes have been compiled.")
-            model.fit(tf_train_dataset, epochs=int(training_args.num_train_epochs), callbacks=callbacks)
+            history = model.fit(tf_train_dataset, epochs=int(training_args.num_train_epochs), callbacks=callbacks)
+            eval_metrics = {key: val[-1] for key, val in history.history.items()}
         # endregion
 
         # region Validation
@@ -701,11 +703,16 @@ def main():
 
                 metric.add_batch(predictions=decoded_preds, references=decoded_labels)
 
-            result = metric.compute(use_stemmer=True)
-            result = {key: round(val.mid.fmeasure * 100, 4) for key, val in result.items()}
+            eval_metrics = metric.compute(use_stemmer=True)
 
+            result = {key: round(val.mid.fmeasure * 100, 4) for key, val in eval_metrics.items()}
             logger.info(result)
         # endregion
+
+        if training_args.output_dir is not None and eval_metrics is not None:
+            output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+            with open(output_eval_file, "w") as writer:
+                writer.write(json.dumps(eval_metrics))
 
         if training_args.output_dir is not None and not training_args.push_to_hub:
             # If we're not pushing to hub, at least save a local copy when we're done

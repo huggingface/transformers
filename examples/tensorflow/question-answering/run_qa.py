@@ -24,6 +24,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
+import json
 
 import tensorflow as tf
 from datasets import load_dataset
@@ -759,6 +760,10 @@ def main():
             logging.info("Evaluation metrics:")
             for metric, value in metrics.items():
                 logging.info(f"{metric}: {value:.3f}")
+            if training_args.output_dir is not None:
+                output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+                with open(output_eval_file, "w") as writer:
+                    writer.write(json.dumps(metrics))
         # endregion
 
         # region Prediction

@@ -494,19 +494,9 @@ def main():
         push_to_hub_model_id = training_args.push_to_hub_model_id
         model_name = model_args.model_name_or_path.split('/')[-1]
         if not push_to_hub_model_id:
-            if data_args.dataset_name is not None:
-                push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
-            else:
-                push_to_hub_model_id = f"{model_name}-finetuned-text-classification"
+            push_to_hub_model_id = f"{model_name}-finetuned-text-classification"
 
-        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "summarization"}
-        if data_args.dataset_name is not None:
-            model_card_kwargs["dataset_tags"] = data_args.dataset_name
-            if data_args.dataset_config_name is not None:
-                model_card_kwargs["dataset_args"] = data_args.dataset_config_name
-                model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
-            else:
-                model_card_kwargs["dataset"] = data_args.dataset_name
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-classification"}
 
         if training_args.push_to_hub:
             callbacks = [

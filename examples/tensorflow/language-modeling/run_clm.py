@@ -32,6 +32,7 @@ from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
 from typing import Optional
+import json
 
 import datasets
 import tensorflow as tf
@@ -283,6 +284,7 @@ def main():
         raw_datasets = load_dataset(
             data_args.dataset_name,
             data_args.dataset_config_name,
+            cache_dir=model_args.cache_dir,
             use_auth_token=True if model_args.use_auth_token else None,
         )
         if "validation" not in raw_datasets.keys():
@@ -290,12 +292,14 @@ def main():
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[:{data_args.validation_split_percentage}%]",
+                cache_dir=model_args.cache_dir,
                 use_auth_token=True if model_args.use_auth_token else None,
             )
             raw_datasets["train"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
                 split=f"train[{data_args.validation_split_percentage}%:]",
+                cache_dir=model_args.cache_dir,
                 use_auth_token=True if model_args.use_auth_token else None,
             )
     else:
@@ -305,16 +309,39 @@ def main():
             data_files["train"] = data_args.train_file
         if data_args.validation_file is not None:
             data_files["validation"] = data_args.validation_file
-        extension = data_args.train_file.split(".")[-1]
+        extension = (
+            data_args.train_file.split(".")[-1]
+            if data_args.train_file is not None
+            else data_args.validation_file.split(".")[-1]
+        )
         if extension == "txt":
             extension = "text"
             dataset_args["keep_linebreaks"] = data_args.keep_linebreaks
         raw_datasets = load_dataset(
             extension,
             data_files=data_files,
+            cache_dir=model_args.cache_dir,
             use_auth_token=True if model_args.use_auth_token else None,
             **dataset_args,
         )
+        # If no validation data is there, validation_split_percentage will be used to divide the dataset.
+        if "validation" not in raw_datasets.keys():
+            raw_datasets["validation"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[:{data_args.validation_split_percentage}%]",
+                cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
+                **dataset_args,
+            )
+            raw_datasets["train"] = load_dataset(
+                extension,
+                data_files=data_files,
+                split=f"train[{data_args.validation_split_percentage}%:]",
+                cache_dir=model_args.cache_dir,
+                use_auth_token=True if model_args.use_auth_token else None,
+                **dataset_args,
+            )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
     # endregion
@@ -430,7 +457,7 @@ def main():
         eval_dataset = eval_dataset.select(range(max_eval_samples))
 
     # Log a few random samples from the training set:
-    for index in random.sample(range(len(train_dataset)), 3):
+    for index in random.sample(range(len(train_dataset)), min(3, len(train_dataset))):
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
     # endregion
 
@@ -534,38 +561,55 @@ def main():
         # endregion
 
         # region Training and validation
-        logger.info("***** Running training *****")
-        logger.info(f"  Num examples = {len(train_dataset)}")
-        logger.info(f"  Num Epochs = {training_args.num_train_epochs}")
-        logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
-        logger.info(f"  Total train batch size = {training_args.per_device_train_batch_size * num_replicas}")
+        if training_args.do_train:
+            logger.info("***** Running training *****")
+            logger.info(f"  Num examples = {len(train_dataset)}")
+            logger.info(f"  Num Epochs = {training_args.num_train_epochs}")
+            logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
+            logger.info(f"  Total train batch size = {training_args.per_device_train_batch_size * num_replicas}")
 
-        # For long training runs, you may wish to use the PushToHub() callback here to save intermediate checkpoints
-        # to the Hugging Face Hub rather than just pushing the finished model.
-        # See https://huggingface.co/docs/transformers/main_classes/keras_callbacks#transformers.PushToHubCallback
+            # For long training runs, you may wish to use the PushToHub() callback here to save intermediate checkpoints
+            # to the Hugging Face Hub rather than just pushing the finished model.
+            # See https://huggingface.co/docs/transformers/main_classes/keras_callbacks#transformers.PushToHubCallback
 
-        history = model.fit(
-            tf_train_dataset,
-            validation_data=tf_eval_dataset,
-            epochs=int(training_args.num_train_epochs),
-            callbacks=callbacks
-        )
-        try:
-            train_perplexity = math.exp(history.history["loss"][-1])
-        except OverflowError:
-            train_perplexity = math.inf
-        try:
-            validation_perplexity = math.exp(history.history["val_loss"][-1])
-        except OverflowError:
-            validation_perplexity = math.inf
-        logger.info(f"  Final train loss: {history.history['loss'][-1]:.3f}")
-        logger.info(f"  Final train perplexity: {train_perplexity:.3f}")
-        logger.info(f"  Final validation loss: {history.history['val_loss'][-1]:.3f}")
-        logger.info(f"  Final validation perplexity: {validation_perplexity:.3f}")
-        # endregion
+            history = model.fit(
+                tf_train_dataset,
+                validation_data=tf_eval_dataset if training_args.do_eval else None,
+                epochs=int(training_args.num_train_epochs),
+                callbacks=callbacks
+            )
+            train_loss = history.history["loss"][-1]
+            try:
+                train_perplexity = math.exp(train_loss)
+            except OverflowError:
+                train_perplexity = math.inf
+            logger.info(f"  Final train loss: {train_loss:.3f}")
+            logger.info(f"  Final train perplexity: {train_perplexity:.3f}")
+
+        if training_args.do_eval:
+            if not training_args.do_train:
+                validation_loss = model.evaluate(tf_eval_dataset)
+            else:
+                validation_loss = history.history["val_loss"][-1]
+            try:
+                validation_perplexity = math.exp(validation_loss)
+            except OverflowError:
+                validation_perplexity = math.inf
+            logger.info(f"  Final validation loss: {validation_loss:.3f}")
+            logger.info(f"  Final validation perplexity: {validation_perplexity:.3f}")
 
         if training_args.output_dir is not None:
-            model.save_pretrained(training_args.output_dir)
+            output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+            results_dict = dict()
+            if training_args.do_train:
+                results_dict["train_loss"] = train_loss
+                results_dict["train_perplexity"] = train_perplexity
+            if training_args.do_eval:
+                results_dict["eval_loss"] = validation_loss
+                results_dict["eval_perplexity"] = validation_perplexity
+            with open(output_eval_file, "w") as writer:
+                writer.write(json.dumps(results_dict))
+        # endregion
 
     if training_args.output_dir is not None and not training_args.push_to_hub:
         # If we're not pushing to hub, at least save a local copy when we're done

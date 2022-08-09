@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
 from typing import Optional, Union
+import json
 
 import datasets
 import tensorflow as tf
@@ -462,19 +463,9 @@ def main():
         push_to_hub_model_id = training_args.push_to_hub_model_id
         model_name = model_args.model_name_or_path.split('/')[-1]
         if not push_to_hub_model_id:
-            if data_args.dataset_name is not None:
-                push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
-            else:
-                push_to_hub_model_id = f"{model_name}-finetuned-multiplechoice"
+            push_to_hub_model_id = f"{model_name}-finetuned-multiplechoice"
 
-        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "summarization"}
-        if data_args.dataset_name is not None:
-            model_card_kwargs["dataset_tags"] = data_args.dataset_name
-            if data_args.dataset_config_name is not None:
-                model_card_kwargs["dataset_args"] = data_args.dataset_config_name
-                model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
-            else:
-                model_card_kwargs["dataset"] = data_args.dataset_name
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "multiple-choice"}
 
         if training_args.push_to_hub:
             callbacks = [
@@ -492,6 +483,7 @@ def main():
         # endregion
 
         # region Training
+        eval_metrics = None
         if training_args.do_train:
             dataset_options = tf.data.Options()
             dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
@@ -522,12 +514,13 @@ def main():
                 ).with_options(dataset_options)
             else:
                 validation_data = None
-            model.fit(
+            history = model.fit(
                 tf_train_dataset,
                 validation_data=validation_data,
                 epochs=int(training_args.num_train_epochs),
                 callbacks=callbacks
             )
+            eval_metrics = {key: val[-1] for key, val in history.history.items()}
         # endregion
 
         # region Evaluation
@@ -542,8 +535,14 @@ def main():
                 collate_fn=data_collator,
                 drop_remainder=True,
             ).with_options(dataset_options)
-            model.evaluate(tf_eval_dataset)
+            eval_results = model.evaluate(tf_eval_dataset)
+            eval_metrics = {"val_loss": eval_results[0], "val_accuracy": eval_results[1]}
         # endregion
+
+        if eval_metrics is not None and training_args.output_dir is not None:
+            output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+            with open(output_eval_file, "w") as writer:
+                writer.write(json.dumps(eval_metrics))
 
         # region Push to hub
 

@@ -23,12 +23,12 @@ import os
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
+import json
 
 import datasets
 import numpy as np
 import tensorflow as tf
 from datasets import load_dataset
-from tqdm import tqdm
 
 import evaluate
 import transformers
@@ -633,6 +633,7 @@ def main():
         # endregion
 
         # region Training
+        eval_metrics = None
         model.compile(optimizer=optimizer, jit_compile=training_args.xla)
 
         if training_args.do_train:
@@ -647,11 +648,12 @@ def main():
                 logger.warning("XLA training may be slow at first when --pad_to_max_length is not set "
                                "until all possible shapes have been compiled.")
 
-            model.fit(tf_train_dataset, epochs=int(training_args.num_train_epochs), callbacks=callbacks)
+            history = model.fit(tf_train_dataset, epochs=int(training_args.num_train_epochs), callbacks=callbacks)
+            eval_metrics = {key: val[-1] for key, val in history.history.items()}
         # endregion
 
         # region Validation
-        if training_args.do_eval:
+        if training_args.do_eval and not training_args.do_train:
             # Compiling generation with XLA yields enormous speedups, see https://huggingface.co/blog/tf-xla-generate
             @tf.function(jit_compile=True)
             def generate(**kwargs):
@@ -671,9 +673,14 @@ def main():
 
                     metric.add_batch(predictions=decoded_preds, references=decoded_labels)
 
-                result = metric.compute()
-                logger.info({"bleu": result["score"]})
+                eval_metrics = metric.compute()
+                logger.info({"bleu": eval_metrics["score"]})
         # endregion
+
+        if training_args.output_dir is not None and eval_metrics is not None:
+            output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+            with open(output_eval_file, "w") as writer:
+                writer.write(json.dumps(eval_metrics))
 
         if training_args.output_dir is not None and not training_args.push_to_hub:
             # If we're not pushing to hub, at least save a local copy when we're done

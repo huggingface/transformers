@@ -22,6 +22,8 @@ import logging
 import random
 from dataclasses import dataclass, field
 from typing import Optional
+import os
+import json
 
 import datasets
 import numpy as np
@@ -571,11 +573,17 @@ def main():
         logger.info("Evaluation metrics:")
         for key, val in eval_metric.items():
             logger.info(f"{key}: {val:.4f}")
+
+        if training_args.output_dir is not None:
+            output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+            with open(output_eval_file, "w") as writer:
+                writer.write(json.dumps(eval_metric))
         # endregion
 
     if training_args.output_dir is not None and not training_args.push_to_hub:
         # If we're not pushing to hub, at least save a local copy when we're done
         model.save_pretrained(training_args.output_dir)
+
 
 if __name__ == "__main__":
     main()

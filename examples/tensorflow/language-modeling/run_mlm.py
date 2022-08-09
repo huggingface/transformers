@@ -31,6 +31,7 @@ from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
 from typing import Optional
+import json
 
 import datasets
 import tensorflow as tf
@@ -473,7 +474,7 @@ def main():
         eval_dataset = eval_dataset.select(range(max_eval_samples))
 
     # Log a few random samples from the training set:
-    for index in random.sample(range(len(train_dataset)), 3):
+    for index in random.sample(range(len(train_dataset)), min(3, len(train_dataset))):
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
     # endregion
 
@@ -546,7 +547,7 @@ def main():
         )
 
         # no user-specified loss = will use the model internal loss
-        model.compile(optimizer=optimizer, jit_compile=training_args.xla)
+        model.compile(optimizer=optimizer, jit_compile=training_args.xla, run_eagerly=True)
         # endregion
 
         # region Preparing push_to_hub and model card
@@ -595,26 +596,42 @@ def main():
 
         history = model.fit(
             tf_train_dataset,
-            validation_data=tf_eval_dataset,
+            validation_data=tf_eval_dataset if training_args.do_eval else None,
             epochs=int(training_args.num_train_epochs),
             callbacks=callbacks
         )
+        train_loss = history.history["loss"][-1]
         try:
-            train_perplexity = math.exp(history.history["loss"][-1])
+            train_perplexity = math.exp(train_loss)
         except OverflowError:
             train_perplexity = math.inf
+        logger.info(f"  Final train loss: {train_loss:.3f}")
+        logger.info(f"  Final train perplexity: {train_perplexity:.3f}")
+
+    if training_args.do_eval:
+        if not training_args.do_train:
+            validation_loss = model.evaluate(tf_eval_dataset)
+        else:
+            validation_loss = history.history["val_loss"][-1]
         try:
-            validation_perplexity = math.exp(history.history["val_loss"][-1])
+            validation_perplexity = math.exp(validation_loss)
         except OverflowError:
             validation_perplexity = math.inf
-        logger.warning(f"  Final train loss: {history.history['loss'][-1]:.3f}")
-        logger.warning(f"  Final train perplexity: {train_perplexity:.3f}")
-        logger.warning(f"  Final validation loss: {history.history['val_loss'][-1]:.3f}")
-        logger.warning(f"  Final validation perplexity: {validation_perplexity:.3f}")
-        # endregion
+        logger.info(f"  Final validation loss: {validation_loss:.3f}")
+        logger.info(f"  Final validation perplexity: {validation_perplexity:.3f}")
 
-        if training_args.output_dir is not None:
-            model.save_pretrained(training_args.output_dir)
+    if training_args.output_dir is not None:
+        output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+        results_dict = dict()
+        if training_args.do_train:
+            results_dict["train_loss"] = train_loss
+            results_dict["train_perplexity"] = train_perplexity
+        if training_args.do_eval:
+            results_dict["eval_loss"] = validation_loss
+            results_dict["eval_perplexity"] = validation_perplexity
+        with open(output_eval_file, "w") as writer:
+            writer.write(json.dumps(results_dict))
+        # endregion
 
     if training_args.output_dir is not None and not training_args.push_to_hub:
         # If we're not pushing to hub, at least save a local copy when we're done
