@@ -64,8 +64,10 @@ if __name__ == "__main__":
         "--openai_config_file",
         default="",
         type=str,
-        help="An optional config json file corresponding to the pre-trained OpenAI model. \n"
-        "This specifies the model architecture.",
+        help=(
+            "An optional config json file corresponding to the pre-trained OpenAI model. \n"
+            "This specifies the model architecture."
+        ),
     )
     args = parser.parse_args()
     convert_openai_checkpoint_to_pytorch(

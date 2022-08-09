@@ -79,7 +79,8 @@ def load_tf2_weights_in_bert(model, tf_checkpoint_path, config):
     layer_depth = list(set(layer_depth))[0]
     if layer_depth != 1:
         raise ValueError(
-            "The model contains more than just the embedding/encoder layers. This script does not handle MLM/NSP heads."
+            "The model contains more than just the embedding/encoder layers. This script does not handle MLM/NSP"
+            " heads."
         )
 
     # convert layers
@@ -201,7 +202,8 @@ def load_tf2_weights_in_bert(model, tf_checkpoint_path, config):
             pointer.data = torch.from_numpy(array)
         else:
             raise ValueError(
-                f"Shape mismatch in layer {full_name}: Model expects shape {pointer.shape} but layer contains shape: {array.shape}"
+                f"Shape mismatch in layer {full_name}: Model expects shape {pointer.shape} but layer contains shape:"
+                f" {array.shape}"
             )
         logger.info(f"Successfully set variable {full_name} to PyTorch layer {trace}")
     return model

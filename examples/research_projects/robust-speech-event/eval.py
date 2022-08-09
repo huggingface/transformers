@@ -24,7 +24,7 @@ def log_results(result: Dataset, args: Dict[str, str]):
     cer_result = cer.compute(references=result["target"], predictions=result["prediction"])
 
     # print & log results
-    result_str = f"WER: {wer_result}\n" f"CER: {cer_result}"
+    result_str = f"WER: {wer_result}\nCER: {cer_result}"
     print(result_str)
 
     with open(f"{dataset_id}_eval_results.txt", "w") as f:

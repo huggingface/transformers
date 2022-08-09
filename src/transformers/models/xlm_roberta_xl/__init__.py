@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -29,7 +29,12 @@ _import_structure = {
     ],
 }
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_xlm_roberta_xl"] = [
         "XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST",
         "XLMRobertaXLForCausalLM",
@@ -49,7 +54,12 @@ if TYPE_CHECKING:
         XLMRobertaXLOnnxConfig,
     )
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_xlm_roberta_xl import (
             XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLMRobertaXLForCausalLM,

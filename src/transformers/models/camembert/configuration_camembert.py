@@ -27,8 +27,12 @@ logger = logging.get_logger(__name__)
 
 CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "camembert-base": "https://huggingface.co/camembert-base/resolve/main/config.json",
-    "umberto-commoncrawl-cased-v1": "https://huggingface.co/Musixmatch/umberto-commoncrawl-cased-v1/resolve/main/config.json",
-    "umberto-wikipedia-uncased-v1": "https://huggingface.co/Musixmatch/umberto-wikipedia-uncased-v1/resolve/main/config.json",
+    "umberto-commoncrawl-cased-v1": (
+        "https://huggingface.co/Musixmatch/umberto-commoncrawl-cased-v1/resolve/main/config.json"
+    ),
+    "umberto-wikipedia-uncased-v1": (
+        "https://huggingface.co/Musixmatch/umberto-wikipedia-uncased-v1/resolve/main/config.json"
+    ),
 }
 
 

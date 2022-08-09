@@ -25,8 +25,12 @@ FUNNEL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "funnel-transformer/small-base": "https://huggingface.co/funnel-transformer/small-base/resolve/main/config.json",
     "funnel-transformer/medium": "https://huggingface.co/funnel-transformer/medium/resolve/main/config.json",
     "funnel-transformer/medium-base": "https://huggingface.co/funnel-transformer/medium-base/resolve/main/config.json",
-    "funnel-transformer/intermediate": "https://huggingface.co/funnel-transformer/intermediate/resolve/main/config.json",
-    "funnel-transformer/intermediate-base": "https://huggingface.co/funnel-transformer/intermediate-base/resolve/main/config.json",
+    "funnel-transformer/intermediate": (
+        "https://huggingface.co/funnel-transformer/intermediate/resolve/main/config.json"
+    ),
+    "funnel-transformer/intermediate-base": (
+        "https://huggingface.co/funnel-transformer/intermediate-base/resolve/main/config.json"
+    ),
     "funnel-transformer/large": "https://huggingface.co/funnel-transformer/large/resolve/main/config.json",
     "funnel-transformer/large-base": "https://huggingface.co/funnel-transformer/large-base/resolve/main/config.json",
     "funnel-transformer/xlarge": "https://huggingface.co/funnel-transformer/xlarge/resolve/main/config.json",

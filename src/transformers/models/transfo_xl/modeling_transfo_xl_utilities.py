@@ -102,7 +102,7 @@ class ProjectedAdaptiveLogSoftmax(nn.Module):
             hidden = hidden.view(-1, hidden.size(-1))
             labels = labels.view(-1)
             if hidden.size(0) != labels.size(0):
-                raise RuntimeError("Input and labels should have the same size " "in the batch dimension.")
+                raise RuntimeError("Input and labels should have the same size in the batch dimension.")
         else:
             hidden = hidden.view(-1, hidden.size(-1))
 

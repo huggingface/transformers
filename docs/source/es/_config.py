@@ -10,5 +10,5 @@ notebook_first_cells = [{"type": "code", "content": INSTALL_CONTENT}]
 black_avoid_patterns = {
     "{processor_class}": "FakeProcessorClass",
     "{model_class}": "FakeModelClass",
-    "{object_class}": "FakeObjectClass",    
+    "{object_class}": "FakeObjectClass",
 }

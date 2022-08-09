@@ -87,8 +87,10 @@ parser.add_argument(
     "--max_seq_length",
     default=384,
     type=int,
-    help="The maximum total input sequence length after WordPiece tokenization. Sequences "
-    "longer than this will be truncated, and sequences shorter than this will be padded.",
+    help=(
+        "The maximum total input sequence length after WordPiece tokenization. Sequences "
+        "longer than this will be truncated, and sequences shorter than this will be padded."
+    ),
 )
 parser.add_argument(
     "--doc_stride",
@@ -109,8 +111,10 @@ parser.add_argument(
     "--max_answer_length",
     default=30,
     type=int,
-    help="The maximum length of an answer that can be generated. This is needed because the start "
-    "and end predictions are not conditioned on one another.",
+    help=(
+        "The maximum length of an answer that can be generated. This is needed because the start "
+        "and end predictions are not conditioned on one another."
+    ),
 )
 
 parser.add_argument("--seed", type=int, default=42, help="random seed for initialization")

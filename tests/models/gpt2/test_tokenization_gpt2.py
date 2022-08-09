@@ -175,6 +175,78 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     padding="max_length",
                 )
 
+    def test_padding_if_pad_token_set_slow(self):
+        tokenizer = GPT2Tokenizer.from_pretrained(self.tmpdirname, pad_token="<pad>")
+
+        # Simple input
+        s = "This is a simple input"
+        s2 = ["This is a simple input looooooooong", "This is a simple input"]
+        p = ("This is a simple input", "This is a pair")
+        p2 = [
+            ("This is a simple input loooooong", "This is a simple input"),
+            ("This is a simple pair loooooong", "This is a simple pair"),
+        ]
+
+        pad_token_id = tokenizer.pad_token_id
+
+        out_s = tokenizer(s, padding="max_length", max_length=30, return_tensors="np")
+        out_s2 = tokenizer(s2, padding=True, truncate=True, return_tensors="np")
+        out_p = tokenizer(*p, padding="max_length", max_length=60, return_tensors="np")
+        out_p2 = tokenizer(p2, padding=True, truncate=True, return_tensors="np")
+
+        # s
+        # test single string max_length padding
+        self.assertEqual(out_s["input_ids"].shape[-1], 30)
+        self.assertTrue(pad_token_id in out_s["input_ids"])
+        self.assertTrue(0 in out_s["attention_mask"])
+
+        # s2
+        # test automatic padding
+        self.assertEqual(out_s2["input_ids"].shape[-1], 33)
+        # long slice doesn't have padding
+        self.assertFalse(pad_token_id in out_s2["input_ids"][0])
+        self.assertFalse(0 in out_s2["attention_mask"][0])
+        # short slice does have padding
+        self.assertTrue(pad_token_id in out_s2["input_ids"][1])
+        self.assertTrue(0 in out_s2["attention_mask"][1])
+
+        # p
+        # test single pair max_length padding
+        self.assertEqual(out_p["input_ids"].shape[-1], 60)
+        self.assertTrue(pad_token_id in out_p["input_ids"])
+        self.assertTrue(0 in out_p["attention_mask"])
+
+        # p2
+        # test automatic padding pair
+        self.assertEqual(out_p2["input_ids"].shape[-1], 52)
+        # long slice pair doesn't have padding
+        self.assertFalse(pad_token_id in out_p2["input_ids"][0])
+        self.assertFalse(0 in out_p2["attention_mask"][0])
+        # short slice pair does have padding
+        self.assertTrue(pad_token_id in out_p2["input_ids"][1])
+        self.assertTrue(0 in out_p2["attention_mask"][1])
+
+    def test_add_bos_token_slow(self):
+        bos_token = "$$$"
+        tokenizer = GPT2Tokenizer.from_pretrained(self.tmpdirname, bos_token=bos_token, add_bos_token=True)
+
+        s = "This is a simple input"
+        s2 = ["This is a simple input 1", "This is a simple input 2"]
+
+        bos_token_id = tokenizer.bos_token_id
+
+        out_s = tokenizer(s)
+        out_s2 = tokenizer(s2)
+
+        self.assertEqual(out_s.input_ids[0], bos_token_id)
+        self.assertTrue(all(o[0] == bos_token_id for o in out_s2.input_ids))
+
+        decode_s = tokenizer.decode(out_s.input_ids)
+        decode_s2 = tokenizer.batch_decode(out_s2.input_ids)
+
+        self.assertEqual(decode_s.split()[0], bos_token)
+        self.assertTrue(all(d.split()[0] == bos_token for d in decode_s2))
+
     # tokenizer has no padding token
     def test_padding_different_model_input_name(self):
         pass

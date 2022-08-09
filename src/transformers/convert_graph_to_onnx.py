@@ -120,7 +120,7 @@ def check_onnxruntime_requirements(minimum_version: Version):
             raise ImportError(
                 f"We found an older version of onnxruntime ({onnxruntime.__version__}) "
                 f"but we require onnxruntime to be >= {minimum_version} to enable all the conversions options.\n"
-                f"Please update onnxruntime by running `pip install --upgrade onnxruntime`"
+                "Please update onnxruntime by running `pip install --upgrade onnxruntime`"
             )
 
     except ImportError:
@@ -273,6 +273,8 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
     import torch
     from torch.onnx import export
 
+    from .pytorch_utils import is_torch_less_than_1_11
+
     print(f"Using framework PyTorch: {torch.__version__}")
 
     with torch.no_grad():
@@ -281,7 +283,7 @@ def convert_pytorch(nlp: Pipeline, opset: int, output: Path, use_external_format
 
         # PyTorch deprecated the `enable_onnx_checker` and `use_external_data_format` arguments in v1.11,
         # so we check the torch version for backwards compatibility
-        if parse(torch.__version__) <= parse("1.10.99"):
+        if is_torch_less_than_1_11:
             export(
                 nlp.model,
                 model_args,
@@ -376,7 +378,8 @@ def convert(
 
     """
     warnings.warn(
-        "The `transformers.convert_graph_to_onnx` package is deprecated and will be removed in version 5 of Transformers",
+        "The `transformers.convert_graph_to_onnx` package is deprecated and will be removed in version 5 of"
+        " Transformers",
         FutureWarning,
     )
     print(f"ONNX opset version set to: {opset}")

@@ -36,6 +36,7 @@ PATH_TO_DOC = "docs/source/en"
 # Update this list with models that are supposed to be private.
 PRIVATE_MODELS = [
     "DPRSpanPredictor",
+    "LongT5Stack",
     "RealmBertModel",
     "T5Stack",
     "TFDPRSpanPredictor",
@@ -45,6 +46,7 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "OPTDecoder",  # Building part of bigger (tested) model.
     "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
     "SegformerDecodeHead",  # Building part of bigger (tested) model.
     "PLBartEncoder",  # Building part of bigger (tested) model.
@@ -58,6 +60,7 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "DetrDecoderWrapper",  # Building part of bigger (tested) model.
     "M2M100Encoder",  # Building part of bigger (tested) model.
     "M2M100Decoder",  # Building part of bigger (tested) model.
+    "MCTCTEncoder",  # Building part of bigger (tested) model.
     "Speech2TextEncoder",  # Building part of bigger (tested) model.
     "Speech2TextDecoder",  # Building part of bigger (tested) model.
     "LEDEncoder",  # Building part of bigger (tested) model.
@@ -75,6 +78,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "MegatronBertEncoder",  # Building part of bigger (tested) model.
     "MegatronBertDecoder",  # Building part of bigger (tested) model.
     "MegatronBertDecoderWrapper",  # Building part of bigger (tested) model.
+    "MvpDecoderWrapper",  # Building part of bigger (tested) model.
+    "MvpEncoder",  # Building part of bigger (tested) model.
     "PegasusEncoder",  # Building part of bigger (tested) model.
     "PegasusDecoderWrapper",  # Building part of bigger (tested) model.
     "DPREncoder",  # Building part of bigger (tested) model.
@@ -92,6 +97,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "SeparableConv1D",  # Building part of bigger (tested) model.
     "FlaxBartForCausalLM",  # Building part of bigger (tested) model.
     "FlaxBertForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through FlaxRobertaForCausalLM.
+    "OPTDecoderWrapper",
+    "TFSegformerDecodeHead",  # Not a regular model.
 ]
 
 # Update this list with test files that don't have a tester with a `all_model_classes` variable and which don't
@@ -124,6 +131,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "ViltForQuestionAnswering",
     "ViltForImagesAndTextClassification",
     "ViltForImageAndTextRetrieval",
+    "ViltForTokenClassification",
     "ViltForMaskedLM",
     "XGLMEncoder",
     "XGLMDecoder",
@@ -131,6 +139,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "PerceiverForMultimodalAutoencoding",
     "PerceiverForOpticalFlow",
     "SegformerDecodeHead",
+    "TFSegformerDecodeHead",
     "FlaxBeitForMaskedImageModeling",
     "PLBartEncoder",
     "PLBartDecoder",
@@ -138,6 +147,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BeitForMaskedImageModeling",
     "CLIPTextModel",
     "CLIPVisionModel",
+    "GroupViTTextModel",
+    "GroupViTVisionModel",
     "TFCLIPTextModel",
     "TFCLIPVisionModel",
     "FlaxCLIPTextModel",
@@ -146,12 +157,19 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "DetrForSegmentation",
     "DPRReader",
     "FlaubertForQuestionAnswering",
+    "FlavaImageCodebook",
+    "FlavaTextModel",
+    "FlavaImageModel",
+    "FlavaMultimodalModel",
     "GPT2DoubleHeadsModel",
     "LukeForMaskedLM",
     "LukeForEntityClassification",
     "LukeForEntityPairClassification",
     "LukeForEntitySpanClassification",
     "OpenAIGPTDoubleHeadsModel",
+    "OwlViTTextModel",
+    "OwlViTVisionModel",
+    "OwlViTForObjectDetection",
     "RagModel",
     "RagSequenceForGeneration",
     "RagTokenForGeneration",
@@ -518,7 +536,8 @@ def check_all_decorator_order():
     if len(errors) > 0:
         msg = "\n".join(errors)
         raise ValueError(
-            f"The parameterized decorator (and its variants) should always be first, but this is not the case in the following files:\n{msg}"
+            "The parameterized decorator (and its variants) should always be first, but this is not the case in the"
+            f" following files:\n{msg}"
         )
 
 
@@ -595,7 +614,6 @@ UNDOCUMENTED_OBJECTS = [
     "absl",  # External module
     "add_end_docstrings",  # Internal, should never have been in the main init.
     "add_start_docstrings",  # Internal, should never have been in the main init.
-    "cached_path",  # Internal used for downloading models.
     "convert_tf_weight_name_to_pt_weight_name",  # Internal used to convert model weights
     "logger",  # Internal logger
     "logging",  # External module
@@ -717,7 +735,7 @@ def check_docstrings_are_in_md():
     """Check all docstrings are in md"""
     files_with_rst = []
     for file in Path(PATH_TO_TRANSFORMERS).glob("**/*.py"):
-        with open(file, "r") as f:
+        with open(file, encoding="utf-8") as f:
             code = f.read()
         docstrings = code.split('"""')
 

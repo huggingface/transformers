@@ -59,7 +59,7 @@ LARGE_NEGATIVE = -1e8
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -266,7 +266,8 @@ class TFCLIPAttention(tf.keras.layers.Layer):
         self.attention_head_size = self.embed_dim // self.num_attention_heads
         if self.attention_head_size * self.num_attention_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {self.num_attention_heads})."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_attention_heads})."
             )
 
         factor = config.initializer_factor
@@ -708,12 +709,14 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
 
         if not isinstance(config.text_config, CLIPTextConfig):
             raise ValueError(
-                f"config.text_config is expected to be of type CLIPTextConfig but is of type {type(config.text_config)}."
+                "config.text_config is expected to be of type CLIPTextConfig but is of type"
+                f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, CLIPVisionConfig):
             raise ValueError(
-                f"config.vision_config is expected to be of type CLIPVisionConfig but is of type {type(config.vision_config)}."
+                "config.vision_config is expected to be of type CLIPVisionConfig but is of type"
+                f" {type(config.vision_config)}."
             )
 
         self.config = config

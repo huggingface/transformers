@@ -551,8 +551,10 @@ def main():
         "--max_seq_length",
         default=384,
         type=int,
-        help="The maximum total input sequence length after WordPiece tokenization. Sequences "
-        "longer than this will be truncated, and sequences shorter than this will be padded.",
+        help=(
+            "The maximum total input sequence length after WordPiece tokenization. Sequences "
+            "longer than this will be truncated, and sequences shorter than this will be padded."
+        ),
     )
     parser.add_argument(
         "--doc_stride",
@@ -564,8 +566,10 @@ def main():
         "--max_query_length",
         default=64,
         type=int,
-        help="The maximum number of tokens for the question. Questions longer than this will "
-        "be truncated to this length.",
+        help=(
+            "The maximum number of tokens for the question. Questions longer than this will "
+            "be truncated to this length."
+        ),
     )
     parser.add_argument("--do_train", action="store_true", help="Whether to run training.")
     parser.add_argument("--do_eval", action="store_true", help="Whether to run eval on the dev set.")
@@ -610,20 +614,27 @@ def main():
         "--max_answer_length",
         default=30,
         type=int,
-        help="The maximum length of an answer that can be generated. This is needed because the start "
-        "and end predictions are not conditioned on one another.",
+        help=(
+            "The maximum length of an answer that can be generated. This is needed because the start "
+            "and end predictions are not conditioned on one another."
+        ),
     )
     parser.add_argument(
         "--verbose_logging",
         action="store_true",
-        help="If true, all of the warnings related to data processing will be printed. "
-        "A number of warnings are expected for a normal SQuAD evaluation.",
+        help=(
+            "If true, all of the warnings related to data processing will be printed. "
+            "A number of warnings are expected for a normal SQuAD evaluation."
+        ),
     )
     parser.add_argument(
         "--lang_id",
         default=0,
         type=int,
-        help="language id of input for language-specific xlm models (see tokenization_xlm.PRETRAINED_INIT_CONFIGURATION)",
+        help=(
+            "language id of input for language-specific xlm models (see"
+            " tokenization_xlm.PRETRAINED_INIT_CONFIGURATION)"
+        ),
     )
 
     parser.add_argument("--logging_steps", type=int, default=500, help="Log every X updates steps.")
@@ -652,8 +663,10 @@ def main():
         "--fp16_opt_level",
         type=str,
         default="O1",
-        help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
-        "See details at https://nvidia.github.io/apex/amp.html",
+        help=(
+            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+            "See details at https://nvidia.github.io/apex/amp.html"
+        ),
     )
     parser.add_argument("--server_ip", type=str, default="", help="Can be used for distant debugging.")
     parser.add_argument("--server_port", type=str, default="", help="Can be used for distant debugging.")

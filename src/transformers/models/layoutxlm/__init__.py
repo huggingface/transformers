@@ -19,6 +19,7 @@
 from typing import TYPE_CHECKING
 
 from ...utils import (
+    OptionalDependencyNotAvailable,
     _LazyModule,
     is_sentencepiece_available,
     is_tokenizers_available,
@@ -27,26 +28,42 @@ from ...utils import (
 )
 
 
-_import_structure = {}
+_import_structure = {"processing_layoutxlm": ["LayoutXLMProcessor"]}
 
-if is_sentencepiece_available():
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_layoutxlm"] = ["LayoutXLMTokenizer"]
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_layoutxlm_fast"] = ["LayoutXLMTokenizerFast"]
 
-if is_vision_available():
-    _import_structure["processing_layoutxlm"] = ["LayoutXLMProcessor"]
-
 if TYPE_CHECKING:
-    if is_sentencepiece_available():
+    from .processing_layoutxlm import LayoutXLMProcessor
+
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_layoutxlm import LayoutXLMTokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_layoutxlm_fast import LayoutXLMTokenizerFast
-
-    if is_vision_available():
-        from .processing_layoutlmv2 import LayoutXLMProcessor
 
 else:
     import sys

@@ -27,10 +27,18 @@ from ...configuration_utils import PretrainedConfig
 
 
 TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/tapas-base-finetuned-sqa": "https://huggingface.co/google/tapas-base-finetuned-sqa/resolve/main/config.json",
-    "google/tapas-base-finetuned-wtq": "https://huggingface.co/google/tapas-base-finetuned-wtq/resolve/main/config.json",
-    "google/tapas-base-finetuned-wikisql-supervised": "https://huggingface.co/google/tapas-base-finetuned-wikisql-supervised/resolve/main/config.json",
-    "google/tapas-base-finetuned-tabfact": "https://huggingface.co/google/tapas-base-finetuned-tabfact/resolve/main/config.json",
+    "google/tapas-base-finetuned-sqa": (
+        "https://huggingface.co/google/tapas-base-finetuned-sqa/resolve/main/config.json"
+    ),
+    "google/tapas-base-finetuned-wtq": (
+        "https://huggingface.co/google/tapas-base-finetuned-wtq/resolve/main/config.json"
+    ),
+    "google/tapas-base-finetuned-wikisql-supervised": (
+        "https://huggingface.co/google/tapas-base-finetuned-wikisql-supervised/resolve/main/config.json"
+    ),
+    "google/tapas-base-finetuned-tabfact": (
+        "https://huggingface.co/google/tapas-base-finetuned-tabfact/resolve/main/config.json"
+    ),
 }
 
 

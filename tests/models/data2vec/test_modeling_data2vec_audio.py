@@ -535,7 +535,7 @@ class Data2VecAudioModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_mask_feature_prob_ctc(self):
         model = Data2VecAudioForCTC.from_pretrained(
-            "facebook/data2vec-audio-base-960h", mask_feature_prob=0.2, mask_feature_length=2
+            "hf-internal-testing/tiny-random-data2vec-seq-class", mask_feature_prob=0.2, mask_feature_length=2
         )
         model.to(torch_device).train()
         processor = Wav2Vec2Processor.from_pretrained(
@@ -554,7 +554,7 @@ class Data2VecAudioModelTest(ModelTesterMixin, unittest.TestCase):
             attention_mask=batch["attention_mask"].to(torch_device),
         ).logits
 
-        self.assertEqual(logits.shape, (4, 299, 32))
+        self.assertEqual(logits.shape, (4, 1498, 32))
 
     def test_mask_time_prob_ctc(self):
         model = Data2VecAudioForCTC.from_pretrained(
@@ -736,7 +736,8 @@ class Data2VecAudioModelIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe sir i exist",
             "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
-            "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena around him with thousands of spectators were trivialities not worth thinking about",
+            "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena around"
+            " him with thousands of spectators were trivialities not worth thinking about",
             "his instant of panic was followed by a small sharp blow high on his chest",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)

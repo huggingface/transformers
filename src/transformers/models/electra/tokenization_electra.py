@@ -20,12 +20,22 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "google/electra-small-generator": "https://huggingface.co/google/electra-small-generator/resolve/main/vocab.txt",
+        "google/electra-small-generator": (
+            "https://huggingface.co/google/electra-small-generator/resolve/main/vocab.txt"
+        ),
         "google/electra-base-generator": "https://huggingface.co/google/electra-base-generator/resolve/main/vocab.txt",
-        "google/electra-large-generator": "https://huggingface.co/google/electra-large-generator/resolve/main/vocab.txt",
-        "google/electra-small-discriminator": "https://huggingface.co/google/electra-small-discriminator/resolve/main/vocab.txt",
-        "google/electra-base-discriminator": "https://huggingface.co/google/electra-base-discriminator/resolve/main/vocab.txt",
-        "google/electra-large-discriminator": "https://huggingface.co/google/electra-large-discriminator/resolve/main/vocab.txt",
+        "google/electra-large-generator": (
+            "https://huggingface.co/google/electra-large-generator/resolve/main/vocab.txt"
+        ),
+        "google/electra-small-discriminator": (
+            "https://huggingface.co/google/electra-small-discriminator/resolve/main/vocab.txt"
+        ),
+        "google/electra-base-discriminator": (
+            "https://huggingface.co/google/electra-base-discriminator/resolve/main/vocab.txt"
+        ),
+        "google/electra-large-discriminator": (
+            "https://huggingface.co/google/electra-large-discriminator/resolve/main/vocab.txt"
+        ),
     }
 }
 

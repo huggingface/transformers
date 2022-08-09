@@ -40,8 +40,7 @@ class MT5Model(T5Model):
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> summary = "Weiter Verhandlung in Syrien."
     >>> inputs = tokenizer(article, return_tensors="pt")
-    >>> with tokenizer.as_target_tokenizer():
-    ...     labels = tokenizer(summary, return_tensors="pt")
+    >>> labels = tokenizer(text_target=summary, return_tensors="pt")
 
     >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=labels["input_ids"])
     >>> hidden_states = outputs.last_hidden_state
@@ -49,13 +48,13 @@ class MT5Model(T5Model):
     model_type = "mt5"
     config_class = MT5Config
     _keys_to_ignore_on_load_missing = [
-        r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
-        r"decoder\.block\.0\.layer\.1\.EncDecAttention\.relative_attention_bias\.weight",
+        r"encoder.embed_tokens.weight",
+        r"decoder.embed_tokens.weight",
+        r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
     _keys_to_ignore_on_save = [
-        r"encoder\.embed_tokens\.weight",
-        r"decoder\.embed_tokens\.weight",
+        r"encoder.embed_tokens.weight",
+        r"decoder.embed_tokens.weight",
     ]
 
 
@@ -73,21 +72,19 @@ class MT5ForConditionalGeneration(T5ForConditionalGeneration):
     >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> summary = "Weiter Verhandlung in Syrien."
-    >>> inputs = tokenizer(article, return_tensors="pt")
-    >>> with tokenizer.as_target_tokenizer():
-    ...     labels = tokenizer(summary, return_tensors="pt")
+    >>> inputs = tokenizer(article, text_target=summary, return_tensors="pt")
 
-    >>> outputs = model(**inputs, labels=labels["input_ids"])
+    >>> outputs = model(**inputs)
     >>> loss = outputs.loss
     ```"""
 
     model_type = "mt5"
     config_class = MT5Config
     _keys_to_ignore_on_load_missing = [
-        r"encoder\.embed_tokens\.weight",
+        r"encoder.embed_tokens.weight",
     ]
     _keys_to_ignore_on_save = [
-        r"encoder\.embed_tokens\.weight",
+        r"encoder.embed_tokens.weight",
     ]
 
 
@@ -112,8 +109,8 @@ class MT5EncoderModel(T5EncoderModel):
     model_type = "mt5"
     config_class = MT5Config
     _keys_to_ignore_on_load_missing = [
-        r"encoder\.embed_tokens\.weight",
+        r"encoder.embed_tokens.weight",
     ]
     _keys_to_ignore_on_save = [
-        r"encoder\.embed_tokens\.weight",
+        r"encoder.embed_tokens.weight",
     ]

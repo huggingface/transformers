@@ -953,7 +953,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             )
 
         cand_indexes = []
-        for (i, token) in enumerate(input_tokens):
+        for i, token in enumerate(input_tokens):
             if token == "[CLS]" or token == "[SEP]":
                 continue
 
@@ -998,7 +998,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the"
+                " --mlm flag if you want to use this tokenizer."
             )
         labels = inputs.clone()
         # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
@@ -1038,7 +1039,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         input_shape = tf.shape(inputs)
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the"
+                " --mlm flag if you want to use this tokenizer."
             )
         labels = tf.identity(inputs)
         # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
@@ -1078,7 +1080,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the"
+                " --mlm flag if you want to use this tokenizer."
             )
         labels = np.copy(inputs)
         # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
@@ -1159,7 +1162,8 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the"
+                " --mlm flag if you want to use this tokenizer."
             )
 
         labels = inputs.clone()
@@ -1245,12 +1249,14 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for permutation language modeling."
+                " Please add a mask token if you want to use this tokenizer."
             )
 
         if inputs.size(1) % 2 != 0:
             raise ValueError(
-                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
+                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see"
+                " relevant comments in source code for details."
             )
 
         labels = inputs.clone()
@@ -1345,12 +1351,14 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for permutation language modeling."
+                " Please add a mask token if you want to use this tokenizer."
             )
 
         if tf.shape(inputs)[1] % 2 != 0:
             raise ValueError(
-                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
+                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see"
+                " relevant comments in source code for details."
             )
 
         labels = tf.identity(inputs)
@@ -1452,12 +1460,14 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for permutation language modeling."
+                " Please add a mask token if you want to use this tokenizer."
             )
 
         if inputs.shape[1] % 2 != 0:
             raise ValueError(
-                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
+                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see"
+                " relevant comments in source code for details."
             )
 
         labels = np.copy(inputs)

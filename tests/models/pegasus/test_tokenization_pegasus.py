@@ -72,7 +72,10 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_mask_tokens_rust_pegasus(self):
         rust_tokenizer = self.rust_tokenizer_class.from_pretrained(self.tmpdirname)
         py_tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname)
-        raw_input_str = "Let's see which <unk> is the better <unk_token_11> one <mask_1> It seems like this <mask_2> was important </s> <pad> <pad> <pad>"
+        raw_input_str = (
+            "Let's see which <unk> is the better <unk_token_11> one <mask_1> It seems like this <mask_2> was important"
+            " </s> <pad> <pad> <pad>"
+        )
         rust_ids = rust_tokenizer([raw_input_str], return_tensors=None, add_special_tokens=False).input_ids[0]
         py_ids = py_tokenizer([raw_input_str], return_tensors=None, add_special_tokens=False).input_ids[0]
         self.assertListEqual(py_ids, rust_ids)
@@ -106,10 +109,9 @@ class PegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         src_texts = ["This is going to be way too long." * 150, "short example"]
         tgt_texts = ["not super long but more than 5 tokens", "tiny"]
         batch = self._large_tokenizer(src_texts, padding=True, truncation=True, return_tensors="pt")
-        with self._large_tokenizer.as_target_tokenizer():
-            targets = self._large_tokenizer(
-                tgt_texts, max_length=5, padding=True, truncation=True, return_tensors="pt"
-            )
+        targets = self._large_tokenizer(
+            text_target=tgt_texts, max_length=5, padding=True, truncation=True, return_tensors="pt"
+        )
 
         assert batch.input_ids.shape == (2, 1024)
         assert batch.attention_mask.shape == (2, 1024)
@@ -158,7 +160,10 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_mask_tokens_rust_pegasus(self):
         rust_tokenizer = self.rust_tokenizer_class.from_pretrained(self.tmpdirname)
         py_tokenizer = self.tokenizer_class.from_pretrained(self.tmpdirname)
-        raw_input_str = "Let's see which <unk> is the better <unk_token> one [MASK] It seems like this [MASK] was important </s> <pad> <pad> <pad>"
+        raw_input_str = (
+            "Let's see which <unk> is the better <unk_token> one [MASK] It seems like this [MASK] was important </s>"
+            " <pad> <pad> <pad>"
+        )
         rust_ids = rust_tokenizer([raw_input_str], return_tensors=None, add_special_tokens=False).input_ids[0]
         py_ids = py_tokenizer([raw_input_str], return_tensors=None, add_special_tokens=False).input_ids[0]
         self.assertListEqual(py_ids, rust_ids)
@@ -168,10 +173,9 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         src_texts = ["This is going to be way too long." * 1000, "short example"]
         tgt_texts = ["not super long but more than 5 tokens", "tiny"]
         batch = self._large_tokenizer(src_texts, padding=True, truncation=True, return_tensors="pt")
-        with self._large_tokenizer.as_target_tokenizer():
-            targets = self._large_tokenizer(
-                tgt_texts, max_length=5, padding=True, truncation=True, return_tensors="pt"
-            )
+        targets = self._large_tokenizer(
+            text_target=tgt_texts, max_length=5, padding=True, truncation=True, return_tensors="pt"
+        )
 
         assert batch.input_ids.shape == (2, 4096)
         assert batch.attention_mask.shape == (2, 4096)
@@ -198,7 +202,10 @@ class BigBirdPegasusTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer.tokenize(test_str)
         """
 
-        test_str = "This is an example string that is used to test the original TF implementation against the HF implementation"
+        test_str = (
+            "This is an example string that is used to test the original TF implementation against the HF"
+            " implementation"
+        )
 
         token_ids = self._large_tokenizer(test_str).input_ids
 

@@ -16,8 +16,10 @@ Generic utilities
 """
 
 import inspect
+import tempfile
 from collections import OrderedDict, UserDict
-from contextlib import ExitStack
+from collections.abc import MutableMapping
+from contextlib import ExitStack, contextmanager
 from dataclasses import fields
 from enum import Enum
 from typing import Any, ContextManager, List, Tuple
@@ -239,7 +241,7 @@ class ModelOutput(OrderedDict):
         return tuple(self[k] for k in self.keys())
 
 
-class ExplicitEnum(Enum):
+class ExplicitEnum(str, Enum):
     """
     Enum with more explicit error message for missing values.
     """
@@ -310,3 +312,26 @@ def find_labels(model_class):
         return [p for p in signature.parameters if "label" in p or p in ("start_positions", "end_positions")]
     else:
         return [p for p in signature.parameters if "label" in p]
+
+
+def flatten_dict(d: MutableMapping, parent_key: str = "", delimiter: str = "."):
+    """Flatten a nested dict into a single level dict."""
+
+    def _flatten_dict(d, parent_key="", delimiter="."):
+        for k, v in d.items():
+            key = str(parent_key) + delimiter + str(k) if parent_key else k
+            if v and isinstance(v, MutableMapping):
+                yield from flatten_dict(v, key, delimiter=delimiter).items()
+            else:
+                yield key, v
+
+    return dict(_flatten_dict(d, parent_key, delimiter))
+
+
+@contextmanager
+def working_or_temp_dir(working_dir, use_temp_dir: bool = False):
+    if use_temp_dir:
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            yield tmp_dir
+    else:
+        yield working_dir

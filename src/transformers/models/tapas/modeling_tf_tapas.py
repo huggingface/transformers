@@ -519,8 +519,8 @@ class TFTapasLayer(tf.keras.layers.Layer):
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
                 raise ValueError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers "
-                    "by setting `config.add_cross_attention=True`"
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
+                    " by setting `config.add_cross_attention=True`"
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
@@ -862,6 +862,19 @@ class TFTapasPreTrainedModel(TFPreTrainedModel):
     config_class = TapasConfig
     base_model_prefix = "tapas"
 
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+        return self.serving_output(output)
+
 
 TAPAS_START_DOCSTRING = r"""
 
@@ -1021,14 +1034,14 @@ class TFTapasModel(TFTapasPreTrainedModel):
         return outputs
 
     def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=output.last_hidden_state,
             pooler_output=output.pooler_output,
-            hidden_states=hs,
-            attentions=attns,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
 
 
@@ -1128,10 +1141,10 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
         )
 
     def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
 
 
 class TFTapasComputeTokenLogits(tf.keras.layers.Layer):
@@ -1533,7 +1546,8 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
                         per_example_additional_loss *= large_answer_loss_mask
                     else:
                         raise ValueError(
-                            "You have to specify numeric values and numeric values scale in order to calculate the regression loss"
+                            "You have to specify numeric values and numeric values scale in order to calculate the"
+                            " regression loss"
                         )
                 total_loss += tf.reduce_mean(per_example_additional_loss)
 
@@ -1556,11 +1570,14 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         )
 
     def serving_output(self, output: TFTableQuestionAnsweringOutput) -> TFTableQuestionAnsweringOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFTableQuestionAnsweringOutput(
-            logits=output.logits, logits_aggregation=output.logits_aggregation, hidden_states=hs, attentions=attns
+            logits=output.logits,
+            logits_aggregation=output.logits_aggregation,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
 
 
@@ -1666,10 +1683,10 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
         )
 
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
 
 
 """ TAPAS utilities."""
@@ -1723,10 +1740,13 @@ class ProductIndexMap(IndexMap):
           inner_index: IndexMap, must have the same shape as `outer_index`.
         """
         if outer_index.batch_dims != inner_index.batch_dims:
-            raise ValueError("outer_index.batch_dims and inner_index.batch_dims " "must be the same.")
+            raise ValueError("outer_index.batch_dims and inner_index.batch_dims must be the same.")
 
         super(ProductIndexMap, self).__init__(
-            indices=(inner_index.indices + outer_index.indices * inner_index.num_segments),
+            indices=(
+                inner_index.indices
+                + outer_index.indices * tf.cast(inner_index.num_segments, inner_index.indices.dtype)
+            ),
             num_segments=inner_index.num_segments * outer_index.num_segments,
             batch_dims=inner_index.batch_dims,
         )
@@ -1785,7 +1805,7 @@ def flatten(index, name="segmented_flatten"):
     for _ in range(index.batch_dims, index.indices.shape.rank):
         offset = tf.expand_dims(offset, -1)
 
-    indices = offset + index.indices
+    indices = tf.cast(offset, index.indices.dtype) + index.indices
     return IndexMap(indices=tf.reshape(indices, [-1]), num_segments=index.num_segments * batch_size, batch_dims=0)
 
 

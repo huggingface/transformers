@@ -21,7 +21,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 VAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "Visual-Attention-Network/van-base": "https://huggingface.co/Visual-Attention-Network/van-base/blob/main/config.json",
+    "Visual-Attention-Network/van-base": (
+        "https://huggingface.co/Visual-Attention-Network/van-base/blob/main/config.json"
+    ),
 }
 
 

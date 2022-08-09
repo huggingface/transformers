@@ -52,9 +52,10 @@ class SummarizationDistiller(SummarizationModule):
             student.config.length_penalty = hparams.length_penalty
         hparams.tokenizer_name = hparams.teacher  # Use teacher's tokenizer
         super().__init__(hparams, model=student, config=student.config)
-        assert (
-            student.config.model_type == teacher.config.model_type
-        ), f"teacher, student model types should be the same, got {student.config.model_type} != {teacher.config.model_type}"
+        assert student.config.model_type == teacher.config.model_type, (
+            f"teacher, student model types should be the same, got {student.config.model_type} !="
+            f" {teacher.config.model_type}"
+        )
 
         if student.config.model_type == "t5":
             student_encoder_layers = len(student.get_encoder().block)

@@ -77,8 +77,9 @@ class ByT5Tokenizer(PreTrainedTokenizer):
             extra_tokens = len(set(filter(lambda x: bool("extra_id" in str(x)), additional_special_tokens)))
             if extra_tokens != extra_ids:
                 raise ValueError(
-                    f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are provided to ByT5Tokenizer. "
-                    "In this case the additional_special_tokens must include the extra_ids tokens"
+                    f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
+                    " provided to ByT5Tokenizer. In this case the additional_special_tokens must include the"
+                    " extra_ids tokens"
                 )
 
         pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
@@ -146,7 +147,8 @@ class ByT5Tokenizer(PreTrainedTokenizer):
         """Do not add eos again if user already added it."""
         if len(token_ids) > 0 and token_ids[-1] == self.eos_token_id:
             warnings.warn(
-                f"This sequence already has {self.eos_token}. In future versions this behavior may lead to duplicated eos tokens being added."
+                f"This sequence already has {self.eos_token}. In future versions this behavior may lead to duplicated"
+                " eos tokens being added."
             )
             return token_ids
         else:
