@@ -133,6 +133,7 @@ def get_key_to_not_convert(model):
     model (`torch.nn.Module`):
         Input model
     """
+    # Ignore this for base models (BertModel, GPT2Model, etc.)
     if not hasattr(model, model.base_model_prefix):
         return ""
 
