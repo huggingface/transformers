@@ -173,6 +173,29 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
 
     @slow
     @require_torch
+    def test_small_model_japanese(self):
+        question_answerer = pipeline(
+            "question-answering",
+            model="KoichiYasuoka/deberta-base-japanese-aozora-ud-head",
+        )
+        output = question_answerer(question="国語", context="全学年にわたって小学校の国語の教科書に挿し絵が用いられている")
+
+        # Wrong answer, the whole text is identified as one "word" since the tokenizer does not include
+        # a pretokenizer
+        self.assertEqual(
+            nested_simplify(output),
+            {"score": 1.0, "start": 0, "end": 30, "answer": "全学年にわたって小学校の国語の教科書に挿し絵が用いられている"},
+        )
+
+        # Disable word alignment
+        output = question_answerer(question="国語", context="全学年にわたって小学校の国語の教科書に挿し絵が用いられている", align_to_words=False)
+        self.assertEqual(
+            nested_simplify(output),
+            {"score": 1.0, "start": 15, "end": 18, "answer": "教科書"},
+        )
+
+    @slow
+    @require_torch
     def test_small_model_long_context_cls_slow(self):
         question_answerer = pipeline(
             "question-answering",
