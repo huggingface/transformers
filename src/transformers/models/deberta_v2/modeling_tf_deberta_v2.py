@@ -519,12 +519,21 @@ def pos_dynamic_expand(pos_index, p2c_att, key_layer):
 def take_along_axis(x, indices):
     # Only a valid port of np.take_along_axis when the gather axis is -1
 
-    # [B, S, P] -> [B, S, P, D]
-    one_hot_indices = tf.one_hot(indices, depth=x.shape[-1], dtype=x.dtype)
+    # TPU + gathers and reshapes don't go along well -- see https://github.com/huggingface/transformers/issues/18239
+    if isinstance(tf.distribute.get_strategy(), tf.distribute.TPUStrategy):
+        # [B, S, P] -> [B, S, P, D]
+        one_hot_indices = tf.one_hot(indices, depth=x.shape[-1], dtype=x.dtype)
 
-    # if we ignore the first two dims, this is equivalent to multiplying a matrix (one hot) by a vector (x)
-    # grossly abusing notation: [B, S, P, D] . [B, S, D] = [B, S, P]
-    gathered = tf.einsum("ijkl,ijl->ijk", one_hot_indices, x)
+        # if we ignore the first two dims, this is equivalent to multiplying a matrix (one hot) by a vector (x)
+        # grossly abusing notation: [B, S, P, D] . [B, S, D] = [B, S, P]
+        gathered = tf.einsum("ijkl,ijl->ijk", one_hot_indices, x)
+
+    # GPUs, on the other hand, prefer gathers instead of large one-hot+matmuls
+    else:
+        flat_x = tf.reshape(x, (-1, x.shape[-1]))
+        flat_indices = tf.reshape(indices, (-1, indices.shape[-1]))
+        gathered = tf.gather(flat_x, flat_indices, batch_dims=1)
+        gathered = tf.reshape(gathered, shape_list(indices))
 
     return gathered
 
