@@ -848,7 +848,6 @@ def get_checkpoint_shard_files(
     """
     import json
 
-    print(_commit_hash)
     if not os.path.isfile(index_filename):
         raise ValueError(f"Can't find a checkpoint index ({index_filename}) in {pretrained_model_name_or_path}.")
 
