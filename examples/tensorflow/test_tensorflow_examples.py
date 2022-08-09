@@ -278,7 +278,7 @@ class ExamplesTests(TestCasePlus):
             --do_train
             --do_eval
             --learning_rate=3e-3
-            --num_train_epochs 7
+            --num_train_epochs 12
             --per_device_train_batch_size=2
             --per_device_eval_batch_size=1
             --source_lang en_XX
