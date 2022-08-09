@@ -28,6 +28,7 @@ if is_tf_available():
 
 @dataclass
 class TFTrainingArguments(TrainingArguments):
+    framework = "tf"
     """
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
     itself**.
