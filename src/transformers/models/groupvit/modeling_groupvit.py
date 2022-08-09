@@ -1132,9 +1132,7 @@ class GroupViTTextTransformer(nn.Module):
 
         # text_embeds.shape = [batch_size, sequence_length, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
-        pooled_output = last_hidden_state[
-            torch.arange(last_hidden_state.shape[0]), input_ids.to(torch.int).argmax(dim=-1)
-        ]
+        pooled_output = last_hidden_state[torch.arange(last_hidden_state.shape[0]), input_ids.argmax(dim=-1)]
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
