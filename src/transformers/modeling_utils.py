@@ -1872,9 +1872,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     " pip install bitsandbytes` "
                 )
             if torch_dtype == "auto" or torch_dtype != torch.float16:
-                torch_dtype = (
-                    torch.float16
-                )  # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
+                # We force the `dtype` to be float16, this is a requirement from `bitsandbytes`
+                torch_dtype = torch.float16
                 logger.info("Loading the model in mixed int8 - forcing the weights to be casted in float16")
             if device_map is None:
                 raise ValueError(

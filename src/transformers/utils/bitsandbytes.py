@@ -100,7 +100,7 @@ def replace_8bit_linear(model, threshold=6.0):
     Parameters:
         model (`torch.nn.Module`):
             Input model or `torch.nn.Module` as the function is run recursively.
-        threshold (`float`, *optional*):
+        threshold (`float`, *optional*, defaults to 6.0):
             `int8_threshold` for outlier detection as described in the formentioned paper. This parameters is set to
             `6.0` as described by the paper.
     """
