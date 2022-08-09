@@ -518,7 +518,6 @@ class PretrainedConfig(PushToHubMixin):
                 f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
             )
 
-        print(config_dict, kwargs)
         return cls.from_dict(config_dict, **kwargs)
 
     @classmethod
