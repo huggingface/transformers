@@ -804,11 +804,11 @@ def main():
 
         # true loss = total loss / total samples
         loss = jax.lax.psum(loss, "batch")
-        loss = jax.tree_map(lambda x: x / num_labels, loss)
+        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
 
         # true grad = total grad / total samples
         grad = jax.lax.psum(grad, "batch")
-        grad = jax.tree_map(lambda x: x / num_labels, grad)
+        grad = jax.tree_util.tree_map(lambda x: x / num_labels, grad)
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
 
         metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
@@ -824,7 +824,7 @@ def main():
 
         # true loss = total loss / total samples
         loss = jax.lax.psum(loss, "batch")
-        loss = jax.tree_map(lambda x: x / num_labels, loss)
+        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
 
         metrics = {"loss": loss}
         return metrics
