@@ -398,7 +398,7 @@ def unpack_inputs(func):
         fn_args_and_kwargs.update(dict(zip(func.__code__.co_varnames[1:], args)))
 
         # Encoder Decoder models delegate the application of the configuration options to their inner models.
-        if "encoder_decoder" in str(self).lower():
+        if "EncoderDecoder" in self.__class__.__name__:
             config = None
         else:
             config = self.config
