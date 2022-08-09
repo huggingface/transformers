@@ -105,10 +105,10 @@ class LayoutLMv3FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             The sequence of standard deviations for each channel, to be used when normalizing images.
         apply_ocr (`bool`, *optional*, defaults to `True`):
             Whether to apply the Tesseract OCR engine to get words + normalized bounding boxes.
-        ocr_lang (`Optional[str]`, *optional*):
+        ocr_lang (`str`, *optional*):
             The language, specified by its ISO code, to be used by the Tesseract OCR engine. By default, English is
             used.
-        tesseract_config (`Optional[str]`, *optional*):
+        tesseract_config (`str`, *optional*):
             Any additional custom configuration flags that are forwarded to the `config` parameter when calling
             Tesseract. For example: '--psm 6'.
 

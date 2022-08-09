@@ -125,8 +125,7 @@ class Speech2TextProcessorTest(unittest.TestCase):
 
         input_str = "This is a test string"
 
-        with processor.as_target_processor():
-            encoded_processor = processor(input_str)
+        encoded_processor = processor(text=input_str)
 
         encoded_tok = tokenizer(input_str)
 
