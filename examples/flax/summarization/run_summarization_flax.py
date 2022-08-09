@@ -795,11 +795,11 @@ def main():
 
         # true loss = total loss / total samples
         loss = jax.lax.psum(loss, "batch")
-        loss = jax.tree_map(lambda x: x / num_labels, loss)
+        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
 
         # true grad = total grad / total samples
         grad = jax.lax.psum(grad, "batch")
-        grad = jax.tree_map(lambda x: x / num_labels, grad)
+        grad = jax.tree_util.tree_map(lambda x: x / num_labels, grad)
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
 
         metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step)}
@@ -815,7 +815,7 @@ def main():
 
         # true loss = total loss / total samples
         loss = jax.lax.psum(loss, "batch")
-        loss = jax.tree_map(lambda x: x / num_labels, loss)
+        loss = jax.tree_util.tree_map(lambda x: x / num_labels, loss)
 
         metrics = {"loss": loss}
         return metrics
@@ -903,7 +903,7 @@ def main():
 
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
-        eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+        eval_metrics = jax.tree_util.tree_map(jnp.mean, eval_metrics)
 
         # compute ROUGE metrics
         rouge_desc = ""
@@ -924,7 +924,7 @@ def main():
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
-            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
             model.save_pretrained(training_args.output_dir, params=params)
             tokenizer.save_pretrained(training_args.output_dir)
             if training_args.push_to_hub:
@@ -958,7 +958,7 @@ def main():
 
         # normalize prediction metrics
         pred_metrics = get_metrics(pred_metrics)
-        pred_metrics = jax.tree_map(jnp.mean, pred_metrics)
+        pred_metrics = jax.tree_util.tree_map(jnp.mean, pred_metrics)
 
         # compute ROUGE metrics
         rouge_desc = ""
