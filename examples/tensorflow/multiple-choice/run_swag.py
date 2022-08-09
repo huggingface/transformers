@@ -18,6 +18,7 @@ Fine-tuning the library models for multiple choice.
 """
 # You can also adapt this script on your own multiple choice task. Pointers for this are left as comments.
 
+import json
 import logging
 import os
 import sys
@@ -25,7 +26,6 @@ from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
 from typing import Optional, Union
-import json
 
 import datasets
 import tensorflow as tf
@@ -39,11 +39,11 @@ from transformers import (
     AutoTokenizer,
     DefaultDataCollator,
     HfArgumentParser,
+    PushToHubCallback,
     TFAutoModelForMultipleChoice,
     TFTrainingArguments,
     create_optimizer,
     set_seed,
-    PushToHubCallback
 )
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.utils import PaddingStrategy, check_min_version, send_example_telemetry
@@ -56,6 +56,7 @@ logger = logging.getLogger(__name__)
 
 
 # region Helper classes and functions
+
 
 @dataclass
 class DataCollatorForMultipleChoice:
@@ -397,8 +398,6 @@ def main():
         if "validation" not in raw_datasets:
             raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = raw_datasets["validation"]
-        if not training_args.do_train:
-            non_label_columns = [feature for feature in eval_dataset.features if feature not in ("label", "labels")]
         if data_args.max_eval_samples is not None:
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
             eval_dataset = eval_dataset.select(range(max_eval_samples))
@@ -455,13 +454,12 @@ def main():
             )
         else:
             optimizer = None
-            lr_schedule = None
-        model.compile(optimizer=optimizer, metrics=['accuracy'], jit_compile=training_args.xla)
+        model.compile(optimizer=optimizer, metrics=["accuracy"], jit_compile=training_args.xla)
         # endregion
 
         # region Preparing push_to_hub and model card
         push_to_hub_model_id = training_args.push_to_hub_model_id
-        model_name = model_args.model_name_or_path.split('/')[-1]
+        model_name = model_args.model_name_or_path.split("/")[-1]
         if not push_to_hub_model_id:
             push_to_hub_model_id = f"{model_name}-finetuned-multiplechoice"
 
@@ -475,7 +473,7 @@ def main():
                     organization=training_args.push_to_hub_organization,
                     token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
-                    **model_card_kwargs
+                    **model_card_kwargs,
                 )
             ]
         else:
@@ -518,7 +516,7 @@ def main():
                 tf_train_dataset,
                 validation_data=validation_data,
                 epochs=int(training_args.num_train_epochs),
-                callbacks=callbacks
+                callbacks=callbacks,
             )
             eval_metrics = {key: val[-1] for key, val in history.history.items()}
         # endregion

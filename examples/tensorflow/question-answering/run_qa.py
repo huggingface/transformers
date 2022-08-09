@@ -18,13 +18,13 @@ Fine-tuning the library models for question answering.
 """
 # You can also adapt this script on your own question answering task. Pointers for this are left as comments.
 
+import json
 import logging
 import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-import json
 
 import tensorflow as tf
 from datasets import load_dataset
@@ -37,11 +37,11 @@ from transformers import (
     EvalPrediction,
     HfArgumentParser,
     PreTrainedTokenizerFast,
+    PushToHubCallback,
     TFAutoModelForQuestionAnswering,
     TFTrainingArguments,
-    set_seed,
     create_optimizer,
-    PushToHubCallback
+    set_seed,
 )
 from transformers.utils import CONFIG_NAME, TF2_WEIGHTS_NAME, check_min_version, send_example_telemetry
 from utils_qa import postprocess_qa_predictions
@@ -658,12 +658,11 @@ def main():
             )
 
             # no user-specified loss = will use the model internal loss
-            model.compile(optimizer=optimizer, jit_compile=training_args.xla, metrics=['accuracy'])
+            model.compile(optimizer=optimizer, jit_compile=training_args.xla, metrics=["accuracy"])
 
         else:
-            model.compile(optimizer=None, jit_compile=training_args.xla, metrics=['accuracy'])
+            model.compile(optimizer=None, jit_compile=training_args.xla, metrics=["accuracy"])
             training_dataset = None
-
 
         if training_args.do_eval:
             eval_dataset = model.prepare_tf_dataset(
@@ -691,7 +690,7 @@ def main():
 
         # region Preparing push_to_hub and model card
         push_to_hub_model_id = training_args.push_to_hub_model_id
-        model_name = model_args.model_name_or_path.split('/')[-1]
+        model_name = model_args.model_name_or_path.split("/")[-1]
         if not push_to_hub_model_id:
             if data_args.dataset_name is not None:
                 push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
@@ -715,7 +714,7 @@ def main():
                     organization=training_args.push_to_hub_organization,
                     token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
-                    **model_card_kwargs
+                    **model_card_kwargs,
                 )
             ]
         else:

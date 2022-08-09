@@ -16,13 +16,13 @@
 """ Fine-tuning the library models for sequence classification."""
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
+import json
 import logging
 import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
-import json
 
 import numpy as np
 from datasets import load_dataset
@@ -32,11 +32,11 @@ from transformers import (
     AutoTokenizer,
     HfArgumentParser,
     PretrainedConfig,
+    PushToHubCallback,
     TFAutoModelForSequenceClassification,
     TFTrainingArguments,
-    set_seed,
     create_optimizer,
-    PushToHubCallback,
+    set_seed,
 )
 from transformers.utils import CONFIG_NAME, TF2_WEIGHTS_NAME, send_example_telemetry
 
@@ -422,9 +422,9 @@ def main():
                 tf_data[key] = None
                 continue
             if (
-                    (key == 'train' and not training_args.do_train)
-                    or (key == 'validation' and not training_args.do_eval)
-                    or (key == 'test' and not training_args.do_predict)
+                (key == "train" and not training_args.do_train)
+                or (key == "validation" and not training_args.do_eval)
+                or (key == "test" and not training_args.do_predict)
             ):
                 tf_data[key] = None
                 continue
@@ -482,7 +482,7 @@ def main():
                 adam_global_clipnorm=training_args.max_grad_norm,
             )
         else:
-            optimizer = schedule = None
+            optimizer = None
         if is_regression:
             metrics = []
         else:
@@ -492,7 +492,7 @@ def main():
 
         # region Preparing push_to_hub and model card
         push_to_hub_model_id = training_args.push_to_hub_model_id
-        model_name = model_args.model_name_or_path.split('/')[-1]
+        model_name = model_args.model_name_or_path.split("/")[-1]
         if not push_to_hub_model_id:
             push_to_hub_model_id = f"{model_name}-finetuned-text-classification"
 
@@ -506,7 +506,7 @@ def main():
                     organization=training_args.push_to_hub_organization,
                     token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
-                    **model_card_kwargs
+                    **model_card_kwargs,
                 )
             ]
         else:

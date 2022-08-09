@@ -18,12 +18,12 @@ Fine-tuning the library models for translation.
 """
 # You can also adapt this script on your own sequence to sequence task. Pointers for this are left as comments.
 
+import json
 import logging
 import os
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
-import json
 
 import datasets
 import numpy as np
@@ -35,19 +35,19 @@ import transformers
 from transformers import (
     AutoConfig,
     AutoTokenizer,
+    DataCollatorForSeq2Seq,
     HfArgumentParser,
+    KerasMetricCallback,
     M2M100Tokenizer,
     MBart50Tokenizer,
     MBart50TokenizerFast,
     MBartTokenizer,
     MBartTokenizerFast,
+    PushToHubCallback,
     TFAutoModelForSeq2SeqLM,
     TFTrainingArguments,
     create_optimizer,
     set_seed,
-    DataCollatorForSeq2Seq,
-    KerasMetricCallback,
-    PushToHubCallback
 )
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
@@ -252,6 +252,7 @@ class DataTrainingArguments:
 
 
 # endregion
+
 
 def main():
     # region Argument parsing
@@ -494,7 +495,7 @@ def main():
             model=model,
             label_pad_token_id=label_pad_token_id,
             pad_to_multiple_of=64,  # Reduce the number of unique shapes for XLA, especially for generation
-            return_tensors='tf',
+            return_tensors="tf",
         )
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
@@ -519,10 +520,7 @@ def main():
             shuffle=True,
         ).with_options(dataset_options)
         tf_eval_dataset = model.prepare_tf_dataset(
-            eval_dataset,
-            collate_fn=data_collator,
-            batch_size=total_eval_batch_size,
-            shuffle=False
+            eval_dataset, collate_fn=data_collator, batch_size=total_eval_batch_size, shuffle=False
         ).with_options(dataset_options)
         # endregion
 
@@ -547,7 +545,6 @@ def main():
             )
         else:
             optimizer = None
-            lr_schedule = None
         # endregion
 
         # region Metric and postprocessing
@@ -560,7 +557,7 @@ def main():
             gen_kwargs = {
                 "max_length": data_args.val_max_target_length,
                 "num_beams": data_args.num_beams,
-                "no_repeat_ngram_size": 0  # Not supported under XLA right now, and some models set it by default
+                "no_repeat_ngram_size": 0,  # Not supported under XLA right now, and some models set it by default
             }
 
             def postprocess_text(preds, labels):
@@ -591,7 +588,7 @@ def main():
                 eval_dataset=tf_eval_dataset,
                 predict_with_generate=True,
                 use_xla_generation=True,
-                generate_kwargs=gen_kwargs
+                generate_kwargs=gen_kwargs,
             )
             callbacks = [metric_callback]
         else:
@@ -601,7 +598,7 @@ def main():
 
         # region Preparing push_to_hub and model card
         push_to_hub_model_id = training_args.push_to_hub_model_id
-        model_name = model_args.model_name_or_path.split('/')[-1]
+        model_name = model_args.model_name_or_path.split("/")[-1]
         if not push_to_hub_model_id:
             push_to_hub_model_id = f"{model_name}-finetuned-{data_args.source_lang}-{data_args.target_lang}"
 
@@ -627,7 +624,7 @@ def main():
                     organization=training_args.push_to_hub_organization,
                     token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
-                    **model_card_kwargs
+                    **model_card_kwargs,
                 )
             )
         # endregion
@@ -645,8 +642,10 @@ def main():
             logger.info(f"  Total optimization steps = {num_train_steps}")
 
             if training_args.xla and not data_args.pad_to_max_length:
-                logger.warning("XLA training may be slow at first when --pad_to_max_length is not set "
-                               "until all possible shapes have been compiled.")
+                logger.warning(
+                    "XLA training may be slow at first when --pad_to_max_length is not set "
+                    "until all possible shapes have been compiled."
+                )
 
             history = model.fit(tf_train_dataset, epochs=int(training_args.num_train_epochs), callbacks=callbacks)
             eval_metrics = {key: val[-1] for key, val in history.history.items()}

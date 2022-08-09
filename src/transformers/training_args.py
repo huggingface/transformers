@@ -1085,7 +1085,8 @@ class TrainingArguments:
             self.optim = OptimizerNames.ADAFACTOR
 
         if (
-            self.framework == "pt" and is_torch_available()
+            self.framework == "pt"
+            and is_torch_available()
             and (self.device.type != "cuda")
             and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
             and (self.fp16 or self.fp16_full_eval)
@@ -1096,7 +1097,8 @@ class TrainingArguments:
             )
 
         if (
-            self.framework == "pt" and is_torch_available()
+            self.framework == "pt"
+            and is_torch_available()
             and (self.device.type != "cuda")
             and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
             and (self.device.type != "cpu")

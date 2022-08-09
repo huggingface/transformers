@@ -23,7 +23,7 @@ from unittest.mock import patch
 
 import tensorflow as tf
 
-from transformers.testing_utils import CaptureLogger, TestCasePlus, get_gpu_count, slow
+from transformers.testing_utils import TestCasePlus, get_gpu_count, slow
 
 
 SRC_DIRS = [
@@ -44,12 +44,12 @@ sys.path.extend(SRC_DIRS)
 
 if SRC_DIRS is not None:
     import run_clm
-    import run_text_classification
     import run_mlm
     import run_ner
     import run_qa as run_squad
     import run_summarization
     import run_swag
+    import run_text_classification
     import run_translation
 
 
@@ -77,7 +77,7 @@ def get_results(output_dir):
 
 
 def is_cuda_available():
-    return bool(tf.config.list_physical_devices('GPU'))
+    return bool(tf.config.list_physical_devices("GPU"))
 
 
 stream_handler = logging.StreamHandler(sys.stdout)
@@ -130,7 +130,7 @@ class ExamplesTests(TestCasePlus):
             --overwrite_output_dir
             """.split()
 
-        if len(tf.config.list_physical_devices('GPU')) > 1:
+        if len(tf.config.list_physical_devices("GPU")) > 1:
             # Skipping because there are not enough batches to train the model + would need a drop_last to work.
             return
 

@@ -22,6 +22,8 @@ https://huggingface.co/models?filter=text-generation
 """
 # You can also adapt this script on your own clm task. Pointers for this are left as comments.
 
+import json
+
 # region Imports
 import logging
 import math
@@ -32,7 +34,6 @@ from dataclasses import dataclass, field
 from itertools import chain
 from pathlib import Path
 from typing import Optional
-import json
 
 import datasets
 import tensorflow as tf
@@ -48,11 +49,11 @@ from transformers import (
     AutoConfig,
     AutoTokenizer,
     HfArgumentParser,
+    PushToHubCallback,
     TFAutoModelForCausalLM,
     TFTrainingArguments,
     create_optimizer,
     set_seed,
-    PushToHubCallback,
 )
 from transformers.utils import send_example_telemetry
 from transformers.utils.versions import require_version
@@ -207,6 +208,7 @@ class DataTrainingArguments:
 
 
 # endregion
+
 
 def main():
     # region Argument Parsing
@@ -529,7 +531,7 @@ def main():
 
         # region Preparing push_to_hub and model card
         push_to_hub_model_id = training_args.push_to_hub_model_id
-        model_name = model_args.model_name_or_path.split('/')[-1]
+        model_name = model_args.model_name_or_path.split("/")[-1]
         if not push_to_hub_model_id:
             if data_args.dataset_name is not None:
                 push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
@@ -553,7 +555,7 @@ def main():
                     organization=training_args.push_to_hub_organization,
                     token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
-                    **model_card_kwargs
+                    **model_card_kwargs,
                 )
             ]
         else:
@@ -576,7 +578,7 @@ def main():
                 tf_train_dataset,
                 validation_data=tf_eval_dataset if training_args.do_eval else None,
                 epochs=int(training_args.num_train_epochs),
-                callbacks=callbacks
+                callbacks=callbacks,
             )
             train_loss = history.history["loss"][-1]
             try:

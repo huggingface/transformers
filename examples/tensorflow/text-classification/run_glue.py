@@ -16,12 +16,12 @@
 """ Finetuning the library models for sequence classification on GLUE."""
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
+import json
 import logging
 import os
 import sys
 from dataclasses import dataclass, field
 from typing import Optional
-import json
 
 import numpy as np
 import tensorflow as tf
@@ -36,14 +36,15 @@ from transformers import (
     DefaultDataCollator,
     HfArgumentParser,
     PretrainedConfig,
+    PushToHubCallback,
     TFAutoModelForSequenceClassification,
     TFTrainingArguments,
-    set_seed,
     create_optimizer,
-    PushToHubCallback
+    set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version, send_example_telemetry
+
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 check_min_version("4.22.0.dev0")
@@ -296,7 +297,6 @@ def main():
 
     # region Dataset preprocessing
     sentence1_key, sentence2_key = task_to_keys[data_args.task_name]
-    non_label_column_names = [name for name in datasets["train"].column_names if name != "label"]
 
     # Padding strategy
     if data_args.pad_to_max_length:
@@ -448,8 +448,7 @@ def main():
                 adam_global_clipnorm=training_args.max_grad_norm,
             )
         else:
-            optimizer = 'adam'  # Just write anything because we won't be using it
-            schedule = None
+            optimizer = "adam"  # Just write anything because we won't be using it
         if is_regression:
             metrics = []
         else:
@@ -459,7 +458,7 @@ def main():
 
         # region Preparing push_to_hub and model card
         push_to_hub_model_id = training_args.push_to_hub_model_id
-        model_name = model_args.model_name_or_path.split('/')[-1]
+        model_name = model_args.model_name_or_path.split("/")[-1]
         if not push_to_hub_model_id:
             push_to_hub_model_id = f"{model_name}-finetuned-glue"
 
@@ -474,7 +473,7 @@ def main():
                     organization=training_args.push_to_hub_organization,
                     token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
-                    **model_card_kwargs
+                    **model_card_kwargs,
                 )
             ]
         else:

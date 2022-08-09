@@ -18,15 +18,14 @@ Fine-tuning a 🤗 Transformers model on token classification tasks (NER, POS, C
 without using a Trainer.
 """
 
+import json
 import logging
+import os
 import random
 from dataclasses import dataclass, field
 from typing import Optional
-import os
-import json
 
 import datasets
-import numpy as np
 import tensorflow as tf
 from datasets import ClassLabel, load_dataset
 
@@ -34,16 +33,15 @@ import evaluate
 import transformers
 from transformers import (
     CONFIG_MAPPING,
-    MODEL_MAPPING,
     AutoConfig,
     AutoTokenizer,
+    DataCollatorForTokenClassification,
     HfArgumentParser,
+    PushToHubCallback,
     TFAutoModelForTokenClassification,
     TFTrainingArguments,
     create_optimizer,
     set_seed,
-    DataCollatorForTokenClassification,
-    PushToHubCallback,
 )
 from transformers.utils import send_example_telemetry
 from transformers.utils.versions import require_version
@@ -394,7 +392,7 @@ def main():
 
         # We need the DataCollatorForTokenClassification here, as we need to correctly pad labels as
         # well as inputs.
-        collate_fn = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors='tf')
+        collate_fn = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="tf")
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
 
@@ -490,7 +488,7 @@ def main():
 
         # region Preparing push_to_hub and model card
         push_to_hub_model_id = training_args.push_to_hub_model_id
-        model_name = model_args.model_name_or_path.split('/')[-1]
+        model_name = model_args.model_name_or_path.split("/")[-1]
         if not push_to_hub_model_id:
             if data_args.dataset_name is not None:
                 push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
@@ -514,13 +512,12 @@ def main():
                     organization=training_args.push_to_hub_organization,
                     token=training_args.push_to_hub_token,
                     tokenizer=tokenizer,
-                    **model_card_kwargs
+                    **model_card_kwargs,
                 )
             ]
         else:
             callbacks = []
         # endregion
-
 
         # region Training
         logger.info("***** Running training *****")
@@ -534,7 +531,7 @@ def main():
             tf_train_dataset,
             validation_data=tf_eval_dataset,
             epochs=int(training_args.num_train_epochs),
-            callbacks=callbacks
+            callbacks=callbacks,
         )
         # endregion
 
@@ -546,9 +543,11 @@ def main():
         try:
             predictions = model.predict(tf_eval_dataset, batch_size=training_args.per_device_eval_batch_size)["logits"]
         except tf.python.framework.errors_impl.InvalidArgumentError:
-            raise ValueError("Concatenating predictions failed! If your version of TensorFlow is 2.8.0 or older "
-                             "then you will need to use --pad_to_max_length to generate predictions, as older "
-                             "versions of TensorFlow cannot concatenate variable-length predictions as RaggedTensor.")
+            raise ValueError(
+                "Concatenating predictions failed! If your version of TensorFlow is 2.8.0 or older "
+                "then you will need to use --pad_to_max_length to generate predictions, as older "
+                "versions of TensorFlow cannot concatenate variable-length predictions as RaggedTensor."
+            )
         if isinstance(predictions, tf.RaggedTensor):
             predictions = predictions.to_tensor(default_value=-100)
         predictions = tf.math.argmax(predictions, axis=-1).numpy()
