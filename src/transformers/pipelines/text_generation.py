@@ -110,11 +110,12 @@ class TextGenerationPipeline(Pipeline):
                 )
             preprocess_params["handle_long_generation"] = handle_long_generation
         if stop_sequence is not None:
-            stop_sequence_ids = self.tokenizer.encode(
-                stop_sequence
-            )
+            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
             if len(stop_sequence_ids) > 1:
-                warnings.warn(f"Stopping on a multiple token sequence is not yet supported on transformers. The first token of the stop sequence will be used as the stop sequence string in the interim.")
+                warnings.warn(
+                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
+                    "the stop sequence will be used as the stop sequence string in the interim."
+                )
             generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
 
         preprocess_params.update(generate_kwargs)
@@ -213,7 +214,6 @@ class TextGenerationPipeline(Pipeline):
         return inputs
 
     def _forward(self, model_inputs, **generate_kwargs):
-        breakpoint()
         input_ids = model_inputs["input_ids"]
         attention_mask = model_inputs.get("attention_mask", None)
         # Allow empty prompts
