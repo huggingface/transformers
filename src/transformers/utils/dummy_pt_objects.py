@@ -359,6 +359,7 @@ MODEL_FOR_CTC_MAPPING = None
 
 
 MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING = None
+MODEL_FOR_DEPTH_ESTIMATION_MAPPING = None
 
 
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
@@ -470,6 +471,12 @@ class AutoModelForCTC(metaclass=DummyObject):
 
 
 class AutoModelForDocumentQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+class AutoModelForDepthEstimation(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
