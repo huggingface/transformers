@@ -421,9 +421,7 @@ class EncoderDecoderMixin:
 @require_torch
 class Wav2Vec2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model_and_inputs(self):
-        model = SpeechToSpeechModel.from_encoder_decoder_pretrained(
-            "facebook/wav2vec2-base-960h", "bert-base-cased"
-        )
+        model = SpeechToSpeechModel.from_encoder_decoder_pretrained("facebook/wav2vec2-base-960h", "bert-base-cased")
         batch_size = 13
         input_values = floats_tensor([batch_size, 512], scale=1.0)
         attention_mask = random_attention_mask([batch_size, 512])

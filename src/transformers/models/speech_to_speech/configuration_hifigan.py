@@ -30,11 +30,11 @@ class HiFiGANConfig(PretrainedConfig):
 class CodeHiFiGANConfig(PretrainedConfig):
     def __init__(
         self,
-        upsample_rates=[5,4,4,2,2],
-        upsample_kernel_sizes=[11,8,8,4,4],
+        upsample_rates=[5, 4, 4, 2, 2],
+        upsample_kernel_sizes=[11, 8, 8, 4, 4],
         upsample_initial_channel=512,
-        resblock_kernel_sizes=[3,7,11],
-        resblock_dilation_sizes=[[1,3,5], [1,3,5], [1,3,5]],
+        resblock_kernel_sizes=[3, 7, 11],
+        resblock_dilation_sizes=[[1, 3, 5], [1, 3, 5], [1, 3, 5]],
         num_embeddings=1000,
         embedding_dim=128,
         model_in_dim=128,
@@ -60,7 +60,7 @@ class CodeHiFiGANConfig(PretrainedConfig):
         self.upsample_initial_channel = upsample_initial_channel
         self.upsample_kernel_sizes = upsample_kernel_sizes
         self.sampling_rate = sampling_rate
-        self.num_embeddings=num_embeddings
+        self.num_embeddings = num_embeddings
         self.embedding_dim = embedding_dim
         self.f0 = f0
         self.f0_quant_num_bin = f0_quant_num_bin
@@ -75,4 +75,3 @@ class CodeHiFiGANConfig(PretrainedConfig):
         self.embedder_dim = embedder_dim
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
-

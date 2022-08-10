@@ -173,8 +173,8 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
 # Copied from transformers.models.speech_encoder_decoder.modeling_speech_encoder_decoder.SpeechEncoderDecoderModel with SpeechEncoderDecoder->SpeechToSpeech,speech_encoder_decoder->speech_to_speech
 class SpeechToSpeechModel(PreTrainedModel):
     r"""
-    [`SpeechToSpeechModel`] is a generic model class that will be instantiated as a transformer architecture with
-    one of the base model classes of the library as encoder and another one as decoder when created with the
+    [`SpeechToSpeechModel`] is a generic model class that will be instantiated as a transformer architecture with one
+    of the base model classes of the library as encoder and another one as decoder when created with the
     :meth*~transformers.AutoModel.from_pretrained* class method for the encoder and
     :meth*~transformers.AutoModelForCausalLM.from_pretrained* class method for the decoder.
     """

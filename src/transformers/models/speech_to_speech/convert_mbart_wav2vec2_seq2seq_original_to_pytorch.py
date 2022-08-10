@@ -22,15 +22,15 @@ import torch
 from torch import nn
 
 from transformers import (
-    PegasusConfig,
-    PegasusForCausalLM,
     MBartConfig,
     MBartForCausalLM,
+    PegasusConfig,
+    PegasusForCausalLM,
     SpeechToSpeechConfig,
     SpeechToSpeechModel,
     Wav2Vec2ConformerConfig,
-    Wav2Vec2FeatureExtractor,
     Wav2Vec2ConformerModel,
+    Wav2Vec2FeatureExtractor,
     logging,
 )
 
@@ -116,6 +116,7 @@ def set_recursively(hf_pointer, key, value, full_name, weight_type):
 
     logger.info(f"{key + '.' + weight_type if weight_type is not None else ''} was initialized from {full_name}.")
 
+
 # Adapted from transformers.models.wav2vec2_conformer.convert_wav2vec2_conformer_original_pytorch_checkpoint_to_pytorch.recursively_load_weights
 def recursively_load_weights(fairseq_model, hf_model):
     unused_weights = []
@@ -175,6 +176,7 @@ def recursively_load_weights(fairseq_model, hf_model):
 
     logger.warning(f"Unused weights: {unused_weights}")
 
+
 # Copied from transformers.models.wav2vec2_conformer.convert_wav2vec2_conformer_original_pytorch_checkpoint_to_pytorch.recursively_load_conv_layer
 def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
     name = full_name.split("conv_layers.")[-1]
@@ -214,6 +216,7 @@ def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_gro
             logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
     else:
         unused_weights.append(full_name)
+
 
 # Copied from transformers.models.speech_encoder_decoder.convert_mbart_wav2vec2_seq2seq_original_to_pytorch.load_adapter
 def load_adapter(full_name, value, adapter, unused_weights):
@@ -269,6 +272,7 @@ def load_adapter(full_name, value, adapter, unused_weights):
     else:
         unused_weights.append(full_name)
 
+
 # Copied from transformers.models.speech_encoder_decoder.convert_mbart_wav2vec2_seq2seq_original_to_pytorch.make_linear_from_emb
 def make_linear_from_emb(emb):
     vocab_size, emb_size = emb.weight.shape
@@ -319,7 +323,6 @@ def convert_wav2vec2_checkpoint(
         max_position_embeddings=4002,
     )
 
-
     # load feature extractor
     feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(encoder_config_path, use_auth_token=True)
 
@@ -337,8 +340,8 @@ def convert_wav2vec2_checkpoint(
     hf_wav2vec = SpeechToSpeechModel(encoder=hf_encoder, decoder=hf_decoder)
     hf_wav2vec.config.tie_word_embeddings = False
 
-    #tokenizer = MBart50Tokenizer(dict_path)
-    #tokenizer.save_pretrained(pytorch_dump_folder_path)
+    # tokenizer = MBart50Tokenizer(dict_path)
+    # tokenizer.save_pretrained(pytorch_dump_folder_path)
 
     config = hf_wav2vec.config.to_dict()
     # config["tokenizer_class"] = "mbart50"

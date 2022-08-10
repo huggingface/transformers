@@ -3,9 +3,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Conv1d, ConvTranspose1d
 from torch.nn.utils import remove_weight_norm, weight_norm
+
+from configuration_hifigan import CodeHiFiGANConfig, HiFiGANConfig
 from transformers import PreTrainedModel
 
-from configuration_hifigan import HiFiGANConfig, CodeHiFiGANConfig
 
 LRELU_SLOPE = 0.1
 
@@ -129,13 +130,11 @@ class HiFiGAN(PreTrainedModel):
         )
 
         self.ups = nn.ModuleList()
-        for i, (u, k) in enumerate(
-                zip(config.upsample_rates, config.upsample_kernel_sizes)
-        ):
+        for i, (u, k) in enumerate(zip(config.upsample_rates, config.upsample_kernel_sizes)):
             self.ups.append(
                 weight_norm(
                     ConvTranspose1d(
-                        config.upsample_initial_channel // (2 ** i),
+                        config.upsample_initial_channel // (2**i),
                         config.upsample_initial_channel // (2 ** (i + 1)),
                         k,
                         u,
@@ -147,9 +146,7 @@ class HiFiGAN(PreTrainedModel):
         self.resblocks = nn.ModuleList()
         for i in range(len(self.ups)):
             ch = config.upsample_initial_channel // (2 ** (i + 1))
-            for k, d in zip(
-                    config.resblock_kernel_sizes, config.resblock_dilation_sizes
-            ):
+            for k, d in zip(config.resblock_kernel_sizes, config.resblock_dilation_sizes):
                 self.resblocks.append(ResBlock(ch, k, d))
 
         self.conv_post = weight_norm(Conv1d(ch, 1, 7, 1, padding=3))
@@ -255,9 +252,7 @@ class CodeHiFiGAN(HiFiGAN):
 
         self.f0 = config.f0
         n_f0_bin = config.f0_quant_num_bin
-        self.f0_quant_embed = (
-            None if n_f0_bin <= 0 else nn.Embedding(n_f0_bin, config.embedding_dim)
-        )
+        self.f0_quant_embed = None if n_f0_bin <= 0 else nn.Embedding(n_f0_bin, config.embedding_dim)
 
     @staticmethod
     def _upsample(signal, max_frames):
@@ -275,9 +270,7 @@ class CodeHiFiGAN(HiFiGAN):
         # pad zeros as needed (if signal's shape does not divide completely with max_frames)
         reminder = (max_frames - signal.shape[2] * signal.shape[3]) // signal.shape[3]
         if reminder > 0:
-            raise NotImplementedError(
-                "Padding condition signal - misalignment between condition features."
-            )
+            raise NotImplementedError("Padding condition signal - misalignment between condition features.")
 
         signal = signal.view(bsz, channels, max_frames)
         return signal
@@ -288,9 +281,7 @@ class CodeHiFiGAN(HiFiGAN):
         if self.dur_predictor and kwargs.get("dur_prediction", False):
             assert x.size(0) == 1, "only support single sample"
             log_dur_pred = self.dur_predictor(x.transpose(1, 2))
-            dur_out = torch.clamp(
-                torch.round((torch.exp(log_dur_pred) - 1)).long(), min=1
-            )
+            dur_out = torch.clamp(torch.round((torch.exp(log_dur_pred) - 1)).long(), min=1)
             # B x C x T
             x = torch.repeat_interleave(x, dur_out.view(-1), dim=2)
 
@@ -307,9 +298,7 @@ class CodeHiFiGAN(HiFiGAN):
             x = torch.cat([x, kwargs["f0"]], dim=1)
 
         if self.multispkr:
-            assert (
-                    "spkr" in kwargs
-            ), 'require "spkr" input for multispeaker CodeHiFiGAN vocoder'
+            assert "spkr" in kwargs, 'require "spkr" input for multispeaker CodeHiFiGAN vocoder'
             spkr = self.spkr(kwargs["spkr"]).transpose(1, 2)
             spkr = self._upsample(spkr, x.shape[-1])
             x = torch.cat([x, spkr], dim=1)
@@ -322,4 +311,3 @@ class CodeHiFiGAN(HiFiGAN):
             x = torch.cat([x, feat], dim=1)
 
         return super().forward(x)
-
