@@ -106,6 +106,7 @@ class OptimizerNames(ExplicitEnum):
 
 @dataclass
 class TrainingArguments:
+    framework = "pt"
     """
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
     itself**.
@@ -1039,25 +1040,25 @@ class TrainingArguments:
             self.greater_is_better = self.metric_for_best_model not in ["loss", "eval_loss"]
         if self.run_name is None:
             self.run_name = self.output_dir
-
-        if self.fp16_backend and self.fp16_backend != "auto":
-            warnings.warn(
-                "`fp16_backend` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
-                " `half_precision_backend` instead",
-                FutureWarning,
-            )
-            self.half_precision_backend = self.fp16_backend
-
-        if self.bf16 or self.bf16_full_eval:
-
-            if self.no_cuda and not is_torch_bf16_cpu_available():
-                # cpu
-                raise ValueError("Your setup doesn't support bf16/cpu. You need torch>=1.10")
-            elif not self.no_cuda and not is_torch_bf16_gpu_available():
-                # gpu
-                raise ValueError(
-                    "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
+        if self.framework == "pt" and is_torch_available():
+            if self.fp16_backend and self.fp16_backend != "auto":
+                warnings.warn(
+                    "`fp16_backend` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
+                    " `half_precision_backend` instead",
+                    FutureWarning,
                 )
+                self.half_precision_backend = self.fp16_backend
+
+            if self.bf16 or self.bf16_full_eval:
+
+                if self.no_cuda and not is_torch_bf16_cpu_available():
+                    # cpu
+                    raise ValueError("Your setup doesn't support bf16/cpu. You need torch>=1.10")
+                elif not self.no_cuda and not is_torch_bf16_gpu_available():
+                    # gpu
+                    raise ValueError(
+                        "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
+                    )
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
@@ -1084,7 +1085,8 @@ class TrainingArguments:
             self.optim = OptimizerNames.ADAFACTOR
 
         if (
-            is_torch_available()
+            self.framework == "pt"
+            and is_torch_available()
             and (self.device.type != "cuda")
             and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
             and (self.fp16 or self.fp16_full_eval)
@@ -1095,7 +1097,8 @@ class TrainingArguments:
             )
 
         if (
-            is_torch_available()
+            self.framework == "pt"
+            and is_torch_available()
             and (self.device.type != "cuda")
             and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
             and (self.device.type != "cpu")
@@ -1106,7 +1109,7 @@ class TrainingArguments:
                 " (`--bf16_full_eval`) can only be used on CUDA or CPU devices."
             )
 
-        if is_torch_available() and self.tf32 is not None:
+        if self.framework == "pt" and is_torch_available() and self.tf32 is not None:
             if self.tf32:
                 if is_torch_tf32_available():
                     torch.backends.cuda.matmul.allow_tf32 = True
