@@ -15,9 +15,9 @@
 """ PyTorch PEGASUS model."""
 
 import copy
+import dataclasses
 import math
 import random
-import dataclasses
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -150,7 +150,6 @@ class PegasusXSinusoidalPositionalEmbedding(nn.Module):
         return pe[None].expand(batch_size, -1, -1)
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PegasusX
 class PegasusXAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -608,7 +607,6 @@ class PegasusXEncoderLayer(nn.Module):
         return padded_hidden_states[:, pad_size:-pad_size, :]
 
 
-# Copied from transformers.models.mbart.modeling_mbart.MBartDecoderLayer with MBart->Pegasus
 class PegasusXDecoderLayer(nn.Module):
     def __init__(self, config: PegasusXConfig):
         super().__init__()
@@ -1634,7 +1632,7 @@ class PegasusXForConditionalGeneration(PegasusXPreTrainedModel):
         return reordered_past
 
 
-# Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->Pegasus
+# Copied from transformers.models.bart.modeling_bart.BartDecoderWrapper with Bart->PegasusX
 class PegasusXDecoderWrapper(PegasusXPreTrainedModel):
     """
     This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
