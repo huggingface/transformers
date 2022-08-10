@@ -30,11 +30,6 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def rename_key(dct, old, new):
-    val = dct.pop(old)
-    dct[new] = val
-
-
 PREFIX = "https://openaipublic.azureedge.net/jukebox/models/"
 MODEL_MAPPING = {
     "jukebox-1b-lyrics": [
@@ -260,8 +255,6 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
         key_prefix = "vqvae" if i == 0 else f"priors.{i-1}"
         new_dic = fix_jukebox_keys(new_dic, model.state_dict(), key_prefix, mapping)
         weight_dict.append(new_dic)
-
-
 
     vqvae_state_dict = weight_dict.pop(0)
     model.vqvae.load_state_dict(vqvae_state_dict)

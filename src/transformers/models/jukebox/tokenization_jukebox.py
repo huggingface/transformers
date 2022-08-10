@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The Open AI Team Authors and The HuggingFace Inc. team.
+# Copyright 2022 The Open AI Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -338,8 +338,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     def convert_lyric_tokens_to_string(self, lyrics: List[str]) -> str:
         return " ".join(lyrics)
 
-    # TODO : should add_token be implemeted for artists, genres and lyrics? Should it have
-    # a type argument to add an artist token with self.getattr('artist') ?
     def convert_to_tensors(
         self, inputs, tensor_type: Optional[Union[str, TensorType]] = None, prepend_batch_axis: bool = False
     ):
@@ -424,7 +422,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         artists_id, genres_ids, full_tokens = self._convert_token_to_id(artists_tokens, genres_tokens, lyrics_tokens)
 
         attention_masks = [-INFINITY] * len(full_tokens[-1])
-        # TODO properly handle the return pt tensor option
         input_ids = [
             self.convert_to_tensors(
                 [input_ids + [artists_id[i]] + genres_ids[i] + full_tokens[i]], tensor_type=return_tensors

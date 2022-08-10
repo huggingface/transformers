@@ -1,6 +1,5 @@
 # coding=utf-8
 # Copyright 2022 The OpenAI Team Authors and HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -2232,7 +2231,6 @@ class JukeboxPrior(nn.Module):
                 n_time=self.n_time, include_time_signal=not self.audio_conditioning, **metadata_conditioning_kwargs
             )
 
-        # TODO as the prior type can change, can't rename to decoder or enc_dec
         if config.single_enc_dec[-level - 1]:
             # Single encoder-decoder transformer
             self.prior_shapes = [(self.nb_relevant_lyric_tokens,), prior_kwargs.pop("input_shape")]
