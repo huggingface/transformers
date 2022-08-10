@@ -72,7 +72,7 @@ class DonutFeatureExtractionTester(unittest.TestCase):
             "do_pad": self.do_pad,
             "do_normalize": self.do_normalize,
             "image_mean": self.image_mean,
-            "image_std": self.image_std, 
+            "image_std": self.image_std,
         }
 
 

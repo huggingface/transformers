@@ -105,7 +105,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "deberta",
     "deberta-v2",
     "distilbert",
-    "donut",
+    "donut-swin",
     "electra",
     "gpt2",
     "gpt_neo",
