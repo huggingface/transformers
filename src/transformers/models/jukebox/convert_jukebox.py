@@ -44,7 +44,8 @@ MODEL_MAPPING = {
         "1b_lyrics/prior_level_2.pth.tar",
     ],
     "jukebox-5b-lyrics": [
-        "5b/vqvae.pth.tar5b/prior_level_0.pth.tar",
+        "5b/vqvae.pth.tar",
+        "5b/prior_level_0.pth.tar",
         "5b/prior_level_1.pth.tar",
         "5b_lyrics/prior_level_2.pth.tar",
     ],
@@ -61,21 +62,27 @@ def replace_key(key):
     elif key.endswith(".model.3.weight") and len(key.split(".")) > 10:
         key = key.replace(".model.3.weight", ".conv1d_2.weight")
 
+    if "prime_prior" in key:
+        key = key.replace("prime_prior", "lyric_encoder")
+
     if key.endswith("k"):  # replace vqvae.X.k with vqvae.X.codebook
         return key.replace(".k", ".codebook")
     if "y_emb." in key:
         return key.replace("y_emb.", "metadata_embedding.")
+    if "prime_state_ln" in key:
+        return key.replace("prime_state_ln", "lyric_encoder.final_layer_norm")
     if ".ln" in key:
         return key.replace(".ln", ".layer_norm")
     if "_ln" in key:
         return key.replace("_ln", "_layer_norm")
-    if "prime_prior" in key:
-        return key.replace("prime_prior", "lyric_encoder")
+    
+    if "prime_state_proj" in key:
+        return key.replace("prime_state_proj", "lyric_encoder.proj_in")
     if "prime_x_out" in key:
-        return key.replace("prime_x_out", "lyric_enc_proj_out")
-    if "prior.x_out" in key:  # and "conditioner_block" in key
+        return key.replace("prime_x_out", "lyric_encoder.lm_head")
+    if "prior.x_out" in key: 
         return key.replace("x_out", "fc_proj_out")
-    if "x_emb" in key:  # and "conditioner_block" in key
+    if "x_emb" in key:  
         return key.replace("x_emb", "embed_tokens")
     return key
 
@@ -210,7 +217,27 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
 
     model_to_convert = MODEL_MAPPING[model_name.split("/")[-1]]
 
-    config = JukeboxConfig.from_pretrained("ArthurZ/" + model_name)
+    # config = JukeboxConfig.from_pretrained("ArthurZ/" + model_name)
+    # config = JukeboxConfig(
+    #     timing_dims=128
+    #     prior_attn_order=[10, 2, 2],
+    #     prior_blocks=128,
+    #     prime_n_vocab=80,
+    #     nb_relevant_lyric_tokens=[512, 0, 0],
+    #     prior_n_heads=[8, 1, 1],
+    #     prior_n_ctx=[8192, 8192, 8192],
+    #     prime_width=[1280, 128, 128],
+    #     prior_width=[4800, 1920, 1920],
+    #     single_enc_dec=[False, False, False],
+    #     timing_dims=128,
+    #     vqvae_width=64,
+    #     metadata_dims=[(120, 4111), (120, 4111), (120, 4111)],
+    #     min_duration=23.8,
+    #     sample_length= 1058304,
+    #     prior_depth=[79, 72, 72],
+    #     max_nb_genres=1,
+    # )
+    config = JukeboxConfig(sample_length= 1058304)
     model = JukeboxModel(config)
 
     weight_dict = []
@@ -253,32 +280,15 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="jukebox-5b-lyrics",
+        default="jukebox-1b-lyrics",
         type=str,
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="converted_model",
+        default="jukebox-1b-lyrics-converted",
         type=str,
         help="Path to the output PyTorch model directory.",
     )
     args = parser.parse_args()
-
-    jb_5b_config = JukeboxConfig(
-        prior_attn_order=[10, 2, 2],
-        prior_blocks=128,
-        prime_n_vocab=80,
-        nb_relevant_lyric_tokens=[512, 0, 0],
-        prior_n_heads=[512, 0, 0],
-        prior_n_ctx=[8192, 8192, 8192],
-        prime_width=[1280, 128, 128],
-        prior_width=[4096, 2048, 1024],
-        single_enc_dec=[False, False, False],
-        timing_dims=128,
-        vqvae_width=64,
-        metadata_conditioning=[(120, 4111), (120, 4111), (120, 4111)],
-        min_duration=23.8,
-    )
-
-    # convert_openai_checkpoint(args.model_name, args.pytorch_dump_folder_path)
+    convert_openai_checkpoint(args.model_name, args.pytorch_dump_folder_path)

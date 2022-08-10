@@ -75,7 +75,7 @@ class JukeboxConfig(PretrainedConfig):
         metadata_dims=[(604, 7898), (120, 4111), (120, 4111)],
         copy_input=False,
         nb_priors=3,
-        timing_dims=128,
+        timing_dims=64,
         single_enc_dec=[True, False, False],
         metadata_conditioning=True,
         merged_decoder=[True, False, False],

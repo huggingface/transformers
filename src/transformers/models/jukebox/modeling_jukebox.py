@@ -2149,7 +2149,7 @@ class JukeboxPrior(nn.Module):
             zero_out=config.prior_zero_out,
             res_scale=config.prior_res_scale,
             pos_init=config.prior_pos_init,
-            init_scale=config.init_scale[-level - 1],
+            init_scale=config.prior_init_scale[-level - 1],
             m_attn=config.prior_m_attn,
         )
 
@@ -2157,7 +2157,7 @@ class JukeboxPrior(nn.Module):
             # TODO rename to encoder_kwargs as they are used both
             # when single and not
             lyric_enc_kwargs = dict(
-                n_vocab=config.prime_n_vocab,
+                embed_dim=config.prime_n_vocab, # previously bins
                 width=config.prime_width[-level - 1],
                 depth=config.prime_depth[-level - 1],
                 heads=config.prime_heads,
@@ -2175,7 +2175,7 @@ class JukeboxPrior(nn.Module):
                 m_mlp=config.prime_m_mlp,
             )
         else:
-            lyric_enc_kwargs = dict(n_vocab=config.prime_n_vocab)
+            lyric_enc_kwargs = dict(embed_dim=config.prime_n_vocab)
 
         audio_conditioning_kwargs = dict(
             out_width=config.prior_width[-level - 1],
@@ -2236,7 +2236,7 @@ class JukeboxPrior(nn.Module):
         if config.single_enc_dec[-level - 1]:
             # Single encoder-decoder transformer
             self.prior_shapes = [(self.nb_relevant_lyric_tokens,), prior_kwargs.pop("input_shape")]
-            self.prior_embed_dim = [lyric_enc_kwargs["n_vocab"], prior_kwargs.pop("embed_dim")]
+            self.prior_embed_dim = [lyric_enc_kwargs["embed_dim"], prior_kwargs.pop("embed_dim")]
             self.prior_dims = [np.prod(shape) for shape in self.prior_shapes]
             self.prior_embed_dim_shift = np.cumsum([0, *self.prior_embed_dim])[:-1]
             self.prior_width = prior_kwargs["width"]
@@ -2268,11 +2268,11 @@ class JukeboxPrior(nn.Module):
                     only_encode=True,
                     **lyric_enc_kwargs,
                 )
-                self.lyric_encoder_proj_out = JukeboxConv1D(self.lyric_acts_width, self.lyric_enc_width)
-                self.lyric_encoder_layer_norm = JukeboxLayerNorm(self.lyric_enc_width)
-                self.lyric_enc_dim = lyric_enc_kwargs["n_vocab"]
-                self.lyric_encoder.proj_out = nn.Linear(self.lyric_enc_width, self.lyric_enc_dim, bias=False)
-                nn.init.normal_(self.lyric_encoder.proj_out.weight, std=0.02 * prior_kwargs["init_scale"])
+                self.lyric_encoder.proj_in = JukeboxConv1D(self.lyric_acts_width, self.lyric_enc_width)
+                self.lyric_encoder.final_layer_norm = JukeboxLayerNorm(self.lyric_enc_width)
+                self.lyric_enc_dim = lyric_enc_kwargs["embed_dim"]
+                self.lyric_encoder.lm_head = nn.Linear(self.lyric_enc_width, self.lyric_enc_dim, bias=False)
+                nn.init.normal_(self.lyric_encoder.lm_head.weight, std=0.02 * prior_kwargs["init_scale"])
             else:
                 self.lyrics_enc_loss_dims = 0
             self.gen_loss_dims = np.prod(self.music_tokens_shape)
@@ -2533,8 +2533,8 @@ class JukeboxPrior(nn.Module):
             if sample:
                 self.lyric_encoder = self.lyric_encoder.to(lyric_tokens.device)
             lyric_acts = self.lyric_encoder(lyric_tokens, None, None, None, fp16=fp16)
-            lyric_acts = self.lyric_encoder_proj_out(lyric_acts)
-            lyric_encoder_states = self.lyric_encoder_layer_norm(lyric_acts)
+            lyric_acts = self.lyric_encoder.proj_in(lyric_acts)
+            lyric_encoder_states = self.lyric_encoder.final_layer_norm(lyric_acts)
             if sample:
                 self.lyric_encoder.cpu()
                 if fp16:
