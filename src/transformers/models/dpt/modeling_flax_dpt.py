@@ -348,6 +348,9 @@ class FlaxDPTReadoutProjectSequentialCollectionLayer(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
+        # Here we set the name of the layer to be explicitly `0` because in the
+        # Pytorch modeling script we use nn.Sequential layer that sets the
+        # key of this dense layer to 0 by default.
         self.dense = nn.Dense(self.config.hidden_size, name="0")
         self.act = ACT2FN[self.config.hidden_act]
 
