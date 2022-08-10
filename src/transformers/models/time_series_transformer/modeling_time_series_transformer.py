@@ -169,7 +169,7 @@ class Seq2SeqTSModelOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
-    scale: Optional[float] = None
+    scale: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -183,6 +183,7 @@ class Seq2SeqTSPredictionOutput(ModelOutput):
     encoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    scale: Optional[torch.FloatTensor] = None
 
 
 # class TimeSeriesTransformerLearnedPositionalEmbedding(nn.Embedding):
@@ -1495,6 +1496,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
                 encoder_last_hidden_state=outputs.encoder_last_hidden_state,
                 encoder_hidden_states=outputs.encoder_hidden_states,
                 encoder_attentions=outputs.encoder_attentions,
+                scale=outputs.scale,
             )
 
         else:
