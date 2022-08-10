@@ -68,7 +68,6 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
 
 def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
-    # .T doesn't work while converting to onnx, aten::numpy_T operator is not supported yet
     image_loss = contrastive_loss(similarity.t())
     return (caption_loss + image_loss) / 2.0
 
