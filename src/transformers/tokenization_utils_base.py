@@ -42,7 +42,7 @@ from .utils import (
     add_end_docstrings,
     cached_file,
     copy_func,
-    get_file_from_repo,
+    extract_commit_hash,
     is_flax_available,
     is_offline_mode,
     is_tf_available,
@@ -1651,6 +1651,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         subfolder = kwargs.pop("subfolder", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
+        commit_hash = kwargs.pop("_commit_hash", None)
 
         user_agent = {"file_type": "tokenizer", "from_auto_class": from_auto_class, "is_fast": "Fast" in cls.__name__}
         if from_pipeline is not None:
@@ -1690,7 +1691,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if "tokenizer_file" in vocab_files:
                 # Try to get the tokenizer config to see if there are versioned tokenizer files.
                 fast_tokenizer_file = FULL_TOKENIZER_FILE
-                resolved_config_file = get_file_from_repo(
+                resolved_config_file = cached_file(
                     pretrained_model_name_or_path,
                     TOKENIZER_CONFIG_FILE,
                     cache_dir=cache_dir,
@@ -1701,7 +1702,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     revision=revision,
                     local_files_only=local_files_only,
                     subfolder=subfolder,
+                    user_agent=user_agent,
+                    _raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_connection_errors=False,
+                    _commit_hash=commit_hash,
                 )
+                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
                 if resolved_config_file is not None:
                     with open(resolved_config_file, encoding="utf-8") as reader:
                         tokenizer_config = json.load(reader)
@@ -1730,7 +1736,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
                     _raise_exceptions_for_connection_errors=False,
+                    _commit_hash=commit_hash,
                 )
+                commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
 
         if len(unresolved_files) > 0:
             logger.info(
@@ -1763,6 +1771,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             use_auth_token=use_auth_token,
             cache_dir=cache_dir,
             local_files_only=local_files_only,
+            _commit_hash=commit_hash,
             **kwargs,
         )
 
@@ -1776,6 +1785,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         use_auth_token=None,
         cache_dir=None,
         local_files_only=False,
+        _commit_hash=None,
         **kwargs
     ):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
@@ -1791,6 +1801,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 use_auth_token=use_auth_token,
                 cache_dir=cache_dir,
                 local_files_only=local_files_only,
+                _commit_hash=_commit_hash,
                 **(copy.deepcopy(kwargs)),
             )
         else:
@@ -1823,6 +1834,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     use_auth_token=use_auth_token,
                     cache_dir=cache_dir,
                     local_files_only=local_files_only,
+                    _commit_hash=_commit_hash,
                 )
                 config_tokenizer_class = config.tokenizer_class
             except (OSError, ValueError, KeyError):
