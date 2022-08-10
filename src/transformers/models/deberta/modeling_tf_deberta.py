@@ -119,7 +119,8 @@ class TFDebertaStableDropout(tf.keras.layers.Layer):
         Applies dropout to the inputs, as vanilla dropout, but also scales the remaining elements up by 1/drop_prob.
         """
         mask = tf.cast(
-            1 - tf.compat.v1.distributions.Bernoulli(probs=1 - self.drop_prob).sample(sample_shape=shape_list(inputs)),
+            1
+            - tf.compat.v1.distributions.Bernoulli(probs=1.0 - self.drop_prob).sample(sample_shape=shape_list(inputs)),
             tf.bool,
         )
         scale = tf.convert_to_tensor(1.0 / (1 - self.drop_prob), dtype=tf.float32)
