@@ -689,7 +689,7 @@ jobs:
                     python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_tensorflow ./examples/tensorflow/ | tee tests_output.txt
                   fi
             - store_artifacts:
-                  path: ~/transformers/examples_output.txt
+                  path: ~/transformers/tensorflow_examples_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
 
@@ -719,7 +719,7 @@ jobs:
             - run: |
                   TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_tensorflow ./examples/tensorflow/ | tee examples_output.txt
             - store_artifacts:
-                  path: ~/transformers/examples_output.txt
+                  path: ~/transformers/tensorflow_examples_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
 
