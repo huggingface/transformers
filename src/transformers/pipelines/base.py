@@ -768,7 +768,7 @@ class Pipeline(_ScikitCompat):
             elif device < 0:
                 self.device = torch.device("cpu")
             else:
-                self.device = torch.device("cuda:{device}")
+                self.device = torch.device(f"cuda:{device}")
         else:
             self.device = device
         self.binary_output = binary_output
