@@ -21,7 +21,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "google/pegasus-x-base": "https://huggingface.co/google/pegasus-x-base/resolve/main/config.json",
+    "zphang/pegasus-x-base": "https://huggingface.co/zphang/pegasus-x-base/resolve/main/config.json",
+    "zphang/pegasus-x-large": "https://huggingface.co/zphang/pegasus-x-large/resolve/main/config.json",
     # See all PEGASUS-X models at https://huggingface.co/models?filter=pegasus-x
 }
 
@@ -31,7 +32,7 @@ class PegasusXConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`PegasusXModel`]. It is used to instantiate an
     PEGASUS model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the PEGASUS-X
-    [google/pegasus-large](https://huggingface.co/google/pegasus-large) architecture.
+    [zphang/pegasus-x-large](https://huggingface.co/zphang/pegasus-x-large) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -94,10 +95,10 @@ class PegasusXConfig(PretrainedConfig):
     ```python
     >>> from transformers import PegasusXModel, PegasusXConfig
 
-    >>> # Initializing a PEGASUS google/pegasus-large style configuration
+    >>> # Initializing a PEGASUS zphang/pegasus-x-large style configuration
     >>> configuration = PegasusXConfig()
 
-    >>> # Initializing a model from the google/pegasus-large style configuration
+    >>> # Initializing a model from the zphang/pegasus-x-large style configuration
     >>> model = PegasusXModel(configuration)
 
     >>> # Accessing the model configuration

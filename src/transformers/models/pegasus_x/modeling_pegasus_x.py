@@ -46,13 +46,14 @@ from .configuration_pegasus_x import PegasusXConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "google/pegasus--xlarge"
+_CHECKPOINT_FOR_DOC = "zphang/pegasus-x-base"
 _CONFIG_FOR_DOC = "PegasusXConfig"
 _TOKENIZER_FOR_DOC = "PegasusXTokenizer"
 
 
 PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "google/pegasus-x-large",
+    "zphang/pegasus-x-base",
+    "zphang/pegasus-x-large",
     # See all PEGASUS models at https://huggingface.co/models?filter=pegasus-x
 ]
 
@@ -760,8 +761,8 @@ PEGASUS_X_GENERATION_EXAMPLE = r"""
     ```python
     >>> from transformers import PegasusXTokenizer, PegasusXForConditionalGeneration
 
-    >>> model = PegasusXForConditionalGeneration.from_pretrained("google/pegasus-x-base")
-    >>> tokenizer = PegasusXTokenizer.from_pretrained("google/pegasus-x-base")
+    >>> model = PegasusXForConditionalGeneration.from_pretrained("zphang/pegasus-x-base")
+    >>> tokenizer = PegasusXTokenizer.from_pretrained("google/pegasus-base")
 
     >>> ARTICLE_TO_SUMMARIZE = (
     ...     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
@@ -1406,7 +1407,7 @@ class PegasusXModel(PegasusXPreTrainedModel):
         >>> from transformers import PegasusTokenizer, PegasusModel
 
         >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
-        >>> model = PegasusModel.from_pretrained("google/pegasus-large")
+        >>> model = PegasusModel.from_pretrained("zphang/pegasus-x-large")
 
         >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")
         >>> decoder_inputs = tokenizer("Studies show that", return_tensors="pt")
