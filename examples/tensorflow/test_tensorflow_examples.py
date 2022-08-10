@@ -19,8 +19,8 @@ import json
 import logging
 import os
 import sys
-from unittest.mock import patch
 from unittest import skip
+from unittest.mock import patch
 
 import tensorflow as tf
 
@@ -86,7 +86,6 @@ logger.addHandler(stream_handler)
 
 
 class ExamplesTests(TestCasePlus):
-
     @skip("Skipping until shape inference for to_tf_dataset PR is merged.")
     def test_run_text_classification(self):
         tmp_dir = self.get_auto_remove_tmp_dir()
