@@ -704,7 +704,7 @@ PIPELINE_INIT_ARGS = r"""
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id. You can pass native `torch.device` too.
+            the associated CUDA device id. You can pass native `torch.device` or a `str` too.
         binary_output (`bool`, *optional*, defaults to `False`):
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
@@ -747,7 +747,7 @@ class Pipeline(_ScikitCompat):
         framework: Optional[str] = None,
         task: str = "",
         args_parser: ArgumentHandler = None,
-        device: int = -1,
+        device: Union[int, str, "torch.device"] = -1,
         binary_output: bool = False,
         **kwargs,
     ):
@@ -760,14 +760,21 @@ class Pipeline(_ScikitCompat):
         self.feature_extractor = feature_extractor
         self.modelcard = modelcard
         self.framework = framework
-        if is_torch_available() and isinstance(device, torch.device):
-            self.device = device
+        if is_torch_available() and self.framework == "pt":
+            if isinstance(device, torch.device):
+                self.device = device
+            elif isinstance(device, str):
+                self.device = torch.device(device)
+            elif device < 0:
+                self.device = torch.device("cpu")
+            else:
+                self.device = torch.device("cuda:{device}")
         else:
-            self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
+            self.device = device
         self.binary_output = binary_output
 
         # Special handling
-        if self.framework == "pt" and self.device.type == "cuda":
+        if self.framework == "pt" and self.device.type != "cpu":
             self.model = self.model.to(self.device)
 
         # Update config with task specific parameters

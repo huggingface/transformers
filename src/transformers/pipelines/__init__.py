@@ -422,6 +422,7 @@ def pipeline(
     revision: Optional[str] = None,
     use_fast: bool = True,
     use_auth_token: Optional[Union[str, bool]] = None,
+    device: Optional[Union[int, str, "torch.device"]] = None,
     device_map=None,
     torch_dtype=None,
     trust_remote_code: Optional[bool] = None,
@@ -508,6 +509,9 @@ def pipeline(
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `huggingface-cli login` (stored in `~/.huggingface`).
+        device (`int` or `str` or `torch.device`):
+            Defines the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank like `1`) on which this
+            pipeline will be allocated.
         device_map (`str` or `Dict[str, Union[int, str, torch.device]`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
             `device_map="auto"` to compute the most optimized `device_map` automatically. [More
@@ -810,5 +814,8 @@ def pipeline(
 
     if feature_extractor is not None:
         kwargs["feature_extractor"] = feature_extractor
+
+    if device is not None:
+        kwargs["device"] = device
 
     return pipeline_class(model=model, framework=framework, task=task, **kwargs)
