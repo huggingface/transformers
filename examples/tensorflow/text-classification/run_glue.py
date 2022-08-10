@@ -462,7 +462,7 @@ def main():
         if not push_to_hub_model_id:
             push_to_hub_model_id = f"{model_name}-finetuned-glue"
 
-        model_card_kwargs = dict()
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-classification"}
         model_card_kwargs["task_name"] = data_args.task_name
 
         if training_args.push_to_hub:
