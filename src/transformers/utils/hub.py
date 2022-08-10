@@ -38,6 +38,7 @@ from huggingface_hub import (
     whoami,
 )
 from huggingface_hub.constants import HUGGINGFACE_HEADER_X_LINKED_ETAG, HUGGINGFACE_HEADER_X_REPO_COMMIT
+from huggingface_hub.file_download import REGEX_COMMIT_HASH
 from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError, RevisionNotFoundError
 from requests.exceptions import HTTPError
 from transformers.utils.logging import tqdm
@@ -200,7 +201,7 @@ def http_user_agent(user_agent: Union[Dict, str, None] = None) -> str:
     return ua
 
 
-def extract_commit_hash(resolved_file, commit_hash):
+def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]):
     """
     Extracts the commit hash from a resolved filename toward a cache file.
     """
@@ -210,7 +211,8 @@ def extract_commit_hash(resolved_file, commit_hash):
     search = re.search(r"snapshots/([^/]+)/", resolved_file)
     if search is None:
         return None
-    return search.groups()[0]
+    commit_hash = search.groups()[0]
+    return commit_hash if REGEX_COMMIT_HASH.match(commit_hash) else None
 
 
 def try_to_load_from_cache(cache_dir, repo_id, filename, revision=None, commit_hash=None):
