@@ -76,7 +76,7 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
     midpoint - `max_n_lyric_tokens//2` to the midpoint + `max_n_lyric_tokens//2` will be returned. This *focuses* on
     the most relevant tokens (in time) for the sequence.
 
-    Args: # TODO : args to prettify
+    Args:
         full_tokens (`List[int]`):
             List containing the ids of the entire lyrics.
         total_length (`int`):
@@ -92,9 +92,6 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
     full_tokens = full_tokens[0]
     if len(full_tokens) < max_n_lyric_tokens:
         tokens = torch.cat([torch.zeros(max_n_lyric_tokens - len(full_tokens)), full_tokens])
-        # tokens = torch.cat([0] * (max_n_lyric_tokens - len(full_tokens)), full_tokens)
-        # did not handle that before but now the full_tokens are torch tensors
-        # because the tokenizer outputs tensors and not list (choice ma)
         indices = [-1] * (max_n_lyric_tokens - len(full_tokens)) + list(range(0, len(full_tokens)))
     else:
         assert 0 <= offset < total_length
@@ -102,9 +99,9 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
         midpoint = min(max(midpoint, max_n_lyric_tokens // 2), len(full_tokens) - max_n_lyric_tokens // 2)
         tokens = full_tokens[midpoint - max_n_lyric_tokens // 2 : midpoint + max_n_lyric_tokens // 2]
         indices = list(range(midpoint - max_n_lyric_tokens // 2, midpoint + max_n_lyric_tokens // 2))
-    assert len(tokens) == max_n_lyric_tokens, f"Expected length {max_n_lyric_tokens}, got {len(tokens)}"
-    assert len(indices) == max_n_lyric_tokens, f"Expected length {max_n_lyric_tokens}, got {len(indices)}"
-    # assert tokens == [full_tokens[index] if index != -1 else 0 for index in indices]
+    # assert len(tokens) == max_n_lyric_tokens, f"Expected length {max_n_lyric_tokens}, got {len(tokens)}"
+    # assert len(indices) == max_n_lyric_tokens, f"Expected length {max_n_lyric_tokens}, got {len(indices)}"
+    # # assert tokens == [full_tokens[index] if index != -1 else 0 for index in indices]
     return tokens.unsqueeze(dim=0), indices
 
 
@@ -141,7 +138,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to:
     this superclass for more information regarding those methods.
 
-    # TODO: the original paper should support composing from 2 or more artists and genres.
     However the code does not allow that and only supports composing from various genres.
 
     Args:

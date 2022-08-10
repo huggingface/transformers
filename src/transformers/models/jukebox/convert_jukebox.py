@@ -75,14 +75,14 @@ def replace_key(key):
         return key.replace(".ln", ".layer_norm")
     if "_ln" in key:
         return key.replace("_ln", "_layer_norm")
-    
+
     if "prime_state_proj" in key:
         return key.replace("prime_state_proj", "lyric_encoder.proj_in")
     if "prime_x_out" in key:
         return key.replace("prime_x_out", "lyric_encoder.lm_head")
-    if "prior.x_out" in key: 
+    if "prior.x_out" in key:
         return key.replace("x_out", "fc_proj_out")
-    if "x_emb" in key:  
+    if "x_emb" in key:
         return key.replace("x_emb", "embed_tokens")
     return key
 
@@ -237,7 +237,7 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
     #     prior_depth=[79, 72, 72],
     #     max_nb_genres=1,
     # )
-    config = JukeboxConfig(sample_length= 1058304)
+    config = JukeboxConfig(sample_length=1058304)
     model = JukeboxModel(config)
 
     weight_dict = []

@@ -52,9 +52,9 @@ _CONFIG_FOR_DOC = "JukeboxConfig"
 _TOKENIZER_FOR_DOC = "JukeboxTokenizer"
 
 JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "ArthurZ/jukebox-dummy",
-    "ArthurZ/jukebox-1b-lyrics",
-    "ArthurZ/jukebox-5b-lyrics",
+    "openai/jukebox-dummy",
+    "openai/jukebox-1b-lyrics",
+    "openai/jukebox-5b-lyrics",
     # See all Jukebox models at https://huggingface.co/models?filter=jukebox
 ]
 
@@ -1499,7 +1499,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         - metadata_conditioning : whether or not the prior supports conditionning on artitst, genres, lyrics and
           timing. When
         False, the start token is random.
-        - prime_len : for now ??????
+        - prime_len : for now len of the lyric hidden states
         """
         super().__init__()
         self.input_shape = input_shape
@@ -2157,7 +2157,7 @@ class JukeboxPrior(nn.Module):
             # TODO rename to encoder_kwargs as they are used both
             # when single and not
             lyric_enc_kwargs = dict(
-                embed_dim=config.prime_n_vocab, # previously bins
+                embed_dim=config.prime_n_vocab,  # previously bins
                 width=config.prime_width[-level - 1],
                 depth=config.prime_depth[-level - 1],
                 heads=config.prime_heads,

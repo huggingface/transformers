@@ -22,8 +22,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 JUKEBOX_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ArthurZ/jukebox-5b-lyrics": "https://huggingface.co/ArthurZ/jukebox-5b-lyrics/blob/main/config.json",
-    "ArthurZ/jukebox-1b-lyrics": "https://huggingface.co/ArthurZ/jukebox-1b-lyrics/blob/main/config.json",
+    "openai/jukebox-5b-lyrics": "https://huggingface.co/openai/jukebox-5b-lyrics/blob/main/config.json",
+    "openai/jukebox-1b-lyrics": "https://huggingface.co/openai/jukebox-1b-lyrics/blob/main/config.json",
 }
 
 
@@ -34,7 +34,7 @@ class JukeboxConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information. Instantiating a configuration with the defaults will
     yield a similar configuration to that of
-    [ArthurZ/jukebox-1b-lyrics](https://huggingface.co/ArthurZ/jukebox-1b-lyrics) architecture.
+    [openai/jukebox-1b-lyrics](https://huggingface.co/openai/jukebox-1b-lyrics) architecture.
 
 
     The downsampling and stride are used to determine downsampling of the input sequence. For example, downsamoling =

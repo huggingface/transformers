@@ -28,7 +28,7 @@ if is_torch_available():
 @require_torch
 class Jukebox1bModelTester(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
-    model_id = "ArthurZ/jukebox-1b-lyrics"
+    model_id = "openai/jukebox-1b-lyrics"
     metas = dict(
         artist="Zac Brown Band",
         genres="Country",
@@ -163,8 +163,8 @@ class Jukebox1bModelTester(unittest.TestCase):
 
         top_prior = model.priors[-1]
         start = 0
-        z_conds = top_prior.get_z_conds(zs, start=start, end=start + top_prior.n_ctx)
-        y = top_prior.get_y(labels[-1].clone(), start, 1058304, 0)
+        z_conds = top_prior.get_music_tokens_conds(zs, start=start, end=start + top_prior.n_ctx)
+        y = top_prior.get_metadata(labels[-1].clone(), start, 1058304, 0)
 
         self.assertIsNone(z_conds)
         self.assertListEqual(y.cpu().numpy()[0][:10].tolist(), self.EXPECTED_Y_COND)
@@ -233,6 +233,7 @@ class Jukebox1bModelTester(unittest.TestCase):
 @require_torch
 class Jukebox5bModelTester(unittest.TestCase):
     all_model_classes = (JukeboxModel,) if is_torch_available() else ()
+    model_id = "openai/jukebox-5b-lyrics"
     metas = dict(
         artist="Zac Brown Band",
         genres="Country",
@@ -309,10 +310,9 @@ class Jukebox5bModelTester(unittest.TestCase):
 
     @slow
     def test_sampling(self):
-        model_id = "ArthurZ/jukebox-5b-lyrics"
-        model = JukeboxModel.from_pretrained(model_id, min_duration=0).eval()
+        model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
 
-        labels = self.prepare_inputs(model_id)
+        labels = self.prepare_inputs(self.model_id)
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
         zs = model._sample(zs, labels, [2], sample_length=60 * model.priors[-1].raw_to_tokens, save_results=False)
@@ -333,10 +333,9 @@ class Jukebox5bModelTester(unittest.TestCase):
 
     @slow
     def test_slow_sampling(self):
-        model_id = "ArthurZ/jukebox-5b-lyrics"
-        model = JukeboxModel.from_pretrained(model_id, min_duration=0).eval().to("cuda")
+        model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval().to("cuda")
 
-        labels = [i.cuda() for i in self.prepare_inputs(model_id)]
+        labels = [i.cuda() for i in self.prepare_inputs(self.model_id)]
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
         zs = model._sample(zs, labels, [2], sample_length=60 * model.priors[-1].raw_to_tokens, save_results=False)
