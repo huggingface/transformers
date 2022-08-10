@@ -291,7 +291,7 @@ class TokenClassificationPipeline(Pipeline):
                         AggregationStrategy.MAX,
                     }:
                         warnings.warn("Tokenizer does not support real words, using fallback heuristic", UserWarning)
-                    is_subword = sentence[start_ind - 1 : start_ind] != " " if start_ind > 0 else False
+                    is_subword = start_ind > 0 and " " not in sentence[start_ind - 1 : start_ind + 1]
 
                 if int(input_ids[idx]) == self.tokenizer.unk_token_id:
                     word = word_ref
