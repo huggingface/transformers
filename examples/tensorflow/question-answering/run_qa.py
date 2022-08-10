@@ -742,8 +742,8 @@ def main():
             if isinstance(eval_predictions.start_logits, tf.RaggedTensor):
                 # If predictions are RaggedTensor, we densify them. Since they are logits, padding with 0 is a bad idea!
                 # The reason is that a logit of 0 can often end up as quite a high probability value, sometimes even
-                # the highest probability in a sample. Instead, we use a value of -1000, which ensures that the padding
-                # positions are correctly masked.
+                # the highest probability in a sample. Instead, we use a large negative value, which ensures that the
+                # padding positions are correctly masked.
                 eval_start_logits = eval_predictions.start_logits.to_tensor(default_value=-1000).numpy()
                 eval_end_logits = eval_predictions.end_logits.to_tensor(default_value=-1000).numpy()
             else:
@@ -773,8 +773,8 @@ def main():
             if isinstance(test_predictions.start_logits, tf.RaggedTensor):
                 # If predictions are RaggedTensor, we densify them. Since they are logits, padding with 0 is a bad idea!
                 # The reason is that a logit of 0 can often end up as quite a high probability value, sometimes even
-                # the highest probability in a sample. Instead, we use a value of -1000, which ensures that the padding
-                # positions are correctly masked.
+                # the highest probability in a sample. Instead, we use a large negative value, which ensures that the
+                # padding positions are correctly masked.
                 test_start_logits = test_predictions.start_logits.to_tensor(default_value=-1000).numpy()
                 test_end_logits = test_predictions.end_logits.to_tensor(default_value=-1000).numpy()
             else:
