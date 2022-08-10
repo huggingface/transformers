@@ -333,31 +333,31 @@ def gradient_based_conv_transpose(
 
 class ConvTransposeGradient(nn.Module):
     """Convolution Module wrapping lax.conv_transpose. Calculates transposed convolutions via gradient (transpose) of a
-forward convolution.
+    forward convolution.
 
-    Attributes:
-        features: number of convolution filters.
-        kernel_size: shape of the convolutional kernel. For 1D convolution,
-        the kernel size can be passed as an integer. For all other cases, it must
-        be a sequence of integers.
-        strides: a sequence of `n` integers, representing the inter-window strides.
-        padding: either the string `'SAME'`, the string `'VALID'`, the string
-        `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
-        high)` integer pairs that give the padding to apply before and after each
-        spatial dimension. A single int is interpeted as applying the same padding
-        in all dims and passign a single int in a sequence causes the same padding
-        to be used on both sides.
-        kernel_dilation: `None`, or a sequence of `n` integers, giving the
-        dilation factor to apply in each spatial dimension of the convolution
-        kernel. Convolution with kernel dilation is also known as 'atrous
-        convolution'.
-        use_bias: whether to add a bias to the output (default: True).
-        dtype: the dtype of the computation (default: float32).
-        param_dtype: the dtype passed to parameter initializers (default: float32).
-        precision: numerical precision of the computation see `jax.lax.Precision`
-        for details.
-        kernel_init: initializer for the convolutional kernel.
-        bias_init: initializer for the bias.
+        Attributes:
+            features: number of convolution filters.
+            kernel_size: shape of the convolutional kernel. For 1D convolution,
+            the kernel size can be passed as an integer. For all other cases, it must
+            be a sequence of integers.
+            strides: a sequence of `n` integers, representing the inter-window strides.
+            padding: either the string `'SAME'`, the string `'VALID'`, the string
+            `'CIRCULAR'` (periodic boundary conditions), or a sequence of `n` `(low,
+            high)` integer pairs that give the padding to apply before and after each
+            spatial dimension. A single int is interpeted as applying the same padding
+            in all dims and passign a single int in a sequence causes the same padding
+            to be used on both sides.
+            kernel_dilation: `None`, or a sequence of `n` integers, giving the
+            dilation factor to apply in each spatial dimension of the convolution
+            kernel. Convolution with kernel dilation is also known as 'atrous
+            convolution'.
+            use_bias: whether to add a bias to the output (default: True).
+            dtype: the dtype of the computation (default: float32).
+            param_dtype: the dtype passed to parameter initializers (default: float32).
+            precision: numerical precision of the computation see `jax.lax.Precision`
+            for details.
+            kernel_init: initializer for the convolutional kernel.
+            bias_init: initializer for the bias.
     """
 
     features: int
