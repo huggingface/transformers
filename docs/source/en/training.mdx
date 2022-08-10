@@ -98,18 +98,18 @@ Specify where to save the checkpoints from your training:
 >>> training_args = TrainingArguments(output_dir="test_trainer")
 ```
 
-### Metrics
+### Evaluate
 
-[`Trainer`] does not automatically evaluate model performance during training. You will need to pass [`Trainer`] a function to compute and report metrics. The 🤗 Datasets library provides a simple [`accuracy`](https://huggingface.co/metrics/accuracy) function you can load with the `load_metric` (see this [tutorial](https://huggingface.co/docs/datasets/metrics.html) for more information) function:
+[`Trainer`] does not automatically evaluate model performance during training. You'll need to pass [`Trainer`] a function to compute and report metrics. The [🤗 Evaluate](https://huggingface.co/docs/evaluate/index) library provides a simple [`accuracy`](https://huggingface.co/spaces/evaluate-metric/accuracy) function you can load with the [`evaluate.load`] (see this [quicktour](https://huggingface.co/docs/evaluate/a_quick_tour) for more information) function:
 
 ```py
 >>> import numpy as np
->>> from datasets import load_metric
+>>> import evaluate
 
->>> metric = load_metric("accuracy")
+>>> metric = evaluate.load("accuracy")
 ```
 
-Call `compute` on `metric` to calculate the accuracy of your predictions. Before passing your predictions to `compute`, you need to convert the predictions to logits (remember all 🤗 Transformers models return logits):
+Call [`~evaluate.compute`] on `metric` to calculate the accuracy of your predictions. Before passing your predictions to `compute`, you need to convert the predictions to logits (remember all 🤗 Transformers models return logits):
 
 ```py
 >>> def compute_metrics(eval_pred):
@@ -341,12 +341,14 @@ To keep track of your training progress, use the [tqdm](https://tqdm.github.io/)
 ...         progress_bar.update(1)
 ```
 
-### Metrics
+### Evaluate
 
-Just like how you need to add an evaluation function to [`Trainer`], you need to do the same when you write your own training loop. But instead of calculating and reporting the metric at the end of each epoch, this time you will accumulate all the batches with [`add_batch`](https://huggingface.co/docs/datasets/package_reference/main_classes.html?highlight=add_batch#datasets.Metric.add_batch) and calculate the metric at the very end.
+Just like how you added an evaluation function to [`Trainer`], you need to do the same when you write your own training loop. But instead of calculating and reporting the metric at the end of each epoch, this time you'll accumulate all the batches with [`~evaluate.add_batch`] and calculate the metric at the very end.
 
 ```py
->>> metric = load_metric("accuracy")
+>>> import evaluate
+
+>>> metric = evaluate.load("accuracy")
 >>> model.eval()
 >>> for batch in eval_dataloader:
 ...     batch = {k: v.to(device) for k, v in batch.items()}
