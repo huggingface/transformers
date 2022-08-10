@@ -973,7 +973,7 @@ class TrainingArguments:
                 " Expects timeout in seconds. Used for timeout argument in"
                 " torch.distributed.init_process_group calls. Please refer the PyTorch documentation"
                 " https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group"
-                " timeout is passed datetime object."
+                " for more information."
             )
         },
     )
