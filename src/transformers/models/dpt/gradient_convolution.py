@@ -14,10 +14,8 @@ default_kernel_init = lecun_normal()
 
 PRNGKey = Any
 Shape = Tuple[int, ...]
-Dtype = Any  # this could be a real type?
+Dtype = jnp.dtype  # this could be a real type?
 Array = Any
-PrecisionLike = Union[None, str, lax.Precision, Tuple[str, str], Tuple[lax.Precision, lax.Precision]]
-
 PrecisionLike = Union[None, str, lax.Precision, Tuple[str, str], Tuple[lax.Precision, lax.Precision]]
 PaddingLike = Union[str, int, Sequence[Union[int, Tuple[int, int]]]]
 LaxPadding = Union[str, Sequence[Tuple[int, int]]]
@@ -47,7 +45,7 @@ ConvGeneralDilatedDimensionNumbers = Union[None, ConvDimensionNumbers, Tuple[str
 def _flip_axes(x, axes):
     """Flip ndarray 'x' along each axis specified in axes tuple."""
     for axis in axes:
-        x = np.flip(x, axis)
+        x = jnp.flip(x, axis)
     return x
 
 
@@ -183,6 +181,7 @@ def canonicalize_padding(padding: PaddingLike, rank: int) -> LaxPadding:
     )
 
 
+# Copied from a contributor's PR on jax: https://github.com/yang-song/jax/commit/883a7c9e812e0f7af8dffa0eb54d017fd2200f10 
 def _compute_adjusted_padding(
     input_size: int,
     output_size: int,
