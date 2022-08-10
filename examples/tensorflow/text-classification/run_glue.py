@@ -16,6 +16,7 @@
 """ Finetuning the library models for sequence classification on GLUE."""
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
+import json
 import logging
 import os
 import sys
@@ -24,8 +25,9 @@ from typing import Optional
 
 import numpy as np
 import tensorflow as tf
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 
+import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -34,34 +36,18 @@ from transformers import (
     DefaultDataCollator,
     HfArgumentParser,
     PretrainedConfig,
+    PushToHubCallback,
     TFAutoModelForSequenceClassification,
     TFTrainingArguments,
+    create_optimizer,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
 from transformers.utils import check_min_version, send_example_telemetry
 
 
-# region Helper functions
-
-
-class SavePretrainedCallback(tf.keras.callbacks.Callback):
-    # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
-    # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
-    # that saves the model with this method after each epoch.
-    def __init__(self, output_dir, **kwargs):
-        super().__init__()
-        self.output_dir = output_dir
-
-    def on_epoch_end(self, epoch, logs=None):
-        self.model.save_pretrained(self.output_dir)
-
-
-# endregion
-
-
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.21.0.dev0")
+check_min_version("4.22.0.dev0")
 
 task_to_keys = {
     "cola": ("sentence", None),
@@ -182,7 +168,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -311,7 +297,6 @@ def main():
 
     # region Dataset preprocessing
     sentence1_key, sentence2_key = task_to_keys[data_args.task_name]
-    non_label_column_names = [name for name in datasets["train"].column_names if name != "label"]
 
     # Padding strategy
     if data_args.pad_to_max_length:
@@ -366,7 +351,7 @@ def main():
     # endregion
 
     # region Metric function
-    metric = load_metric("glue", data_args.task_name)
+    metric = evaluate.load("glue", data_args.task_name)
 
     def compute_metrics(preds, label_ids):
         preds = preds["logits"]
@@ -393,24 +378,11 @@ def main():
         )
         # endregion
 
-        # region Optimizer, loss and compilation
-        optimizer = tf.keras.optimizers.Adam(
-            learning_rate=training_args.learning_rate,
-            beta_1=training_args.adam_beta1,
-            beta_2=training_args.adam_beta2,
-            epsilon=training_args.adam_epsilon,
-            clipnorm=training_args.max_grad_norm,
-        )
-        if is_regression:
-            loss_fn = tf.keras.losses.MeanSquaredError()
-            metrics = []
-        else:
-            loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
-            metrics = ["accuracy"]
-        model.compile(optimizer=optimizer, loss=loss_fn, metrics=metrics)
-        # endregion
-
         # region Convert data to a tf.data.Dataset
+        dataset_options = tf.data.Options()
+        dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+        num_replicas = training_args.strategy.num_replicas_in_sync
+
         tf_data = dict()
         max_samples = {
             "train": data_args.max_train_samples,
@@ -427,31 +399,89 @@ def main():
                 assert "label" in datasets[key].features, f"Missing labels from {key} data!"
             if key == "train":
                 shuffle = True
-                batch_size = training_args.per_device_train_batch_size
-                drop_remainder = True  # Saves us worrying about scaling gradients for the last batch
+                batch_size = training_args.per_device_train_batch_size * num_replicas
             else:
                 shuffle = False
-                batch_size = training_args.per_device_eval_batch_size
-                drop_remainder = False
+                batch_size = training_args.per_device_eval_batch_size * num_replicas
             samples_limit = max_samples[key]
             dataset = datasets[key]
             if samples_limit is not None:
                 dataset = dataset.select(range(samples_limit))
-            data = dataset.to_tf_dataset(
-                columns=[col for col in dataset.column_names if col not in set(non_label_column_names + ["label"])],
+
+            # model.prepare_tf_dataset() wraps a Hugging Face dataset in a tf.data.Dataset which is ready to use in
+            # training. This is the recommended way to use a Hugging Face dataset when training with Keras. You can also
+            # use the lower-level dataset.to_tf_dataset() method, but you will have to specify things like column names
+            # yourself if you use this method, whereas they are automatically inferred from the model input names when
+            # using model.prepare_tf_dataset()
+            # For more info see the docs:
+            # https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.TFPreTrainedModel.prepare_tf_dataset
+            # https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.to_tf_dataset
+            data = model.prepare_tf_dataset(
+                dataset,
                 shuffle=shuffle,
                 batch_size=batch_size,
                 collate_fn=data_collator,
-                drop_remainder=drop_remainder,
-                # `label_cols` is needed for user-defined losses, such as in this example
-                label_cols="label" if "label" in dataset.column_names else None,
+                tokenizer=tokenizer,
             )
+            data = data.with_options(dataset_options)
             tf_data[key] = data
+        # endregion
+
+        # region Optimizer, loss and compilation
+        if training_args.do_train:
+            num_train_steps = len(tf_data["train"]) * training_args.num_train_epochs
+            if training_args.warmup_steps > 0:
+                num_warmup_steps = training_args.warmup_steps
+            elif training_args.warmup_ratio > 0:
+                num_warmup_steps = int(num_train_steps * training_args.warmup_ratio)
+            else:
+                num_warmup_steps = 0
+
+            optimizer, schedule = create_optimizer(
+                init_lr=training_args.learning_rate,
+                num_train_steps=num_train_steps,
+                num_warmup_steps=num_warmup_steps,
+                adam_beta1=training_args.adam_beta1,
+                adam_beta2=training_args.adam_beta2,
+                adam_epsilon=training_args.adam_epsilon,
+                weight_decay_rate=training_args.weight_decay,
+                adam_global_clipnorm=training_args.max_grad_norm,
+            )
+        else:
+            optimizer = "adam"  # Just write anything because we won't be using it
+        if is_regression:
+            metrics = []
+        else:
+            metrics = ["accuracy"]
+        model.compile(optimizer=optimizer, metrics=metrics, jit_compile=training_args.xla)
+        # endregion
+
+        # region Preparing push_to_hub and model card
+        push_to_hub_model_id = training_args.push_to_hub_model_id
+        model_name = model_args.model_name_or_path.split("/")[-1]
+        if not push_to_hub_model_id:
+            push_to_hub_model_id = f"{model_name}-finetuned-glue"
+
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "text-classification"}
+        model_card_kwargs["task_name"] = data_args.task_name
+
+        if training_args.push_to_hub:
+            callbacks = [
+                PushToHubCallback(
+                    output_dir=training_args.output_dir,
+                    model_id=push_to_hub_model_id,
+                    organization=training_args.push_to_hub_organization,
+                    token=training_args.push_to_hub_token,
+                    tokenizer=tokenizer,
+                    **model_card_kwargs,
+                )
+            ]
+        else:
+            callbacks = []
         # endregion
 
         # region Training and validation
         if training_args.do_train:
-            callbacks = [SavePretrainedCallback(output_dir=training_args.output_dir)]
             if training_args.do_eval and not data_args.task_name == "mnli":
                 # Do both evaluation and training in the Keras fit loop, unless the task is MNLI
                 # because MNLI has two validation sets
@@ -471,6 +501,12 @@ def main():
             # We normally do validation as part of the Keras fit loop, but we run it independently
             # if there was no fit() step (because we didn't train the model) or if the task is MNLI,
             # because MNLI has a separate validation-mismatched validation set
+
+            # In this example, we compute advanced metrics only at the end of training, and only compute
+            # loss and accuracy on the validation set each epoch, but
+            # if you'd like to compute metrics every epoch that are too complex to be written as
+            # standard Keras metrics, you can use our KerasMetricCallback. See
+            # https://huggingface.co/docs/transformers/main/en/main_classes/keras_callbacks
             logger.info("*** Evaluate ***")
 
             # Loop to handle MNLI double evaluation (matched, mis-matched)
@@ -488,6 +524,10 @@ def main():
                 eval_metrics = compute_metrics(eval_predictions, raw_dataset["label"])
                 print(f"Evaluation metrics ({task}):")
                 print(eval_metrics)
+                if training_args.output_dir is not None:
+                    output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+                    with open(output_eval_file, "w") as writer:
+                        writer.write(json.dumps(eval_metrics))
 
         # endregion
 
@@ -536,6 +576,10 @@ def main():
                             item = model.config.id2label[item]
                             writer.write(f"{index}\t{item}\n")
         # endregion
+
+        if training_args.output_dir is not None and not training_args.push_to_hub:
+            # If we're not pushing to hub, at least save a local copy when we're done
+            model.save_pretrained(training_args.output_dir)
 
 
 if __name__ == "__main__":

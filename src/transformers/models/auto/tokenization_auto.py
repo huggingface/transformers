@@ -25,7 +25,7 @@ from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import TOKENIZER_CONFIG_FILE
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
-from ...utils import get_file_from_repo, is_sentencepiece_available, is_tokenizers_available, logging
+from ...utils import cached_file, extract_commit_hash, is_sentencepiece_available, is_tokenizers_available, logging
 from ..encoder_decoder import EncoderDecoderConfig
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
@@ -357,7 +357,7 @@ def get_tokenizer_config(
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`).
+            when running `huggingface-cli login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -389,7 +389,8 @@ def get_tokenizer_config(
     tokenizer.save_pretrained("tokenizer-test")
     tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
-    resolved_config_file = get_file_from_repo(
+    commit_hash = kwargs.get("_commit_hash", None)
+    resolved_config_file = cached_file(
         pretrained_model_name_or_path,
         TOKENIZER_CONFIG_FILE,
         cache_dir=cache_dir,
@@ -399,13 +400,19 @@ def get_tokenizer_config(
         use_auth_token=use_auth_token,
         revision=revision,
         local_files_only=local_files_only,
+        _raise_exceptions_for_missing_entries=False,
+        _raise_exceptions_for_connection_errors=False,
+        _commit_hash=commit_hash,
     )
     if resolved_config_file is None:
         logger.info("Could not locate the tokenizer configuration file, will try to use the model config instead.")
         return {}
+    commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
 
     with open(resolved_config_file, encoding="utf-8") as reader:
-        return json.load(reader)
+        result = json.load(reader)
+    result["_commit_hash"] = commit_hash
+    return result
 
 
 class AutoTokenizer:
@@ -532,6 +539,8 @@ class AutoTokenizer:
 
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
+        if "_commit_hash" in tokenizer_config:
+            kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
         config_tokenizer_class = tokenizer_config.get("tokenizer_class")
         tokenizer_auto_map = None
         if "auto_map" in tokenizer_config:

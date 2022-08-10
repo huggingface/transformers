@@ -14,7 +14,7 @@
   - local: preprocessing
     title: Preprocess
   - local: training
-    title: Mettere a punto un modello pre-addestrato
+    title: Fine-tuning di un modello pre-addestrato
   - local: accelerate
     title: Allenamento distribuito con 🤗 Accelerate
   - local: model_sharing
@@ -23,12 +23,16 @@
 - sections:
   - local: create_a_model
     title: Crea un'architettura personalizzata
+  - local: custom_models
+    title: Condividere modelli personalizzati
   - local: run_scripts
     title: Addestramento con script
   - local: multilingual
     title: Modelli multilingua per l'inferenza
+  - local: converting_tensorflow_models
+    title: Convertire modelli tensorflow
   - local: serialization
     title: Esporta modelli Transformers
-- sections:
   - local: debugging
     title: Debugging
+  title: Guide pratiche

@@ -229,6 +229,12 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.data2vec.Data2VecTextOnnxConfig",
         ),
+        "data2vec-vision": supported_features_mapping(
+            "default",
+            "image-classification",
+            "image-segmentation",
+            onnx_config_cls="models.data2vec.Data2VecVisionOnnxConfig",
+        ),
         "deberta": supported_features_mapping(
             "default",
             "masked-lm",
@@ -376,6 +382,13 @@ class FeaturesManager:
             "default",
             "image-classification",
             onnx_config_cls="models.mobilevit.MobileViTOnnxConfig",
+        ),
+        "mt5": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls="models.mt5.MT5OnnxConfig",
         ),
         "m2m-100": supported_features_mapping(
             "default",
