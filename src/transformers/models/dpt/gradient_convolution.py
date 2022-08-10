@@ -181,7 +181,7 @@ def canonicalize_padding(padding: PaddingLike, rank: int) -> LaxPadding:
     )
 
 
-# Copied from a contributor's PR on jax: https://github.com/yang-song/jax/commit/883a7c9e812e0f7af8dffa0eb54d017fd2200f10 
+# Copied from a contributor's PR on jax: https://github.com/yang-song/jax/commit/883a7c9e812e0f7af8dffa0eb54d017fd2200f10
 def _compute_adjusted_padding(
     input_size: int,
     output_size: int,
@@ -332,7 +332,8 @@ def gradient_based_conv_transpose(
 
 
 class ConvTransposeGradient(nn.Module):
-    """Convolution Module wrapping lax.conv_transpose. Calculates transposed convolutions via gradient (transpose) of a forward convolution.
+    """Convolution Module wrapping lax.conv_transpose. Calculates transposed convolutions via gradient (transpose) of a
+forward convolution.
 
     Attributes:
         features: number of convolution filters.
@@ -374,8 +375,12 @@ class ConvTransposeGradient(nn.Module):
     @compact
     def __call__(self, inputs: Array) -> Array:
         """Applies a transposed convolution to the inputs.
+        Here we mimic the implementation of the ConvTranspose module:
+        https://flax.readthedocs.io/en/latest/_modules/flax/linen/linear.html#ConvTranspose and define the `__call__`
+        method with the @compact decorator
 
-        Behaviour mirrors of `jax.lax.conv_transpose`, computing transposed convolutions via the gradient (transpose) of a forward convolutions.
+        Behaviour mirrors of `jax.lax.conv_transpose`, computing transposed convolutions via the gradient (transpose)
+        of a forward convolutions.
 
         Args:
         inputs: input data with dimensions (batch, spatial_dims..., features).
