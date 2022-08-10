@@ -49,7 +49,7 @@ class JukeboxTokenizationTest(unittest.TestCase):
         """
         import torch
 
-        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox-1b-lyrics")
+        tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
         tokens = tokenizer(**self.metas)["input_ids"]
         # fmt: off
         EXPECTED_OUTPUT = [
@@ -132,7 +132,7 @@ class JukeboxTokenizationTest(unittest.TestCase):
         """
         import torch
 
-        tokenizer = JukeboxTokenizer.from_pretrained("ArthurZ/jukebox-5b-lyrics")
+        tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-5b-lyrics")
         tokens = tokenizer(**self.metas)["input_ids"]
         # fmt: off
         EXPECTED_OUTPUT = [

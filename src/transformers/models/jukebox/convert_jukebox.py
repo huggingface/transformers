@@ -217,7 +217,8 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
 
     model_to_convert = MODEL_MAPPING[model_name.split("/")[-1]]
 
-    # config = JukeboxConfig.from_pretrained("ArthurZ/" + model_name)
+    # config = JukeboxConfig.from_pretrained("openai/" + model_name)
+    # to convert the 5b lyric token model, use : or "openai/jukebox-5b-lyrics"
     # config = JukeboxConfig(
     #     timing_dims=128
     #     prior_attn_order=[10, 2, 2],
@@ -260,8 +261,7 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
         new_dic = fix_jukebox_keys(new_dic, model.state_dict(), key_prefix, mapping)
         weight_dict.append(new_dic)
 
-    with open("mapping.json", "w") as txtfile:
-        json.dump(mapping, txtfile)
+
 
     vqvae_state_dict = weight_dict.pop(0)
     model.vqvae.load_state_dict(vqvae_state_dict)
@@ -269,6 +269,9 @@ def convert_openai_checkpoint(model_name=None, pytorch_dump_folder_path=None):
         model.priors[i].load_state_dict(weight_dict[i])
 
     Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
+    with open(f"{pytorch_dump_folder_path}/mapping.json", "w") as txtfile:
+        json.dump(mapping, txtfile, sep="\n")
+
     print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
 
