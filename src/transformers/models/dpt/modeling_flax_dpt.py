@@ -205,7 +205,7 @@ class FlaxDPTSelfAttention(nn.Module):
         outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
         return outputs
 
-
+`# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTOutput with ViT->DPT`
 class FlaxDPTViTOutput(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -506,7 +506,7 @@ class FlaxDPTFeatureFusionLayer(nn.Module):
     align_corners: bool = True
 
     def setup(self):
-        self.projection = nn.Conv(self.config.fusion_hidden_size, kernel_size=(1, 1))  # , bias=True)
+        self.projection = nn.Conv(self.config.fusion_hidden_size, kernel_size=(1, 1), use_bias=True)
 
         self.residual_layer1 = FlaxDPTPreActResidualLayer(self.config)
         self.residual_layer2 = FlaxDPTPreActResidualLayer(self.config)
@@ -516,16 +516,16 @@ class FlaxDPTFeatureFusionLayer(nn.Module):
         if residual is not None:
             if hidden_state.shape != residual.shape:
                 size = hidden_state.shape
-                residual = self.upsample(residual, size)
+                residual = self.upsample(residual, align_corners=True)
             hidden_state = hidden_state + self.residual_layer1(residual)
 
         hidden_state = self.residual_layer2(hidden_state)
-        hidden_state = self.upsample(hidden_state)
+        hidden_state = self.upsample(hidden_state, align_corners=self.align_corners)
         hidden_state = self.projection(hidden_state)
 
         return hidden_state
 
-
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTLayer with ViTConfig->DPTConfig, ViTAttention->DPTViTAttention, ViTIntermediate->DPTViTIntermediate, ViTOutput->DPTViTOutput
 class FlaxDPTViTLayer(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -561,7 +561,7 @@ class FlaxDPTViTLayer(nn.Module):
             outputs += (attention_outputs[1],)
         return outputs
 
-
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTLayerCollection with ViTConfig->DPTConfig, ViTLayer->DPTViTLayer
 class FlaxDPTViTLayerCollection(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -604,7 +604,7 @@ class FlaxDPTViTLayerCollection(nn.Module):
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions
         )
 
-
+# Copied from transformers.models.vit.modeling_vit.FlaxViTPooler with ViT->DPT
 class FlaxDPTViTPooler(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -621,7 +621,7 @@ class FlaxDPTViTPooler(nn.Module):
         cls_hidden_state = self.dense(cls_hidden_state)
         return nn.tanh(cls_hidden_state)
 
-
+# Copied from transformers.models.vit.modeling_flax_vit.FlaxViTEncoder with ViTConfig -> DPTConfig, ViTLayer->DPTViTLayer
 class FlaxDPTViTEncoder(nn.Module):
     config: DPTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -698,7 +698,7 @@ class FlaxDPTPreTrainedModel(FlaxPreTrainedModel):
         if input_shape is None:
             input_shape = (1, config.image_size, config.image_size, 3)
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
-
+    # Copied from transformers.models.FlaxViTPreTrainedModel.init_weights
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         pixel_values = jnp.zeros(input_shape, dtype=self.dtype)
@@ -719,6 +719,7 @@ class FlaxDPTPreTrainedModel(FlaxPreTrainedModel):
             return random_params
 
     @add_start_docstrings_to_model_forward(DPT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    # Copied from transformers.models.FlaxViTPreTrainedModel.__call__
     def __call__(
         self,
         pixel_values,
@@ -863,8 +864,8 @@ class FlaxDPTUpsample(nn.Module):
     def setup(self):
         pass
 
-    def __call__(self, x, output_size=None):
-        if output_size is None:
+    def __call__(self, x, align_corners=True):
+        if not align_corners:
             output_size = x.shape
             output_size = (output_size[0], output_size[1] * self.scale, output_size[2] * self.scale, output_size[3])
         return jax.image.resize(x, output_size, method=self.method)
