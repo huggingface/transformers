@@ -367,6 +367,12 @@ _import_structure = {
         "WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "WavLMConfig",
     ],
+    "models.x_clip": [
+        "X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "XClipConfig",
+        "XClipTextConfig",
+        "XClipVisionConfig",
+    ],
     "models.xglm": ["XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XGLMConfig"],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
     "models.xlm_prophetnet": ["XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMProphetNetConfig"],
@@ -981,6 +987,15 @@ else:
             "CLIPPreTrainedModel",
             "CLIPTextModel",
             "CLIPVisionModel",
+        ]
+    )
+    _import_structure["models.x_clip"].extend(
+        [
+            "X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "XClipModel",
+            "XClipPreTrainedModel",
+            "XClipTextModel",
+            "XClipVisionModel",
         ]
     )
     _import_structure["models.convbert"].extend(
@@ -3164,6 +3179,7 @@ if TYPE_CHECKING:
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
+    from .models.x_clip import X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, XClipConfig, XClipTextConfig, XClipVisionConfig
     from .models.xglm import XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XGLMConfig
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
     from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
@@ -4463,6 +4479,13 @@ if TYPE_CHECKING:
             WavLMForXVector,
             WavLMModel,
             WavLMPreTrainedModel,
+        )
+        from .models.x_clip import (
+            X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            XClipModel,
+            XClipPreTrainedModel,
+            XClipTextModel,
+            XClipVisionModel,
         )
         from .models.xglm import XGLM_PRETRAINED_MODEL_ARCHIVE_LIST, XGLMForCausalLM, XGLMModel, XGLMPreTrainedModel
         from .models.xlm import (
