@@ -713,7 +713,7 @@ jobs:
             - run: pip install .[sklearn,tensorflow,sentencepiece,testing]
             - run: pip install -r examples/tensorflow/_tests_requirements.txt
             - save_cache:
-                  key: v0.5-torch_examples-{{ checksum "setup.py" }}
+                  key: v0.5-tensorflow_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
             - run: |
