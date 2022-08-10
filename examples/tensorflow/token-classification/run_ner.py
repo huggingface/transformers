@@ -33,7 +33,7 @@ import evaluate
 import transformers
 from transformers import (
     CONFIG_MAPPING,
-    MODEL_MAPPING,
+    TF_MODEL_MAPPING,
     AutoConfig,
     AutoTokenizer,
     HfArgumentParser,
@@ -51,7 +51,7 @@ logger.addHandler(logging.StreamHandler())
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
 
 # You should update this to your particular problem to have better documentation of `model_type`
-MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
+MODEL_CONFIG_CLASSES = list(TF_MODEL_MAPPING.keys())
 MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 
