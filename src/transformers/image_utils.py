@@ -23,13 +23,14 @@ import PIL.ImageOps
 import requests
 
 from .utils import is_torch_available
+from .utils.constants import (  # noqa: F401
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+)
 from .utils.generic import _is_torch
 
-
-IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]
-IMAGENET_DEFAULT_STD = [0.229, 0.224, 0.225]
-IMAGENET_STANDARD_MEAN = [0.5, 0.5, 0.5]
-IMAGENET_STANDARD_STD = [0.5, 0.5, 0.5]
 
 ImageInput = Union[
     PIL.Image.Image, np.ndarray, "torch.Tensor", List[PIL.Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
@@ -358,3 +359,20 @@ class ImageFeatureExtractionMixin:
         ]
 
         return new_image
+
+    def flip_channel_order(self, image):
+        """
+        Flips the channel order of `image` from RGB to BGR, or vice versa. Note that this will trigger a conversion of
+        `image` to a NumPy array if it's a PIL Image.
+
+        Args:
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
+                The image whose color channels to flip. If `np.ndarray` or `torch.Tensor`, the channel dimension should
+                be first.
+        """
+        self._ensure_format_supported(image)
+
+        if isinstance(image, PIL.Image.Image):
+            image = self.to_numpy_array(image)
+
+        return image[::-1, :, :]

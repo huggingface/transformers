@@ -20,6 +20,7 @@ import os
 import re
 import shlex
 import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -27,7 +28,7 @@ from collections.abc import Mapping
 from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
-from typing import Iterator, Union
+from typing import Iterator, List, Union
 from unittest import mock
 
 from transformers import logging as transformers_logging
@@ -63,6 +64,7 @@ from .utils import (
     is_soundfile_availble,
     is_spacy_available,
     is_tensorflow_probability_available,
+    is_tensorflow_text_available,
     is_tf2onnx_available,
     is_tf_available,
     is_timm_available,
@@ -70,6 +72,7 @@ from .utils import (
     is_torch_available,
     is_torch_bf16_cpu_available,
     is_torch_bf16_gpu_available,
+    is_torch_tensorrt_fx_available,
     is_torch_tf32_available,
     is_torch_tpu_available,
     is_torchaudio_available,
@@ -291,10 +294,15 @@ def require_intel_extension_for_pytorch(test_case):
     """
     Decorator marking a test that requires Intel Extension for PyTorch.
 
-    These tests are skipped when Intel Extension for PyTorch isn't installed.
+    These tests are skipped when Intel Extension for PyTorch isn't installed or it does not match current PyTorch
+    version.
 
     """
-    return unittest.skipUnless(is_ipex_available(), "test requires Intel Extension for PyTorch")(test_case)
+    return unittest.skipUnless(
+        is_ipex_available(),
+        "test requires Intel Extension for PyTorch to be installed and match current PyTorch version, see"
+        " https://github.com/intel/intel-extension-for-pytorch",
+    )(test_case)
 
 
 def require_torch_scatter(test_case):
@@ -359,6 +367,14 @@ def require_tokenizers(test_case):
     Decorator marking a test that requires 🤗 Tokenizers. These tests are skipped when 🤗 Tokenizers isn't installed.
     """
     return unittest.skipUnless(is_tokenizers_available(), "test requires tokenizers")(test_case)
+
+
+def require_tensorflow_text(test_case):
+    """
+    Decorator marking a test that requires tensorflow_text. These tests are skipped when tensroflow_text isn't
+    installed.
+    """
+    return unittest.skipUnless(is_tensorflow_text_available(), "test requires tensorflow_text")(test_case)
 
 
 def require_pandas(test_case):
@@ -458,7 +474,7 @@ def require_torch_tpu(test_case):
     """
     Decorator marking a test that requires a TPU (in PyTorch).
     """
-    return unittest.skipUnless(is_torch_tpu_available(), "test requires PyTorch TPU")(test_case)
+    return unittest.skipUnless(is_torch_tpu_available(check_device=False), "test requires PyTorch TPU")(test_case)
 
 
 if is_torch_available():
@@ -483,6 +499,11 @@ else:
 def require_torchdynamo(test_case):
     """Decorator marking a test that requires TorchDynamo"""
     return unittest.skipUnless(is_torchdynamo_available(), "test requires TorchDynamo")(test_case)
+
+
+def require_torch_tensorrt_fx(test_case):
+    """Decorator marking a test that requires Torch-TensorRT FX"""
+    return unittest.skipUnless(is_torch_tensorrt_fx_available(), "test requires Torch-TensorRT FX")(test_case)
 
 
 def require_torch_gpu(test_case):
@@ -1365,9 +1386,13 @@ def pytest_terminal_summary_main(tr, id):
         tr.summary_warnings()  # final warnings
 
     tr.reportchars = "wPpsxXEf"  # emulate -rA (used in summary_passes() and short_test_summary())
-    with open(report_files["passes"], "w") as f:
-        tr._tw = create_terminal_writer(config, f)
-        tr.summary_passes()
+
+    # Skip the `passes` report, as it starts to take more than 5 minutes, and sometimes it timeouts on CircleCI if it
+    # takes > 10 minutes (as this part doesn't generate any output on the terminal).
+    # (also, it seems there is no useful information in this report, and we rarely need to read it)
+    # with open(report_files["passes"], "w") as f:
+    #     tr._tw = create_terminal_writer(config, f)
+    #     tr.summary_passes()
 
     with open(report_files["summary_short"], "w") as f:
         tr._tw = create_terminal_writer(config, f)
@@ -1541,3 +1566,25 @@ def to_2tuple(x):
     if isinstance(x, collections.abc.Iterable):
         return x
     return (x, x)
+
+
+# These utils relate to ensuring the right error message is received when running scripts
+class SubprocessCallException(Exception):
+    pass
+
+
+def run_command(command: List[str], return_stdout=False):
+    """
+    Runs `command` with `subprocess.check_output` and will potentially return the `stdout`. Will also properly capture
+    if an error occured while running `command`
+    """
+    try:
+        output = subprocess.check_output(command, stderr=subprocess.STDOUT)
+        if return_stdout:
+            if hasattr(output, "decode"):
+                output = output.decode("utf-8")
+            return output
+    except subprocess.CalledProcessError as e:
+        raise SubprocessCallException(
+            f"Command `{' '.join(command)}` failed with the following error:\n\n{e.output.decode()}"
+        ) from e

@@ -98,24 +98,25 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "accelerate>=0.10.0",
-    "black~=22.0,>=22.3",
+    "black==22.3",
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets",
     "deepspeed>=0.6.5",
     "dill<0.3.5",
+    "evaluate>=0.2.0",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
     "filelock",
     "flake8>=3.8.3",
-    "flax>=0.3.5",
+    "flax>=0.4.1",
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.1.0,<1.0",
+    "huggingface-hub>=0.8.1,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -155,11 +156,12 @@ _deps = [
     "starlette",
     "tensorflow-cpu>=2.3",
     "tensorflow>=2.3",
+    "tensorflow-text",
     "tf2onnx",
     "timeout-decorator",
     "timm",
     "tokenizers>=0.11.1,!=0.11.3,<0.13",
-    "torch>=1.0",
+    "torch>=1.0,!=0.12.0",
     "torchaudio",
     "pyctcdecode>=0.3.0",
     "tqdm>=4.27",
@@ -238,8 +240,8 @@ extras = {}
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic")
 extras["sklearn"] = deps_list("scikit-learn")
 
-extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx")
-extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx")
+extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text")
+extras["tf-cpu"] = deps_list("tensorflow-cpu", "onnxconverter-common", "tf2onnx", "tensorflow-text")
 
 extras["torch"] = deps_list("torch")
 extras["accelerate"] = deps_list("accelerate")
@@ -287,6 +289,7 @@ extras["testing"] = (
         "psutil",
         "datasets",
         "dill",
+        "evaluate",
         "pytest-timeout",
         "black",
         "sacrebleu",
@@ -397,7 +400,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.21.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.22.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
@@ -408,7 +411,6 @@ setup(
     url="https://github.com/huggingface/transformers",
     package_dir={"": "src"},
     packages=find_packages("src"),
-    package_data={"transformers": ["py.typed"]},
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},

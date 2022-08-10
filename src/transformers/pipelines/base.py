@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from packaging import version
 
+from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..modelcard import ModelCard
 from ..models.auto.configuration_auto import AutoConfig
@@ -341,7 +342,9 @@ def get_framework(model, revision: Optional[str] = None):
     return framework
 
 
-def get_default_model(targeted_task: Dict, framework: Optional[str], task_options: Optional[Any]) -> str:
+def get_default_model_and_revision(
+    targeted_task: Dict, framework: Optional[str], task_options: Optional[Any]
+) -> Union[str, Tuple[str, str]]:
     """
     Select a default model to use for a given task. Defaults to pytorch if ambiguous.
 
@@ -627,7 +630,6 @@ class PipedPipelineDataFormat(PipelineDataFormat):
         for line in sys.stdin:
             # Split for multi-columns
             if "\t" in line:
-
                 line = line.split("\t")
                 if self.column:
                     # Dictionary to map arguments
@@ -749,7 +751,6 @@ class Pipeline(_ScikitCompat):
         binary_output: bool = False,
         **kwargs,
     ):
-
         if framework is None:
             framework, model = infer_framework_load_model(model, config=model.config)
 
@@ -791,6 +792,27 @@ class Pipeline(_ScikitCompat):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
         os.makedirs(save_directory, exist_ok=True)
+
+        if hasattr(self, "_registered_impl"):
+            # Add info to the config
+            pipeline_info = self._registered_impl.copy()
+            custom_pipelines = {}
+            for task, info in pipeline_info.items():
+                if info["impl"] != self.__class__:
+                    continue
+
+                info = info.copy()
+                module_name = info["impl"].__module__
+                last_module = module_name.split(".")[-1]
+                # Change classes into their names/full names
+                info["impl"] = f"{last_module}.{info['impl'].__name__}"
+                info["pt"] = tuple(c.__name__ for c in info["pt"])
+                info["tf"] = tuple(c.__name__ for c in info["tf"])
+
+                custom_pipelines[task] = info
+            self.model.config.custom_pipelines = custom_pipelines
+            # Save the pipeline custom code
+            custom_object_save(self, save_directory)
 
         self.model.save_pretrained(save_directory)
 
@@ -943,7 +965,9 @@ class Pipeline(_ScikitCompat):
 
     def get_inference_context(self):
         inference_context = (
-            torch.inference_mode if version.parse(torch.__version__) >= version.parse("1.9.0") else torch.no_grad
+            torch.inference_mode
+            if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.9.0")
+            else torch.no_grad
         )
         return inference_context
 
@@ -1085,3 +1109,71 @@ class ChunkPipeline(Pipeline):
         model_iterator = PipelinePackIterator(dataloader, self.forward, forward_params, loader_batch_size=batch_size)
         final_iterator = PipelineIterator(model_iterator, self.postprocess, postprocess_params)
         return final_iterator
+
+
+class PipelineRegistry:
+    def __init__(self, supported_tasks: Dict[str, Any], task_aliases: Dict[str, str]) -> None:
+        self.supported_tasks = supported_tasks
+        self.task_aliases = task_aliases
+
+    def get_supported_tasks(self) -> List[str]:
+        supported_task = list(self.supported_tasks.keys()) + list(self.task_aliases.keys())
+        supported_task.sort()
+        return supported_task
+
+    def check_task(self, task: str) -> Tuple[str, Dict, Any]:
+        if task in self.task_aliases:
+            task = self.task_aliases[task]
+        if task in self.supported_tasks:
+            targeted_task = self.supported_tasks[task]
+            return task, targeted_task, None
+
+        if task.startswith("translation"):
+            tokens = task.split("_")
+            if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
+                targeted_task = self.supported_tasks["translation"]
+                task = "translation"
+                return task, targeted_task, (tokens[1], tokens[3])
+            raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
+
+        raise KeyError(
+            f"Unknown task {task}, available tasks are {self.get_supported_tasks() + ['translation_XX_to_YY']}"
+        )
+
+    def register_pipeline(
+        self,
+        task: str,
+        pipeline_class: type,
+        pt_model: Optional[Union[type, Tuple[type]]] = None,
+        tf_model: Optional[Union[type, Tuple[type]]] = None,
+        default: Optional[Dict] = None,
+        type: Optional[str] = None,
+    ) -> None:
+        if task in self.supported_tasks:
+            logger.warning(f"{task} is already registered. Overwriting pipeline for task {task}...")
+
+        if pt_model is None:
+            pt_model = ()
+        elif not isinstance(pt_model, tuple):
+            pt_model = (pt_model,)
+
+        if tf_model is None:
+            tf_model = ()
+        elif not isinstance(tf_model, tuple):
+            tf_model = (tf_model,)
+
+        task_impl = {"impl": pipeline_class, "pt": pt_model, "tf": tf_model}
+
+        if default is not None:
+            if "model" not in default and ("pt" in default or "tf" in default):
+                default = {"model": default}
+            task_impl["default"] = default
+
+        if type is not None:
+            task_impl["type"] = type
+
+        self.supported_tasks[task] = task_impl
+        pipeline_class._registered_impl = {task: task_impl}
+
+    def to_dict(self):
+        return self.supported_tasks
