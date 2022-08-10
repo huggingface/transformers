@@ -3,6 +3,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn import Conv1d, ConvTranspose1d
 from torch.nn.utils import remove_weight_norm, weight_norm
+from transformers import PreTrainedModel
+
+from .configuration_hifigan import HiFiGANConfig
 
 LRELU_SLOPE = 0.1
 
@@ -108,15 +111,17 @@ class ResBlock(torch.nn.Module):
             remove_weight_norm(layer)
 
 
-class Generator(torch.nn.Module):
-    def __init__(self, cfg):
-        super(Generator, self).__init__()
-        self.num_kernels = len(cfg["resblock_kernel_sizes"])
-        self.num_upsamples = len(cfg["upsample_rates"])
+class HiFiGAN(PreTrainedModel):
+    config_class = HiFiGANConfig
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_kernels = len(config.resblock_kernel_sizes)
+        self.num_upsamples = len(config.upsample_rates)
         self.conv_pre = weight_norm(
             Conv1d(
-                cfg.get("model_in_dim", 80),
-                cfg["upsample_initial_channel"],
+                config.model_in_dim,
+                config.upsample_initial_channel,
                 7,
                 1,
                 padding=3,
@@ -125,13 +130,13 @@ class Generator(torch.nn.Module):
 
         self.ups = nn.ModuleList()
         for i, (u, k) in enumerate(
-            zip(cfg["upsample_rates"], cfg["upsample_kernel_sizes"])
+            zip(config.upsample_rates, config.upsample_kernel_sizes)
         ):
             self.ups.append(
                 weight_norm(
                     ConvTranspose1d(
-                        cfg["upsample_initial_channel"] // (2**i),
-                        cfg["upsample_initial_channel"] // (2 ** (i + 1)),
+                        config.upsample_initial_channel // (2**i),
+                        config.upsample_initial_channel // (2 ** (i + 1)),
                         k,
                         u,
                         padding=(k - u) // 2,
@@ -141,9 +146,9 @@ class Generator(torch.nn.Module):
 
         self.resblocks = nn.ModuleList()
         for i in range(len(self.ups)):
-            ch = cfg["upsample_initial_channel"] // (2 ** (i + 1))
+            ch = config.upsample_initial_channel // (2 ** (i + 1))
             for k, d in zip(
-                cfg["resblock_kernel_sizes"], cfg["resblock_dilation_sizes"]
+                config.resblock_kernel_sizes, config.resblock_dilation_sizes
             ):
                 self.resblocks.append(ResBlock(ch, k, d))
 
