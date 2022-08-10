@@ -313,7 +313,6 @@ class Decoder(nn.Module):
         for level, down_t, stride_t in iterator:
             self.level_blocks.append(level_block(level, down_t, stride_t))
 
-        # TODO rename to proj out
         self.out = nn.Conv1d(output_emb_width, input_emb_width, 3, 1, 1)
 
     def forward(self, hidden_states, all_levels=True):
@@ -535,7 +534,7 @@ class JukeboxBottleneck(nn.Module):
         for level in range(self.levels):
             level_block = self.level_blocks[-level - 1]
             hidden_states = input_audio[level]
-            sampled_tokens, quantised_states, commit_loss, metric = level_block(
+            sampled_tokens, quantised_state, commit_loss, metric = level_block(
                 hidden_states, update_codebook=self.training
             )
             music_tokens.append(sampled_tokens)
@@ -554,31 +553,31 @@ class JukeboxVQVAE(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         if not config.sample_length:
-            downsamples = calculate_strides(config.vq_vae_strides_t, config.vq_vae_downs_t)
+            downsamples = calculate_strides(config.vqvae_strides_t, config.vqvae_downs_t)
             top_raw_to_tokens = np.prod(downsamples)
             config.sample_length = (
-                (config.sample_length_in_seconds * config.sr // top_raw_to_tokens) * top_raw_to_tokens
+                (config.sample_length_in_seconds * config.sampling_rate // top_raw_to_tokens) * top_raw_to_tokens
             ).astype(int)
 
         input_shape = (config.sample_length, 1)
         block_kwargs = dict(
-            width=config.vq_vae_conv_block_width,
-            depth=config.vq_vae_conv_block_depth,
-            m_conv=config.vq_vae_m_conv,
-            dilation_growth_rate=config.vq_vae_dilation_growth_rate,
-            dilation_cycle=config.vq_vae_dilation_cycle,
-            reverse_decoder_dilation=config.vq_vae_reverse_decoder_dilation,
+            width=config.vqvae_conv_block_width,
+            depth=config.vqvae_conv_block_depth,
+            m_conv=config.vqvae_m_conv,
+            dilation_growth_rate=config.vqvae_dilation_growth_rate,
+            dilation_cycle=config.vqvae_dilation_cycle,
+            reverse_decoder_dilation=config.vqvae_reverse_decoder_dilation,
         )
 
-        multipliers = config.vq_vae_multipliers
-        codebook_width = config.vq_vae_emmbedding_width
-        self.width = config.vq_vae_width
-        self.depth = config.vq_vae_depth
+        multipliers = config.vqvae_multipliers
+        codebook_width = config.vqvae_emmbedding_width
+        self.width = config.vqvae_width
+        self.depth = config.vqvae_depth
 
-        self.downs_t = downs_t = config.vq_vae_downs_t
-        self.strides_t = strides_t = config.vq_vae_strides_t
-        self.codebook_dim = codebook_dim = config.vq_vae_codebook_dimension
-        self.commit = config.vq_vae_commit
+        self.downs_t = downs_t = config.vqvae_downs_t
+        self.strides_t = strides_t = config.vqvae_strides_t
+        self.codebook_dim = codebook_dim = config.vqvae_codebook_dimension
+        self.commit = config.vqvae_commit
 
         self.sample_length = input_shape[0]
         x_shape, x_channels = input_shape[:-1], input_shape[-1]
@@ -586,7 +585,7 @@ class JukeboxVQVAE(PreTrainedModel):
 
         self.downsamples = calculate_strides(strides_t, downs_t)
         self.hop_lengths = np.cumprod(self.downsamples)
-        self.levels = levels = config.vq_vae_levels
+        self.levels = levels = config.vqvae_levels
         self.music_tokens_shapes = [(int(x_shape[0] // self.hop_lengths[-level - 1]),) for level in range(levels)]
 
         if multipliers is None:
@@ -626,7 +625,7 @@ class JukeboxVQVAE(PreTrainedModel):
             self.encoders.append(encoder(level))
             self.decoders.append(decoder(level))
 
-        self.bottleneck = JukeboxBottleneck(codebook_dim, codebook_width, config.vq_vae_lmu, levels)
+        self.bottleneck = JukeboxBottleneck(codebook_dim, codebook_width, config.vqvae_lmu, levels)
 
     def preprocess(self, raw_audio):
         # x: NTC [-1,1] -> NCT [-1,1]
@@ -1488,6 +1487,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         only_encode=False,
         merged_decoder=False,
         prime_len=None,
+        afn="quick_gelu",
     ):
         """
         - input_shape : respective dimension of the different inputs (lyrics/music_tokens)
@@ -1529,7 +1529,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             n_depth=depth,
             attn_dropout=attn_dropout,
             resid_dropout=resid_dropout,
-            afn="quick_gelu",
+            afn=afn,
             scale=True,
             mask=mask,
             zero_out=zero_out,
@@ -1598,7 +1598,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         with torch.no_grad():
             tokens = self.preprocess(tokens)
 
-        N = hidden_states.shape[0]
+        N = tokens.shape[0]
         if not self.audio_conditioning:
             audio_conditioning = torch.zeros((N, 1, self.width), device=tokens.device, dtype=torch.float)
 
@@ -1900,13 +1900,10 @@ class MusicTokenConditioner(nn.Module):
 
     """
 
-    # TODO check why embed_dim is initialized to config.latent_dim which is 2048 = to codebook_di. is it
-    # latent_dim?
     def __init__(
         self, input_shape, embed_dim, down_t, stride_t, out_width, init_scale, zero_out, res_scale, **block_kwargs
     ):
         super().__init__()
-        # self.x_shape = input_shape # is this needed?
         self.width = out_width
         self.embed_tokens = nn.Embedding(embed_dim, out_width)
         nn.init.normal_(self.embed_tokens.weight, std=0.02 * init_scale)
@@ -2023,13 +2020,13 @@ class LabelConditioner(nn.Module):
         self,
         metadata_dims,
         timing_dims,
-        sr,
+        sampling_rate,
         min_duration,
         max_duration,
         n_time,
         out_width,
         init_scale,
-        max_bow_genre_size,
+        max_nb_genres,
         include_time_signal,
     ):
         super().__init__()
@@ -2037,14 +2034,14 @@ class LabelConditioner(nn.Module):
         self.out_width = out_width
         # TODO rename bins
         bow_genre_bins, artist_bins = metadata_dims
-        self.max_bow_genre_size = max_bow_genre_size
+        self.max_nb_genres = max_nb_genres
         self.bow_genre_emb = SimpleEmbedding(bow_genre_bins, out_width, init_scale)
         self.artist_emb = SimpleEmbedding(artist_bins, out_width, init_scale)
         self.include_time_signal = include_time_signal
         if self.include_time_signal:
             t_ranges = (
-                (min_duration * sr, max_duration * sr),  # Total length
-                (0.0, max_duration * sr),  # Absolute pos
+                (min_duration * sampling_rate, max_duration * sampling_rate),  # Total length
+                (0.0, max_duration * sampling_rate),  # Absolute pos
                 (0.0, 1.0),
             )  # Relative pos
             assert len(t_ranges) == 3, f"Expecting (total, absolute, relative) ranges, got {t_ranges}"
@@ -2115,18 +2112,18 @@ class JukeboxPrior(nn.Module):
         vqvae_music_tokens_shapes = config.vqvae_music_tokens_shapes
 
         def rescale(music_tokens_shape):
-            return (music_tokens_shape[0] * config.n_ctx[-level - 1] // vqvae_music_tokens_shapes[level][0],)
+            return (music_tokens_shape[0] * config.prior_n_ctx[-level - 1] // vqvae_music_tokens_shapes[level][0],)
 
         music_tokens_shapes = [rescale(music_tokens_shape) for music_tokens_shape in vqvae_music_tokens_shapes]
-        self.use_tokens = config.use_tokens[-level - 1]
-        self.n_tokens = config.n_tokens[-level - 1]
+        self.lyric_conditioning = config.lyric_conditioning[-level - 1]
+        self.nb_relevant_lyric_tokens = config.nb_relevant_lyric_tokens[-level - 1]
 
         # TODO rename prime loss fraction
         self.prime_loss_fraction = config.prime_loss_fraction[-level - 1]
 
         self.copy_input = config.copy_input
         if self.copy_input:
-            config.bins = config.latent_dim
+            config.bins = config.prior_latent_dim
 
         self.music_tokens_shapes = music_tokens_shapes
         self.levels = len(self.music_tokens_shapes)
@@ -2135,32 +2132,32 @@ class JukeboxPrior(nn.Module):
 
         self.level = level
 
-        self.latent_dim = config.latent_dim
+        self.latent_dim = config.prior_latent_dim
 
         prior_kwargs = dict(
-            input_shape=(config.n_ctx[-level - 1],),
-            embed_dim=config.latent_dim,
-            width=config.width[-level - 1],
-            depth=config.depth[-level - 1],
-            heads=config.n_heads[-level - 1],  # TODO Rename in config
-            attn_order=config.attn_order[-level - 1],
-            blocks=config.blocks,
-            spread=config.spread,
-            attn_dropout=config.attn_dropout,
-            resid_dropout=config.resid_dropout,
-            emb_dropout=config.emb_dropout,
-            zero_out=config.zero_out,
-            res_scale=config.res_scale,
-            pos_init=config.pos_init,
+            input_shape=(config.prior_n_ctx[-level - 1],),
+            embed_dim=config.prior_latent_dim,
+            width=config.prior_width[-level - 1],
+            depth=config.prior_depth[-level - 1],
+            heads=config.prior_n_heads[-level - 1],
+            attn_order=config.prior_attn_order[-level - 1],
+            blocks=config.prior_blocks,
+            spread=config.prior_spread,
+            attn_dropout=config.prior_attn_dropout,
+            resid_dropout=config.prior_resid_dropout,
+            emb_dropout=config.prior_emb_dropout,
+            zero_out=config.prior_zero_out,
+            res_scale=config.prior_res_scale,
+            pos_init=config.prior_pos_init,
             init_scale=config.init_scale[-level - 1],
-            m_attn=config.m_attn,  # m_mlp=config.m_mlp
+            m_attn=config.prior_m_attn,
         )
 
-        if config.use_tokens and not config.single_enc_dec[-level - 1]:
+        if config.lyric_conditioning and not config.single_enc_dec[-level - 1]:
             # TODO rename to encoder_kwargs as they are used both
             # when single and not
             lyric_enc_kwargs = dict(
-                n_vocab=config.n_vocab,
+                n_vocab=config.prime_n_vocab,
                 width=config.prime_width[-level - 1],
                 depth=config.prime_depth[-level - 1],
                 heads=config.prime_heads,
@@ -2178,11 +2175,11 @@ class JukeboxPrior(nn.Module):
                 m_mlp=config.prime_m_mlp,
             )
         else:
-            lyric_enc_kwargs = dict(n_vocab=config.n_vocab)
+            lyric_enc_kwargs = dict(n_vocab=config.prime_n_vocab)
 
         audio_conditioning_kwargs = dict(
-            out_width=config.width[-level - 1],
-            init_scale=config.init_scale[-level - 1],
+            out_width=config.prior_width[-level - 1],
+            init_scale=config.prior_init_scale[-level - 1],
             width=config.cond_width[-level - 1],
             depth=config.cond_depth[-level - 1],
             m_conv=config.cond_m_conv,
@@ -2194,14 +2191,14 @@ class JukeboxPrior(nn.Module):
         )  # have to keep this else names wrong
 
         metadata_conditioning_kwargs = dict(
-            out_width=config.width[-level - 1],
-            init_scale=config.init_scale[-level - 1],
-            metadata_dims=config.y_bins[-level - 1],  # rename to metadata_dims
-            timing_dims=config.t_bins,  # rename to timing_dims or timing_intervals
-            sr=config.sr,
+            out_width=config.prior_width[-level - 1],
+            init_scale=config.prior_init_scale[-level - 1],
+            metadata_dims=config.metadata_dims[-level - 1],  # rename to metadata_dims
+            timing_dims=config.timing_dims,  # rename to timing_dims or timing_intervals
+            sampling_rate=config.sampling_rate,
             min_duration=config.min_duration,
             max_duration=config.max_duration,
-            max_bow_genre_size=config.max_bow_genre_size,
+            max_nb_genres=config.max_nb_genres,
         )
 
         # Audio conditioning
@@ -2209,7 +2206,7 @@ class JukeboxPrior(nn.Module):
         self.cond_level = level + 1
 
         # metadata conditioning
-        self.metadata_conditioning = config.labels  # TODO change config
+        self.metadata_conditioning = config.metadata_conditioning
 
         self.single_enc_dec = config.single_enc_dec[-level - 1]
         # Audio conditioning : conditioning on music tokens (either from audio or from previous levels or both)
@@ -2219,9 +2216,9 @@ class JukeboxPrior(nn.Module):
             def conditioner_block(_level):
                 return MusicTokenConditioner(
                     input_shape=music_tokens_shapes[_level],
-                    embed_dim=config.latent_dim,  # TODO should we remove in favor of the vqvae dim? Maybe not
-                    down_t=config.downs_t[_level],
-                    stride_t=config.strides_t[_level],
+                    embed_dim=config.prior_latent_dim,
+                    down_t=config.cond_downs_t[_level],
+                    stride_t=config.cond_strides_t[_level],
                     **audio_conditioning_kwargs,
                 )
 
@@ -2238,18 +2235,11 @@ class JukeboxPrior(nn.Module):
         # TODO as the prior type can change, can't rename to decoder or enc_dec
         if config.single_enc_dec[-level - 1]:
             # Single encoder-decoder transformer
-            self.prior_shapes = [(self.n_tokens,), prior_kwargs.pop("input_shape")]
+            self.prior_shapes = [(self.nb_relevant_lyric_tokens,), prior_kwargs.pop("input_shape")]
             self.prior_embed_dim = [lyric_enc_kwargs["n_vocab"], prior_kwargs.pop("embed_dim")]
             self.prior_dims = [np.prod(shape) for shape in self.prior_shapes]
             self.prior_embed_dim_shift = np.cumsum([0, *self.prior_embed_dim])[:-1]
             self.prior_width = prior_kwargs["width"]
-
-            # print(f"Creating cond. autoregress with prior embed_dim {self.prior_embed_dim}, ")
-            # print(f"dims {self.prior_dims}, ")
-            # print(f"shift {self.prior_embed_dim_shift}")
-            # print(f"input shape {sum(self.prior_dims)}")
-            # print(f"input embed_dim (vocab size of the embedding layer) {sum(self.prior_embed_dim)}")
-            # print(f"Self copy is {self.copy_input}")
 
             # lyrics_enc_loss_dims was the prime loss dims, gen is for the generated tokens.
             # what is the shape of the lyrics loss?
@@ -2267,8 +2257,8 @@ class JukeboxPrior(nn.Module):
 
         else:
             # Separate encoder-decoder transformer
-            if self.n_tokens != 0 and self.use_tokens:
-                lyric_enc_input_shape = (self.n_tokens,)
+            if self.nb_relevant_lyric_tokens != 0 and self.lyric_conditioning:
+                lyric_enc_input_shape = (self.nb_relevant_lyric_tokens,)
                 self.lyrics_enc_loss_dims = np.prod(lyric_enc_input_shape)
                 self.lyric_acts_width, self.lyric_enc_width = lyric_enc_kwargs["width"], prior_kwargs["width"]
                 self.lyric_encoder = JukeboxConditionalAutoregressive(
@@ -2298,7 +2288,7 @@ class JukeboxPrior(nn.Module):
             )
 
         self.n_ctx = self.gen_loss_dims
-        self.downsamples = calculate_strides(config.strides_t, config.downs_t)
+        self.downsamples = calculate_strides(config.cond_strides_t, config.cond_downs_t)
         self.cond_downsample = self.downsamples[level + 1] if level != self.levels - 1 else None
         self.raw_to_tokens = np.prod(self.downsamples[: level + 1])
         self.sample_length = self.n_ctx * self.raw_to_tokens
@@ -2329,18 +2319,22 @@ class JukeboxPrior(nn.Module):
         """
         Processes the full labels to only retreive the relevant lyric tokens and keep the metadata conditioning tokens.
         """
-        if self.n_tokens > 0:
-            tokens_list = torch.zeros((labels.shape[0], self.n_tokens), dtype=torch.long, device=labels.device)
+        if self.nb_relevant_lyric_tokens > 0:
+            tokens_list = torch.zeros(
+                (labels.shape[0], self.nb_relevant_lyric_tokens), dtype=torch.long, device=labels.device
+            )
             indices_list = []  # whats the index of each current character in original array
             for idx in range(labels.shape[0]):
-                full_tokens = labels.clone()[:, 4 + self.metadata_embedding.max_bow_genre_size :]
+                full_tokens = labels.clone()[:, 4 + self.metadata_embedding.max_nb_genres :]
                 total_length, offset, duration = labels[idx, 0], labels[idx, 1], labels[idx, 2]
-                tokens, indices = get_relevant_lyric_tokens(full_tokens, self.n_tokens, total_length, offset, duration)
+                tokens, indices = get_relevant_lyric_tokens(
+                    full_tokens, self.nb_relevant_lyric_tokens, total_length, offset, duration
+                )
                 tokens_list[idx, :] = tokens
                 indices_list.append(indices)
 
             return (
-                torch.cat((labels[:, : 4 + self.metadata_embedding.max_bow_genre_size], tokens_list), dim=-1),
+                torch.cat((labels[:, : 4 + self.metadata_embedding.max_nb_genres], tokens_list), dim=-1),
                 indices_list,
             )
         else:
@@ -2443,7 +2437,7 @@ class JukeboxPrior(nn.Module):
         Converts the tokens to the input_embeddings. Splits the lyrics and the metadata. Lyric tokens can be None
         """
         if metadata is not None:
-            n_labels = metadata.shape[1] - self.n_tokens
+            n_labels = metadata.shape[1] - self.nb_relevant_lyric_tokens
             metadata, lyric_tokens = metadata[:, :n_labels], metadata[:, n_labels:]
         else:
             metadata, lyric_tokens = None, None
@@ -2486,7 +2480,7 @@ class JukeboxPrior(nn.Module):
                         [lyric_tokens, music_tokens], [None, audio_conditioning]
                     )
                 if sample_tokens is not None:
-                    sample_tokens += self.n_tokens
+                    sample_tokens += self.nb_relevant_lyric_tokens
                 tokens = self.prior.primed_sample(
                     n_samples,
                     music_tokens,
@@ -2535,7 +2529,7 @@ class JukeboxPrior(nn.Module):
         Retreive the last hidden_states of the lyric encoder that will be attended to by the decoder. Forwards through
         the lyric encoder.
         """
-        if self.n_tokens != 0 and self.use_tokens:
+        if self.nb_relevant_lyric_tokens != 0 and self.lyric_conditioning:
             if sample:
                 self.lyric_encoder = self.lyric_encoder.to(lyric_tokens.device)
             lyric_acts = self.lyric_encoder(lyric_tokens, None, None, None, fp16=fp16)
@@ -2553,7 +2547,7 @@ class JukeboxPrior(nn.Module):
         """
         Computes the loss for the lyric encoder, next token prediction.
         """
-        if self.use_tokens:
+        if self.lyric_conditioning:
             lyric_encoder_states = lyric_encoder_states.float()
             lyric_encoder_states = self.lyric_encoder.proj_out(lyric_encoder_states)
             lyric_enc_loss = nn.functional.cross_entropy(
@@ -2579,7 +2573,7 @@ class JukeboxPrior(nn.Module):
             self.prior.transformer.set_record_attn(get_attn_weights)
         audio_conditioning, metadata_conditioning, lyric_tokens = self.get_cond(music_tokens_conds, metadata)
         if self.copy_input:
-            lyric_tokens = music_tokens[:, : self.n_tokens]
+            lyric_tokens = music_tokens[:, : self.nb_relevant_lyric_tokens]
 
         if self.single_enc_dec:  # the preprocess returns the full tokens, shifted
             tokens, audio_conditioning = self.prior_preprocess(
@@ -2696,7 +2690,7 @@ def get_starts(total_length, n_ctx, hop_length):
 
 
 # FIXME, consumes too much RAM so should probably be removed
-def get_alignment(music_tokens, labels, prior, level, fp16, hps):
+def get_alignment(music_tokens, labels, prior, level, fp16, config):
     """
     Should compute the lyric to music token alignment, but for now it cannot be used.
     """
@@ -2713,8 +2707,8 @@ def get_alignment(music_tokens, labels, prior, level, fp16, hps):
     else:
         padding_length = 0
 
-    hop_length = int(hps.hop_fraction[-level - 1] * prior.n_ctx)
-    alignment_head, alignment_layer = hps.alignment_head[0], hps.alignment_layer[0]
+    hop_length = int(config.hop_fraction[-level - 1] * prior.n_ctx)
+    alignment_head, alignment_layer = config.prior_alignment_head[0], config.prior_alignment_layer[0]
     attn_layers = set([alignment_layer])
     alignment_hops = {}
     indices_hops = {}
@@ -2724,7 +2718,7 @@ def get_alignment(music_tokens, labels, prior, level, fp16, hps):
         end = start + n_ctx
 
         # set metadata offset, sample_length and lyrics tokens
-        metadata, indices_hop = prior.get_metadata(labels, start, hps.sample_length, get_indices=True, offset=0)
+        metadata, indices_hop = prior.get_metadata(labels, start, config.sample_length, get_indices=True, offset=0)
 
         tokens_bs = torch.chunk(tokens, batch_size, dim=0)
         metadata_bs = torch.chunk(metadata, batch_size, dim=0)
@@ -2740,8 +2734,8 @@ def get_alignment(music_tokens, labels, prior, level, fp16, hps):
         alignment_hop = w.float().cpu().numpy()
         del w
 
-        # alignment_hop has shape (bs, n_ctx, n_tokens)
-        # indices_hop is a list of len=bs, each entry of len hps.n_tokens
+        # alignment_hop has shape (bs, n_ctx, nb_relevant_lyric_tokens)
+        # indices_hop is a list of len=bs, each entry of len hps.nb_relevant_lyric_tokens
         indices_hops[start] = indices_hop
         alignment_hops[start] = alignment_hop
     prior.cpu()
@@ -2765,7 +2759,7 @@ def get_alignment(music_tokens, labels, prior, level, fp16, hps):
     return alignments
 
 
-def save_wav(fname, lvl, metas, aud, sr):
+def save_wav(fname, lvl, metas, aud, sampling_rate):
     import soundfile
 
     aud = torch.clamp(aud, -1, 1).cpu().numpy()
@@ -2774,16 +2768,18 @@ def save_wav(fname, lvl, metas, aud, sr):
             # twitter prompts or inputs are in the form of a dictionnary
             artists, genres, lyrics = list(metas)[i].values()
             path = f"{fname}/lvl_{lvl}-{artists}-{genres}-{lyrics[:5]}-{i}.wav"
-            soundfile.write(path, aud[i], samplerate=sr, format="wav")
+            soundfile.write(path, aud[i], samplerate=sampling_rate, format="wav")
         else:
-            soundfile.write(f"{fname}/lvl_{lvl}-sample-{i}.wav", aud[i], samplerate=sr, format="wav")
+            soundfile.write(f"{fname}/lvl_{lvl}-sample-{i}.wav", aud[i], samplerate=sampling_rate, format="wav")
 
 
-def load_audio(file, sr, offset, duration, mono=False):
+def load_audio(file, sampling_rate, offset, duration, mono=False):
     import librosa
 
     # Librosa loads more filetypes than soundfile
-    raw_audio, _ = librosa.load(file, sr=sr, mono=mono, offset=offset / sr, duration=duration / sr)
+    raw_audio, _ = librosa.load(
+        file, sr=sampling_rate, mono=mono, offset=offset / sampling_rate, duration=duration / sampling_rate
+    )
     if len(raw_audio.shape) == 1:
         raw_audio = raw_audio.reshape((1, -1))
     return raw_audio
@@ -2792,7 +2788,7 @@ def load_audio(file, sr, offset, duration, mono=False):
 def load_prompts(audio_files, duration, hps):
     raw_audio_list = []
     for audio_file in audio_files:
-        raw_audio = load_audio(audio_file, sr=hps.sr, duration=duration, offset=0.0, mono=True)
+        raw_audio = load_audio(audio_file, sampling_rate=hps.sampling_rate, duration=duration, offset=0.0, mono=True)
         raw_audio = raw_audio.T  # CT -> TC
         raw_audio_list.append(raw_audio)
     while len(raw_audio_list) < hps.n_samples:
@@ -2812,7 +2808,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        self.embed_dim = config.hidden_size
         self.vqvae = JukeboxVQVAE(config)
         config.vqvae_music_tokens_shapes = self.vqvae.music_tokens_shapes
         self.priors = nn.ModuleList([JukeboxPrior(config, level=i) for i in range(config.nb_priors)])
@@ -2933,7 +2928,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
         total_length = (
             sample_length
             if sample_length is not None
-            else (int(sample_length_in_seconds * self.config.sr) // top_prior.raw_to_tokens) * top_prior.raw_to_tokens
+            else (int(sample_length_in_seconds * self.config.sampling_rate) // top_prior.raw_to_tokens)
+            * top_prior.raw_to_tokens
         )
         sampling_kwargs = [
             dict(
@@ -2988,8 +2984,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 logdir = f"{self.start_time}/level_{level}"
                 if not os.path.exists(logdir):
                     os.makedirs(logdir)
-                save_wav(logdir, level, metas=metas, aud=raw_audio, sr=self.config.sr)
-                if alignments is None and self.priors[-1] is not None and self.priors[-1].n_tokens > 0:
+                save_wav(logdir, level, metas=metas, aud=raw_audio, sampling_rate=self.config.sampling_rate)
+                if alignments is None and self.priors[-1] is not None and self.priors[-1].nb_relevant_lyric_tokens > 0:
                     empty_cache()
                     alignments = get_alignment(
                         music_tokens,
