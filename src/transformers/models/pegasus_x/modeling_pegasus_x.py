@@ -48,7 +48,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "zphang/pegasus-x-base"
 _CONFIG_FOR_DOC = "PegasusXConfig"
-_TOKENIZER_FOR_DOC = "PegasusXTokenizer"
+_TOKENIZER_FOR_DOC = "PegasusTokenizer"
 
 
 PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -757,10 +757,10 @@ PEGASUS_X_GENERATION_EXAMPLE = r"""
     Summarization example:
 
     ```python
-    >>> from transformers import PegasusXTokenizer, PegasusXForConditionalGeneration
+    >>> from transformers import PegasusTokenizer, PegasusXForConditionalGeneration
 
     >>> model = PegasusXForConditionalGeneration.from_pretrained("zphang/pegasus-x-base")
-    >>> tokenizer = PegasusXTokenizer.from_pretrained("google/pegasus-base")
+    >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-base")
 
     >>> ARTICLE_TO_SUMMARIZE = (
     ...     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "

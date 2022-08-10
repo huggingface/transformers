@@ -360,7 +360,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("opt", "OPT"),
         ("owlvit", "OWL-ViT"),
         ("pegasus", "Pegasus"),
-        ("pegasus_x", "PegasusX"),
+        ("pegasus_x", "PEGASUS-X"),
         ("perceiver", "Perceiver"),
         ("phobert", "PhoBERT"),
         ("plbart", "PLBart"),
