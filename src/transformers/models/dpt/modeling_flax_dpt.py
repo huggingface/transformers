@@ -310,6 +310,7 @@ class FlaxDPTReassembleLayer(nn.Module):
                 kernel_size=(self.factor, self.factor),
                 strides=(self.factor, self.factor),
                 use_bias=True,
+                padding="SAME",
             )
         elif self.factor < 1:
             # so should downsample

@@ -182,6 +182,7 @@ def canonicalize_padding(padding: PaddingLike, rank: int) -> LaxPadding:
 
 
 # Copied from a contributor's PR on jax: https://github.com/yang-song/jax/commit/883a7c9e812e0f7af8dffa0eb54d017fd2200f10
+# originally copied from: https://github.com/deepmind/dm-haiku/blob/c5dddba7c99850e4ce5a6d8bb17fc3f06c236359/haiku/_src/conv.py#L430
 def _compute_adjusted_padding(
     input_size: int,
     output_size: int,
@@ -205,7 +206,7 @@ def _compute_adjusted_padding(
         padding_before = 0
     elif padding == "SAME":
         expected_input_size = (output_size + stride - 1) // stride
-        if input_size != expected_input_size:
+        if expected_input_size != input_size:
             raise ValueError(
                 "The expected input size with the current set of input "
                 f"parameters is {expected_input_size} which doesn't "
@@ -291,8 +292,10 @@ def gradient_based_conv_transpose(
             raise ValueError("No 4+ dimensional dimension_number defaults.")
     dn = conv_dimension_numbers_(lhs.shape, rhs.shape, dimension_numbers)
     # dn = dimension_numbers
+    # k_shape = jnp.take(jnp.array(rhs.shape), jnp.array(dn.rhs_spec))
     k_shape = np.take(rhs.shape, dn.rhs_spec)
     k_sdims = k_shape[2:]  # type: ignore[index]
+    # i_shape = jnp.take(jnp.array(lhs.shape), jnp.array(dn.lhs_spec))
     i_shape = np.take(lhs.shape, dn.lhs_spec)
     i_sdims = i_shape[2:]  # type: ignore[index]
 
@@ -363,7 +366,7 @@ class ConvTransposeGradient(nn.Module):
     features: int
     kernel_size: Union[int, Tuple[int, ...]]
     strides: Optional[Tuple[int, ...]] = None
-    padding: PaddingLike = "SAME"
+    padding: PaddingLike = (0, 0)
     kernel_dilation: Optional[Sequence[int]] = None
     use_bias: bool = True
     dtype: jnp.dtype = jnp.float32
