@@ -1713,7 +1713,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         resolved_vocab_files = {}
         unresolved_files = []
         for file_id, file_path in vocab_files.items():
-            print(file_id, file_path)
             if file_path is None:
                 resolved_vocab_files[file_id] = None
             else:

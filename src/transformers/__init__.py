@@ -463,6 +463,7 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
+    "utils.bitsandbytes": [],
 }
 
 # sentencepiece-backed objects

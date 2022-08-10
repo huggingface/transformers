@@ -70,6 +70,7 @@ src/transformers/models/trocr/modeling_trocr.py
 src/transformers/models/unispeech/modeling_unispeech.py
 src/transformers/models/unispeech_sat/modeling_unispeech_sat.py
 src/transformers/models/van/modeling_van.py
+src/transformers/models/videomae/modeling_videomae.py
 src/transformers/models/vilt/modeling_vilt.py
 src/transformers/models/vision_encoder_decoder/modeling_vision_encoder_decoder.py
 src/transformers/models/vit/modeling_vit.py
