@@ -14,11 +14,10 @@
 # limitations under the License.
 """ PyTorch PEGASUS model."""
 
-import copy
 import dataclasses
 import math
 import random
-from typing import List, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
