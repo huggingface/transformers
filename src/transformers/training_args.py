@@ -13,12 +13,12 @@
 # limitations under the License.
 
 import contextlib
-import datetime
 import json
 import math
 import os
 import warnings
 from dataclasses import asdict, dataclass, field
+from datetime import timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -985,10 +985,6 @@ class TrainingArguments:
         if env_local_rank != -1 and env_local_rank != self.local_rank:
             self.local_rank = env_local_rank
 
-        # Handle the conversion from integer-based seconds to a timedelta
-        # which is expected by torch.distributed.init_process_group
-        self.timeout = datetime.timedelta(seconds=self.timeout)
-
         # convert to int
         self.log_level = trainer_log_levels[self.log_level]
         self.log_level_replica = trainer_log_levels[self.log_level_replica]
@@ -1301,6 +1297,13 @@ class TrainingArguments:
         eval_batch_size = per_device_batch_size * max(1, self.n_gpu)
         return eval_batch_size
 
+    @property
+    def timeout_delta(self) -> timedelta:
+        """
+        The actual timeout for torch.distributed.init_process_group since it expects a timedelta variable.
+        """
+        return timedelta(seconds=self.timeout)
+
     @cached_property
     @torch_required
     def _setup_devices(self) -> "torch.device":
@@ -1354,7 +1357,7 @@ class TrainingArguments:
                             "please try exporting rank 0's hostname as MASTER_ADDR"
                         )
                 torch.distributed.init_process_group(
-                    backend=self.xpu_backend, rank=rank, world_size=size, timeout=self.timeout
+                    backend=self.xpu_backend, rank=rank, world_size=size, timeout=self.timeout_delta
                 )
         elif is_torch_tpu_available():
             device = xm.xla_device()
@@ -1366,7 +1369,7 @@ class TrainingArguments:
         elif is_sagemaker_dp_enabled():
             import smdistributed.dataparallel.torch.torch_smddp  # noqa: F401
 
-            dist.init_process_group(backend="smddp", timeout=self.timeout)
+            dist.init_process_group(backend="smddp", timeout=self.timeout_delta)
             self.local_rank = int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
@@ -1402,7 +1405,7 @@ class TrainingArguments:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
             if not torch.distributed.is_initialized():
-                torch.distributed.init_process_group(backend="nccl", timeout=self.timeout)
+                torch.distributed.init_process_group(backend="nccl", timeout=self.timeout_delta)
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
 
