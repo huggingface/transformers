@@ -1228,8 +1228,8 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
 @add_start_docstrings(
     """
     LayoutLM Model with a span classification head on top for extractive question-answering tasks such as
-    [DocVQA](https://rrc.cvc.uab.es/?ch=17) (a linear layer on top of the text part of the hidden-states output to
-    compute `span start logits` and `span end logits`).
+    [DocVQA](https://rrc.cvc.uab.es/?ch=17) (a linear layer on top of the final hidden-states output to compute `span
+    start logits` and `span end logits`).
     """,
     LAYOUTLM_START_DOCSTRING,
 )
@@ -1277,8 +1277,8 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
 
         Example:
 
-        In this example below, we give the LayoutLMv2 model an image (of texts) and ask it a question. It will give us
-        a prediction of what it thinks the answer is (the span of the answer within the texts parsed from the image).
+        In the example below, we prepare a question + context pair for the LayoutLM model. It will give us a prediction
+        of what it thinks the answer is (the span of the answer within the texts parsed from the image).
 
         ```python
         >>> from transformers import AutoTokenizer, LayoutLMForQuestionAnswering
@@ -1288,10 +1288,10 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased", add_prefix_space=True)
         >>> model = LayoutLMForQuestionAnswering.from_pretrained("microsoft/layoutlm-base-uncased")
 
-        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> dataset = load_dataset("nielsr/funsd", split="train")
         >>> example = dataset[0]
         >>> question = "what's his name?"
-        >>> words = example["tokens"]
+        >>> words = example["words"]
         >>> boxes = example["bboxes"]
 
         >>> encoding = tokenizer(

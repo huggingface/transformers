@@ -38,6 +38,8 @@ src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/gpt2/modeling_gpt2.py
 src/transformers/models/gptj/modeling_gptj.py
 src/transformers/models/hubert/modeling_hubert.py
+src/transformers/models/layoutlm/modeling_layoutlm.py
+src/transformers/models/layoutlm/modeling_tf_layoutlm.py
 src/transformers/models/layoutlmv2/modeling_layoutlmv2.py
 src/transformers/models/layoutlmv3/modeling_layoutlmv3.py
 src/transformers/models/layoutlmv3/modeling_tf_layoutlmv3.py
