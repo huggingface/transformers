@@ -29,7 +29,6 @@ X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class XClipTextConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XClipModel`]. It is used to instantiate an XClip

@@ -17,15 +17,16 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
-    "configuration_x_clip": ["X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP", "XClipConfig", "XClipTextConfig", "XClipVisionConfig"],
+    "configuration_x_clip": [
+        "X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "XClipConfig",
+        "XClipTextConfig",
+        "XClipVisionConfig",
+    ],
 }
 
 try:
@@ -43,7 +44,12 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_x_clip import X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, XClipConfig, XClipTextConfig, XClipVisionConfig
+    from .configuration_x_clip import (
+        X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        XClipConfig,
+        XClipTextConfig,
+        XClipVisionConfig,
+    )
 
     try:
         if not is_torch_available():

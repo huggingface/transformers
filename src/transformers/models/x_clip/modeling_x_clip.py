@@ -45,7 +45,6 @@ X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 # Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -388,17 +387,18 @@ class XClipVisionEncoderLayer(nn.Module):
     """
     This corresponds to the `CrossFramelAttentionBlock` class in the original implementation.
     """
+
     def __init__(self, config: XClipConfig):
         super().__init__()
         self.T = config.num_frames
-        
+
         self.embed_dim = config.hidden_size
 
         self.message_fc = nn.Linear(self.embed_dim, self.embed_dim)
         self.message_ln = nn.LayerNorm(self.embed_dim)
         self.message_attn = XClipAttention(config)
-        
-        self.drop_path = XClipDropPath(config.drop_path_rate) if config.drop_path_rate > 0. else nn.Identity()
+
+        self.drop_path = XClipDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
         self.self_attn = XClipAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim)
@@ -424,17 +424,21 @@ class XClipVisionEncoderLayer(nn.Module):
         """
         l, bt, d = hidden_states.size()
         b = bt // self.T
-        x = x.view(l, b, self.T, d) 
+        x = x.view(l, b, self.T, d)
 
-        msg_token = self.message_fc(hidden_states[0,:,:,:]) 
-        msg_token = msg_token.view(b, self.T, 1, d) 
-        
-        msg_token = msg_token.permute(1,2,0,3).view(self.T, b, d) 
-        msg_token = msg_token + self.drop_path(self.message_attn(self.message_ln(msg_token), self.message_ln(msg_token),self.message_ln(msg_token),need_weights=False)[0])
-        msg_token = msg_token.view(self.T, 1, b, d).permute(1,2,0,3)
-        
+        msg_token = self.message_fc(hidden_states[0, :, :, :])
+        msg_token = msg_token.view(b, self.T, 1, d)
+
+        msg_token = msg_token.permute(1, 2, 0, 3).view(self.T, b, d)
+        msg_token = msg_token + self.drop_path(
+            self.message_attn(
+                self.message_ln(msg_token), self.message_ln(msg_token), self.message_ln(msg_token), need_weights=False
+            )[0]
+        )
+        msg_token = msg_token.view(self.T, 1, b, d).permute(1, 2, 0, 3)
+
         hidden_states = torch.cat([hidden_states, msg_token], dim=0)
-        
+
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
@@ -971,7 +975,7 @@ class XClipVisionTransformer(nn.Module):
         embed_dim = config.hidden_size
 
         self.embeddings = XClipVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim)
+        self.pre_layernorm = nn.LayerNorm(embed_dim)
         self.encoder = XClipVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim)
 
@@ -998,7 +1002,7 @@ class XClipVisionTransformer(nn.Module):
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.pre_layrnorm(hidden_states)
+        hidden_states = self.pre_layernorm(hidden_states)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -1103,9 +1107,13 @@ class XClipModel(XClipPreTrainedModel):
         self.text_model = XClipTextTransformer(text_config)
         self.vision_model = XClipVisionTransformer(vision_config)
 
+        self.final_layernorm = nn.LayerNorm(text_config.hidden_size)
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
+
+        self.prompts_visual_layernorm = nn.LayerNorm(self.vision_embed_dim)
+        self.prompts_visual_projection = nn.Parameter(torch.randn(self.vision_embed_dim, self.text_embed_dim))
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1196,7 +1204,7 @@ class XClipModel(XClipPreTrainedModel):
 
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         image = image.reshape(-1, num_channels, height, width)
-        
+
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -1210,10 +1218,10 @@ class XClipModel(XClipPreTrainedModel):
         # TODO add the following:
         # img_features = self.prompts_visual_ln(img_features)
         # img_features = img_features @ self.prompts_visual_proj
-        
+
         # cls_features = cls_features.view(b, t, -1)
         # img_features = img_features.view(b,t,-1,cls_features.shape[-1])
-        
+
         # video_features = self.mit(cls_features)
 
         return image_features
