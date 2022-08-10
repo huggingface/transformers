@@ -115,7 +115,7 @@ class TFCvtConvEmbeddings(tf.keras.layers.Layer):
             kernel_initializer=get_initializer(config.initializer_range),
             name="projection",
         )
-        # Using the same default epsilon & momentum as PyTorch
+        # Using the same default epsilon as PyTorch
         self.Normalization = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="normalization")
 
     def convolution(self, hidden_state: tf.Tensor) -> tf.Tensor:
@@ -133,12 +133,14 @@ class TFCvtConvEmbeddings(tf.keras.layers.Layer):
         # So change the input format from `NCHW` to `NHWC`.
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 3, 1))
         pixel_values = self.convolution(pixel_values)
+
         # rearrange "b h w c" -> b (h w) c"
         batch_size, height, width, num_channels = shape_list(pixel_values)
         hidden_size = height * width
         pixel_values = tf.reshape(pixel_values, shape=(batch_size, hidden_size, num_channels))
         if self.Normalization:
             pixel_values = self.Normalization(pixel_values)
+
         # rearrange "b (h w) c" -> b c h w"
         pixel_values = tf.transpose(pixel_values, perm=(0, 2, 1))
         pixel_values = tf.reshape(pixel_values, shape=(batch_size, num_channels, height, width))
@@ -852,7 +854,6 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
         # In the original implementation the authors use epsilon=1e-5 for Layer Normalization.
         # Pytorch CVT model doesn't seem to use config.layer_norm_ep
         # Therefore we will be using the same epsilon as in Pytorch CVT model.
-        # What is the use of config.layer_norm_eps ?
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm")
 
         # Classifier head
