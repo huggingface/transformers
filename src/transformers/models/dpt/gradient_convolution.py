@@ -332,7 +332,7 @@ def gradient_based_conv_transpose(
 
 
 class ConvTransposeGradient(nn.Module):
-    """Convolution Module wrapping lax.conv_transpose.
+    """Convolution Module wrapping lax.conv_transpose. Calculates transposed convolutions via gradient (transpose) of a forward convolution.
 
     Attributes:
         features: number of convolution filters.
@@ -375,7 +375,7 @@ class ConvTransposeGradient(nn.Module):
     def __call__(self, inputs: Array) -> Array:
         """Applies a transposed convolution to the inputs.
 
-        Behaviour mirrors of `jax.lax.conv_transpose`.
+        Behaviour mirrors of `jax.lax.conv_transpose`, computing transposed convolutions via the gradient (transpose) of a forward convolutions.
 
         Args:
         inputs: input data with dimensions (batch, spatial_dims..., features).
