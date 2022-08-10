@@ -133,10 +133,10 @@ model = AutoModel.from_config(config)
 
 Due to Pytorch design, this functionality is only available for floating dtypes.
 
-### Mixed int8 quantization 
+### `bitsandbytes` integration for Int8 mixed-precision matrix decomposition
 
 From the paper `GPT3.int8() : 8-bit Matrix Multiplication for Transformers at Scale`, we suport HuggingFace 🤗  integration for all models in the Hub with few lines of code. 
-For models trained in  half-precision (aka, either `float16` or `bfloat16`). This method aims to reduce `nn.Linear` size by 2, without affecting too much quality by operating on the outliers in half-precision. Therefore the method is termed as mixed 8bit quantization.
+For models trained in  half-precision (aka, either `float16` or `bfloat16`) or full precision. This method aims to reduce `nn.Linear` size by 2 (if trained in half precision) or by 4 if trained in full precision, without affecting too much quality by operating on the outliers in half-precision.
 This technique is useful and works well for billion scale models (>1B parameters) therefore we advice you to use it only for models of that scale. This method has been tested for 2-billion to 176-billion scale models and supports only PyTorch models. 
 
 ![HFxbitsandbytes.png](https://s3.amazonaws.com/moonup/production/uploads/1659861207959-62441d1d9fdefb55a0b7d12c.png)
@@ -150,7 +150,7 @@ Below are some notes to help you use this module, or follow this demo on Google 
 
 #### Requirements
 
-- Make sure you run that on a NVIDIA T4 or A100 GPU that supports 8-bit tensor cores. Note that previous generations of NVIDIA GPUs do not support 8-bit tensor cores.
+- Make sure you run that on a NVIDIA GPU that supports 8-bit tensor cores (Turing or Ampere GPUs - e.g. T4, RTX20s RTX30s, A40-A100). Note that previous generations of NVIDIA GPUs do not support 8-bit tensor cores.
 - Install the correct version of `bitsandbytes` by running:
 `pip install -i https://test.pypi.org/simple/ bitsandbytes`
 - Install `accelerate`:
@@ -167,7 +167,7 @@ The implementation supports multi-GPU setup thanks to `accelerate` as backend. I
 (If allocating `1GB` into GPU-0 and `2GB` into GPU-1, you can use `max_memory={0:"1GB", 1:"2GB"}`)
 ```py
 max_memory_mapping = {0: "1GB", 1: "2GB"}
-model_name = "bigscience/bloom-2b5"
+model_name = "bigscience/bloom-3b"
 model_8bit = AutoModelForCausalLM.from_pretrained(
     model_name, device_map="auto", load_in_8bit=True, max_memory=max_memory_mapping
 )

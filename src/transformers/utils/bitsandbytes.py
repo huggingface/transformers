@@ -88,7 +88,7 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head"):
     library. This will enable running your models using mixed int8 precision as described by the paper `GPT3.int8():
     8-bit Matrix Multiplication for Transformers at Scale`. Make sure `bitsandbytes` compiled with the correct CUDA
     version of your hardware is installed before running this function. `pip install -i https://test.pypi.org/simple/
-    bitsandbytes-cudaXXX` with `XXX` is your CUDA version (e.g., 11.6 = 116)
+    bitsandbytes`
 
     The function will be run recursively and replace all `torch.nn.Linear` modules except for the `lm_head` that should
     be kept as a `torch.nn.Linear` module. The replacement is done under `init_empty_weights` context manager so no
