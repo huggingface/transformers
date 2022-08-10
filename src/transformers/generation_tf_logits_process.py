@@ -297,7 +297,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
     def __init__(self, bad_words_ids: List[List[int]], eos_token_id: int):
 
         if not isinstance(bad_words_ids, List) or len(bad_words_ids) == 0:
-            raise ValueError(f"`bad_words_ids` has to be a non-emtpy list, but is {bad_words_ids}.")
+            raise ValueError(f"`bad_words_ids` has to be a non-empty list, but is {bad_words_ids}.")
         if any(not isinstance(bad_word_ids, list) for bad_word_ids in bad_words_ids):
             raise ValueError(f"`bad_words_ids` has to be a list of lists, but is {bad_words_ids}.")
         if any(
@@ -332,7 +332,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
             def _len_greater_than_cur_len():
                 # Otherwise, if the bad sequence is longer than the current length they can't ever match
                 return tf.cond(
-                    tf.math.greater(self.bad_word_seqs_len[bad_word_seq_number], row_input_ids.shape[0]),
+                    tf.math.greater(self.bad_word_seqs_len[bad_word_seq_number], tf.shape(row_input_ids)[0]),
                     lambda: tf.zeros((), dtype=tf.bool),
                     _match_found,
                 )

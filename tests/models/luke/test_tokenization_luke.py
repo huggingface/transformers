@@ -480,7 +480,10 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
 
     def test_entity_classification_no_padding_or_truncation(self):
         tokenizer = LukeTokenizer.from_pretrained("studio-ousia/luke-base", task="entity_classification")
-        sentence = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon ."
+        sentence = (
+            "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped"
+            " the new world number one avoid a humiliating second- round exit at Wimbledon ."
+        )
         span = (39, 42)
 
         encoding = tokenizer(sentence, entity_spans=[span], return_token_type_ids=True)
@@ -491,7 +494,8 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         self.assertEqual(len(encoding["token_type_ids"]), 42)
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"], spaces_between_special_tokens=False),
-            "<s>Top seed Ana Ivanovic said on Thursday<ent> she<ent> could hardly believe her luck as a fortuitous netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon.</s>",
+            "<s>Top seed Ana Ivanovic said on Thursday<ent> she<ent> could hardly believe her luck as a fortuitous"
+            " netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon.</s>",
         )
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"][9:12], spaces_between_special_tokens=False), "<ent> she<ent>"
@@ -514,7 +518,10 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         tokenizer = LukeTokenizer.from_pretrained(
             "studio-ousia/luke-base", task="entity_classification", return_token_type_ids=True
         )
-        sentence = "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped the new world number one avoid a humiliating second- round exit at Wimbledon ."
+        sentence = (
+            "Top seed Ana Ivanovic said on Thursday she could hardly believe her luck as a fortuitous netcord helped"
+            " the new world number one avoid a humiliating second- round exit at Wimbledon ."
+        )
         # entity information
         span = (39, 42)
 

@@ -538,9 +538,26 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
 
         hypotheses_batch = model.generate(**inputs)
 
-        EXPECTED_LEP = "motivated by some recent studies on the light cp - odd higgs boson @xmath0 in non - minimal supersymmetric models, we investigate the rare @xmath1-decays @xmath2 ( @xmath3 ) in the two higgs doublet model ( 2hdm ), the nearly minimal supersymmetric standard model ( nmssm ), the next - to - minimal supersymmetric standard model ( nmssm ) and the minimal supersymmetric standard model ( mssm ).<n> we find that the branching ratios of @xmath4 can reach @xmath5 in 2hdm, @xmath6 in nmssm and @xmath7 in mssm, which are at the level of @xmath8 in 2hdm, @xmath9 in nmssm and @xmath10 in mssm, respectively.<n> these rates can be significantly enhanced in new physics models which lie within the expected sensitivity of the gigaz option of the international linear collider ( ilc ). <n> = # 1,nucl. <n> phys. <n> b * # 1"
+        EXPECTED_LEP = (
+            "motivated by some recent studies on the light cp - odd higgs boson @xmath0 in non - minimal"
+            " supersymmetric models, we investigate the rare @xmath1-decays @xmath2 ( @xmath3 ) in the two higgs"
+            " doublet model ( 2hdm ), the nearly minimal supersymmetric standard model ( nmssm ), the next - to -"
+            " minimal supersymmetric standard model ( nmssm ) and the minimal supersymmetric standard model ( mssm"
+            " ).<n> we find that the branching ratios of @xmath4 can reach @xmath5 in 2hdm, @xmath6 in nmssm and"
+            " @xmath7 in mssm, which are at the level of @xmath8 in 2hdm, @xmath9 in nmssm and @xmath10 in mssm,"
+            " respectively.<n> these rates can be significantly enhanced in new physics models which lie within the"
+            " expected sensitivity of the gigaz option of the international linear collider ( ilc ). <n> = # 1,nucl."
+            " <n> phys. <n> b * # 1"
+        )
 
-        EXPECTED_MAGNET = "a positive, nonsaturating and dominantly linear magnetoresistance can appear within quite wide magnetic - field range in the surface state of a topological insulator having a positive and finite effective g - factor. this linear magnetoresistance shows up in the system of high carrier concentration and low mobility when electrons are in extended states and spread over many smeared landau levels, and persists up to room temperature, providing a possible mechanism for the recently observed linear magnetoresistance in topological insulator bi@xmath0se@xmath1 nanoribbons."
+        EXPECTED_MAGNET = (
+            "a positive, nonsaturating and dominantly linear magnetoresistance can appear within quite wide magnetic -"
+            " field range in the surface state of a topological insulator having a positive and finite effective g -"
+            " factor. this linear magnetoresistance shows up in the system of high carrier concentration and low"
+            " mobility when electrons are in extended states and spread over many smeared landau levels, and persists"
+            " up to room temperature, providing a possible mechanism for the recently observed linear"
+            " magnetoresistance in topological insulator bi@xmath0se@xmath1 nanoribbons."
+        )
 
         generated = tokenizer.batch_decode(
             hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True

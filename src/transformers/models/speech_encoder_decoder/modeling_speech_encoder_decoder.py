@@ -135,7 +135,7 @@ SPEECH_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
             soundfile*). To prepare the array into *input_values*, the [`Wav2Vec2Processor`] should be used for padding
             and conversion into a tensor of type *torch.FloatTensor*. See [`Wav2Vec2Processor.__call__`] for details.
-        input_features (`torch.LongTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
+        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`, *optional*):
             Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
             by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
             via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
@@ -199,10 +199,10 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         if config.decoder.cross_attention_hidden_size is not None:
             if config.decoder.cross_attention_hidden_size != config.encoder.hidden_size:
                 raise ValueError(
-                    "If `cross_attention_hidden_size` is specified in the decoder's configuration, "
-                    "it has to be equal to the encoder's `hidden_size`. "
-                    f"Got {config.decoder.cross_attention_hidden_size} for `config.decoder.cross_attention_hidden_size` "
-                    f"and {config.encoder.hidden_size} for `config.encoder.hidden_size`."
+                    "If `cross_attention_hidden_size` is specified in the decoder's configuration, it has to be equal"
+                    f" to the encoder's `hidden_size`. Got {config.decoder.cross_attention_hidden_size} for"
+                    f" `config.decoder.cross_attention_hidden_size` and {config.encoder.hidden_size} for"
+                    " `config.encoder.hidden_size`."
                 )
 
         # initialize with config
@@ -221,11 +221,13 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
         if self.encoder.config.to_dict() != self.config.encoder.to_dict():
             logger.warning(
-                f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config: {self.config.encoder}"
+                f"Config of the encoder: {self.encoder.__class__} is overwritten by shared encoder config:"
+                f" {self.config.encoder}"
             )
         if self.decoder.config.to_dict() != self.config.decoder.to_dict():
             logger.warning(
-                f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config: {self.config.decoder}"
+                f"Config of the decoder: {self.decoder.__class__} is overwritten by shared decoder config:"
+                f" {self.config.decoder}"
             )
 
         # make sure that the individual model's config refers to the shared config
@@ -410,10 +412,9 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
                 if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
                     logger.info(
-                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. "
-                        f"Cross attention layers are added to {decoder_pretrained_model_name_or_path} "
-                        f"and randomly initialized if {decoder_pretrained_model_name_or_path}'s architecture allows for "
-                        "cross attention layers."
+                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention"
+                        f" layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if"
+                        f" {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
                     )
                     decoder_config.is_decoder = True
                     decoder_config.add_cross_attention = True
@@ -481,8 +482,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         'Mr. Quilter ist der Apostel der Mittelschicht und wir freuen uns, sein Evangelium willkommen heißen zu können.'
 
         >>> # Training: Train model on English transcription
-        >>> with processor.as_target_processor():
-        ...     labels = processor(ds[0]["text"], return_tensors="pt").input_ids
+        >>> labels = processor(text=ds[0]["text"], return_tensors="pt").input_ids
 
         >>> loss = model(input_values, labels=labels).loss
         >>> loss.backward()
@@ -599,8 +599,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
 
     def resize_token_embeddings(self, *args, **kwargs):
         raise NotImplementedError(
-            "Resizing the embedding layers via the SpeechEncoderDecoderModel directly is not supported. "
-            "Please use the respective methods of the wrapped decoder object (model.decoder.resize_token_embeddings(...))"
+            "Resizing the embedding layers via the SpeechEncoderDecoderModel directly is not supported. Please use the"
+            " respective methods of the wrapped decoder object (model.decoder.resize_token_embeddings(...))"
         )
 
     def _reorder_cache(self, past, beam_idx):

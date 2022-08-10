@@ -36,6 +36,7 @@ from transformers.testing_utils import (
     is_pt_tf_cross_test,
     require_pandas,
     require_scatter,
+    require_tensorflow_probability,
     require_tokenizers,
     require_torch,
     slow,
@@ -140,6 +141,10 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         input_text = "UNwant\u00E9d,running"
         output_text = "unwanted, running"
         return input_text, output_text
+
+    @require_tensorflow_probability
+    def test_tf_encode_plus_sent_to_model(self):
+        super().test_tf_encode_plus_sent_to_model()
 
     def test_rust_and_python_full_tokenizers(self):
         if not self.test_rust_tokenizer:
@@ -251,7 +256,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "want", "##want", "##ed", "wa", "un", "runn", "##ing"]
 
         vocab = {}
-        for (i, token) in enumerate(vocab_tokens):
+        for i, token in enumerate(vocab_tokens):
             vocab[token] = i
         tokenizer = WordpieceTokenizer(vocab=vocab, unk_token="[UNK]")
 

@@ -168,7 +168,10 @@ class BigBirdTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
     @slow
     def test_tokenization_base_hard_symbols(self):
-        symbols = 'This is a very long text with a lot of weird characters, such as: . , ~ ? ( ) " [ ] ! : - . Also we will add words that should not exsist and be tokenized to <unk>, such as saoneuhaoesuth'
+        symbols = (
+            'This is a very long text with a lot of weird characters, such as: . , ~ ? ( ) " [ ] ! : - . Also we will'
+            " add words that should not exsist and be tokenized to <unk>, such as saoneuhaoesuth"
+        )
         # fmt: off
         original_tokenizer_encodings = [65, 871, 419, 358, 946, 991, 2521, 452, 358, 1357, 387, 7751, 3536, 112, 985, 456, 126, 865, 938, 5400, 5734, 458, 1368, 467, 786, 2462, 5246, 1159, 633, 865, 4519, 457, 582, 852, 2557, 427, 916, 508, 405, 34324, 497, 391, 408, 11342, 1244, 385, 100, 938, 985, 456, 574, 362, 12597, 3200, 3129, 1172, 66]  # noqa: E231
         # fmt: on

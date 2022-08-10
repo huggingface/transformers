@@ -32,7 +32,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "microsoft/deberta-xlarge": "https://huggingface.co/microsoft/deberta-xlarge/resolve/main/vocab.json",
         "microsoft/deberta-base-mnli": "https://huggingface.co/microsoft/deberta-base-mnli/resolve/main/vocab.json",
         "microsoft/deberta-large-mnli": "https://huggingface.co/microsoft/deberta-large-mnli/resolve/main/vocab.json",
-        "microsoft/deberta-xlarge-mnli": "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/vocab.json",
+        "microsoft/deberta-xlarge-mnli": (
+            "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/vocab.json"
+        ),
     },
     "merges_file": {
         "microsoft/deberta-base": "https://huggingface.co/microsoft/deberta-base/resolve/main/merges.txt",
@@ -40,7 +42,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "microsoft/deberta-xlarge": "https://huggingface.co/microsoft/deberta-xlarge/resolve/main/merges.txt",
         "microsoft/deberta-base-mnli": "https://huggingface.co/microsoft/deberta-base-mnli/resolve/main/merges.txt",
         "microsoft/deberta-large-mnli": "https://huggingface.co/microsoft/deberta-large-mnli/resolve/main/merges.txt",
-        "microsoft/deberta-xlarge-mnli": "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/merges.txt",
+        "microsoft/deberta-xlarge-mnli": (
+            "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/merges.txt"
+        ),
     },
 }
 

@@ -88,7 +88,8 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     """
     Make causal mask used for bi-directional self-attention.
     """
-    bsz, tgt_len = input_ids_shape
+    bsz = input_ids_shape[0]
+    tgt_len = input_ids_shape[1]
     mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
     mask_cond = tf.range(shape_list(mask)[-1])
 
@@ -101,7 +102,7 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
 
 
 # Copied from transformers.models.bart.modeling_tf_bart._expand_mask
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -162,12 +163,14 @@ class TFMarianSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         tf.stop_gradient(table)
         return table
 
-    def call(self, input_shape: tf.TensorShape, past_key_values_length: int = 0):
+    def call(
+        self, input_shape: tf.TensorShape, past_key_values_length: int = 0, position_ids: Optional[tf.Tensor] = None
+    ):
         """Input is expected to be of size [bsz x seqlen]."""
-        bsz, seq_len = input_shape[:2]
-
-        positions = tf.range(past_key_values_length, seq_len + past_key_values_length, delta=1, name="range")
-        return tf.gather(self.weight, positions)
+        if position_ids is None:
+            seq_len = input_shape[1]
+            position_ids = tf.range(past_key_values_length, seq_len + past_key_values_length, delta=1, name="range")
+        return tf.gather(self.weight, position_ids)
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->Marian
@@ -267,7 +270,10 @@ class TFMarianAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(attn_weights),
                 [bsz * self.num_heads, tgt_len, src_len],
-                message=f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {shape_list(attn_weights)}",
+                message=(
+                    f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                    f" {shape_list(attn_weights)}"
+                ),
             )
 
         if attention_mask is not None:
@@ -277,7 +283,10 @@ class TFMarianAttention(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(attention_mask),
                     [bsz, 1, tgt_len, src_len],
-                    message=f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is {shape_list(attention_mask)}",
+                    message=(
+                        f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
+                        f" {shape_list(attention_mask)}"
+                    ),
                 )
 
             attention_mask = tf.cast(attention_mask, dtype=attn_weights.dtype)
@@ -293,7 +302,10 @@ class TFMarianAttention(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(layer_head_mask),
                     [self.num_heads],
-                    message=f"Head mask for a single layer should be of size {(self.num_heads)}, but is {shape_list(layer_head_mask)}",
+                    message=(
+                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                        f" {shape_list(layer_head_mask)}"
+                    ),
                 )
 
             attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
@@ -310,7 +322,10 @@ class TFMarianAttention(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(attn_output),
                 [bsz * self.num_heads, tgt_len, self.head_dim],
-                message=f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {shape_list(attn_output)}",
+                message=(
+                    f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                    f" {shape_list(attn_output)}"
+                ),
             )
 
         attn_output = tf.transpose(
@@ -616,6 +631,9 @@ MARIAN_INPUTS_DOCSTRING = r"""
             `past_key_values`).
         decoder_attention_mask (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             will be made by default and ignore pad tokens. It is not recommended to set this for most use cases.
+        decoder_position_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
+            range `[0, config.max_position_embeddings - 1]`.
         head_mask (`tf.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -784,7 +802,10 @@ class TFMarianEncoder(tf.keras.layers.Layer):
             tf.debugging.assert_equal(
                 shape_list(head_mask)[0],
                 len(self.layers),
-                message=f"The head_mask should be specified for {len(self.layers)} layers, but it is for {shape_list(head_mask)[0]}.",
+                message=(
+                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for"
+                    f" {shape_list(head_mask)[0]}."
+                ),
             )
 
         # encoder layers
@@ -855,6 +876,7 @@ class TFMarianDecoder(tf.keras.layers.Layer):
         input_ids=None,
         inputs_embeds=None,
         attention_mask=None,
+        position_ids=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
         head_mask=None,
@@ -883,6 +905,9 @@ class TFMarianDecoder(tf.keras.layers.Layer):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
+            position_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
+                range `[0, config.max_position_embeddings - 1]`.
             encoder_hidden_states (`tf.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
@@ -912,11 +937,11 @@ class TFMarianDecoder(tf.keras.layers.Layer):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`tf.Tensor` of
-                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
-                control over how to convert `input_ids` indices into associated vectors than the model's internal
-                embedding lookup matrix.
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`tf.Tensor` of shape
+                `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids`
+                you can choose to directly pass an embedded representation. This is useful if you want more control
+                over how to convert `input_ids` indices into associated vectors than the model's internal embedding
+                lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail. This argument can be used only in eager mode, in graph mode the value
@@ -945,7 +970,10 @@ class TFMarianDecoder(tf.keras.layers.Layer):
         past_key_values_length = shape_list(past_key_values[0][0])[2] if past_key_values is not None else 0
 
         # embed positions
-        positions = self.embed_positions(input_shape, past_key_values_length)
+        if position_ids is None:
+            positions = self.embed_positions(input_shape, past_key_values_length)
+        else:
+            positions = self.embed_positions(input_shape, position_ids=position_ids)
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
@@ -983,7 +1011,10 @@ class TFMarianDecoder(tf.keras.layers.Layer):
                 tf.debugging.assert_equal(
                     shape_list(attn_mask)[0],
                     len(self.layers),
-                    message=f"The {attn_name} should be specified for {len(self.layers)} layers, but it is for {shape_list(attn_mask)[0]}.",
+                    message=(
+                        f"The {attn_name} should be specified for {len(self.layers)} layers, but it is for"
+                        f" {shape_list(attn_mask)[0]}."
+                    ),
                 )
 
         for idx, decoder_layer in enumerate(self.layers):
@@ -1073,6 +1104,7 @@ class TFMarianMainLayer(tf.keras.layers.Layer):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        decoder_position_ids=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
@@ -1120,6 +1152,7 @@ class TFMarianMainLayer(tf.keras.layers.Layer):
         decoder_outputs = self.decoder(
             decoder_input_ids,
             attention_mask=decoder_attention_mask,
+            position_ids=decoder_position_ids,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
@@ -1178,6 +1211,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        decoder_position_ids=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
@@ -1197,6 +1231,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            decoder_position_ids=decoder_position_ids,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
@@ -1248,7 +1283,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         super().__init__(config, *inputs, **kwargs)
         self.model = TFMarianMainLayer(config, name="model")
         self.use_cache = config.use_cache
-        # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
+        # final_bias_logits is registered as a buffer in pytorch, so not trainable for the sake of consistency.
         self.final_logits_bias = self.add_weight(
             name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
@@ -1281,6 +1316,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        decoder_position_ids=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
@@ -1323,6 +1359,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
+            decoder_position_ids=decoder_position_ids,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
@@ -1380,6 +1417,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         decoder_input_ids,
         past=None,
         attention_mask=None,
+        decoder_attention_mask=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
@@ -1387,9 +1425,17 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         encoder_outputs=None,
         **kwargs
     ):
+
         # cut decoder_input_ids if past is used
         if past is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
+
+        if decoder_attention_mask is not None:  # xla
+            decoder_position_ids = tf.math.cumsum(decoder_attention_mask, axis=-1, exclusive=True)[:, -1:]
+        elif past is not None:  # no xla + past
+            decoder_position_ids = past[0][0].shape[2]
+        else:  # no xla + no past
+            decoder_position_ids = tf.range(decoder_input_ids.shape[1])
 
         return {
             "input_ids": None,  # encoder_outputs is defined. input_ids not needed
@@ -1397,6 +1443,8 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
+            "decoder_attention_mask": decoder_attention_mask,
+            "decoder_position_ids": decoder_position_ids,
             "head_mask": head_mask,
             "decoder_head_mask": decoder_head_mask,
             "cross_attn_head_mask": cross_attn_head_mask,

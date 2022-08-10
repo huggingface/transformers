@@ -61,7 +61,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/vocab.json",
     },
     "tokenizer_config_file": {
-        "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer_config.json",
+        "facebook/wav2vec2-base-960h": (
+            "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer_config.json"
+        ),
     },
 }
 
@@ -601,7 +603,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)
 
@@ -717,7 +719,9 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
             "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/vocab.json"
         },
         "tokenizer_config_file": {
-            "facebook/wav2vec2-base-960h": "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer.json",
+            "facebook/wav2vec2-base-960h": (
+                "https://huggingface.co/facebook/wav2vec2-base-960h/resolve/main/tokenizer.json"
+            ),
         },
     }
     model_input_names = ["input_values", "attention_mask"]
@@ -748,7 +752,8 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         )
 
         warnings.warn(
-            "The class `Wav2Vec2Tokenizer` is deprecated and will be removed in version 5 of Transformers. Please use `Wav2Vec2Processor` or `Wav2Vec2CTCTokenizer` instead.",
+            "The class `Wav2Vec2Tokenizer` is deprecated and will be removed in version 5 of Transformers. Please use"
+            " `Wav2Vec2Processor` or `Wav2Vec2CTCTokenizer` instead.",
             FutureWarning,
         )
 
@@ -917,6 +922,6 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)

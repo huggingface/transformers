@@ -18,24 +18,44 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_sentencepiece_available, is_tokenizers_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available, is_tokenizers_available
 
 
 _import_structure = {}
 
-if is_sentencepiece_available():
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_barthez"] = ["BarthezTokenizer"]
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_barthez_fast"] = ["BarthezTokenizerFast"]
 
 
 if TYPE_CHECKING:
 
-    if is_sentencepiece_available():
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_barthez import BarthezTokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_barthez_fast import BarthezTokenizerFast
 
 else:

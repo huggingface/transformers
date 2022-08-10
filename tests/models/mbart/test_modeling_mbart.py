@@ -113,6 +113,12 @@ class MBartModelTester:
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
 
+        # forcing a certain token to be generated, sets all other tokens to -inf
+        # if however the token to be generated is already at -inf then it can lead token
+        # `nan` values and thus break generation
+        self.forced_bos_token_id = None
+        self.forced_eos_token_id = None
+
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
@@ -142,6 +148,8 @@ class MBartModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
+            forced_bos_token_id=self.forced_bos_token_id,
+            forced_eos_token_id=self.forced_eos_token_id,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -224,6 +232,7 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     )
     all_generative_model_classes = (MBartForConditionalGeneration,) if is_torch_available() else ()
     is_encoder_decoder = True
+    fx_compatible = True
     test_pruning = False
     test_missing_keys = False
 
@@ -348,7 +357,9 @@ class MBartEnroIntegrationTest(AbstractSeq2SeqIntegrationTest):
     ]
     tgt_text = [
         "Şeful ONU declară că nu există o soluţie militară în Siria",
-        'Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor face decât să înrăutăţească violenţa şi mizeria pentru milioane de oameni.',
+        "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei"
+        ' pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu vor'
+        " face decât să înrăutăţească violenţa şi mizeria pentru milioane de oameni.",
     ]
     expected_src_tokens = [8274, 127873, 25916, 7, 8622, 2071, 438, 67485, 53, 187895, 23, 51712, 2, 250004]
 

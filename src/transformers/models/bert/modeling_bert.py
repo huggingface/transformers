@@ -24,7 +24,6 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -41,7 +40,12 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    is_torch_greater_than_1_6,
+    prune_linear_layer,
+)
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -62,7 +66,7 @@ _TOKENIZER_FOR_DOC = "BertTokenizer"
 # TokenClassification docstring
 _CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "dbmdz/bert-large-cased-finetuned-conll03-english"
 _TOKEN_CLASS_EXPECTED_OUTPUT = (
-    "['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', " "'I-LOC'] "
+    "['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', 'I-LOC'] "
 )
 _TOKEN_CLASS_EXPECTED_LOSS = 0.01
 
@@ -195,7 +199,7 @@ class BertEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        if version.parse(torch.__version__) > version.parse("1.6.0"):
+        if is_torch_greater_than_1_6:
             self.register_buffer(
                 "token_type_ids",
                 torch.zeros(self.position_ids.size(), dtype=torch.long),
@@ -510,7 +514,8 @@ class BertLayer(nn.Module):
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
                 raise ValueError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
+                    " by setting `config.add_cross_attention=True`"
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
@@ -1458,7 +1463,8 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
 
         if "next_sentence_label" in kwargs:
             warnings.warn(
-                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use `labels` instead.",
+                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use"
+                " `labels` instead.",
                 FutureWarning,
             )
             labels = kwargs.pop("next_sentence_label")

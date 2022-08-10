@@ -139,7 +139,7 @@ class PhrasalConstraint(Constraint):
         super(Constraint, self).__init__()
 
         if not isinstance(token_ids, list) or len(token_ids) == 0:
-            raise ValueError(f"`token_ids` has to be a non-emtpy list, but is {token_ids}.")
+            raise ValueError(f"`token_ids` has to be a non-empty list, but is {token_ids}.")
         if any((not isinstance(token_id, int) or token_id < 0) for token_id in token_ids):
             raise ValueError(f"Each list in `token_ids` has to be a list of positive integers, but is {token_ids}.")
 
@@ -219,7 +219,8 @@ class DisjunctiveTrie:
 
         if no_subsets and self.has_subsets(root, nested_token_ids):
             raise ValueError(
-                f"Each list in `nested_token_ids` can't be a complete subset of another list, but is {nested_token_ids}."
+                "Each list in `nested_token_ids` can't be a complete subset of another list, but is"
+                f" {nested_token_ids}."
             )
 
         self.trie = root
@@ -270,7 +271,7 @@ class DisjunctiveConstraint(Constraint):
         super(Constraint, self).__init__()
 
         if not isinstance(nested_token_ids, list) or len(nested_token_ids) == 0:
-            raise ValueError(f"`nested_token_ids` has to be a non-emtpy list, but is {nested_token_ids}.")
+            raise ValueError(f"`nested_token_ids` has to be a non-empty list, but is {nested_token_ids}.")
         if any(not isinstance(token_ids, list) for token_ids in nested_token_ids):
             raise ValueError(f"`nested_token_ids` has to be a list of lists, but is {nested_token_ids}.")
         if any(

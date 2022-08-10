@@ -103,7 +103,9 @@ def convert_tf_weight_name_to_pt_weight_name(tf_name, start_prefix_to_remove="",
 #####################
 
 
-def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
+def load_pytorch_checkpoint_in_tf2_model(
+    tf_model, pytorch_checkpoint_path, tf_inputs=None, allow_missing_keys=False, output_loading_info=False
+):
     """Load pytorch checkpoints in a TF 2.0 model"""
     try:
         import tensorflow as tf  # noqa: F401
@@ -115,14 +117,25 @@ def load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path, tf_i
         )
         raise
 
-    pt_path = os.path.abspath(pytorch_checkpoint_path)
-    logger.info(f"Loading PyTorch weights from {pt_path}")
+    # Treats a single file as a collection of shards with 1 shard.
+    if isinstance(pytorch_checkpoint_path, str):
+        pytorch_checkpoint_path = [pytorch_checkpoint_path]
 
-    pt_state_dict = torch.load(pt_path, map_location="cpu")
+    # Loads all shards into a single state dictionary
+    pt_state_dict = {}
+    for path in pytorch_checkpoint_path:
+        pt_path = os.path.abspath(path)
+        logger.info(f"Loading PyTorch weights from {pt_path}")
+        pt_state_dict.update(torch.load(pt_path, map_location="cpu"))
+
     logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters")
 
     return load_pytorch_weights_in_tf2_model(
-        tf_model, pt_state_dict, tf_inputs=tf_inputs, allow_missing_keys=allow_missing_keys
+        tf_model,
+        pt_state_dict,
+        tf_inputs=tf_inputs,
+        allow_missing_keys=allow_missing_keys,
+        output_loading_info=output_loading_info,
     )
 
 
@@ -135,7 +148,9 @@ def load_pytorch_model_in_tf2_model(tf_model, pt_model, tf_inputs=None, allow_mi
     )
 
 
-def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False):
+def load_pytorch_weights_in_tf2_model(
+    tf_model, pt_state_dict, tf_inputs=None, allow_missing_keys=False, output_loading_info=False
+):
     """Load pytorch state_dict in a TF 2.0 model."""
     try:
         import tensorflow as tf  # noqa: F401
@@ -163,6 +178,10 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
             new_key = key.replace("gamma", "weight")
         if "beta" in key:
             new_key = key.replace("beta", "bias")
+        if "running_var" in key:
+            new_key = key.replace("running_var", "moving_variance")
+        if "running_mean" in key:
+            new_key = key.replace("running_mean", "moving_mean")
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
@@ -254,27 +273,32 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 
     if len(unexpected_keys) > 0:
         logger.warning(
-            f"Some weights of the PyTorch model were not used when "
-            f"initializing the TF 2.0 model {tf_model.__class__.__name__}: {unexpected_keys}\n"
-            f"- This IS expected if you are initializing {tf_model.__class__.__name__} from a PyTorch model trained on another task "
-            f"or with another architecture (e.g. initializing a TFBertForSequenceClassification model from a BertForPreTraining model).\n"
-            f"- This IS NOT expected if you are initializing {tf_model.__class__.__name__} from a PyTorch model that you expect "
-            f"to be exactly identical (e.g. initializing a TFBertForSequenceClassification model from a BertForSequenceClassification model)."
+            "Some weights of the PyTorch model were not used when initializing the TF 2.0 model"
+            f" {tf_model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are initializing"
+            f" {tf_model.__class__.__name__} from a PyTorch model trained on another task or with another architecture"
+            " (e.g. initializing a TFBertForSequenceClassification model from a BertForPreTraining model).\n- This IS"
+            f" NOT expected if you are initializing {tf_model.__class__.__name__} from a PyTorch model that you expect"
+            " to be exactly identical (e.g. initializing a TFBertForSequenceClassification model from a"
+            " BertForSequenceClassification model)."
         )
     else:
         logger.warning(f"All PyTorch model weights were used when initializing {tf_model.__class__.__name__}.\n")
     if len(missing_keys) > 0:
         logger.warning(
-            f"Some weights or buffers of the TF 2.0 model {tf_model.__class__.__name__} were not initialized from the PyTorch model "
-            f"and are newly initialized: {missing_keys}\n"
-            f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            f"Some weights or buffers of the TF 2.0 model {tf_model.__class__.__name__} were not initialized from the"
+            f" PyTorch model and are newly initialized: {missing_keys}\nYou should probably TRAIN this model on a"
+            " down-stream task to be able to use it for predictions and inference."
         )
     else:
         logger.warning(
             f"All the weights of {tf_model.__class__.__name__} were initialized from the PyTorch model.\n"
-            f"If your task is similar to the task the model of the checkpoint was trained on, "
+            "If your task is similar to the task the model of the checkpoint was trained on, "
             f"you can already use {tf_model.__class__.__name__} for predictions without further training."
         )
+
+    if output_loading_info:
+        loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys}
+        return tf_model, loading_info
 
     return tf_model
 
@@ -284,7 +308,9 @@ def load_pytorch_weights_in_tf2_model(tf_model, pt_state_dict, tf_inputs=None, a
 #####################
 
 
-def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False):
+def load_tf2_checkpoint_in_pytorch_model(
+    pt_model, tf_checkpoint_path, tf_inputs=None, allow_missing_keys=False, output_loading_info=False
+):
     """
     Load TF 2.0 HDF5 checkpoint in a PyTorch model We use HDF5 to easily do transfer learning (see
     https://github.com/tensorflow/tensorflow/blob/ee16fcac960ae660e0e4496658a366e2f745e1f0/tensorflow/python/keras/engine/network.py#L1352-L1357).
@@ -318,17 +344,21 @@ def load_tf2_checkpoint_in_pytorch_model(pt_model, tf_checkpoint_path, tf_inputs
 
     load_tf_weights(tf_model, tf_checkpoint_path)
 
-    return load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=allow_missing_keys)
+    return load_tf2_model_in_pytorch_model(
+        pt_model, tf_model, allow_missing_keys=allow_missing_keys, output_loading_info=output_loading_info
+    )
 
 
-def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False):
+def load_tf2_model_in_pytorch_model(pt_model, tf_model, allow_missing_keys=False, output_loading_info=False):
     """Load TF 2.0 model in a pytorch model"""
     weights = tf_model.weights
 
-    return load_tf2_weights_in_pytorch_model(pt_model, weights, allow_missing_keys=allow_missing_keys)
+    return load_tf2_weights_in_pytorch_model(
+        pt_model, weights, allow_missing_keys=allow_missing_keys, output_loading_info=output_loading_info
+    )
 
 
-def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=False):
+def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=False, output_loading_info=False):
     """Load TF2.0 symbolic weights in a PyTorch model"""
     try:
         import tensorflow as tf  # noqa: F401
@@ -430,28 +460,33 @@ def load_tf2_weights_in_pytorch_model(pt_model, tf_weights, allow_missing_keys=F
 
     if len(unexpected_keys) > 0:
         logger.warning(
-            f"Some weights of the TF 2.0 model were not used when "
-            f"initializing the PyTorch model {pt_model.__class__.__name__}: {unexpected_keys}\n"
-            f"- This IS expected if you are initializing {pt_model.__class__.__name__} from a TF 2.0 model trained on another task "
-            f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a TFBertForPreTraining model).\n"
-            f"- This IS NOT expected if you are initializing {pt_model.__class__.__name__} from a TF 2.0 model that you expect "
-            f"to be exactly identical (e.g. initializing a BertForSequenceClassification model from a TFBertForSequenceClassification model)."
+            "Some weights of the TF 2.0 model were not used when initializing the PyTorch model"
+            f" {pt_model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are initializing"
+            f" {pt_model.__class__.__name__} from a TF 2.0 model trained on another task or with another architecture"
+            " (e.g. initializing a BertForSequenceClassification model from a TFBertForPreTraining model).\n- This IS"
+            f" NOT expected if you are initializing {pt_model.__class__.__name__} from a TF 2.0 model that you expect"
+            " to be exactly identical (e.g. initializing a BertForSequenceClassification model from a"
+            " TFBertForSequenceClassification model)."
         )
     else:
         logger.warning(f"All TF 2.0 model weights were used when initializing {pt_model.__class__.__name__}.\n")
     if len(missing_keys) > 0:
         logger.warning(
-            f"Some weights of {pt_model.__class__.__name__} were not initialized from the TF 2.0 model "
-            f"and are newly initialized: {missing_keys}\n"
-            f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+            f"Some weights of {pt_model.__class__.__name__} were not initialized from the TF 2.0 model and are newly"
+            f" initialized: {missing_keys}\nYou should probably TRAIN this model on a down-stream task to be able to"
+            " use it for predictions and inference."
         )
     else:
         logger.warning(
             f"All the weights of {pt_model.__class__.__name__} were initialized from the TF 2.0 model.\n"
-            f"If your task is similar to the task the model of the checkpoint was trained on, "
+            "If your task is similar to the task the model of the checkpoint was trained on, "
             f"you can already use {pt_model.__class__.__name__} for predictions without further training."
         )
 
     logger.info(f"Weights or buffers not loaded from TF 2.0 model: {all_tf_weights}")
+
+    if output_loading_info:
+        loading_info = {"missing_keys": missing_keys, "unexpected_keys": unexpected_keys}
+        return pt_model, loading_info
 
     return pt_model

@@ -28,7 +28,7 @@ RAG_CONFIG_DOC = r"""
         title_sep (`str`, *optional*, defaults to  `" / "`):
             Separator inserted between the title and the text of the retrieved document when calling [`RagRetriever`].
         doc_sep (`str`, *optional*, defaults to  `" // "`):
-            Separator inserted between the the text of the retrieved document and the original input when calling
+            Separator inserted between the text of the retrieved document and the original input when calling
             [`RagRetriever`].
         n_docs (`int`, *optional*, defaults to 5):
             Number of documents to retrieve.

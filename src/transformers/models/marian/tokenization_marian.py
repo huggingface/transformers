@@ -15,7 +15,6 @@ import json
 import os
 import re
 import warnings
-from contextlib import contextmanager
 from pathlib import Path
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -47,7 +46,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/vocab.json"
     },
     "tokenizer_config_file": {
-        "Helsinki-NLP/opus-mt-en-de": "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/tokenizer_config.json"
+        "Helsinki-NLP/opus-mt-en-de": (
+            "https://huggingface.co/Helsinki-NLP/opus-mt-en-de/resolve/main/tokenizer_config.json"
+        )
     },
 }
 
@@ -110,10 +111,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
     >>> src_texts = ["I am a small frog.", "Tom asked his teacher for advice."]
     >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
-    >>> inputs = tokenizer(src_texts, return_tensors="pt", padding=True)
-    >>> with tokenizer.as_target_tokenizer():
-    ...     labels = tokenizer(tgt_texts, return_tensors="pt", padding=True)
-    >>> inputs["labels"] = labels["input_ids"]
+    >>> inputs = tokenizer(src_texts, text_target=tgt_texts, return_tensors="pt", padding=True)
     # keys  [input_ids, attention_mask, labels].
 
     >>> outputs = model(**inputs)  # should work
@@ -279,18 +277,14 @@ class MarianTokenizer(PreTrainedTokenizer):
         # We don't expect to process pairs, but leave the pair logic for API consistency
         return token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-    @contextmanager
-    def as_target_tokenizer(self):
-        """
-        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
-        sequence-to-sequence models that need a slightly different processing for the labels.
-        """
+    def _switch_to_input_mode(self):
+        self.current_spm = self.spm_source
+        self.current_encoder = self.encoder
+
+    def _switch_to_target_mode(self):
         self.current_spm = self.spm_target
         if self.separate_vocabs:
             self.current_encoder = self.target_encoder
-        yield
-        self.current_spm = self.spm_source
-        self.current_encoder = self.encoder
 
     @property
     def vocab_size(self) -> int:

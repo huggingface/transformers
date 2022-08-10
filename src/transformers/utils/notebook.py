@@ -174,7 +174,10 @@ class NotebookProgressBar:
         elif self.predicted_remaining is None:
             self.label = f"[{spaced_value}/{self.total} {format_time(self.elapsed_time)}"
         else:
-            self.label = f"[{spaced_value}/{self.total} {format_time(self.elapsed_time)} < {format_time(self.predicted_remaining)}"
+            self.label = (
+                f"[{spaced_value}/{self.total} {format_time(self.elapsed_time)} <"
+                f" {format_time(self.predicted_remaining)}"
+            )
             self.label += f", {1/self.average_time_per_item:.2f} it/s"
         self.label += "]" if self.comment is None or len(self.comment) == 0 else f", {self.comment}]"
         self.display()
@@ -303,6 +306,11 @@ class NotebookProgressCallback(TrainerCallback):
             self.prediction_bar.update(1)
         else:
             self.prediction_bar.update(self.prediction_bar.value + 1)
+
+    def on_predict(self, args, state, control, **kwargs):
+        if self.prediction_bar is not None:
+            self.prediction_bar.close()
+        self.prediction_bar = None
 
     def on_log(self, args, state, control, logs=None, **kwargs):
         # Only for when there is no evaluation

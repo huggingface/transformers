@@ -176,7 +176,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "こんにちは", "こん", "にちは", "ばんは", "##こん", "##にちは", "##ばんは"]
 
         vocab = {}
-        for (i, token) in enumerate(vocab_tokens):
+        for i, token in enumerate(vocab_tokens):
             vocab[token] = i
         tokenizer = WordpieceTokenizer(vocab=vocab, unk_token="[UNK]")
 
@@ -249,7 +249,7 @@ class BertJapaneseCharacterTokenizationTest(TokenizerTesterMixin, unittest.TestC
         vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "こ", "ん", "に", "ち", "は", "ば", "世", "界", "、", "。"]
 
         vocab = {}
-        for (i, token) in enumerate(vocab_tokens):
+        for i, token in enumerate(vocab_tokens):
             vocab[token] = i
         tokenizer = CharacterTokenizer(vocab=vocab, unk_token="[UNK]")
 
@@ -288,7 +288,8 @@ class BertTokenizerMismatchTest(unittest.TestCase):
             BertTokenizer.from_pretrained(EXAMPLE_BERT_JAPANESE_ID)
             self.assertTrue(
                 cm.records[0].message.startswith(
-                    "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from."
+                    "The tokenizer class you load from this checkpoint is not the same type as the class this function"
+                    " is called from."
                 )
             )
         EXAMPLE_BERT_ID = "bert-base-cased"
@@ -296,6 +297,7 @@ class BertTokenizerMismatchTest(unittest.TestCase):
             BertJapaneseTokenizer.from_pretrained(EXAMPLE_BERT_ID)
             self.assertTrue(
                 cm.records[0].message.startswith(
-                    "The tokenizer class you load from this checkpoint is not the same type as the class this function is called from."
+                    "The tokenizer class you load from this checkpoint is not the same type as the class this function"
+                    " is called from."
                 )
             )

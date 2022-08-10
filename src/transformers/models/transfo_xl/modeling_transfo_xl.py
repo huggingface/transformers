@@ -327,21 +327,17 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
         attn_score = AC + BD
         attn_score.mul_(self.scale)
 
+        mask_value = torch.finfo(attn_score.dtype).min
+
         # compute attention probability
         if attn_mask is not None and torch.sum(attn_mask).item():
             attn_mask = attn_mask == 1  # Switch to bool
             if attn_mask.dim() == 2:
-                if next(self.parameters()).dtype == torch.float16:
-                    attn_score = (
-                        attn_score.float().masked_fill(attn_mask[None, :, :, None], -65000).type_as(attn_score)
-                    )
-                else:
-                    attn_score = attn_score.float().masked_fill(attn_mask[None, :, :, None], -1e30).type_as(attn_score)
+                attn_score = (
+                    attn_score.float().masked_fill(attn_mask[None, :, :, None], mask_value).type_as(attn_score)
+                )
             elif attn_mask.dim() == 3:
-                if next(self.parameters()).dtype == torch.float16:
-                    attn_score = attn_score.float().masked_fill(attn_mask[:, :, :, None], -65000).type_as(attn_score)
-                else:
-                    attn_score = attn_score.float().masked_fill(attn_mask[:, :, :, None], -1e30).type_as(attn_score)
+                attn_score = attn_score.float().masked_fill(attn_mask[:, :, :, None], mask_value).type_as(attn_score)
 
         # [qlen x klen x bsz x n_head]
         attn_prob = nn.functional.softmax(attn_score, dim=1)
@@ -1020,13 +1016,15 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
         if not self.trainer_compatible:
             warnings.warn(
                 "The output of TransfoXL will be updated in v5 to support a single loss as first argument. In order"
-                "to use that updated output, please specify `trainer_compatible=True` as your configuration attribute.",
+                "to use that updated output, please specify `trainer_compatible=True` as your configuration"
+                " attribute.",
                 DeprecationWarning,
             )
 
-        assert (
-            self.sample_softmax <= 0
-        ), "Sampling from the softmax is not implemented yet. Please look at issue: #3310: https://github.com/huggingface/transformers/issues/3310"
+        assert self.sample_softmax <= 0, (
+            "Sampling from the softmax is not implemented yet. Please look at issue: #3310:"
+            " https://github.com/huggingface/transformers/issues/3310"
+        )
 
         self.crit = ProjectedAdaptiveLogSoftmax(
             config.vocab_size, config.d_embed, config.d_model, config.cutoffs, div_val=config.div_val
@@ -1196,7 +1194,7 @@ class TransfoXLLMHeadModel(TransfoXLPreTrainedModel):
     TRANSFO_XL_START_DOCSTRING,
 )
 class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head\.weight"]
+    _keys_to_ignore_on_load_missing = [r"h\.\d+\.attn\.masked_bias", r"lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
@@ -1261,7 +1259,7 @@ class TransfoXLForSequenceClassification(TransfoXLPreTrainedModel):
                 sequence_lengths = -1
                 logger.warning(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
-                    f"unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
 
         pooled_logits = logits[range(batch_size), sequence_lengths]

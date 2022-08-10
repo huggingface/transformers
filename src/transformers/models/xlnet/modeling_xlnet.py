@@ -1056,7 +1056,6 @@ class XLNetModel(XLNetPreTrainedModel):
                 fwd_pos_seq = fwd_pos_seq.clamp(-self.clamp_len, self.clamp_len)
             pos_emb = self.positional_embedding(fwd_pos_seq, inv_freq, bsz)
 
-        pos_emb = pos_emb.to(self.device)
         return pos_emb
 
     @add_start_docstrings_to_model_forward(XLNET_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -1092,7 +1091,8 @@ class XLNetModel(XLNetPreTrainedModel):
 
         if "use_cache" in kwargs:
             warnings.warn(
-                "The `use_cache` argument is deprecated and will be removed in a future version, use `use_mems` instead.",
+                "The `use_cache` argument is deprecated and will be removed in a future version, use `use_mems`"
+                " instead.",
                 FutureWarning,
             )
             use_mems = kwargs["use_cache"]
@@ -1205,6 +1205,7 @@ class XLNetModel(XLNetPreTrainedModel):
 
         # Positional encoding
         pos_emb = self.relative_positional_encoding(qlen, klen, bsz=bsz)
+        pos_emb = pos_emb.to(output_h.device)
         pos_emb = self.dropout(pos_emb)
 
         # Prepare head mask if needed
