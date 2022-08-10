@@ -41,6 +41,7 @@ from ...utils import (
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPastAndCrossAttentions,
+    ModelOutput,
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
     Seq2SeqQuestionAnsweringModelOutput,
@@ -109,7 +110,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 
 @dataclass
-class Seq2SeqTSModelOutput(Seq2SeqModelOutput):
+class Seq2SeqTSModelOutput(ModelOutput):
     """
     Base class for model encoder's outputs that also contains : pre-computed hidden states that can speed up sequential
     decoding.
@@ -169,6 +170,19 @@ class Seq2SeqTSModelOutput(Seq2SeqModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     scale: Optional[float] = None
+
+
+@dataclass
+class Seq2SeqTSPredictionOutput(ModelOutput):
+    loss: Optional[torch.FloatTensor] = None
+    params: Optional[Tuple[torch.FloatTensor]] = None
+    past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
+    decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    decoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
+    encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # class TimeSeriesTransformerLearnedPositionalEmbedding(nn.Embedding):
@@ -1387,6 +1401,12 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
     def output_params(self, dec_output):
         return self.param_proj(dec_output)
 
+    def get_encoder(self):
+        return self.model.get_encoder()
+
+    def get_decoder(self):
+        return self.model.get_decoder()
+
     @torch.jit.ignore
     def output_distribution(self, params, scale=None, trailing_n=None) -> torch.distributions.Distribution:
         sliced_params = params
@@ -1404,10 +1424,12 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
         future_time_feat: Optional[torch.Tensor] = None,
         future_target: Optional[torch.Tensor] = None,
         future_observed_values: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
-
-        loss = None
-
+        prediction_loss = None
         if future_target is not None and future_observed_values is not None:
             # training
             outputs = self.model(
@@ -1418,6 +1440,10 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
                 past_observed_values,
                 future_time_feat,
                 future_target,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
             )
             params = self.output_params(outputs.last_hidden_state)
             distr = self.output_distribution(params, outputs.scale)
@@ -1429,7 +1455,20 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             else:
                 loss_weights = future_observed_values.min(dim=-1, keepdim=False)
 
-            return weighted_average(loss, weights=loss_weights)
+            prediction_loss = weighted_average(loss, weights=loss_weights)
+
+            return Seq2SeqTSPredictionOutput(
+                loss=prediction_loss,
+                params=params,
+                past_key_values=outputs.past_key_values,
+                decoder_hidden_states=outputs.decoder_hidden_states,
+                decoder_attentions=outputs.decoder_attentions,
+                cross_attentions=outputs.cross_attentions,
+                encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+                encoder_hidden_states=outputs.encoder_hidden_states,
+                encoder_attentions=outputs.encoder_attentions,
+            )
+
         else:
             # prediction
             encoder = self.model.get_encoder()
