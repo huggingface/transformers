@@ -1070,7 +1070,11 @@ if cache_version < 1:
             "`transformers.utils.move_cache()`."
         )
     try:
-        move_cache()
+        if TRANSFORMERS_CACHE != default_cache_path:
+            # Users set some env variable to customize cache storage
+            move_cache(TRANSFORMERS_CACHE, TRANSFORMERS_CACHE)
+        else:
+            move_cache()
     except Exception as e:
         trace = "\n".join(traceback.format_tb(e.__traceback__))
         logger.error(
