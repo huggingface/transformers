@@ -111,24 +111,28 @@ class TFDebertaStableDropout(tf.keras.layers.Layer):
 
     def __init__(self, drop_prob, **kwargs):
         super().__init__(**kwargs)
-        self.drop_prob = tf.convert_to_tensor(drop_prob, dtype=tf.float32)
+        self.drop_prob = drop_prob
 
     @tf.custom_gradient
-    def xdropout(self, input):
+    def xdropout(self, inputs):
         """
-        Applies dropout to the input, as vanilla dropout, but also scales the remaining elements up by 1/drop_prob.
+        Applies dropout to the inputs, as vanilla dropout, but also scales the remaining elements up by 1/drop_prob.
         """
         mask = tf.cast(
-            1 - tf.compat.v1.distributions.Bernoulli(probs=1 - self.drop_prob).sample(sample_shape=shape_list(input)),
+            1 - tf.compat.v1.distributions.Bernoulli(probs=1 - self.drop_prob).sample(sample_shape=shape_list(inputs)),
             tf.bool,
         )
         scale = tf.convert_to_tensor(1.0 / (1 - self.drop_prob), dtype=tf.float32)
-        input = tf.cond(self.drop_prob > 0, lambda: tf.where(mask, 0.0, input) * scale, lambda: input)
+        if self.drop_prob > 0:
+            inputs = tf.where(mask, 0.0, inputs) * scale
 
         def grad(upstream):
-            return tf.cond(scale > 1, lambda: tf.where(mask, 0.0, upstream) * scale, lambda: upstream)
+            if self.drop_prob > 0:
+                return tf.where(mask, 0.0, upstream) * scale
+            else:
+                return upstream
 
-        return input, grad
+        return inputs, grad
 
     def call(self, inputs: tf.Tensor, training: tf.Tensor = False):
         if training:
