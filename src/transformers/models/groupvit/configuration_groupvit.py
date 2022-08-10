@@ -201,7 +201,7 @@ class GroupViTVisionConfig(PretrainedConfig):
         depths=[6, 3, 3],
         num_hidden_layers=12,
         num_group_tokens=[64, 8, 0],
-        num_output_groups=[64, 8, 8],
+        num_output_groups=[64, 8, 0],
         num_attention_heads=6,
         image_size=224,
         patch_size=16,
