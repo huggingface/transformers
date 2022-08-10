@@ -975,7 +975,7 @@ class TrainingArguments:
                 " https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group"
                 " timeout is passed datetime object."
             )
-        }
+        },
     )
 
     def __post_init__(self):
@@ -1354,10 +1354,7 @@ class TrainingArguments:
                             "please try exporting rank 0's hostname as MASTER_ADDR"
                         )
                 torch.distributed.init_process_group(
-                    backend=self.xpu_backend,
-                    rank=rank,
-                    world_size=size,
-                    timeout=self.timeout
+                    backend=self.xpu_backend, rank=rank, world_size=size, timeout=self.timeout
                 )
         elif is_torch_tpu_available():
             device = xm.xla_device()
