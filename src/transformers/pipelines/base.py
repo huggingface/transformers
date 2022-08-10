@@ -763,7 +763,7 @@ class Pipeline(_ScikitCompat):
         if is_torch_available() and self.framework == "pt":
             if isinstance(device, torch.device):
                 self.device = device
-            elif type(device) == str:
+            elif isinstance(int, str):
                 self.device = torch.device(device)
             elif device < 0:
                 self.device = torch.device("cpu")
