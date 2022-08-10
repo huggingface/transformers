@@ -40,17 +40,18 @@ class CodeHiFiGANConfig(PretrainedConfig):
         model_in_dim=128,
         f0=False,
         f0_quant_num_bin=0,
-        dur_predictor=True,
+        duration_predictor=True,
         encoder_embed_dim=128,
-        var_pred_hidden_dim=128,
-        var_pred_kernel_size=3,
-        var_pred_dropout=0.5,
+        variance_predictor_hidden_dim=128,
+        variance_predictor_kernel_size=3,
+        variance_predictor_dropout=0.5,
         sampling_rate=16000,
         multispeaker=False,
-        embedder=False,
         num_speakers=200,
-        embedder_dim=256,
+        speaker_embedding=False,
+        speaker_embedding_dim=256,
         initializer_range=0.02,
+        duration_predictor_activation="relu",
         **kwargs,
     ):
         self.resblock_kernel_sizes = resblock_kernel_sizes
@@ -64,14 +65,15 @@ class CodeHiFiGANConfig(PretrainedConfig):
         self.embedding_dim = embedding_dim
         self.f0 = f0
         self.f0_quant_num_bin = f0_quant_num_bin
-        self.dur_predictor = dur_predictor
+        self.duration_predictor = duration_predictor
         self.encoder_embed_dim = encoder_embed_dim
-        self.var_pred_hidden_dim = var_pred_hidden_dim
-        self.var_pred_kernel_size = var_pred_kernel_size
-        self.var_pred_dropout = var_pred_dropout
+        self.variance_predictor_hidden_dim = variance_predictor_hidden_dim
+        self.variance_predictor_kernel_size = variance_predictor_kernel_size
+        self.variance_predictor_dropout = variance_predictor_dropout
         self.multispeaker = multispeaker
-        self.embedder = embedder
         self.num_speakers = num_speakers
-        self.embedder_dim = embedder_dim
+        self.speaker_embedding = speaker_embedding
+        self.speaker_embedding_dim = speaker_embedding_dim
         self.initializer_range = initializer_range
+        self.duration_predictor_activation = duration_predictor_activation
         super().__init__(**kwargs)
