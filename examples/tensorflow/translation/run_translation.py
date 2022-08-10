@@ -602,7 +602,7 @@ def main():
         if not push_to_hub_model_id:
             push_to_hub_model_id = f"{model_name}-finetuned-{data_args.source_lang}-{data_args.target_lang}"
 
-        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "summarization"}
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "translation"}
         if data_args.dataset_name is not None:
             model_card_kwargs["dataset_tags"] = data_args.dataset_name
             if data_args.dataset_config_name is not None:
