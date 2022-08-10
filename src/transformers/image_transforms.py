@@ -73,13 +73,13 @@ def rescale(
     Rescales `image` by `scale`.
 
     Args:
-        image (`np.ndarray``):
+        image (`np.ndarray`):
             The image to rescale.
-        scale (`float`, `int`):
+        scale (`float` or `int`, *optional*, defaults to 255):
             The scale to use for rescaling the image.
         data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the image. If not provided, it will be the same as the input image.
-        dtype (`np.dtype`, *optional*):
+        dtype (`np.dtype`, *optional*, defaults to `np.float32`):
             The dtype of the output image. Defaults to `np.float32`.Used for backwards compatibility with feature
             extractors
 
