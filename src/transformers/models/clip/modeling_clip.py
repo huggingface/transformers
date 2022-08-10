@@ -1053,7 +1053,6 @@ class CLIPModel(CLIPPreTrainedModel):
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
         logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
-        # .T doesn't work while converting to onnx, aten::numpy_T operator is not supported yet
         logits_per_image = logits_per_text.t()
 
         loss = None
