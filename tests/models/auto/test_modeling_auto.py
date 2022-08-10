@@ -24,6 +24,7 @@ from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
     SMALL_MODEL_IDENTIFIER,
+    RequestCounter,
     require_scatter,
     require_torch,
     slow,
@@ -354,3 +355,21 @@ class AutoModelTest(unittest.TestCase):
     def test_model_from_flax_suggestion(self):
         with self.assertRaisesRegex(EnvironmentError, "Use `from_flax=True` to load this model"):
             _ = AutoModel.from_pretrained("hf-internal-testing/tiny-bert-flax-only")
+
+    def test_cached_model_has_minimum_calls_to_head(self):
+        # Make sure we have cached the model.
+        _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with RequestCounter() as counter:
+            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+            self.assertEqual(counter.get_request_count, 0)
+            self.assertEqual(counter.head_request_count, 1)
+            self.assertEqual(counter.other_request_count, 0)
+
+        # With a sharded checkpoint
+        _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
+        with RequestCounter() as counter:
+            _ = AutoModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
+            self.assertEqual(counter.get_request_count, 0)
+            # There is no pytorch_model.bin so we still get one call for this one.
+            self.assertEqual(counter.head_request_count, 2)
+            self.assertEqual(counter.other_request_count, 0)
