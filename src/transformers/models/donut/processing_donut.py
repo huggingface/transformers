@@ -15,6 +15,7 @@
 """
 Processor class for Donut.
 """
+import re
 import warnings
 from contextlib import contextmanager
 
@@ -106,3 +107,50 @@ class DonutProcessor(ProcessorMixin):
         yield
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
+
+    def token2json(self, tokens, is_inner_value=False):
+        """
+        Convert a (generated) token sequence into an ordered JSON format.
+        """
+        output = dict()
+
+        while tokens:
+            start_token = re.search(r"<s_(.*?)>", tokens, re.IGNORECASE)
+            if start_token is None:
+                break
+            key = start_token.group(1)
+            end_token = re.search(rf"</s_{key}>", tokens, re.IGNORECASE)
+            start_token = start_token.group()
+            if end_token is None:
+                tokens = tokens.replace(start_token, "")
+            else:
+                end_token = end_token.group()
+                start_token_escaped = re.escape(start_token)
+                end_token_escaped = re.escape(end_token)
+                content = re.search(f"{start_token_escaped}(.*?){end_token_escaped}", tokens, re.IGNORECASE)
+                if content is not None:
+                    content = content.group(1).strip()
+                    if r"<s_" in content and r"</s_" in content:  # non-leaf node
+                        value = self.token2json(content, is_inner_value=True)
+                        if value:
+                            if len(value) == 1:
+                                value = value[0]
+                            output[key] = value
+                    else:  # leaf nodes
+                        output[key] = []
+                        for leaf in content.split(r"<sep/>"):
+                            leaf = leaf.strip()
+                            if leaf in self.tokenizer.get_added_vocab() and leaf[0] == "<" and leaf[-2:] == "/>":
+                                leaf = leaf[1:-2]  # for categorical special tokens
+                            output[key].append(leaf)
+                        if len(output[key]) == 1:
+                            output[key] = output[key][0]
+
+                tokens = tokens[tokens.find(end_token) + len(end_token) :].strip()
+                if tokens[:6] == r"<sep/>":  # non-leaf nodes
+                    return [output] + self.token2json(tokens[6:], is_inner_value=True)
+
+        if len(output):
+            return [output] if is_inner_value else output
+        else:
+            return [] if is_inner_value else {"text_sequence": tokens}

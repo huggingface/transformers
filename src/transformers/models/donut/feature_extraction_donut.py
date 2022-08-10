@@ -88,12 +88,12 @@ class DonutFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
 
-    def rotate(self, image, size):
+    def rotate_image(self, image, size):
         if not isinstance(image, Image.Image):
             image = self.to_pil_image(image)
 
         if (size[1] > size[0] and image.width > image.height) or (size[1] < size[0] and image.width < image.height):
-            image = image.rotate(angle=-90, expand=True)
+            image = self.rotate(image, angle=-90, expand=True)
 
         return image
 
@@ -185,7 +185,7 @@ class DonutFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
 
         # transformations (rotating + resizing + padding + normalization)
         if self.do_align_long_axis:
-            images = [self.rotate(image, self.size) for image in images]
+            images = [self.rotate_image(image, self.size) for image in images]
         if self.do_resize and self.size is not None:
             images = [
                 self.resize_and_thumbnail(image=image, size=self.size, resample=self.resample) for image in images
