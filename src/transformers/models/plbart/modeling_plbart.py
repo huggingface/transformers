@@ -137,7 +137,7 @@ class PLBartLearnedPositionalEmbedding(nn.Embedding):
         bsz, seq_len = input_ids.shape[:2]
         positions = torch.arange(
             past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-        ).repeat(bsz, 1)
+        ).expand(bsz, -1)
 
         return super().forward(positions + self.offset)
 
