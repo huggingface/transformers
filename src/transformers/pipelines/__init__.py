@@ -557,7 +557,12 @@ def pipeline(
     # Make sure we only pass use_auth_token once as a kwarg (it used to be possible to pass it in model_kwargs,
     # this is to keep BC).
     use_auth_token = model_kwargs.pop("use_auth_token", use_auth_token)
-    hub_kwargs = {"revision": revision, "use_auth_token": use_auth_token, "trust_remote_code": trust_remote_code}
+    hub_kwargs = {
+        "revision": revision,
+        "use_auth_token": use_auth_token,
+        "trust_remote_code": trust_remote_code,
+        "_commit_hash": None,
+    }
 
     if task is None and model is None:
         raise RuntimeError(
@@ -583,8 +588,10 @@ def pipeline(
     # Instantiate config if needed
     if isinstance(config, str):
         config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        hub_kwargs["_commit_hash"] = config._commit_hash
     elif config is None and isinstance(model, str):
         config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        hub_kwargs["_commit_hash"] = config._commit_hash
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
@@ -639,6 +646,7 @@ def pipeline(
         )
         if config is None and isinstance(model, str):
             config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+            hub_kwargs["_commit_hash"] = config._commit_hash
 
     if device_map is not None:
         if "device_map" in model_kwargs:
@@ -672,6 +680,7 @@ def pipeline(
     )
 
     model_config = model.config
+    hub_kwargs["_commit_hash"] = model.config._commit_hash
 
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None

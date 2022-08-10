@@ -49,6 +49,7 @@ from transformers.testing_utils import (
     TOKEN,
     USER,
     CaptureLogger,
+    RequestCounter,
     is_pipeline_test,
     is_staging_test,
     nested_simplify,
@@ -876,6 +877,16 @@ class CustomPipelineTest(unittest.TestCase):
             nested_simplify(results),
             [{"label": "LABEL_0", "score": 0.505}],
         )
+
+    def test_cached_pipeline_has_minimum_calls_to_head(self):
+        # Make sure we have cached the pipeline.
+        _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
+        with RequestCounter() as counter:
+            _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
+            self.assertEqual(counter.get_request_count, 0)
+            # We still have one extra call because the model does not have a added_tokens.json file
+            self.assertEqual(counter.head_request_count, 2)
+            self.assertEqual(counter.other_request_count, 0)
 
 
 @require_torch

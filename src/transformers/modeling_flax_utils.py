@@ -595,6 +595,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         from_auto_class = kwargs.pop("_from_auto", False)
         _do_init = kwargs.pop("_do_init", True)
         subfolder = kwargs.pop("subfolder", "")
+        commit_hash = kwargs.pop("_commit_hash", None)
 
         if trust_remote_code is True:
             logger.warning(
@@ -625,10 +626,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 revision=revision,
                 _from_auto=from_auto_class,
                 _from_pipeline=from_pipeline,
+                _commit_hash=commit_hash,
                 **kwargs,
             )
         else:
             model_kwargs = kwargs
+
+        if commit_hash is None:
+            commit_hash = getattr(config, "_commit_hash", None)
 
         # Add the dtype to model_kwargs
         model_kwargs["dtype"] = dtype
@@ -682,6 +687,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         revision=revision,
                         subfolder=subfolder,
                         _raise_exceptions_for_missing_entries=False,
+                        _commit_hash=commit_hash,
                     )
                     resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
@@ -748,6 +754,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 use_auth_token=use_auth_token,
                 user_agent=user_agent,
                 revision=revision,
+                _commit_hash=commit_hash,
             )
 
         # init random models
