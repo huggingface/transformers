@@ -530,10 +530,7 @@ def take_along_axis(x, indices):
 
     # GPUs, on the other hand, prefer gathers instead of large one-hot+matmuls
     else:
-        flat_x = tf.reshape(x, (-1, x.shape[-1]))
-        flat_indices = tf.reshape(indices, (-1, indices.shape[-1]))
-        gathered = tf.gather(flat_x, flat_indices, batch_dims=1)
-        gathered = tf.reshape(gathered, shape_list(indices))
+        gathered = tf.gather(x, indices, batch_dims=2)
 
     return gathered
 
