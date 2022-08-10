@@ -1394,7 +1394,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         )
 
         if not return_dict:
-            return decoder_outputs + encoder_outputs
+            return decoder_outputs + encoder_outputs + (scale,)
 
         return Seq2SeqTSModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1480,6 +1480,10 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
                 loss_weights = future_observed_values.min(dim=-1, keepdim=False)
 
             prediction_loss = weighted_average(loss, weights=loss_weights)
+
+            if not return_dict:
+                outputs = (params) + outputs[1:]
+                return ((prediction_loss,) + outputs) if prediction_loss is not None else output
 
             return Seq2SeqTSPredictionOutput(
                 loss=prediction_loss,
