@@ -365,7 +365,7 @@ class ConvTransposeGradient(nn.Module):
     padding: PaddingLike = "SAME"
     kernel_dilation: Optional[Sequence[int]] = None
     use_bias: bool = True
-    dtype: Dtype = jnp.float32
+    dtype: jnp.dtype = jnp.float32
     param_dtype: Dtype = jnp.float32
     precision: PrecisionLike = None
     kernel_init: Callable[[PRNGKey, Shape, Dtype], Array] = default_kernel_init
