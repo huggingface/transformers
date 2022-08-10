@@ -806,4 +806,7 @@ def pipeline(
     if feature_extractor is not None:
         kwargs["feature_extractor"] = feature_extractor
 
-    return pipeline_class(model=model, framework=framework, task=task, device=device, **kwargs)
+    if device is not None:
+        kwargs["device"] = device
+
+    return pipeline_class(model=model, framework=framework, task=task, **kwargs)
