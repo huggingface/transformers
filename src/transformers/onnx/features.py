@@ -201,6 +201,10 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.camembert.CamembertOnnxConfig",
         ),
+        "clip": supported_features_mapping(
+            "default",
+            onnx_config_cls="models.clip.CLIPOnnxConfig",
+        ),
         "codegen": supported_features_mapping(
             "default",
             "causal-lm",
