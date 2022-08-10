@@ -2830,7 +2830,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
     # Sample a single window of length=n_ctx at position=start on level=level
     def sample_single_window(self, music_tokens, labels, offset, sampling_kwargs, level, start):
         prior = self.priors[level]
-        n_samples = self.config.n_samples
+        n_samples = music_tokens[-1].shape[0]
         n_ctx = prior.n_ctx
         end = start + n_ctx
         # get music_tokens already sampled at current level
