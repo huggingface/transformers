@@ -81,7 +81,6 @@ class TextGenerationPipeline(Pipeline):
         clean_up_tokenization_spaces=None,
         prefix=None,
         handle_long_generation=None,
-        stop_sequence=None,
         **generate_kwargs
     ):
         preprocess_params = {}
@@ -109,14 +108,6 @@ class TextGenerationPipeline(Pipeline):
                     " [None, 'hole']"
                 )
             preprocess_params["handle_long_generation"] = handle_long_generation
-        if stop_sequence is not None:
-            stop_sequence_ids = self.tokenizer.encode(stop_sequence, add_special_tokens=False)
-            if len(stop_sequence_ids) > 1:
-                warnings.warn(
-                    "Stopping on a multiple token sequence is not yet supported on transformers. The first token of"
-                    "the stop sequence will be used as the stop sequence string in the interim."
-                )
-            generate_kwargs["eos_token_id"] = stop_sequence_ids[0]
 
         preprocess_params.update(generate_kwargs)
         forward_params = generate_kwargs
