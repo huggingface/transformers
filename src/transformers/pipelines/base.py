@@ -760,14 +760,17 @@ class Pipeline(_ScikitCompat):
         self.feature_extractor = feature_extractor
         self.modelcard = modelcard
         self.framework = framework
-        if is_torch_available() and isinstance(device, torch.device):
-            self.device = device
+        if is_torch_available() and self.framework == "pt":
+            if isinstance(device, torch.device):
+                self.device = device
+            elif type(device) == str:
+                self.device = torch.device(device)
+            elif device < 0:
+                self.device = torch.device("cpu")
+            else:
+                self.device = torch.device("cuda:{device}")
         else:
-            self.device = (
-                device
-                if framework == "tf"
-                else torch.device(device if type(device) == str else "cpu" if device < 0 else f"cuda:{device}")
-            )
+            self.device = device
         self.binary_output = binary_output
 
         # Special handling
