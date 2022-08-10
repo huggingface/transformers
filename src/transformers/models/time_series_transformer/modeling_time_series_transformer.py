@@ -1345,6 +1345,9 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         future_time_feat: Optional[torch.Tensor] = None,
         future_target: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        output_hidden_states: bool = False,
+        use_cache: bool = False,
+        output_attentions: bool = False,
         return_dict: Optional[bool] = None,
     ):
         transformer_inputs, scale, _ = self.create_network_inputs(
@@ -1356,10 +1359,23 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             future_time_feat,
             future_target,
         )
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         if encoder_outputs is None:
             enc_input = transformer_inputs[:, : self.config.context_length, ...]
-            encoder_outputs = self.encoder(inputs_embeds=enc_input)
+            encoder_outputs = self.encoder(
+                inputs_embeds=enc_input,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs,
@@ -1369,8 +1385,16 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
         dec_input = transformer_inputs[:, self.config.context_length :, ...]
         decoder_outputs = self.decoder(
-            inputs_embeds=dec_input, encoder_hidden_states=encoder_outputs.last_hidden_state
+            inputs_embeds=dec_input,
+            encoder_hidden_states=encoder_outputs.last_hidden_state,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
+
+        if not return_dict:
+            return decoder_outputs + encoder_outputs
 
         return Seq2SeqTSModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1440,10 +1464,10 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
                 past_observed_values,
                 future_time_feat,
                 future_target,
-                use_cache=use_cache,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                use_cache=use_cache,
             )
             params = self.output_params(outputs.last_hidden_state)
             distr = self.output_distribution(params, outputs.scale)
