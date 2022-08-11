@@ -98,13 +98,7 @@ def dicts_to_sum(objects: Union[Dict[str, Dict], List[dict]]):
 
 
 class Message:
-    def __init__(
-        self,
-        title: str,
-        ci_title: str,
-        model_results: Dict,
-        additional_results: Dict
-    ):
+    def __init__(self, title: str, ci_title: str, model_results: Dict, additional_results: Dict):
         self.title = title
         self.ci_title = ci_title
 
