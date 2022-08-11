@@ -13,6 +13,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
+from ...activations_tf import get_tf_activation
 from ...tf_utils import shape_list
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
@@ -420,3 +421,24 @@ class TFLayoutLMv3Attention(tf.keras.layers.Layer):
         attention_output = self.self_output(self_outputs[0], hidden_states, training=training)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
+
+
+# Copied from transformers.models.roberta.modeling_tf_bert.TFRobertaIntermediate
+class TFLayoutLMv3Intermediate(tf.keras.layers.Layer):
+    def __init__(self, config: LayoutLMv3Config, **kwargs):
+        super().__init__(**kwargs)
+
+        self.dense = tf.keras.layers.Dense(
+            units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
+
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = get_tf_activation(config.hidden_act)
+        else:
+            self.intermediate_act_fn = config.hidden_act
+
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+
+        return hidden_states
