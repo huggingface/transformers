@@ -11,11 +11,13 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
+    TFQuestionAnsweringModelOutput,
 )
 from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
+    TFQuestionAnsweringLoss,
     get_initializer,
     keras_serializable,
     unpack_inputs,
@@ -1375,3 +1377,131 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
+
+@add_start_docstrings(
+    """
+    LayoutLMv3 Model with a span classification head on top for extractive question-answering tasks such as
+    [DocVQA](https://rrc.cvc.uab.es/?ch=17) (a linear layer on top of the text part of the hidden-states output to
+    compute `span start logits` and `span end logits`).
+    """,
+    LAYOUTLMV3_START_DOCSTRING,
+)
+class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAnsweringLoss):
+    def __init__(self, config: LayoutLMv3Config, **kwargs):
+        super().__init__(config, **kwargs)
+
+        self.num_labels = config.num_labels
+
+        self.layoutlmv3 = TFLayoutLMv3MainLayer(config, name="layoutlmv3")
+        self.qa_outputs = TFLayoutLMv3ClassificationHead(config, name="qa_outputs")
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(LAYOUTLMV3_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFQuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
+    def call(
+        self,
+        input_ids: Optional[tf.Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        start_positions: Optional[tf.Tensor] = None,
+        end_positions: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        bbox: Optional[tf.Tensor] = None,
+        pixel_values: Optional[tf.Tensor] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+    ):
+        r"""
+        start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        end_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, TFAutoModelForQuestionAnswering
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
+        >>> model = TFAutoModelForQuestionAnswering.from_pretrained("microsoft/layoutlmv3-base")
+
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> example = dataset[0]
+        >>> image = example["image"]
+        >>> question = "what's his name?"
+        >>> words = example["tokens"]
+        >>> boxes = example["bboxes"]
+
+        >>> encoding = processor(image, question, words, boxes=boxes, return_tensors="tf")
+        >>> start_positions = torch.tensor([1])
+        >>> end_positions = torch.tensor([3])
+
+        >>> outputs = model(**encoding, start_positions=start_positions, end_positions=end_positions)
+        >>> loss = outputs.loss
+        >>> start_scores = outputs.start_logits
+        >>> end_scores = outputs.end_logits
+        ```"""
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.layoutlmv3(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            bbox=bbox,
+            pixel_values=pixel_values,
+            training=training,
+        )
+
+        sequence_output = outputs[0]
+
+        logits = self.qa_outputs(sequence_output, training=training)
+        start_logits, end_logits = tf.split(value=logits, num_or_size_splits=2, axis=-1)
+        start_logits = tf.squeeze(input=start_logits, axis=-1)
+        end_logits = tf.squeeze(input=end_logits, axis=-1)
+
+        loss = None
+
+        if start_positions is not None and end_positions is not None:
+            labels = {"start_position": start_positions, "end_position": end_positions}
+            loss = self.hf_compute_loss(labels, logits=(start_logits, end_logits))
+
+        if not return_dict:
+            output = (start_logits, end_logits) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFQuestionAnsweringModelOutput(
+            loss=loss,
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
+    def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFQuestionAnsweringModelOutput(
+            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
+        )
