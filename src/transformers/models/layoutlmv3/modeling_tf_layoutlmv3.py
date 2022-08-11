@@ -7,7 +7,11 @@ from typing import Union
 
 import tensorflow as tf
 
-from ...modeling_tf_outputs import TFBaseModelOutput
+from ...modeling_tf_outputs import (
+    TFBaseModelOutput,
+    TFSequenceClassifierOutput,
+    TFTokenClassifierOutput,
+)
 from ...modeling_tf_utils import (
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
@@ -1112,3 +1116,262 @@ class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
             hidden_states=hs,
             attentions=attns,
         )
+
+
+class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
+    """
+    Head for sentence-level classification tasks. Reference: RobertaClassificationHead
+    """
+
+    def __init__(self, config: LayoutLMv3Config, **kwargs):
+        super().__init__(**kwargs)
+        self.dense = tf.keras.layers.Dense(
+            config.hidden_size,
+            activation="tanh",
+            kernel_initializer=get_initializer(config.initializer_range),
+            bias_initializer="zeros",
+            name="dense",
+        )
+        classifier_dropout = (
+            config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
+        )
+        self.dropout = tf.keras.layers.Dropout(
+            classifier_dropout,
+            name="dropout",
+        )
+        self.out_proj = tf.keras.layers.Dense(
+            config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            bias_initializer="zeros",
+            name="out_proj",
+        )
+
+    def call(self, inputs: tf.Tensor, training: bool = False):
+        outputs = self.dropout(inputs, training=training)
+        outputs = self.dense(outputs)
+        outputs = self.dropout(outputs, training=training)
+        outputs = self.out_proj(outputs)
+        return outputs
+
+
+@add_start_docstrings(
+    """
+    LayoutLMv3 Model with a sequence classification head on top (a linear layer on top of the final hidden state of the
+    [CLS] token) e.g. for document image classification tasks such as the
+    [RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/) dataset.
+    """,
+    LAYOUTLMV3_START_DOCSTRING,
+)
+class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSequenceClassificationLoss):
+    def __init__(self, config: LayoutLMv3Config, **kwargs):
+        super().__init__(config, **kwargs)
+        self.config = config
+        self.layoutlmv3 = TFLayoutLMv3MainLayer(config, name="layoutlmv3")
+        self.classifier = TFLayoutLMv3ClassificationHead(config, name="classifier")
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(LAYOUTLMV3_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def call(
+        self,
+        input_ids: Optional[tf.Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        labels: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        bbox: Optional[tf.Tensor] = None,
+        pixel_values: Optional[tf.Tensor] = None,
+        training: Optional[bool] = False,
+    ):
+        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, TFAutoModelForSequenceClassification
+        >>> from datasets import load_dataset
+        >>> import torch
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
+        >>> model = TFAutoModelForSequenceClassification.from_pretrained("microsoft/layoutlmv3-base")
+
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> example = dataset[0]
+        >>> image = example["image"]
+        >>> words = example["tokens"]
+        >>> boxes = example["bboxes"]
+
+        >>> encoding = processor(image, words, boxes=boxes, return_tensors="tf")
+        >>> sequence_label = torch.tensor([1])
+
+        >>> outputs = model(**encoding, labels=sequence_label)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.layoutlmv3(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            bbox=bbox,
+            pixel_values=pixel_values,
+            training=training,
+        )
+        sequence_output = outputs[0][:, 0, :]
+        logits = self.classifier(sequence_output, training=training)
+
+        loss = None if labels is None else self.hf_compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFSequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
+
+@add_start_docstrings(
+    """
+    LayoutLMv3 Model with a token classification head on top (a linear layer on top of the final hidden states) e.g.
+    for sequence labeling (information extraction) tasks such as [FUNSD](https://guillaumejaume.github.io/FUNSD/),
+    [SROIE](https://rrc.cvc.uab.es/?ch=13), [CORD](https://github.com/clovaai/cord) and
+    [Kleister-NDA](https://github.com/applicaai/kleister-nda).
+    """,
+    LAYOUTLMV3_START_DOCSTRING,
+)
+class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenClassificationLoss):
+    def __init__(self, config: LayoutLMv3Config, **kwargs):
+        super().__init__(config, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.layoutlmv3 = TFLayoutLMv3MainLayer(config, name="layoutlmv3")
+        self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
+        if config.num_labels < 10:
+            self.classifier = tf.keras.layers.Dense(
+                config.num_labels,
+                kernel_initializer=get_initializer(config.initializer_range),
+                bias_initializer="zeros",
+                name="classifier",
+            )
+        else:
+            self.classifier = TFLayoutLMv3ClassificationHead(config, name="classifier")
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(LAYOUTLMV3_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFTokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def call(
+        self,
+        input_ids: Optional[tf.Tensor] = None,
+        bbox: Optional[tf.Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        labels: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        pixel_values: Optional[tf.Tensor] = None,
+        training: Optional[bool] = False,
+    ):
+        r"""
+        labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, TFAutoModelForTokenClassification
+        >>> from datasets import load_dataset
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
+        >>> model = TFAutoModelForTokenClassification.from_pretrained("microsoft/layoutlmv3-base", num_labels=7)
+
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> example = dataset[0]
+        >>> image = example["image"]
+        >>> words = example["tokens"]
+        >>> boxes = example["bboxes"]
+        >>> word_labels = example["ner_tags"]
+
+        >>> encoding = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="tf")
+
+        >>> outputs = model(**encoding)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.layoutlmv3(
+            input_ids,
+            bbox=bbox,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            pixel_values=pixel_values,
+            training=training,
+        )
+        if input_ids is not None:
+            input_shape = tf.shape(input_ids)
+        else:
+            input_shape = tf.shape(inputs_embeds)[:-1]
+
+        seq_length = input_shape[1]
+        # only take the text part of the output representations
+        sequence_output = outputs[0][:, :seq_length]
+        sequence_output = self.dropout(sequence_output, training=training)
+        logits = self.classifier(sequence_output)
+
+        loss = None if labels is None else self.hf_compute_loss(labels, logits)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFTokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
+    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
