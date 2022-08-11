@@ -256,10 +256,9 @@ class GenerationTesterMixin:
         )
 
         kwargs = {}
-
+        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
-            attention_mask=attention_mask,
             do_sample=False,
             num_beams=1,
             max_length=max_length,
@@ -269,6 +268,7 @@ class GenerationTesterMixin:
             return_dict_in_generate=return_dict_in_generate,
             remove_invalid_values=True,
             **logits_process_kwargs,
+            **model_kwargs,
         )
 
         if model.config.is_encoder_decoder:
@@ -282,16 +282,17 @@ class GenerationTesterMixin:
             kwargs["encoder_outputs"] = encoder_outputs
 
         with torch.no_grad():
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_greedy = model.greedy_search(
                 input_ids,
                 max_length=max_length,
-                attention_mask=attention_mask,
                 logits_processor=logits_processor,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 output_scores=output_scores,
                 return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
+                **model_kwargs,
             )
         return output_greedy, output_generate
 
@@ -312,13 +313,13 @@ class GenerationTesterMixin:
         return_dict_in_generate=False,
     ):
         torch.manual_seed(0)
+        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
             do_sample=True,
             num_beams=1,
             max_length=max_length,
             num_return_sequences=num_return_sequences,
-            attention_mask=attention_mask,
             output_scores=output_scores,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -331,7 +332,7 @@ class GenerationTesterMixin:
         torch.manual_seed(0)
         kwargs = {}
         if model.config.is_encoder_decoder:
-            encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
+            encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
                 model,
                 input_ids,
                 attention_mask,
@@ -340,18 +341,16 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
             )
             kwargs["encoder_outputs"] = encoder_outputs
-            input_ids_clone = input_ids_clone.repeat_interleave(num_return_sequences, dim=0)
-        else:
-            attention_mask_clone = attention_mask.repeat_interleave(num_return_sequences, dim=0)
-            input_ids_clone = input_ids.repeat_interleave(num_return_sequences, dim=0)
+        elif attention_mask is not None:
+            attention_mask = attention_mask.repeat_interleave(num_return_sequences, dim=0)
 
         # prevent flaky generation test failures
         logits_processor.append(InfNanRemoveLogitsProcessor())
 
         with torch.no_grad():
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_sample = model.sample(
-                input_ids_clone,
-                attention_mask=attention_mask_clone,
+                input_ids.repeat_interleave(num_return_sequences, dim=0),
                 max_length=max_length,
                 logits_processor=logits_processor,
                 logits_warper=logits_warper,
@@ -360,6 +359,7 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
+                **model_kwargs,
             )
         return output_sample, output_generate
 
@@ -378,9 +378,9 @@ class GenerationTesterMixin:
         output_hidden_states=False,
         return_dict_in_generate=False,
     ):
+        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
-            attention_mask=attention_mask,
             do_sample=False,
             max_length=max_length,
             output_scores=output_scores,
@@ -390,12 +390,13 @@ class GenerationTesterMixin:
             remove_invalid_values=True,
             **beam_kwargs,
             **logits_process_kwargs,
+            **model_kwargs,
         )
 
         # beam_search does not automatically interleave `batch_size` dim for `num_beams`
         kwargs = {}
         if model.config.is_encoder_decoder:
-            encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
+            encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
                 model,
                 input_ids,
                 attention_mask,
@@ -404,23 +405,25 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
             )
             kwargs["encoder_outputs"] = encoder_outputs
-            input_ids_clone = input_ids_clone.repeat_interleave(beam_scorer.num_beams, dim=0)
+            input_ids = input_ids.repeat_interleave(beam_scorer.num_beams, dim=0)
         else:
-            attention_mask_clone = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
+            if attention_mask is not None:
+                attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
             input_ids_clone = input_ids.repeat_interleave(beam_scorer.num_beams, dim=0)
 
         with torch.no_grad():
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_beam_search = model.beam_search(
                 input_ids_clone,
                 beam_scorer,
                 max_length=max_length,
-                attention_mask=attention_mask_clone,
                 logits_processor=logits_processor,
                 output_scores=output_scores,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
+                **model_kwargs,
             )
         return output_generate, output_beam_search
 
@@ -508,9 +511,9 @@ class GenerationTesterMixin:
         output_hidden_states=False,
         return_dict_in_generate=False,
     ):
+        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
-            attention_mask=attention_mask,
             do_sample=False,
             max_length=max_length,
             output_scores=output_scores,
@@ -520,12 +523,13 @@ class GenerationTesterMixin:
             remove_invalid_values=True,
             **beam_kwargs,
             **logits_process_kwargs,
+            **model_kwargs,
         )
 
         # group_beam_search does not automatically interleave `batch_size` dim for `num_beams`
         kwargs = {}
         if model.config.is_encoder_decoder:
-            encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
+            encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
                 model,
                 input_ids,
                 attention_mask,
@@ -534,23 +538,22 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
             )
             kwargs["encoder_outputs"] = encoder_outputs
-            input_ids_clone = input_ids_clone.repeat_interleave(beam_scorer.num_beams, dim=0)
-        else:
-            attention_mask_clone = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
-            input_ids_clone = input_ids.repeat_interleave(beam_scorer.num_beams, dim=0)
+        elif attention_mask is not None:
+            attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
 
         with torch.no_grad():
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_group_beam_search = model.group_beam_search(
-                input_ids_clone,
+                input_ids.repeat_interleave(beam_scorer.num_beams, dim=0),
                 beam_scorer,
                 max_length=max_length,
-                attention_mask=attention_mask_clone,
                 logits_processor=logits_processor,
                 output_scores=output_scores,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
+                **model_kwargs,
             )
         return output_generate, output_group_beam_search
 
@@ -570,9 +573,9 @@ class GenerationTesterMixin:
         output_hidden_states=False,
         return_dict_in_generate=False,
     ):
+        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
-            attention_mask=attention_mask,
             do_sample=False,
             max_length=max_length,
             output_scores=output_scores,
@@ -583,12 +586,13 @@ class GenerationTesterMixin:
             constraints=constraints,
             **beam_kwargs,
             **logits_process_kwargs,
+            **model_kwargs,
         )
 
         # group_beam_search does not automatically interleave `batch_size` dim for `num_beams`
         kwargs = {}
         if model.config.is_encoder_decoder:
-            encoder_outputs, input_ids_clone, attention_mask_clone = self._get_encoder_outputs(
+            encoder_outputs, input_ids, attention_mask = self._get_encoder_outputs(
                 model,
                 input_ids,
                 attention_mask,
@@ -597,23 +601,22 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
             )
             kwargs["encoder_outputs"] = encoder_outputs
-            input_ids_clone = input_ids_clone.repeat_interleave(constrained_beam_scorer.num_beams, dim=0)
-        else:
-            attention_mask_clone = attention_mask.repeat_interleave(constrained_beam_scorer.num_beams, dim=0)
-            input_ids_clone = input_ids.repeat_interleave(constrained_beam_scorer.num_beams, dim=0)
+        elif attention_mask is not None:
+            attention_mask = attention_mask.repeat_interleave(constrained_beam_scorer.num_beams, dim=0)
 
         with torch.no_grad():
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_group_beam_search = model.constrained_beam_search(
-                input_ids_clone,
+                input_ids.repeat_interleave(constrained_beam_scorer.num_beams, dim=0),
                 constrained_beam_scorer,
                 max_length=max_length,
-                attention_mask=attention_mask_clone,
                 logits_processor=logits_processor,
                 output_scores=output_scores,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
+                **model_kwargs,
             )
         return output_generate, output_group_beam_search
 
