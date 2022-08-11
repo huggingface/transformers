@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from transformers.utils import is_accelerate_available, is_bitsandbytes_available
 
 
@@ -133,9 +135,11 @@ def get_key_to_not_convert(model):
     model (`torch.nn.Module`):
         Input model
     """
-    # Check if the model has tied parameters
-    # This will keep the lm_head etc on their original class type
-    has_tied_params = len(find_tied_parameters(model)) > 0
+    # Create a copy of the model and tie the weights, then
+    # check if it contains tied weights
+    tied_model = deepcopy(model)  # this has 0 cost since it is done inside `init_empty_weights` context manager`
+    tied_model.tie_weights()
+    has_tied_params = len(find_tied_parameters(tied_model)) > 0
 
     # Check if it is a base model
     is_base_model = not hasattr(model, model.base_model_prefix)
