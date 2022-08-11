@@ -1,3 +1,4 @@
+import types
 import warnings
 from collections.abc import Iterable
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
@@ -7,7 +8,14 @@ import numpy as np
 from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
 from ..modelcard import ModelCard
 from ..tokenization_utils import PreTrainedTokenizer
-from ..utils import PaddingStrategy, add_end_docstrings, is_tf_available, is_torch_available, logging
+from ..utils import (
+    PaddingStrategy,
+    add_end_docstrings,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+    logging,
+)
 from .base import PIPELINE_INIT_ARGS, ArgumentHandler, ChunkPipeline
 
 
@@ -17,13 +25,19 @@ if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
     from ..modeling_utils import PreTrainedModel
 
+    if is_tokenizers_available():
+        import tokenizers
+
 if is_tf_available():
     import tensorflow as tf
 
     from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
+    Dataset = None
+
 if is_torch_available():
     import torch
+    from torch.utils.data import Dataset
 
     from ..models.auto.modeling_auto import MODEL_FOR_QUESTION_ANSWERING_MAPPING
 
@@ -81,6 +95,11 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
                 raise ValueError("Arguments can't be understood")
         else:
             raise ValueError(f"Unknown arguments {kwargs}")
+
+        # When user is sending a generator we need to trust it's a valid example
+        generator_types = (types.GeneratorType, Dataset) if Dataset is not None else (types.GeneratorType,)
+        if isinstance(inputs, generator_types):
+            return inputs
 
         # Normalize inputs
         if isinstance(inputs, dict):
@@ -171,6 +190,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         max_seq_len=None,
         max_question_len=None,
         handle_impossible_answer=None,
+        align_to_words=None,
         **kwargs
     ):
         # Set defaults values
@@ -199,6 +219,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             postprocess_params["max_answer_len"] = max_answer_len
         if handle_impossible_answer is not None:
             postprocess_params["handle_impossible_answer"] = handle_impossible_answer
+        if align_to_words is not None:
+            postprocess_params["align_to_words"] = align_to_words
         return preprocess_params, {}, postprocess_params
 
     def __call__(self, *args, **kwargs):
@@ -234,6 +256,9 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 The maximum length of the question after tokenization. It will be truncated if needed.
             handle_impossible_answer (`bool`, *optional*, defaults to `False`):
                 Whether or not we accept impossible as an answer.
+            align_to_words (`bool`, *optional*, defaults to `True`):
+                Attempts to align the answer to real words. Improves quality on space separated langages. Might hurt on
+                non-space-separated languages (like Japanese or Chinese)
 
         Return:
             A `dict` or a list of `dict`: Each result comes as a dictionary with the following keys:
@@ -245,12 +270,18 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         """
 
         # Convert inputs to features
+
         examples = self._args_parser(*args, **kwargs)
-        if len(examples) == 1:
+        if isinstance(examples, (list, tuple)) and len(examples) == 1:
             return super().__call__(examples[0], **kwargs)
         return super().__call__(examples, **kwargs)
 
     def preprocess(self, example, padding="do_not_pad", doc_stride=None, max_question_len=64, max_seq_len=None):
+        # XXX: This is specal, args_parser will not handle anything generator or dataset like
+        # For those we expect user to send a simple valid example either directly as a SquadExample or simple dict.
+        # So we still need a little sanitation here.
+        if isinstance(example, dict):
+            example = SquadExample(None, example["question"], example["context"], None, None, None)
 
         if max_seq_len is None:
             max_seq_len = min(self.tokenizer.model_max_length, 384)
@@ -371,6 +402,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         top_k=1,
         handle_impossible_answer=False,
         max_answer_len=15,
+        align_to_words=True,
     ):
         min_null_score = 1000000  # large and positive
         answers = []
@@ -449,15 +481,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
                 for s, e, score in zip(starts, ends, scores):
                     s = s - offset
                     e = e - offset
-                    try:
-                        start_word = enc.token_to_word(s)
-                        end_word = enc.token_to_word(e)
-                        start_index = enc.word_to_chars(start_word, sequence_index=sequence_index)[0]
-                        end_index = enc.word_to_chars(end_word, sequence_index=sequence_index)[1]
-                    except Exception:
-                        # Some tokenizers don't really handle words. Keep to offsets then.
-                        start_index = enc.offsets[s][0]
-                        end_index = enc.offsets[e][1]
+
+                    start_index, end_index = self.get_indices(enc, s, e, sequence_index, align_to_words)
 
                     answers.append(
                         {
@@ -474,6 +499,24 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         if len(answers) == 1:
             return answers[0]
         return answers
+
+    def get_indices(
+        self, enc: "tokenizers.Encoding", s: int, e: int, sequence_index: int, align_to_words: bool
+    ) -> Tuple[int, int]:
+        if align_to_words:
+            try:
+                start_word = enc.token_to_word(s)
+                end_word = enc.token_to_word(e)
+                start_index = enc.word_to_chars(start_word, sequence_index=sequence_index)[0]
+                end_index = enc.word_to_chars(end_word, sequence_index=sequence_index)[1]
+            except Exception:
+                # Some tokenizers don't really handle words. Keep to offsets then.
+                start_index = enc.offsets[s][0]
+                end_index = enc.offsets[e][1]
+        else:
+            start_index = enc.offsets[s][0]
+            end_index = enc.offsets[e][1]
+        return start_index, end_index
 
     def decode(
         self, start: np.ndarray, end: np.ndarray, topk: int, max_answer_len: int, undesired_tokens: np.ndarray

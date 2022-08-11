@@ -49,6 +49,7 @@ from transformers.testing_utils import (
     TOKEN,
     USER,
     CaptureLogger,
+    RequestCounter,
     is_pipeline_test,
     is_staging_test,
     nested_simplify,
@@ -795,7 +796,7 @@ class CustomPipelineTest(unittest.TestCase):
         alias = "text-classification"
         # Get the original task, so we can restore it at the end.
         # (otherwise the subsequential tests in `TextClassificationPipelineTests` will fail)
-        original_task, original_task_options = PIPELINE_REGISTRY.check_task(alias)
+        _, original_task, _ = PIPELINE_REGISTRY.check_task(alias)
 
         try:
             with CaptureLogger(logger_) as cm:
@@ -816,7 +817,7 @@ class CustomPipelineTest(unittest.TestCase):
         )
         assert "custom-text-classification" in PIPELINE_REGISTRY.get_supported_tasks()
 
-        task_def, _ = PIPELINE_REGISTRY.check_task("custom-text-classification")
+        _, task_def, _ = PIPELINE_REGISTRY.check_task("custom-text-classification")
         self.assertEqual(task_def["pt"], (AutoModelForSequenceClassification,) if is_torch_available() else ())
         self.assertEqual(task_def["tf"], (TFAutoModelForSequenceClassification,) if is_tf_available() else ())
         self.assertEqual(task_def["type"], "text")
@@ -876,6 +877,16 @@ class CustomPipelineTest(unittest.TestCase):
             nested_simplify(results),
             [{"label": "LABEL_0", "score": 0.505}],
         )
+
+    def test_cached_pipeline_has_minimum_calls_to_head(self):
+        # Make sure we have cached the pipeline.
+        _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
+        with RequestCounter() as counter:
+            _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
+            self.assertEqual(counter.get_request_count, 0)
+            # We still have one extra call because the model does not have a added_tokens.json file
+            self.assertEqual(counter.head_request_count, 2)
+            self.assertEqual(counter.other_request_count, 0)
 
 
 @require_torch

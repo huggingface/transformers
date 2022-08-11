@@ -300,7 +300,7 @@ def is_torch_bf16_gpu_available():
     # 4. torch.autocast exists
     # XXX: one problem here is that it may give invalid results on mixed gpus setup, so it's
     # really only correct for the 0th gpu (or currently set default device if different from 0)
-    if version.parse(torch.__version__) < version.parse("1.10"):
+    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.10"):
         return False
 
     if torch.cuda.is_available() and torch.version.cuda is not None:
@@ -322,7 +322,7 @@ def is_torch_bf16_cpu_available():
 
     import torch
 
-    if version.parse(torch.__version__) < version.parse("1.10"):
+    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.10"):
         return False
 
     try:
@@ -357,7 +357,7 @@ def is_torch_tf32_available():
         return False
     if int(torch.version.cuda.split(".")[0]) < 11:
         return False
-    if version.parse(torch.__version__) < version.parse("1.7"):
+    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.7"):
         return False
 
     return True

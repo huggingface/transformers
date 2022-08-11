@@ -341,6 +341,7 @@ _import_structure = {
         "UniSpeechSatConfig",
     ],
     "models.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
+    "models.videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
     "models.vilt": ["VILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViltConfig", "ViltFeatureExtractor", "ViltProcessor"],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
@@ -440,7 +441,6 @@ _import_structure = {
         "TensorType",
         "add_end_docstrings",
         "add_start_docstrings",
-        "cached_path",
         "is_apex_available",
         "is_datasets_available",
         "is_faiss_available",
@@ -462,6 +462,7 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
+    "utils.bitsandbytes": [],
 }
 
 # sentencepiece-backed objects
@@ -653,6 +654,7 @@ else:
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
+    _import_structure["models.videomae"].append("VideoMAEFeatureExtractor")
     _import_structure["models.vilt"].append("ViltFeatureExtractor")
     _import_structure["models.vilt"].append("ViltProcessor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
@@ -799,6 +801,7 @@ else:
             "MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
             "MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
             "MODEL_FOR_VISION_2_SEQ_MAPPING",
             "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
             "MODEL_MAPPING",
@@ -825,6 +828,7 @@ else:
             "AutoModelForSpeechSeq2Seq",
             "AutoModelForTableQuestionAnswering",
             "AutoModelForTokenClassification",
+            "AutoModelForVideoClassification",
             "AutoModelForVision2Seq",
             "AutoModelForVisualQuestionAnswering",
             "AutoModelWithLMHead",
@@ -1871,6 +1875,15 @@ else:
             "ViTMAEPreTrainedModel",
         ]
     )
+    _import_structure["models.videomae"].extend(
+        [
+            "VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VideoMAEForPreTraining",
+            "VideoMAEModel",
+            "VideoMAEPreTrainedModel",
+            "VideoMAEForVideoClassification",
+        ]
+    )
     _import_structure["models.wav2vec2"].extend(
         [
             "WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2075,6 +2088,7 @@ else:
             "TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
             "TF_MODEL_FOR_PRETRAINING_MAPPING",
             "TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+            "TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING",
             "TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
             "TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
@@ -3100,6 +3114,7 @@ if TYPE_CHECKING:
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
+    from .models.videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
     from .models.vilt import VILT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViltConfig, ViltFeatureExtractor, ViltProcessor
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
@@ -3199,7 +3214,6 @@ if TYPE_CHECKING:
         TensorType,
         add_end_docstrings,
         add_start_docstrings,
-        cached_path,
         is_apex_available,
         is_datasets_available,
         is_faiss_available,
@@ -3373,6 +3387,7 @@ if TYPE_CHECKING:
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.poolformer import PoolFormerFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor
+        from .models.videomae import VideoMAEFeatureExtractor
         from .models.vilt import ViltFeatureExtractor, ViltProcessor
         from .models.vit import ViTFeatureExtractor
         from .models.yolos import YolosFeatureExtractor
@@ -3497,6 +3512,7 @@ if TYPE_CHECKING:
             MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+            MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
             MODEL_FOR_VISION_2_SEQ_MAPPING,
             MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
             MODEL_MAPPING,
@@ -3523,6 +3539,7 @@ if TYPE_CHECKING:
             AutoModelForSpeechSeq2Seq,
             AutoModelForTableQuestionAnswering,
             AutoModelForTokenClassification,
+            AutoModelForVideoClassification,
             AutoModelForVision2Seq,
             AutoModelForVisualQuestionAnswering,
             AutoModelWithLMHead,
@@ -4338,6 +4355,13 @@ if TYPE_CHECKING:
             VanModel,
             VanPreTrainedModel,
         )
+        from .models.videomae import (
+            VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VideoMAEForPreTraining,
+            VideoMAEForVideoClassification,
+            VideoMAEModel,
+            VideoMAEPreTrainedModel,
+        )
         from .models.vilt import (
             VILT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViltForImageAndTextRetrieval,
@@ -4558,6 +4582,7 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
             TF_MODEL_FOR_PRETRAINING_MAPPING,
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
             TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
