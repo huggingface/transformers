@@ -442,3 +442,22 @@ class TFLayoutLMv3Intermediate(tf.keras.layers.Layer):
         hidden_states = self.intermediate_act_fn(hidden_states)
 
         return hidden_states
+
+
+# Copied from transformers.models.roberta.modeling_tf_bert.TFRobertaOutput
+class TFLayoutLMv3Output(tf.keras.layers.Layer):
+    def __init__(self, config: LayoutLMv3Config, **kwargs):
+        super().__init__(**kwargs)
+
+        self.dense = tf.keras.layers.Dense(
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
+        )
+        self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+        self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout_prob)
+
+    def call(self, hidden_states: tf.Tensor, input_tensor: tf.Tensor, training: bool = False) -> tf.Tensor:
+        hidden_states = self.dense(inputs=hidden_states)
+        hidden_states = self.dropout(inputs=hidden_states, training=training)
+        hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
+
+        return hidden_states
