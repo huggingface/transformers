@@ -25,29 +25,29 @@ std::vector<at::Tensor> bloom_attention_compute_attention(
     // batch_size_times_num_heads = batch_size * num_heads
     auto three_times_num_heads = 3 * num_heads;
     auto head_dim = three_times_hidden_size / three_times_num_heads;
-    auto batch_size_times_num_heads = batch_size * num_heads
+    auto batch_size_times_num_heads = batch_size * num_heads;
 
-    // # 3 x [batch_size, seq_length, num_heads, head_dim]
+    // # 3 x [batch_size, q_length, num_heads, head_dim]
     // (query_layer, key_layer, value_layer) = _split_heads(fused_qkv, num_heads=num_heads,
     //                                                      head_dim=head_dim)
 
     /*
     we flatten _split_heads
     */
-    // fused_qkv = fused_qkv.view(batch_size, seq_length, num_heads, 3 * head_dim)
+    // fused_qkv = fused_qkv.view(batch_size, q_length, num_heads, 3 * head_dim)
     // query_layer, key_layer, value_layer = fused_qkv.split(head_dim, dim=-1)
-    fused_qkv = fused_qkv.view({batch_size, seq_length, num_heads, three_times_num_heads});
+    fused_qkv = fused_qkv.view({batch_size, q_length, num_heads, three_times_num_heads});
     auto tensor_list = fused_qkv.tensor_split(head_dim, -1);
     auto query_layer = tensor_list[0];
     auto key_layer = tensor_list[1];
     auto value_layer = tensor_list[2];
 
-    // query_layer = query_layer.transpose(1, 2).reshape(batch_size * num_heads, q_length, head_dim)
-    // key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * num_heads, head_dim, q_length)
-    // value_layer = value_layer.transpose(1, 2).reshape(batch_size * num_heads, q_length, head_dim)
-    query_layer = query_layer.transpose(1, 2).reshape({batch_size * num_heads, q_length, three_times_num_heads});
-    key_layer = ker_layer.permute({0, 2, 3, 1}).reshape({batch_size * num_heads, three_times_num_heads, q_length});
-    value_layer = value_layer.transpose(1, 2).reshape({batch_size * num_heads, q_length, three_times_num_heads});
+    // query_layer = query_layer.transpose(1, 2).reshape(batch_size_times_num_heads, q_length, head_dim)
+    // key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size_times_num_heads, head_dim, q_length)
+    // value_layer = value_layer.transpose(1, 2).reshape(batch_size_times_num_heads, q_length, head_dim)
+    query_layer = query_layer.transpose(1, 2).reshape({batch_size_times_num_heads, q_length, three_times_num_heads});
+    key_layer = key_layer.permute({0, 2, 3, 1}).reshape({batch_size_times_num_heads, three_times_num_heads, q_length});
+    value_layer = value_layer.transpose(1, 2).reshape({batch_size_times_num_heads, q_length, three_times_num_heads});
 
     /*
     End of split_heads
@@ -55,7 +55,7 @@ std::vector<at::Tensor> bloom_attention_compute_attention(
 
     //  if layer_past is not None:
     //      past_key, past_value = layer_past
-    //      # concatenate along seq_length dimension:
+    //      # concatenate along q_length dimension:
     //      #  - key: [batch_size * self.num_heads, head_dim, kv_length]
     //      #  - value: [batch_size * self.num_heads, kv_length, head_dim]
     //      key_layer = torch.cat((past_key, key_layer), dim=2)
@@ -74,7 +74,7 @@ std::vector<at::Tensor> bloom_attention_compute_attention(
     //      present = (key_layer, value_layer)
     //  else:
     //      present = None
-    std::optional<std::vec<at::Tensor>> present;
+    std::optional<std::vector<at::Tensor>> present;
     if use_cache {
         present = {key_layer, value_layer};
     } else {
@@ -129,22 +129,22 @@ std::vector<at::Tensor> bloom_attention_compute_attention(
     end `_merge_heads`
     */
     // # What we want to achieve is:
-    // # batch_size * num_heads, seq_length, head_dim -> batch_size, seq_length, num_heads * head_dim
-    // batch_size_and_num_heads, seq_length, _ = x.shape
+    // # batch_size * num_heads, q_length, head_dim -> batch_size, q_length, num_heads * head_dim
+    // batch_size_and_num_heads, q_length, _ = x.shape
     // batch_size = batch_size_and_num_heads // num_heads
 
 
     //  # First view to decompose the batch size
-    //  # batch_size * num_heads, seq_length, head_dim -> batch_size, num_heads, seq_length, head_dim
-    //  x = x.view(batch_size, num_heads, seq_length, head_dim)
+    //  # batch_size * num_heads, q_length, head_dim -> batch_size, num_heads, q_length, head_dim
+    //  x = x.view(batch_size, num_heads, q_length, head_dim)
     context_layer = context_layer.view({batch_size, num_heads, q_length, head_dim});
 
-    //  # batch_size, num_heads, seq_length, head_dim -> batch_size, seq_length, num_heads, head_dim
+    //  # batch_size, num_heads, q_length, head_dim -> batch_size, q_length, num_heads, head_dim
     //  x = x.permute(0, 2, 1, 3)
     context_layer = context_layer.permute({0, 2, 1, 3});
 
-    //  # batch_size, seq_length, num_heads, head_dim -> batch_size, seq_length, num_heads * head_dim
-    //  return x.reshape(batch_size, seq_length, num_heads * head_dim)
-    context_layer = context_layer.reshape({batch_size, seq_length, three_times_hidden_size / 3});
+    //  # batch_size, q_length, num_heads, head_dim -> batch_size, q_length, num_heads * head_dim
+    //  return x.reshape(batch_size, q_length, num_heads * head_dim)
+    context_layer = context_layer.reshape({batch_size, q_length, three_times_hidden_size / 3});
     return {context_layer, present, attention_probs};
 }
