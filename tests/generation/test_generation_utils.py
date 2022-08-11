@@ -405,16 +405,13 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
             )
             kwargs["encoder_outputs"] = encoder_outputs
-            input_ids = input_ids.repeat_interleave(beam_scorer.num_beams, dim=0)
-        else:
-            if attention_mask is not None:
-                attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
-            input_ids_clone = input_ids.repeat_interleave(beam_scorer.num_beams, dim=0)
+        elif attention_mask is not None:
+            attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams, dim=0)
 
         with torch.no_grad():
             model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_beam_search = model.beam_search(
-                input_ids_clone,
+                input_ids.repeat_interleave(beam_scorer.num_beams, dim=0),
                 beam_scorer,
                 max_length=max_length,
                 logits_processor=logits_processor,
