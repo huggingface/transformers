@@ -9,6 +9,7 @@ if is_bitsandbytes_available():
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
+    from accelerate.utils import find_tied_parameters
 
 
 def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
@@ -132,8 +133,15 @@ def get_key_to_not_convert(model):
     model (`torch.nn.Module`):
         Input model
     """
+    # Check if the model has tied parameters
+    # This will keep the lm_head etc on their original class type
+    has_tied_params = len(find_tied_parameters(model)) > 0
+
+    # Check if it is a base model
+    is_base_model = not hasattr(model, model.base_model_prefix)
+
     # Ignore this for base models (BertModel, GPT2Model, etc.)
-    if not hasattr(model, model.base_model_prefix):
+    if (not has_tied_params) and is_base_model:
         return ""
 
     # otherwise they have an attached head
