@@ -164,8 +164,15 @@ def convert_donut_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
         task_prompt = task_prompt.replace("{user_input}", question)
     elif model_name == "naver-clova-ix/donut-base-finetuned-rvlcdip":
         task_prompt = "<s_rvlcdip>"
+    elif model_name in [
+        "naver-clova-ix/donut-base-finetuned-cord-v1",
+        "naver-clova-ix/donut-base-finetuned-cord-v1-2560",
+    ]:
+        task_prompt = "<s_cord>"
     elif model_name == "naver-clova-ix/donut-base-finetuned-cord-v2":
         task_prompt = "s_cord-v2>"
+    elif model_name == "naver-clova-ix/donut-base-finetuned-zhtrainticket":
+        task_prompt = "<s_zhtrainticket>"
     elif model_name in ["naver-clova-ix/donut-proto", "naver-clova-ix/donut-base"]:
         # use a random prompt
         task_prompt = "hello world"
