@@ -705,7 +705,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
-                        # Maybe the checkpoint is pytorch sharded, we try to grab the pytorch index name in this case.
+                    # Maybe the checkpoint is pytorch sharded, we try to grab the pytorch index name in this case.
                     elif resolved_archive_file is None and from_pt:
                         resolved_archive_file = cached_file(
                             pretrained_model_name_or_path, WEIGHTS_INDEX_NAME, **cached_file_kwargs
