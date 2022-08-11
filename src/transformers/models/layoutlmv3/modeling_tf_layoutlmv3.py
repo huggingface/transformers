@@ -2,6 +2,7 @@ import collections
 import math
 from typing import Dict
 from typing import Optional
+from typing import Tuple
 from typing import Union
 
 import tensorflow as tf
@@ -17,6 +18,11 @@ from ...modeling_tf_utils import (
 )
 from ...activations_tf import get_tf_activation
 from ...tf_utils import shape_list
+from ...utils import (
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    replace_return_docstrings,
+)
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
 _CONFIG_FOR_DOC = "LayoutLMv3Config"
@@ -941,3 +947,168 @@ class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
         output = self.call(inputs)
 
         return self.serving_output(output)
+
+
+LAYOUTLMV3_START_DOCSTRING = r"""
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
+
+    <Tip>
+
+    TF 2.0 models accepts two formats as inputs:
+
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional arguments.
+
+    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
+    tensors in the first argument of the model call function: `model(inputs)`.
+
+    </Tip>
+
+    Parameters:
+        config ([`LayoutLMv3Config`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+LAYOUTLMV3_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`Numpy array` or `tf.Tensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary.
+
+            Indices can be obtained using [`LayoutLMv3Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+
+        bbox (`Numpy array` or `tf.Tensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
+            Bounding boxes of each input sequence tokens. Selected in the range `[0,
+            config.max_2d_position_embeddings-1]`. Each bounding box should be a normalized version in (x0, y0, x1, y1)
+            format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
+            y1) represents the position of the lower right corner.
+
+        pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
+            Batch of document images.
+
+        attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        token_type_ids (`Numpy array` or `tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
+            1]`:
+
+            - 0 corresponds to a *sentence A* token,
+            - 1 corresponds to a *sentence B* token.
+
+            [What are token type IDs?](../glossary#token-type-ids)
+        position_ids (`Numpy array` or `tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.max_position_embeddings - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        inputs_embeds (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert *input_ids* indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(
+    "The bare LayoutLMv3 Model transformer outputting raw hidden-states without any specific head on top.",
+    LAYOUTLMV3_START_DOCSTRING,
+)
+class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.layoutlmv3 = TFLayoutLMv3MainLayer(config, name="layoutlmv3")
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(LAYOUTLMV3_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFBaseModelOutput, config_class=_CONFIG_FOR_DOC)
+    def call(
+        self,
+        input_ids: Optional[tf.Tensor] = None,
+        bbox: Optional[tf.Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        pixel_values: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+    ):
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, TFAutoModel
+        >>> from datasets import load_dataset
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
+        >>> model = TFAutoModel.from_pretrained("microsoft/layoutlmv3-base")
+
+        >>> dataset = load_dataset("nielsr/funsd-layoutlmv3", split="train")
+        >>> example = dataset[0]
+        >>> image = example["image"]
+        >>> words = example["tokens"]
+        >>> boxes = example["bboxes"]
+
+        >>> encoding = processor(image, words, boxes=boxes, return_tensors="tf")
+
+        >>> outputs = model(**encoding)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
+        outputs = self.layoutlmv3(
+            input_ids=input_ids,
+            bbox=bbox,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+
+        return outputs
+
+    def serving_output(self, output: TFBaseModelOutput) -> TFBaseModelOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=hs,
+            attentions=attns,
+        )
