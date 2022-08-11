@@ -5,7 +5,7 @@
 #include <iostream>
 #include <optional>
 
-std::tuple<at::Tensor, std::vector<at::Tensor>, at::Tensor> bloom_attention_compute_attention(
+std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> bloom_attention_compute_attention(
     at::Tensor fused_qkv,
     std::optional<std::vector<at::Tensor>> layer_past,
     at::Tensor alibi,
