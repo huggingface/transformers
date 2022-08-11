@@ -646,7 +646,7 @@ BLOOM_INPUTS_DOCSTRING = r"""
     BLOOM_START_DOCSTRING,
 )
 class BloomModel(BloomPreTrainedModel):
-    def __init__(self, config: BloomConfig, process_group: Optional[torch.distributed.ProcessGroup]):
+    def __init__(self, config: BloomConfig, process_group: Optional[torch.distributed.ProcessGroup]=None):
         super().__init__(config)
 
         self.embed_dim = config.hidden_size
