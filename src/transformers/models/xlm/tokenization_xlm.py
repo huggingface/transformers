@@ -791,7 +791,6 @@ class XLMTokenizer(PreTrainedTokenizer):
         externally, and set `bypass_tokenizer=True` to bypass the tokenizer.
 
         Args:
-
             - lang: ISO language code (default = 'en') (string). Languages should belong of the model supported
               languages. However, we don't enforce it.
             - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False)
