@@ -50,8 +50,10 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the shorter edge of the input to a certain `size`.
-        size (`int`, *optional*, defaults to (768, 768):
-            Resize the shorter edge of the input to the given size. Only has an effect if `do_resize` is set to `True`.
+        size (`int` or `Tuple[int, int]`, *optional*, defaults to (768, 768)):
+            The size to use for resizing the image. Only has an effect if `do_resize` is set to `True`. If `size` is a
+            sequence like (h, w), output size will be matched to this. If `size` is an int, then image will be resized
+            to (size, size).
         resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
@@ -195,7 +197,7 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         # transformations (resizing + center cropping + normalization)
         if self.do_resize and self.size is not None and self.resample is not None:
             images = [
-                self.resize(image=image, size=self.size, resample=self.resample, default_to_square=False)
+                self.resize(image=image, size=self.size, resample=self.resample, default_to_square=True)
                 for image in images
             ]
         if self.do_center_crop and self.crop_size is not None:
