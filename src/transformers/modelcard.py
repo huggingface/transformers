@@ -81,8 +81,7 @@ class ModelCard:
 
     Note: A model card can be loaded and saved to disk.
 
-    Parameters:
-    """
+    Parameters:"""
 
     def __init__(self, **kwargs):
         warnings.warn(
