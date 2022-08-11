@@ -441,7 +441,6 @@ _import_structure = {
         "TensorType",
         "add_end_docstrings",
         "add_start_docstrings",
-        "cached_path",
         "is_apex_available",
         "is_datasets_available",
         "is_faiss_available",
@@ -463,6 +462,7 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
+    "utils.bitsandbytes": [],
 }
 
 # sentencepiece-backed objects
@@ -3214,7 +3214,6 @@ if TYPE_CHECKING:
         TensorType,
         add_end_docstrings,
         add_start_docstrings,
-        cached_path,
         is_apex_available,
         is_datasets_available,
         is_faiss_available,

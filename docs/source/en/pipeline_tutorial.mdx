@@ -12,21 +12,21 @@ specific language governing permissions and limitations under the License.
 
 # Pipelines for inference
 
-The [`pipeline`] makes it simple to use any model from the [Model Hub](https://huggingface.co/models) for inference on a variety of tasks such as text generation, image segmentation and audio classification. Even if you don't have experience with a specific modality or understand the code powering the models, you can still use them with the [`pipeline`]! This tutorial will teach you to:
+The [`pipeline`] makes it simple to use any model from the [Hub](https://huggingface.co/models) for inference on any language, computer vision, speech, and multimodal tasks. Even if you don't have experience with a specific modality or aren't familiar with the underlying code behind the models, you can still use them for inference with the [`pipeline`]! This tutorial will teach you to:
 
 * Use a [`pipeline`] for inference.
 * Use a specific tokenizer or model.
-* Use a [`pipeline`] for audio and vision tasks.
+* Use a [`pipeline`] for audio, vision, and multimodal tasks.
 
 <Tip>
 
-Take a look at the [`pipeline`] documentation for a complete list of supported tasks.
+Take a look at the [`pipeline`] documentation for a complete list of supported tasks and available parameters.
 
 </Tip>
 
 ## Pipeline usage
 
-While each task has an associated [`pipeline`], it is simpler to use the general [`pipeline`] abstraction which contains all the specific task pipelines. The [`pipeline`] automatically loads a default model and tokenizer capable of inference for your task. 
+While each task has an associated [`pipeline`], it is simpler to use the general [`pipeline`] abstraction which contains all the task-specific pipelines. The [`pipeline`] automatically loads a default model and a preprocessing class capable of inference for your task.
 
 1. Start by creating a [`pipeline`] and specify an inference task:
 
@@ -67,7 +67,7 @@ Any additional parameters for your task can also be included in the [`pipeline`]
 
 ### Choose a model and tokenizer
 
-The [`pipeline`] accepts any model from the [Model Hub](https://huggingface.co/models). There are tags on the Model Hub that allow you to filter for a model you'd like to use for your task. Once you've picked an appropriate model, load it with the corresponding `AutoModelFor` and [`AutoTokenizer'] class. For example, load the [`AutoModelForCausalLM`] class for a causal language modeling task:
+The [`pipeline`] accepts any model from the [Hub](https://huggingface.co/models). There are tags on the Hub that allow you to filter for a model you'd like to use for your task. Once you've picked an appropriate model, load it with the corresponding `AutoModelFor` and [`AutoTokenizer`] class. For example, load the [`AutoModelForCausalLM`] class for a causal language modeling task:
 
 ```py
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -95,7 +95,7 @@ Pass your input text to the [`pipeline`] to generate some text:
 
 ## Audio pipeline
 
-The flexibility of the [`pipeline`] means it can also be extended to audio tasks.
+The [`pipeline`] also supports audio tasks like audio classification and automatic speech recognition.
 
 For example, let's classify the emotion in this audio clip:
 
@@ -129,9 +129,9 @@ Pass the audio file to the [`pipeline`]:
 
 ## Vision pipeline
 
-Finally, using a [`pipeline`] for vision tasks is practically identical.
+Using a [`pipeline`] for vision tasks is practically identical.
 
-Specify your vision task and pass your image to the classifier. The imaage can be a link or a local path to the image. For example, what species of cat is shown below?
+Specify your task and pass your image to the classifier. The image can be a link or a local path to the image. For example, what species of cat is shown below?
 
 ![pipeline-cat-chonk](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg)
 
@@ -145,4 +145,27 @@ Specify your vision task and pass your image to the classifier. The imaage can b
 >>> preds = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in preds]
 >>> preds
 [{'score': 0.4335, 'label': 'lynx, catamount'}, {'score': 0.0348, 'label': 'cougar, puma, catamount, mountain lion, painter, panther, Felis concolor'}, {'score': 0.0324, 'label': 'snow leopard, ounce, Panthera uncia'}, {'score': 0.0239, 'label': 'Egyptian cat'}, {'score': 0.0229, 'label': 'tiger cat'}]
+```
+
+## Multimodal pipeline
+
+The [`pipeline`] supports more than one modality. For example, a visual question answering (VQA) task combines text and image. Feel free to use any image link you like and a question you want to ask about the image. The image can be a URL or a local path to the image.
+
+For example, if you use the same image from the vision pipeline above:
+
+```py
+>>> image = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
+>>> question = "Where is the cat?"
+```
+
+Create a pipeline for `vqa` and pass it the image and question:
+
+```py
+>>> from transformers import pipeline
+
+>>> vqa = pipeline(task="vqa")
+>>> preds = vqa(image=image, question=question)
+>>> preds = [{"score": round(pred["score"], 4), "answer": pred["answer"]} for pred in preds]
+>>> preds
+[{'score': 0.9112, 'answer': 'snow'}, {'score': 0.8796, 'answer': 'in snow'}, {'score': 0.6717, 'answer': 'outside'}, {'score': 0.0291, 'answer': 'on ground'}, {'score': 0.027, 'answer': 'ground'}]
 ```
