@@ -88,12 +88,12 @@ into a single instance to both extract the input features and decode the predict
 >>> sequence = processor.batch_decode(outputs.sequences)[0]
 >>> sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
 >>> sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
->>> print(sequence)
-<s_class><advertisement/></s_class>
+>>> print(processor.token2json(sequence))
+{'class': 'advertisement'}
 ```
 
-We refer to the example notebooks regarding converting the model output back to JSON. 
 The code is exactly the same for document parsing, except that the task prompt is different (e.g. "<s_cord-v2>").
+
 Another example can be found below:
 
 - Step-by-step Document Visual Question Answering (DocVQA)
@@ -139,11 +139,15 @@ Another example can be found below:
 >>> sequence = processor.batch_decode(outputs.sequences)[0]
 >>> sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
 >>> sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
->>> print(sequence)
-<s_question> When is the coffee break?</s_question><s_answer> 11-14 to 11:39 a.m.</s_answer>
+>>> print(processor.token2json(sequence))
+{'question': 'When is the coffee break?', 'answer': '11-14 to 11:39 a.m.'}
 ```
 
 See the [model hub](https://huggingface.co/models?filter=donut) to look for Donut checkpoints.
+
+## Training
+
+We refer to the [tutorial notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/donut).
 
 ## DonutSwinConfig
 
