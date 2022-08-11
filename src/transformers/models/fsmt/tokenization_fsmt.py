@@ -354,7 +354,6 @@ class FSMTTokenizer(PreTrainedTokenizer):
             - Install with `pip install sacremoses`
 
         Args:
-
             - lang: ISO language code (default = 'en') (string). Languages should belong of the model supported
               languages. However, we don't enforce it.
             - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False)
