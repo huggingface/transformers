@@ -77,6 +77,8 @@ from setuptools import find_packages, setup
 
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
+from torch.utils.cpp_extension import BuildExtension, CppExtension, CUDAExtension
+
 stale_egg_info = Path(__file__).parent / "transformers.egg-info"
 if stale_egg_info.exists():
     print(
@@ -398,6 +400,24 @@ install_requires = [
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
 
+def get_extensions():
+    # TODO @thomasw21 add cpp versions
+    extensions = []
+
+    # TODO @thomasw21 build cuda kernels only on some conditions
+    if True:
+        extensions += [
+            CUDAExtension(
+                name="transformers.models.bloom.custom_kernels.fused_bloom_attention_cuda",
+                sources=["transformers/models/bloom/custom_kernels/fused_bloom_attention_cuda.cu"],
+                # TODO: understand what that is, probably defines the target architecture
+                #  https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html#options-for-steering-gpu-code-generation-gpu-architecture
+                # Build for A100
+                extra_compile_args=["-arch=compute_80"],
+            ),
+        ]
+    return extensions
+
 setup(
     name="transformers",
     version="4.22.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
@@ -429,5 +449,9 @@ setup(
         "Programming Language :: Python :: 3.9",
         "Topic :: Scientific/Engineering :: Artificial Intelligence",
     ],
-    cmdclass={"deps_table_update": DepsTableUpdateCommand},
+    ext_modules=get_extensions(),
+    cmdclass={
+        "deps_table_update": DepsTableUpdateCommand,
+        "build_ext": BuildExtension
+    },
 )
