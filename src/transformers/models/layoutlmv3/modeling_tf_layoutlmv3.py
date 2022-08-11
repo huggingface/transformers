@@ -390,3 +390,33 @@ class TFLayoutLMv3SelfOutput(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
+
+
+class TFLayoutLMv3Attention(tf.keras.layers.Layer):
+    def __init__(self, config: LayoutLMv3Config, **kwargs):
+        super().__init__(**kwargs)
+        self.self_attention = TFLayoutLMv3SelfAttention(config, name="self")
+        self.self_output = TFLayoutLMv3SelfOutput(config, name="output")
+
+    def call(
+        self,
+        hidden_states: tf.Tensor,
+        attention_mask: Optional[tf.Tensor],
+        head_mask: Optional[tf.Tensor],
+        output_attentions: bool,
+        rel_pos: Optional[tf.Tensor] = None,
+        rel_2d_pos: Optional[tf.Tensor] = None,
+        training: bool = False,
+    ):
+        self_outputs = self.self_attention(
+            hidden_states,
+            attention_mask,
+            head_mask,
+            output_attentions,
+            rel_pos,
+            rel_2d_pos,
+            training=training,
+        )
+        attention_output = self.self_output(self_outputs[0], hidden_states, training=training)
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        return outputs
