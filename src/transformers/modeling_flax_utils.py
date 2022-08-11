@@ -665,14 +665,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
-            # check if an index file exists
-            elif hf_url_exists(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME):
-                archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path,
-                    filename=WEIGHTS_INDEX_NAME,
-                    revision=revision,
-                )
-                is_sharded = True
             else:
                 filename = WEIGHTS_NAME if from_pt else FLAX_WEIGHTS_NAME
                 archive_file = hf_bucket_url(
@@ -730,7 +722,32 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         is_sharded = True
                     except EntryNotFoundError:
                         has_file_kwargs = {"revision": revision, "proxies": proxies, "use_auth_token": use_auth_token}
-                        if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
+                        # check if an index file exists
+                        if has_file(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME,  **has_file_kwargs):
+                            if from_pt :
+                                archive_file = hf_bucket_url(
+                                    pretrained_model_name_or_path,
+                                    filename=WEIGHTS_INDEX_NAME,
+                                    revision=revision,
+                                )
+                                resolved_archive_file = cached_path(
+                                    archive_file,
+                                    cache_dir=cache_dir,
+                                    force_download=force_download,
+                                    proxies=proxies,
+                                    resume_download=resume_download,
+                                    local_files_only=local_files_only,
+                                    use_auth_token=use_auth_token,
+                                    user_agent=user_agent,
+                                )
+                                is_sharded = True
+                            else: 
+                                raise EnvironmentError(
+                                    f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                    f" {FLAX_WEIGHTS_INDEX_NAME} but there is a sharded file for PyTorch weights. Use `from_pt=True` to"
+                                    " load this model from those weights."
+                                )
+                        elif has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {FLAX_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to"

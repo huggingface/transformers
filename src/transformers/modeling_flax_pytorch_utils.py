@@ -61,7 +61,7 @@ def load_pytorch_checkpoint_in_flax_state_dict(
 
         flax_state_dict = convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)
     else:
-        # model is sharded and pytorch_checkpoint_path already contains the list of shard files
+        # model is sharded and pytorch_checkpoint_path already contains the list of .pt shard files
         flax_state_dict = convert_pytorch_sharded_state_dict_to_flax(pytorch_checkpoint_path, flax_model)
     return flax_state_dict
 
@@ -159,6 +159,10 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
         flax_state_dict[flax_key] = jnp.asarray(flax_tensor)
 
     return unflatten_dict(flax_state_dict)
+
+############################
+# Sharded Pytorch => Flax #
+############################
 
 
 def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
