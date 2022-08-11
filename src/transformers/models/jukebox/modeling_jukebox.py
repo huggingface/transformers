@@ -1548,6 +1548,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         # TODO rename prime_len
         self.only_encode = only_encode
         self.prime_len = prime_len
+        # TODO rename fc_pro_out to LM head an probably use HF's linking trick
         if merged_decoder:
             # Merged piped model uses this setup
             self.add_cond_after_transformer = False
@@ -1557,6 +1558,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             self.share_embed_tokens_fc_proj_out = True
 
         if not only_encode:
+            # TODO rename fc_pro_out to LM head an probably use HF's linking trick
             self.fc_proj_out = nn.Linear(width, embed_dim, bias=False)
             if self.share_embed_tokens_fc_proj_out:
                 self.fc_proj_out.weight = self.embed_tokens.weight
@@ -2547,7 +2549,7 @@ class JukeboxPrior(nn.Module):
         """
         if self.lyric_conditioning:
             lyric_encoder_states = lyric_encoder_states.float()
-            lyric_encoder_states = self.lyric_encoder.proj_out(lyric_encoder_states)
+            lyric_encoder_states = self.lyric_encoder.lm_head(lyric_encoder_states)
             lyric_enc_loss = nn.functional.cross_entropy(
                 lyric_encoder_states.view(-1, self.lyric_enc_dim), target_lyrics.view(-1)
             ) / np.log(2.0)
@@ -2783,15 +2785,18 @@ def load_audio(file, sampling_rate, offset, duration, mono=False):
     return raw_audio
 
 
-def load_prompts(audio_files, duration, hps):
+def load_prompts(audio_files, duration, offset, hps):
+    n_samples = len(audio_files)
     raw_audio_list = []
     for audio_file in audio_files:
-        raw_audio = load_audio(audio_file, sampling_rate=hps.sampling_rate, duration=duration, offset=0.0, mono=True)
+        raw_audio = load_audio(
+            audio_file, sampling_rate=hps.sampling_rate, duration=duration, offset=offset, mono=True
+        )
         raw_audio = raw_audio.T  # CT -> TC
         raw_audio_list.append(raw_audio)
-    while len(raw_audio_list) < hps.n_samples:
+    while len(raw_audio_list) < n_samples:
         raw_audio_list.extend(raw_audio_list)
-    raw_audio_list = raw_audio_list[: hps.n_samples]
+    raw_audio_list = raw_audio_list[:n_samples]
     raw_audio = torch.stack([torch.from_numpy(raw_audio) for raw_audio in raw_audio_list])
     return raw_audio
 
@@ -2985,14 +2990,14 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 save_wav(logdir, level, metas=metas, aud=raw_audio, sampling_rate=self.config.sampling_rate)
                 if alignments is None and self.priors[-1] is not None and self.priors[-1].nb_relevant_lyric_tokens > 0:
                     empty_cache()
-                    alignments = get_alignment(
-                        music_tokens,
-                        labels[-1],
-                        self.priors[-1],
-                        level,
-                        sampling_kwargs[-1]["fp16"],
-                        self.config,
-                    )
+                    # alignments = get_alignment(
+                    #     music_tokens,
+                    #     labels[-1],
+                    #     self.priors[-1],
+                    #     level,
+                    #     sampling_kwargs[-1]["fp16"],
+                    #     self.config,
+                    # )
                     pass  # consumes too much ram
         return music_tokens
 
