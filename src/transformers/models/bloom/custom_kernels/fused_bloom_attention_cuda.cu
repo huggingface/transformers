@@ -5,7 +5,7 @@
 #include <iostream>
 #include <optional>
 
-std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> bloom_attention_compute_attention(
+std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forward(
     at::Tensor fused_qkv,
     std::optional<std::vector<at::Tensor>> layer_past,
     at::Tensor alibi,
@@ -147,4 +147,12 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> bloom
     //  return x.reshape(batch_size, q_length, num_heads * head_dim)
     context_layer = context_layer.reshape({batch_size, q_length, three_times_hidden_size / 3});
     return std::make_tuple(context_layer, present, attention_probs);
+}
+
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+    m.def(
+        "forward",
+        &forward,
+        "Bloom attention mechanism forward (CUDA)"
+    );
 }

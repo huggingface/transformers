@@ -39,6 +39,13 @@ from .parallel_layers import TensorParallelColumnLinear, TensorParallelEmbedding
 
 logger = logging.get_logger(__name__)
 
+CUSTOM_KERNELS_ENABLED=False
+try:
+    from .custom_kernels import fused_bloom_attention
+    CUSTOM_KERNELS_ENABLED=True
+except ImportError:
+    logger.warning("We're not using custom kernels.")
+
 _CHECKPOINT_FOR_DOC = "bigscience/bloom-560m"
 _CONFIG_FOR_DOC = "BloomConfig"
 _TOKENIZER_FOR_DOC = "BloomTokenizerFast"
@@ -373,17 +380,31 @@ class BloomAttention(nn.Module):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         batch_size, q_length, _ = fused_qkv.shape
 
-        context_layer, present, attention_probs = self.compute_attention(
-            fused_qkv=fused_qkv,
-            layer_past=layer_past,
-            alibi=alibi,
-            attention_mask=attention_mask,
-            head_mask=head_mask,
-            beta=self.beta,
-            inv_norm_factor=self.inv_norm_factor,
-            num_heads=self.num_heads,
-            use_cache=use_cache
-        )
+        if CUSTOM_KERNELS_ENABLED:
+            assert self.training is False, "Only foward pass was implemented"
+            context_layer, present, attention_probs = fused_bloom_attention.forward(
+                fused_qkv=fused_qkv,
+                layer_past=layer_past,
+                alibi=alibi,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                beta=self.beta,
+                inv_norm_factor=self.inv_norm_factor,
+                num_heads=self.num_heads,
+                use_cache=use_cache
+            )
+        else:
+            context_layer, present, attention_probs = self.compute_attention(
+                fused_qkv=fused_qkv,
+                layer_past=layer_past,
+                alibi=alibi,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
+                beta=self.beta,
+                inv_norm_factor=self.inv_norm_factor,
+                num_heads=self.num_heads,
+                use_cache=use_cache
+            )
 
         # aggregate results across tp ranks. See here: https://github.com/pytorch/pytorch/issues/76232
         if self.pretraining_tp > 1 and self.slow_but_exact:
