@@ -49,12 +49,12 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from ..utils import TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
+from ..utils import ENV_VARS_TRUE_VALUES, TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
 from ..utils.versions import importlib_metadata
 
 
 logger = logging.get_logger(__name__)
-_IS_IN_DEBUG_MODE = os.environ.get("FX_DEBUG_MODE", False) in ["true", "True", "1"]
+_IS_IN_DEBUG_MODE = os.environ.get("FX_DEBUG_MODE", "").upper() in ENV_VARS_TRUE_VALUES
 
 
 def _generate_supported_model_class_names(
