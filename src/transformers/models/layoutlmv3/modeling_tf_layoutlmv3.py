@@ -461,3 +461,37 @@ class TFLayoutLMv3Output(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
+
+
+class TFLayoutLMv3Layer(tf.keras.layers.Layer):
+    def __init__(self, config: LayoutLMv3Config, **kwargs):
+        super().__init__(**kwargs)
+        self.attention = TFLayoutLMv3Attention(config, name="attention")
+        self.intermediate = TFLayoutLMv3Intermediate(config, name="intermediate")
+        self.bert_output = TFLayoutLMv3Output(config, name="output")
+
+    def call(
+        self,
+        hidden_states: tf.Tensor,
+        attention_mask: Optional[tf.Tensor],
+        head_mask: Optional[tf.Tensor],
+        output_attentions: bool,
+        rel_pos: Optional[tf.Tensor] = None,
+        rel_2d_pos: Optional[tf.Tensor] = None,
+        training: bool = False,
+    ):
+        self_attention_outputs = self.attention(
+            hidden_states,
+            attention_mask,
+            head_mask,
+            output_attentions=output_attentions,
+            rel_pos=rel_pos,
+            rel_2d_pos=rel_2d_pos,
+            training=training,
+        )
+        attention_output = self_attention_outputs[0]
+        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+        intermediate_output = self.intermediate(attention_output)
+        layer_output = self.bert_output(intermediate_output, attention_output, training=training)
+        outputs = (layer_output,) + outputs
+        return outputs
