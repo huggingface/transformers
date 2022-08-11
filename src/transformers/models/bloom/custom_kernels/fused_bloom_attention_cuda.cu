@@ -61,8 +61,8 @@ std::tuple<at::Tensor, std::vector<at::Tensor>, at::Tensor> bloom_attention_comp
     //      key_layer = torch.cat((past_key, key_layer), dim=2)
     //      value_layer = torch.cat((past_value, value_layer), dim=1)
     if (layer_past) {
-        auto past_key = *layer_past.at(0);
-        auto past_value = *layer_past.at(1);
+        auto past_key = (*layer_past).at(0);
+        auto past_value = (*layer_past).at(1);
         key_layer = at::cat({past_key, key_layer}, 2);
         key_layer = at::cat({past_value, value_layer}, 1);
     }
@@ -78,7 +78,7 @@ std::tuple<at::Tensor, std::vector<at::Tensor>, at::Tensor> bloom_attention_comp
     if (use_cache) {
         present = {key_layer, value_layer};
     } else {
-        present = at::nullopt;
+        present = {};
     }
 
     //  # [batch_size * num_heads, q_length, kv_length]
@@ -99,9 +99,9 @@ std::tuple<at::Tensor, std::vector<at::Tensor>, at::Tensor> bloom_attention_comp
     //  # torch.finfo not supported by torch.jit, we temporarily remplace with `-1e34`
     //  attn_weights = attention_scores.masked_fill_(attention_mask, torch.finfo(attention_scores.dtype).min)
     //  attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
-    auto input_dtype = attention_scores.dtype;
+    auto input_dtype = attention_scores.dtype();
     if (input_dtype == at::ScalarType::Float) {
-        attention_scores = attention_scores.to(at::ScalarType::Float)
+        attention_scores = attention_scores.to(at::ScalarType::Float);
     };
     // TODO @thomasw21 Figure out how to get minimul value
     auto attn_weights = attention_scores.masked_fill_(attention_mask, -1e34);
