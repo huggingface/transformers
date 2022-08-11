@@ -1,4 +1,5 @@
 import collections
+from typing import Dict
 
 import tensorflow as tf
 
@@ -11,6 +12,18 @@ from ...modeling_tf_utils import (
     unpack_inputs,
 )
 from .configuration_layoutlmv3 import LayoutLMv3Config
+
+_CONFIG_FOR_DOC = "LayoutLMv3Config"
+
+_DUMMY_INPUT_IDS = [
+    [7, 6, 1],
+    [1, 2, 0],
+]
+
+_DUMMY_BBOX = [
+    [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12]],
+    [[13, 14, 15, 16], [17, 18, 19, 20], [21, 22, 23, 24]],
+]
 
 
 class TFLayoutLMv3PatchEmbeddings(tf.keras.layers.Layer):
@@ -206,3 +219,46 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings, training=training)
         return embeddings
+
+
+class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = LayoutLMv3Config
+    base_model_prefix = "layoutlmv3"
+
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        size = self.config.input_size
+        image_shape = (2, self.config.num_channels, size, size)
+        pixel_values = tf.random.uniform(shape=image_shape, minval=-1, maxval=1)
+        return {
+            "input_ids": tf.constant(_DUMMY_INPUT_IDS, dtype=tf.int64),
+            "bbox": tf.constant(_DUMMY_BBOX, dtype=tf.int64),
+            "pixel_values": pixel_values,
+        }
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "bbox": tf.TensorSpec((None, None, 4), tf.int32, name="bbox"),
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
