@@ -1650,7 +1650,7 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
     def __init__(self, config: GroupViTTextConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.group_vit = TFGroupViTTextMainLayer(config, name="groupvit")
+        self.groupvit = TFGroupViTTextMainLayer(config, name="groupvit")
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -1707,7 +1707,7 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
         >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
 
-        outputs = self.group_vit(
+        outputs = self.groupvit(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1737,7 +1737,7 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
     def __init__(self, config: GroupViTVisionConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.group_vit = TFGroupViTVisionMainLayer(config, name="groupvit")
+        self.groupvit = TFGroupViTVisionMainLayer(config, name="groupvit")
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -1805,7 +1805,7 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
 
-        outputs = self.group_vit(
+        outputs = self.groupvit(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1831,7 +1831,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
     def __init__(self, config: GroupViTConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.group_vit = TFGroupViTMainLayer(config, name="groupvit")
+        self.groupvit = TFGroupViTMainLayer(config, name="groupvit")
 
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
@@ -1900,7 +1900,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         >>> text_features = model.get_text_features(**inputs)
         ```"""
 
-        text_features = self.group_vit.get_text_features(
+        text_features = self.groupvit.get_text_features(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1944,7 +1944,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         >>> image_features = model.get_image_features(**inputs)
         ```"""
 
-        image_features = self.group_vit.get_image_features(
+        image_features = self.groupvit.get_image_features(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1993,7 +1993,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
 
-        outputs = self.group_vit(
+        outputs = self.groupvit(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
