@@ -75,21 +75,25 @@ class GenerationTesterMixin:
 
     def _get_input_ids_and_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
         input_ids = inputs_dict[self.input_name]
-        attention_mask = torch.ones_like(input_ids, dtype=torch.long)
 
         # cut to half length & take max batch_size 3
         max_batch_size = 2
         sequence_length = input_ids.shape[-1] // 2
         input_ids = input_ids[:max_batch_size, :sequence_length]
-        attention_mask = attention_mask[:max_batch_size, :sequence_length]
 
         # generate max 3 tokens
         max_length = input_ids.shape[-1] + 3
         if config.eos_token_id is not None and config.pad_token_id is None:
             # hack to allow generate for models such as GPT2 as is done in `generate()`
             config.pad_token_id = config.eos_token_id
+
+        # TransfoXL has no attention mask
+        if "transfoxl" in config.__class__.__name__.lower():
+            attention_mask = None
+        else:
+            attention_mask = torch.ones_like(input_ids, dtype=torch.long)[:max_batch_size, :sequence_length]
+
         return config, input_ids, attention_mask, max_length
 
     @staticmethod
@@ -437,9 +441,9 @@ class GenerationTesterMixin:
         return_dict_in_generate=False,
     ):
         torch.manual_seed(0)
+        model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
         output_generate = model.generate(
             input_ids,
-            attention_mask=attention_mask,
             do_sample=True,
             max_length=max_length,
             output_scores=output_scores,
@@ -449,6 +453,7 @@ class GenerationTesterMixin:
             remove_invalid_values=True,
             **beam_kwargs,
             **logits_warper_kwargs,
+            **model_kwargs,
         )
         # beam_search does not automatically interleave `batch_size` dim for `num_beams * num_return_sequences`
         kwargs = {}
@@ -462,7 +467,7 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
             )
             kwargs["encoder_outputs"] = encoder_outputs
-        else:
+        elif attention_mask is not None:
             attention_mask = attention_mask.repeat_interleave(beam_scorer.num_beams * num_return_sequences, dim=0)
 
         # prevent flaky generation test failures
@@ -471,11 +476,11 @@ class GenerationTesterMixin:
 
         torch.manual_seed(0)
         with torch.no_grad():
+            model_kwargs = {"attention_mask": attention_mask} if attention_mask is not None else {}
             output_beam_sample = model.beam_sample(
                 input_ids.repeat_interleave(beam_scorer.num_beams * num_return_sequences, dim=0),
                 beam_scorer,
                 max_length=max_length,
-                attention_mask=attention_mask,
                 logits_warper=logits_warper,
                 logits_processor=logits_processor,
                 output_scores=output_scores,
@@ -483,6 +488,7 @@ class GenerationTesterMixin:
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 **kwargs,
+                **model_kwargs,
             )
 
         return output_generate, output_beam_sample
