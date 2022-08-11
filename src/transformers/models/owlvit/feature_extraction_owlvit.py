@@ -50,13 +50,13 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the shorter edge of the input to a certain `size`.
-        size (`int`, *optional*, defaults to 768):
+        size (`int`, *optional*, defaults to (768, 768):
             Resize the shorter edge of the input to the given size. Only has an effect if `do_resize` is set to `True`.
         resample (`int`, *optional*, defaults to `PIL.Image.BICUBIC`):
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
             if `do_resize` is set to `True`.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
+        do_center_crop (`bool`, *optional*, defaults to `False`):
             Whether to crop the input at the center. If the input size is smaller than `crop_size` along any edge, the
             image is padded with 0's and then center cropped.
         crop_size (`int`, *optional*, defaults to 768):
@@ -74,10 +74,10 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
     def __init__(
         self,
         do_resize=True,
-        size=768,
+        size=(768, 768),
         resample=Image.BICUBIC,
         crop_size=768,
-        do_center_crop=True,
+        do_center_crop=False,
         do_normalize=True,
         image_mean=None,
         image_std=None,
