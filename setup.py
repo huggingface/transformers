@@ -75,9 +75,9 @@ from pathlib import Path
 
 from setuptools import find_packages, setup
 
+from torch.utils.cpp_extension import BuildExtension, CUDAExtension
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
-from torch.utils.cpp_extension import BuildExtension, CppExtension, CUDAExtension
 
 stale_egg_info = Path(__file__).parent / "transformers.egg-info"
 if stale_egg_info.exists():
@@ -409,11 +409,11 @@ def get_extensions():
         extensions += [
             CUDAExtension(
                 name="transformers.models.bloom.custom_kernels.fused_bloom_attention_cuda",
-                sources=["transformers/models/bloom/custom_kernels/fused_bloom_attention_cuda.cu"],
+                sources=["src/transformers/models/bloom/custom_kernels/fused_bloom_attention_cuda.cu"],
                 # TODO: understand what that is, probably defines the target architecture
                 #  https://docs.nvidia.com/cuda/cuda-compiler-driver-nvcc/index.html#options-for-steering-gpu-code-generation-gpu-architecture
                 # Build for A100
-                extra_compile_args=["-arch=compute_80"],
+                extra_compile_args=["-arch=compute_80", "-std=c++17"],
             ),
         ]
     return extensions

@@ -10,15 +10,15 @@ std::vector<at::Tensor> bloom_attention_compute_attention(
     std::optional<std::vector<at::Tensor>> layer_past,
     at::Tensor alibi,
     at::Tensor attention_mask,
-    str::optional<at::Tensor> head_mask,
+    std::optional<at::Tensor> head_mask,
     float beta,
     float inv_norm_factor,
     int num_heads,
     bool use_cache
 ) {
     // batch_size, q_length, three_times_hidden_size = fused_qkv.shape
-    auto batch_size = fused_qk.size(0);
-    auto q_length = fused_qk.size(1);
+    auto batch_size = fused_qkv.size(0);
+    auto q_length = fused_qkv.size(1);
     auto three_times_hidden_size = fused_qkv.size(2);
 
     // head_dim = three_times_hidden_size / (3 * num_heads)
@@ -42,12 +42,12 @@ std::vector<at::Tensor> bloom_attention_compute_attention(
     auto key_layer = tensor_list[1];
     auto value_layer = tensor_list[2];
 
-    // query_layer = query_layer.transpose(1, 2).reshape(batch_size * num_heads, seq_length, head_dim)
-    // key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * num_heads, head_dim, seq_length)
-    // value_layer = value_layer.transpose(1, 2).reshape(batch_size * num_heads, seq_length, head_dim)
-    query_layer = query_layer.tranpose(1, 2).reshape({batch_size * num_heads, seq_length, three_times_num_heads});
-    key_layer = ker_layer.permute({0, 2, 3, 1}).reshape({batch_size * num_heads, three_times_num_heads, seq_length});
-    value_layer = value_layer.tranpose(1, 2).reshape({batch_size * num_heads, seq_length, three_times_num_heads});
+    // query_layer = query_layer.transpose(1, 2).reshape(batch_size * num_heads, q_length, head_dim)
+    // key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * num_heads, head_dim, q_length)
+    // value_layer = value_layer.transpose(1, 2).reshape(batch_size * num_heads, q_length, head_dim)
+    query_layer = query_layer.transpose(1, 2).reshape({batch_size * num_heads, q_length, three_times_num_heads});
+    key_layer = ker_layer.permute({0, 2, 3, 1}).reshape({batch_size * num_heads, three_times_num_heads, q_length});
+    value_layer = value_layer.transpose(1, 2).reshape({batch_size * num_heads, q_length, three_times_num_heads});
 
     /*
     End of split_heads
@@ -60,7 +60,7 @@ std::vector<at::Tensor> bloom_attention_compute_attention(
     //      #  - value: [batch_size * self.num_heads, kv_length, head_dim]
     //      key_layer = torch.cat((past_key, key_layer), dim=2)
     //      value_layer = torch.cat((past_value, value_layer), dim=1)
-    if layer_past {
+    if (layer_past) {
         auto past_key = layer_past[0];
         auto past_value = layer_past[1];
         key_layer = at::cat({past_key, key_layer}, 2);
