@@ -337,6 +337,11 @@ class Trainer:
         log_level = args.get_process_log_level()
         logging.set_verbosity(log_level)
 
+        if args.flush_denormal:
+            torch.set_flush_denormal(True)
+        else:
+            torch.set_flush_denormal(False)
+
         # force device and distributed setup init explicitly
         args._setup_devices
 

@@ -478,6 +478,9 @@ class TrainingArguments:
             are also available. See the [Ray documentation](
             https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial) for
             more options.
+        flush_denormal (`bool`, *optional*, defaults to `False`):
+            enable flush denormal. Computations with denormal numbers are remarkably slower than normalized number. To
+            solve the low performance issue caused by denormal numbers, user could enable flush denormal
     """
 
     output_dir: str = field(
@@ -960,6 +963,16 @@ class TrainingArguments:
                 " (https://docs.ray.io/en/latest/tune/api_docs/analysis.html"
                 "#ray.tune.ExperimentAnalysis.get_best_trial)"
                 " for more options."
+            )
+        },
+    )
+    flush_denormal: bool = field(
+        default=False,
+        metadata={
+            "help": (
+                "enable flush denormal. Computations with denormal numbers are remarkably slower than normalized"
+                " number.To solve the low performance issue caused by denormal numbers, user could enable flush"
+                " denormal"
             )
         },
     )
