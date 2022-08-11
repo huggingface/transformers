@@ -40,7 +40,6 @@ from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_d
 from .utils import (
     FLAX_WEIGHTS_INDEX_NAME,
     FLAX_WEIGHTS_NAME,
-    HUGGINGFACE_CO_RESOLVE_ENDPOINT,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     PushToHubMixin,
