@@ -100,7 +100,7 @@ class TFCvtEmbeddings(tf.keras.layers.Layer):
 
 
 class TFCvtConvEmbeddings(tf.keras.layers.Layer):
-    """Image to Conv Embedding. This convolutional operation aims to model local spatial contexts."""
+    """Image to Convolution Embeddings. This convolutional operation aims to model local spatial contexts."""
 
     def __init__(self, config: CvtConfig, patch_size: int, embed_dim: int, stride: int, padding: int, **kwargs):
         super().__init__(**kwargs)
@@ -336,7 +336,7 @@ class TFCvtSelfAttention(tf.keras.layers.Layer):
 
 
 class TFCvtSelfOutput(tf.keras.layers.Layer):
-    """Output of the Attention layer (MLP)."""
+    """Output of the Attention layer ."""
 
     def __init__(self, config: CvtConfig, embed_dim: int, drop_rate: float, **kwargs):
         super().__init__(**kwargs)
@@ -655,10 +655,6 @@ class TFCvtMainLayer(tf.keras.layers.Layer):
     ) -> Union[TFBaseModelOutputWithCLSToken, Tuple[tf.Tensor]]:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
-        # pixel_values = tf.transpose(pixel_values, perm=(0, 3, 1, 2))
-        # tried reshaping to to `NHWC` directly in main layer and using this format
-        # throughout the model, but even though I get the same predictions as torch
-        # CVT model, our sequence_output has an absolute difference > 100 with torch prediction
 
         encoder_outputs = self.encoder(
             pixel_values,
@@ -670,7 +666,6 @@ class TFCvtMainLayer(tf.keras.layers.Layer):
         sequence_output = encoder_outputs[0]
 
         if not return_dict:
-            # encoder_outputs -> [last_hidden_state, cls_token, all_hidden_states]
             return (sequence_output,) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithCLSToken(
@@ -821,7 +816,6 @@ class TFCvtModel(TFCvtPreTrainedModel):
         )
 
         if not return_dict:
-            # outputs -> [last_hidden_sate, cls_token_value, hidden_states]
             return (outputs[0],) + outputs[1:]
 
         return TFBaseModelOutputWithCLSToken(
@@ -851,9 +845,7 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
 
         self.num_labels = config.num_labels
         self.cvt = TFCvtMainLayer(config, name="cvt")
-        # In the original implementation the authors use epsilon=1e-5 for Layer Normalization.
-        # Pytorch CVT model doesn't seem to use config.layer_norm_ep
-        # Therefore we will be using the same epsilon as in Pytorch CVT model.
+        # Using same default epsilon as in the original implementation.
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm")
 
         # Classifier head
@@ -929,7 +921,6 @@ class TFCvtForImageClassification(TFCvtPreTrainedModel, TFSequenceClassification
         loss = None if labels is None else self.hf_compute_loss(labels=labels, logits=logits)
 
         if not return_dict:
-            # outputs -> [last_hidden_sate, cls_token_value, hidden_states]
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
