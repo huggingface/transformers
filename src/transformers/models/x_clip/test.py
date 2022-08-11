@@ -1,5 +1,6 @@
 from transformers import XClipConfig, XClipModel
 
+
 config = XClipConfig()
 model = XClipModel(config)
 

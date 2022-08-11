@@ -422,22 +422,25 @@ class XClipVisionEncoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        l, bt, d = hidden_states.size()
+        bt, l, d = hidden_states.size()
         b = bt // self.T
-        x = x.view(l, b, self.T, d)
+        msg_token = self.message_fc(hidden_states[:, 0, :])
+        msg_token = msg_token.view(b, self.T, d)
 
-        msg_token = self.message_fc(hidden_states[0, :, :, :])
-        msg_token = msg_token.view(b, self.T, 1, d)
+        print("Shape of msg_token:", msg_token.shape)
+        print("Initial values of msg_token:", msg_token[0, :3, :3])
 
-        msg_token = msg_token.permute(1, 2, 0, 3).view(self.T, b, d)
-        msg_token = msg_token + self.drop_path(
-            self.message_attn(
-                self.message_ln(msg_token), self.message_ln(msg_token), self.message_ln(msg_token), need_weights=False
-            )[0]
-        )
-        msg_token = msg_token.view(self.T, 1, b, d).permute(1, 2, 0, 3)
+        msg_token = msg_token + self.drop_path(self.message_attn(self.message_ln(msg_token))[0])
+        # add dummy sequence dimension
+        msg_token = msg_token.view(-1, 1, d)
 
-        hidden_states = torch.cat([hidden_states, msg_token], dim=0)
+        print("Shape of msg_token after self-attention:", msg_token.shape)
+        print("Initial values of msg_token after self-attention:", msg_token[0, :3, :3])
+
+        hidden_states = torch.cat([hidden_states, msg_token], dim=1)
+
+        print("Shape of hidden states after concatentation:", hidden_states.shape)
+        print("Initial values of hidden states after concatenation:", hidden_states[0, :3, :3])
 
         residual = hidden_states
 
@@ -925,6 +928,10 @@ class XClipVisionEncoder(nn.Module):
 
         hidden_states = inputs_embeds
         for idx, encoder_layer in enumerate(self.layers):
+            if idx == 0:
+                print(f"Shape of hidden states before layer {idx}:", hidden_states.shape)
+                print(f"Initial values of hidden states before layer {idx}:", hidden_states[0, :3, :3])
+
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
@@ -950,6 +957,10 @@ class XClipVisionEncoder(nn.Module):
                 )
 
             hidden_states = layer_outputs[0]
+
+            if idx == 0:
+                print(f"Shape of hidden states after layer {idx}:", hidden_states.shape)
+                print(f"Initial values of hidden states after layer {idx}:", hidden_states[0, :3, :3])
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
@@ -983,7 +994,7 @@ class XClipVisionTransformer(nn.Module):
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=XClipVisionConfig)
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -998,11 +1009,11 @@ class XClipVisionTransformer(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
-
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layernorm(hidden_states)
+
+        print("Initial hidden states:", hidden_states.shape)
+        print("Initial values of hidden states:", hidden_states[0, :3, :3])
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -1107,7 +1118,6 @@ class XClipModel(XClipPreTrainedModel):
         self.text_model = XClipTextTransformer(text_config)
         self.vision_model = XClipVisionTransformer(vision_config)
 
-        self.final_layernorm = nn.LayerNorm(text_config.hidden_size)
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
@@ -1203,7 +1213,7 @@ class XClipModel(XClipPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
-        image = image.reshape(-1, num_channels, height, width)
+        pixel_values = pixel_values.reshape(-1, num_channels, height, width)
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
@@ -1270,6 +1280,9 @@ class XClipModel(XClipPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        batch_size, num_frames, num_channels, height, width = pixel_values.shape
+        pixel_values = pixel_values.reshape(-1, num_channels, height, width)
+        
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -1291,7 +1304,7 @@ class XClipModel(XClipPreTrainedModel):
 
         text_embeds = text_outputs[1]
         text_embeds = self.text_projection(text_embeds)
-
+        
         # normalized features
         image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
@@ -1306,7 +1319,7 @@ class XClipModel(XClipPreTrainedModel):
             loss = x_clip_loss(logits_per_text)
 
         if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
+            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_embeds, vision_outputs)
             return ((loss,) + output) if loss is not None else output
 
         return XClipOutput(
@@ -1315,6 +1328,6 @@ class XClipModel(XClipPreTrainedModel):
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
             image_embeds=image_embeds,
-            text_model_output=text_outputs,
+            text_model_output=text_embeds,
             vision_model_output=vision_outputs,
         )

@@ -18,7 +18,7 @@ import argparse
 import torch
 
 from huggingface_hub import hf_hub_download
-from transformers import AutoFeatureExtractor, XClipConfig, XClipModel
+from transformers import AutoTokenizer, XClipConfig, XClipModel
 
 
 def get_xclip_config(model_name):
@@ -44,6 +44,8 @@ def rename_key(name):
         name = name.replace("transformer.resblocks", "text_model.encoder.layers")
     if "attn.out_proj" in name and "message" not in name:
         name = name.replace("attn.out_proj", "self_attn.out_proj")
+    if "ln_final" in name:
+        name = name.replace("ln_final", "text_model.final_layer_norm")
     # visual encoder
     if name == "visual.class_embedding":
         name = name.replace("visual.class_embedding", "vision_model.embeddings.class_embedding")
@@ -57,11 +59,11 @@ def rename_key(name):
         name = name.replace("visual.ln_pre", "vision_model.pre_layernorm")
     if "visual.ln_post" in name:
         name = name.replace("visual.ln_post", "vision_model.post_layernorm")
-    # things on top
-    if "ln_final" in name:
-        name = name.replace("ln_final", "final_layernorm")
     if "visual.proj" in name:
-        name = name.replace("visual.proj", "visual_projection")
+        name = name.replace("visual.proj", "visual_projection.weight")
+    if "text_projection" in name:
+        name = name.replace("text_projection", "text_projection.weight")
+    # things on top
     if "prompts_visual_proj" in name:
         name = name.replace("prompts_visual_proj", "prompts_visual_projection")
     if "prompts_visual_ln" in name:
@@ -134,8 +136,14 @@ def convert_state_dict(orig_state_dict, config):
                     ]
                     orig_state_dict[f"text_model.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
 
+        elif key.startswith("prompts_generator") or key.startswith("mit"):
+            # TODO
+            pass
         else:
-            orig_state_dict[rename_key(key)] = val
+            new_key_name = rename_key(key)
+            if new_key_name in ["visual_projection.weight", "text_projection.weight"]:
+                val = val.T
+            orig_state_dict[new_key_name] = val
 
     return orig_state_dict
 
@@ -149,24 +157,30 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_pat
     state_dict = convert_state_dict(state_dict, config)
 
     model = XClipModel(config)
-    model.load_state_dict(state_dict)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    assert missing_keys == ["text_model.embeddings.position_ids", "vision_model.embeddings.position_ids"]
+    model.eval()
 
-    # url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    file_path = hf_hub_download(
+        repo_id="hf-internal-testing/spaghetti-video-8-frames", filename="pixel_values.pt", repo_type="dataset"
+    )
+    pixel_values = torch.load(file_path)
 
     # feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/{}".format(model_name.replace("_", "-")))
-    # image = Image.open(requests.get(url, stream=True).raw)
     # inputs = feature_extractor(images=image, return_tensors="pt")
 
-    # timm_outs = timm_model(inputs["pixel_values"])
-    # hf_outs = model(**inputs).logits
+    tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+    input_ids = tokenizer(["playing sports", "eating spaghetti", "go shopping"], return_tensors="pt").input_ids
 
-    # assert torch.allclose(timm_outs, hf_outs, atol=1e-3)
+    with torch.no_grad():
+        outputs = model(input_ids=input_ids, pixel_values=pixel_values)
 
-    # print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
-    # model.save_pretrained(pytorch_dump_folder_path)
+    # TODO verify outputs
+    print(outputs.logits_per_image)
 
-    # print(f"Saving feature extractor to {pytorch_dump_folder_path}")
-    # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+    if pytorch_dump_folder_path is not None:
+        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
+        model.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
