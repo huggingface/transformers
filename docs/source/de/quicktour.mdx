@@ -52,7 +52,7 @@ Die [`pipeline`] unterstützt viele gängige Aufgaben:
 
 <Tip>
 
-Für mehr Details über die [`pipeline`] und assoziierte Aufgaben, siehe in die Dokumentation [hier](./main_classes/pipelines).
+Für mehr Details über die [`pipeline`] und assoziierte Aufgaben, schauen Sie in die Dokumentation [hier](./main_classes/pipelines).
 
 </Tip>
 
@@ -100,13 +100,13 @@ label: POSITIVE, with score: 0.9998
 label: NEGATIVE, with score: 0.5309
 ```
 
-Die [`pipeline`] kann auch über einen ganzen Datensatz iterieren. Starte mit der Installation der [🤗 Datasets](https://huggingface.co/docs/datasets/) Bibliothek:
+Die [`pipeline`] kann auch über einen ganzen Datensatz iterieren. Starten wir mit der Installation der [🤗 Datasets](https://huggingface.co/docs/datasets/) Bibliothek:
 
 ```bash
 pip install datasets 
 ```
 
-Erstelle eine [`pipeline`] mit der Aufgabe die du lösen möchtest und dem Modell welches du nutzen möchtest.
+Erstellen wir eine [`pipeline`] mit der Aufgabe die wir lösen und dem Modell welches wir nutzen möchten.
 
 ```py
 >>> import torch
@@ -115,7 +115,7 @@ Erstelle eine [`pipeline`] mit der Aufgabe die du lösen möchtest und dem Model
 >>> speech_recognizer = pipeline("automatic-speech-recognition", model="facebook/wav2vec2-base-960h")
 ```
 
-Als nächstes lade den Datensatz (siehe 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) für mehr Details) welches du nutzen möchtest. Zum Beispiel lade den [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) Datensatz:
+Als nächstes laden wir den Datensatz (siehe 🤗 Datasets [Quick Start](https://huggingface.co/docs/datasets/quickstart.html) für mehr Details) welches wir nutzen möchten. Zum Beispiel laden wir den [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) Datensatz:
 
 ```py
 >>> from datasets import load_dataset, Audio
