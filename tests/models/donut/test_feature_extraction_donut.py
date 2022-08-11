@@ -44,6 +44,7 @@ class DonutFeatureExtractionTester(unittest.TestCase):
         max_resolution=400,
         do_resize=True,
         size=[20, 18],
+        do_thumbnail=True,
         do_align_axis=False,
         do_pad=True,
         do_normalize=True,
@@ -58,6 +59,7 @@ class DonutFeatureExtractionTester(unittest.TestCase):
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
+        self.do_thumbnail = do_thumbnail
         self.do_align_axis = do_align_axis
         self.do_pad = do_pad
         self.do_normalize = do_normalize
@@ -68,6 +70,7 @@ class DonutFeatureExtractionTester(unittest.TestCase):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
+            "do_thumbnail": self.do_thumbnail,
             "do_align_long_axis": self.do_align_axis,
             "do_pad": self.do_pad,
             "do_normalize": self.do_normalize,
@@ -93,6 +96,7 @@ class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
         self.assertTrue(hasattr(feature_extractor, "do_resize"))
         self.assertTrue(hasattr(feature_extractor, "size"))
+        self.assertTrue(hasattr(feature_extractor, "do_thumbnail"))
         self.assertTrue(hasattr(feature_extractor, "do_align_long_axis"))
         self.assertTrue(hasattr(feature_extractor, "do_pad"))
         self.assertTrue(hasattr(feature_extractor, "do_normalize"))

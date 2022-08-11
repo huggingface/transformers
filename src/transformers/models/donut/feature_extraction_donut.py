@@ -42,8 +42,7 @@ class DonutFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the shorter edge of the input to the minimum value of a certain `size`, and thumbnail the
-            input to the given `size`.
+            Whether to resize the shorter edge of the input to the minimum value of a certain `size`.
         size (`Tuple(int)`, *optional*, defaults to [1920, 2560]):
             Resize the shorter edge of the input to the minimum value of the given size. Should be a tuple of (width,
             height). Only has an effect if `do_resize` is set to `True`.
@@ -51,6 +50,8 @@ class DonutFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             An optional resampling filter. This can be one of `PIL.Image.NEAREST`, `PIL.Image.BOX`,
             `PIL.Image.BILINEAR`, `PIL.Image.HAMMING`, `PIL.Image.BICUBIC` or `PIL.Image.LANCZOS`. Only has an effect
             if `do_resize` is set to `True`.
+        do_thumbnail (`bool`, *optional*, defaults to `True`):
+            Whether to thumbnail the input to the given `size`.
         do_align_long_axis (`bool`, *optional*, defaults to `False`):
             Whether to rotate the input if the height is greater than width.
         do_pad (`bool`, *optional*, defaults to `True`):
@@ -71,6 +72,7 @@ class DonutFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         do_resize=True,
         size=[1920, 2560],
         resample=Image.BILINEAR,
+        do_thumbnail=True,
         do_align_long_axis=False,
         do_pad=True,
         do_normalize=True,
@@ -82,6 +84,7 @@ class DonutFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         self.do_resize = do_resize
         self.size = size
         self.resample = resample
+        self.do_thumbnail = do_thumbnail
         self.do_align_long_axis = do_align_long_axis
         self.do_pad = do_pad
         self.do_normalize = do_normalize
@@ -97,10 +100,10 @@ class DonutFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
 
         return image
 
-    def resize_and_thumbnail(self, image, size, resample):
-        # 1. resize the shorter edge of the image to `min(size)`
-        image = self.resize(image, size=min(size), resample=resample, default_to_square=False)
-        # 2. create a thumbnail
+    def thumbnail(self, image, size):
+        if not isinstance(image, Image.Image):
+            image = self.to_pil_image(image)
+
         image.thumbnail((size[0], size[1]))
 
         return image
@@ -183,13 +186,16 @@ class DonutFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         if not is_batched:
             images = [images]
 
-        # transformations (rotating + resizing + padding + normalization)
+        # transformations (rotating + resizing + thumbnailing + padding + normalization)
         if self.do_align_long_axis:
             images = [self.rotate_image(image, self.size) for image in images]
         if self.do_resize and self.size is not None:
             images = [
-                self.resize_and_thumbnail(image=image, size=self.size, resample=self.resample) for image in images
+                self.resize(image=image, size=min(self.size), resample=self.resample, default_to_square=False)
+                for image in images
             ]
+        if self.do_thumbnail and self.size is not None:
+            images = [self.thumbnail(image=image, size=self.size) for image in images]
         if self.do_pad and self.size is not None:
             images = [self.pad(image=image, size=self.size, random_padding=random_padding) for image in images]
         if self.do_normalize:
