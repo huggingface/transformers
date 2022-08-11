@@ -98,7 +98,13 @@ def dicts_to_sum(objects: Union[Dict[str, Dict], List[dict]]):
 
 
 class Message:
-    def __init__(self, title: str, ci_title: str, model_results: Dict, additional_results: Dict):
+    def __init__(
+        self,
+        title: str,
+        ci_title: str,
+        model_results: Dict,
+        additional_results: Dict
+    ):
         self.title = title
         self.ci_title = ci_title
 
@@ -387,36 +393,58 @@ class Message:
         return json.dumps(blocks)
 
     @staticmethod
-    def error_out():
-        payload = [
-            {
-                "type": "section",
-                "text": {
-                    "type": "plain_text",
-                    "text": "There was an issue running the tests.",
-                },
-                "accessory": {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
-                    "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
-                },
-            }
-        ]
+    def error_out(title, ci_title="", setup_failed=False, runner_failed=False):
+
+        blocks = []
+        title_block = {"type": "header", "text": {"type": "plain_text", "text": title}}
+        blocks.append(title_block)
+
+        if ci_title:
+            ci_title_block = {"type": "section", "text": {"type": "mrkdwn", "text": ci_title}}
+            blocks.append(ci_title_block)
+
+        if setup_failed:
+            text = "💔 Setup job failed. Tests are not run. 😭"
+        elif runner_failed:
+            text = "💔 CI runners have problems! Tests are not run. 😭"
+        else:
+            text = "💔 There was an issue running the tests. 😭"
+
+        error_block_1 = {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": text,
+            },
+        }
+        error_block_2 = {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": "🙏 Let's fix it ASAP! 🙏",
+            },
+            "accessory": {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
+                "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+            },
+        }
+        blocks.extend([error_block_1, error_block_2])
+
+        payload = json.dumps(blocks)
 
         print("Sending the following payload")
-        print(json.dumps({"blocks": json.loads(payload)}))
+        print(json.dumps({"blocks": blocks}))
 
         client.chat_postMessage(
             channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
-            text="There was an issue running the tests.",
+            text=text,
             blocks=payload,
         )
 
     def post(self):
         print("Sending the following payload")
         print(json.dumps({"blocks": json.loads(self.payload)}))
-
-        text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
 
         self.thread_ts = client.chat_postMessage(
             channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
@@ -630,6 +658,11 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 if __name__ == "__main__":
 
+    setup_status = os.environ.get("SETUP_STATUS")
+    runner_status = os.environ.get("RUNNER_STATUS")
+    setup_failed = True if setup_status is not None and setup_status != "success" else False
+    runner_failed = True if runner_status is not None and runner_status != "success" else False
+
     org = "huggingface"
     repo = "transformers"
     repository_full_name = f"{org}/{repo}"
@@ -688,6 +721,10 @@ if __name__ == "__main__":
 
     else:
         ci_title = ""
+
+    if setup_failed or runner_failed:
+        Message.error_out(title, ci_title, setup_failed, runner_failed)
+        exit(0)
 
     arguments = sys.argv[1:][0]
     try:
