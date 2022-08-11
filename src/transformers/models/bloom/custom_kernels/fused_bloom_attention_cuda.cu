@@ -5,7 +5,7 @@
 #include <iostream>
 #include <optional>
 
-std::vector<at::Tensor> bloom_attention_compute_attention(
+std::tuple<at::Tensor, std::vector<at::Tensor>, at::Tensor> bloom_attention_compute_attention(
     at::Tensor fused_qkv,
     std::optional<std::vector<at::Tensor>> layer_past,
     at::Tensor alibi,
@@ -61,8 +61,8 @@ std::vector<at::Tensor> bloom_attention_compute_attention(
     //      key_layer = torch.cat((past_key, key_layer), dim=2)
     //      value_layer = torch.cat((past_value, value_layer), dim=1)
     if (layer_past) {
-        auto past_key = layer_past[0];
-        auto past_value = layer_past[1];
+        auto past_key = *layer_past.at(0);
+        auto past_value = *layer_past.at(1);
         key_layer = at::cat({past_key, key_layer}, 2);
         key_layer = at::cat({past_value, value_layer}, 1);
     }
@@ -75,7 +75,7 @@ std::vector<at::Tensor> bloom_attention_compute_attention(
     //  else:
     //      present = None
     std::optional<std::vector<at::Tensor>> present;
-    if use_cache {
+    if (use_cache) {
         present = {key_layer, value_layer};
     } else {
         present = at::nullopt;
@@ -100,7 +100,7 @@ std::vector<at::Tensor> bloom_attention_compute_attention(
     //  attn_weights = attention_scores.masked_fill_(attention_mask, torch.finfo(attention_scores.dtype).min)
     //  attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
     auto input_dtype = attention_scores.dtype;
-    if input_dtype == at::ScalarType::Float {
+    if (input_dtype == at::ScalarType::Float) {
         attention_scores = attention_scores.to(at::ScalarType::Float)
     };
     // TODO @thomasw21 Figure out how to get minimul value
@@ -117,7 +117,7 @@ std::vector<at::Tensor> bloom_attention_compute_attention(
 
     //  # matmul: [batch_size * num_heads, q_length, head_dim]
     //  context_layer = torch.bmm(attention_probs, value_layer, out=query_layer)
-    auto context_layer = attention_probs.bmm(value_layer)
+    auto context_layer = attention_probs.bmm(value_layer);
     //  # change view [batch_size, num_heads, q_length, head_dim]
     //  context_layer = _merge_heads(context_layer, num_heads=num_heads, head_dim=head_dim)
 
@@ -146,5 +146,5 @@ std::vector<at::Tensor> bloom_attention_compute_attention(
     //  # batch_size, q_length, num_heads, head_dim -> batch_size, q_length, num_heads * head_dim
     //  return x.reshape(batch_size, q_length, num_heads * head_dim)
     context_layer = context_layer.reshape({batch_size, q_length, three_times_hidden_size / 3});
-    return {context_layer, present, attention_probs};
+    return std::make_tuple(context_layer, present, attention_probs);
 }
