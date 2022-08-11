@@ -1044,12 +1044,7 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device)
             model.eval()
 
-            output_ids_generate = model.generate(
-                do_sample=False,
-                max_length=max_length,
-                remove_invalid_values=True,
-            )
-
+            output_ids_generate = model.generate(do_sample=False, max_length=max_length, remove_invalid_values=True)
             self.assertIsNotNone(output_ids_generate)
 
     def test_group_beam_search_generate(self):
@@ -2708,13 +2703,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         input_ids = tokenizer(encoder_input_str, return_tensors="pt").input_ids
 
         # typos are quickly detected (the correct argument is `do_sample`)
-        with self.assertRaises(ValueError):
-            model.generate(
-                input_ids,
-                do_samples=True,
-            )
+        with self.assertRaisesRegex(ValueError, "do_samples"):
+            model.generate(input_ids, do_samples=True)
 
         # arbitrary arguments that will not be used anywhere are also not accepted
-        with self.assertRaises(ValueError):
+        with self.assertRaisesRegex(ValueError, "foo"):
             fake_model_kwargs = {"foo": "bar"}
             model.generate(input_ids, **fake_model_kwargs)
