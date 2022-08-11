@@ -1055,7 +1055,9 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(LAYOUTLMV3_DOWNSTREAM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        LAYOUTLMV3_DOWNSTREAM_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1164,7 +1166,9 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(LAYOUTLMV3_DOWNSTREAM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        LAYOUTLMV3_DOWNSTREAM_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @replace_return_docstrings(output_type=QuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1294,7 +1298,9 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
 
         self.init_weights()
 
-    @add_start_docstrings_to_model_forward(LAYOUTLMV3_DOWNSTREAM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        LAYOUTLMV3_DOWNSTREAM_INPUTS_DOCSTRING.format("batch_size, sequence_length")
+    )
     @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
