@@ -110,7 +110,6 @@ class BigBirdPegasusConfig(PretrainedConfig):
 
     ```python
 
-    ```
 
         >>> from transformers import BigBirdPegasusModel, BigBirdPegasusConfig
 
@@ -121,6 +120,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
         BigBirdPegasusModel(configuration)
 
         >>> # Accessing the model configuration >>> configuration = model.config
+    ```
     """
     model_type = "bigbird_pegasus"
     keys_to_ignore_at_inference = ["past_key_values"]
