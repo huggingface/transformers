@@ -706,7 +706,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         if resolved_archive_file is not None:
                             is_sharded = True
                         # Maybe the checkpoint is pytorch sharded, we try to grab the pytorch index name in this case.
-                    elif resolved_archive_file is None and from_pt: 
+                    elif resolved_archive_file is None and from_pt:
                         resolved_archive_file = cached_file(
                             pretrained_model_name_or_path, WEIGHTS_INDEX_NAME, **cached_file_kwargs
                         )
@@ -720,7 +720,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                             "proxies": proxies,
                             "use_auth_token": use_auth_token,
                         }
-                        # check if an index file exists
                         if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
                             raise EnvironmentError(
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
