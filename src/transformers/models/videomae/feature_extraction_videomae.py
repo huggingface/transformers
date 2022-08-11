@@ -81,7 +81,7 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
     def crop_video(self, video, size):
         return [self.center_crop(frame, size) for frame in video]
 
-    def normalize_video(self, video, mean, std, rescale=False, channel_first=True):
+    def normalize_video(self, video, mean, std, rescale=None, channel_first=True):
         # video can be a list of PIL images, list of NumPy arrays or list of PyTorch tensors
         # first: convert to list of NumPy arrays
         video = [self.to_numpy_array(frame, rescale=rescale, channel_first=channel_first) for frame in video]
