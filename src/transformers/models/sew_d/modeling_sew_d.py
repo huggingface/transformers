@@ -229,10 +229,10 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
     """
     q_ids = torch.arange(0, query_size)
     k_ids = torch.arange(0, key_size)
-    rel_pos_ids = q_ids[:, None] - k_ids.repeat(q_ids.shape[0], 1)
+    rel_pos_ids = q_ids[:, None] - k_ids[None,:]
     if bucket_size > 0 and max_position > 0:
         rel_pos_ids = make_log_bucket_position(rel_pos_ids, bucket_size, max_position)
-    rel_pos_ids = rel_pos_ids.type(torch.long)
+    rel_pos_ids = rel_pos_ids.to(torch.long)
     rel_pos_ids = rel_pos_ids[:query_size, :]
     rel_pos_ids = rel_pos_ids.unsqueeze(0)
     return rel_pos_ids
@@ -773,7 +773,7 @@ class DisentangledSelfAttention(nn.Module):
             scale_factor += 1
         if "p2c" in self.pos_att_type:
             scale_factor += 1
-        scale = torch.sqrt(torch.tensor(query_layer.size(-1) * scale_factor, dtype=torch.float))
+        scale = torch.sqrt(torch.tensor(pos_query_layer.size(-1), dtype=torch.float) * scale_factor)
         attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2)) / scale
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
