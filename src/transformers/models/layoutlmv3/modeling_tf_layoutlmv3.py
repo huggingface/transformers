@@ -227,49 +227,6 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
         return embeddings
 
 
-class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = LayoutLMv3Config
-    base_model_prefix = "layoutlmv3"
-
-    @property
-    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
-        size = self.config.input_size
-        image_shape = (2, self.config.num_channels, size, size)
-        pixel_values = tf.random.uniform(shape=image_shape, minval=-1, maxval=1)
-        return {
-            "input_ids": tf.constant(_DUMMY_INPUT_IDS, dtype=tf.int64),
-            "bbox": tf.constant(_DUMMY_BBOX, dtype=tf.int64),
-            "pixel_values": pixel_values,
-        }
-
-    @tf.function(
-        input_signature=[
-            {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "bbox": tf.TensorSpec((None, None, 4), tf.int32, name="bbox"),
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-            }
-        ]
-    )
-    def serving(self, inputs):
-        """
-        Method used for serving the model.
-
-        Args:
-            inputs (`Dict[str, tf.Tensor]`):
-                The input of the saved model as a dictionary of tensors.
-        """
-        output = self.call(inputs)
-
-        return self.serving_output(output)
-
-
 class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(**kwargs)
@@ -643,3 +600,344 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
             return tuple(
                 value for value in [hidden_states, all_hidden_states, all_self_attentions] if value is not None
             )
+
+
+@keras_serializable
+class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
+    config_class = LayoutLMv3Config
+
+    def __init__(self, config: LayoutLMv3Config, **kwargs):
+        super().__init__(**kwargs)
+
+        self.config = config
+
+        if config.text_embed:
+            self.embeddings = TFLayoutLMv3TextEmbeddings(config, name="embeddings")
+
+        if config.visual_embed:
+            self.patch_embed = TFLayoutLMv3PatchEmbeddings(config, name="patch_embed")
+            self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
+            self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
+
+            if config.has_relative_attention_bias or config.has_spatial_attention_bias:
+                image_size = config.input_size // config.patch_size
+                self.init_visual_bbox(image_size=(image_size, image_size))
+
+            self.norm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="norm")
+
+        self.encoder = TFLayoutLMv3Encoder(config, name="encoder")
+
+    def build(self, input_shape: tf.TensorShape):
+        if self.config.visual_embed:
+            image_size = self.config.input_size // self.config.patch_size
+            self.cls_token = self.add_weight(
+                shape=(1, 1, self.config.hidden_size),
+                initializer="zeros",
+                trainable=True,
+                dtype=tf.float32,
+                name="cls_token",
+            )
+            self.pos_embed = self.add_weight(
+                shape=(1, image_size * image_size + 1, self.config.hidden_size),
+                initializer="zeros",
+                trainable=True,
+                dtype=tf.float32,
+                name="pos_embed",
+            )
+
+        super().build(input_shape)
+
+    def get_input_embeddings(self) -> tf.keras.layers.Layer:
+        return self.embeddings.word_embeddings
+
+    def set_input_embeddings(self, value: tf.Variable):
+        self.embeddings.word_embeddings.weight = value
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer._prune_heads
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        raise NotImplementedError
+
+    def init_visual_bbox(self, image_size: Tuple[int, int], max_len: int = 1000):
+        # We should not hardcode max_len to 1000, but it is done by the reference implementation,
+        # so we keep it for compatibility with the pretrained weights. The more correct approach
+        # would have been to pass on max_len=config.max_2d_position_embeddings - 1.
+        width, height = image_size
+
+        visual_bbox_x = tf.cast(tf.range(0, max_len * (width + 1), max_len) / width, tf.int64)
+        visual_bbox_x = tf.expand_dims(visual_bbox_x, axis=0)
+        visual_bbox_x = tf.tile(visual_bbox_x, [width, 1])  # (width, width + 1)
+
+        visual_bbox_y = tf.cast(tf.range(0, max_len * (height + 1), max_len) / height, tf.int64)
+        visual_bbox_y = tf.expand_dims(visual_bbox_y, axis=1)
+        visual_bbox_y = tf.tile(visual_bbox_y, [1, height])  # (height + 1, height)
+
+        visual_bbox = tf.stack(
+            [
+                visual_bbox_x[:, :-1],
+                visual_bbox_y[:-1],
+                visual_bbox_x[:, 1:],
+                visual_bbox_y[1:],
+            ],
+            axis=-1,
+        )
+        visual_bbox = tf.reshape(visual_bbox, [-1, 4])
+
+        cls_token_box = tf.constant([[1, 1, max_len - 1, max_len - 1]], dtype=tf.int64)
+        self.visual_bbox = tf.concat([cls_token_box, visual_bbox], axis=0)
+
+    def calculate_visual_bbox(self, batch_size: int):
+        visual_bbox = tf.expand_dims(self.visual_bbox, axis=0)
+        visual_bbox = tf.tile(visual_bbox, [batch_size, 1, 1])
+        return visual_bbox
+
+    def embed_image(self, pixel_values: tf.Tensor):
+        embeddings = self.patch_embed(pixel_values)
+
+        # add [CLS] token
+        batch_size = tf.shape(embeddings)[0]
+        cls_tokens = tf.tile(self.cls_token, [batch_size, 1, 1])
+        embeddings = tf.concat([cls_tokens, embeddings], axis=1)
+
+        # add position embeddings
+        if getattr(self, "pos_embed", None) is not None:
+            embeddings += self.pos_embed
+
+        embeddings = self.norm(embeddings)
+        return embeddings
+
+    def get_extended_attention_mask(self, attention_mask: tf.Tensor):
+        # Adapted from transformers.modelling_utils.ModuleUtilsMixin.get_extended_attention_mask
+
+        n_dims = len(attention_mask.shape)
+
+        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+        # ourselves in which case we just need to make it broadcastable to all heads.
+        if n_dims == 3:
+            extended_attention_mask = tf.expand_dims(attention_mask, axis=1)
+        elif n_dims == 2:
+            # Provided a padding mask of dimensions [batch_size, seq_length].
+            # Make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length].
+            extended_attention_mask = tf.expand_dims(attention_mask, axis=1)  # (batch_size, 1, seq_length)
+            extended_attention_mask = tf.expand_dims(extended_attention_mask, axis=1)  # (batch_size, 1, 1, seq_length)
+        else:
+            raise ValueError(f"Wrong shape for attention_mask (shape {attention_mask.shape}).")
+
+        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+        # masked positions, this operation will create a tensor which is 0.0 for
+        # positions we want to attend and -10000.0 for masked positions.
+        # Since we are adding it to the raw scores before the softmax, this is
+        # effectively the same as removing these entirely.
+        extended_attention_mask = tf.cast(extended_attention_mask, self.compute_dtype)
+        extended_attention_mask = (1.0 - extended_attention_mask) * tf.experimental.numpy.finfo(self.compute_dtype).min
+
+        return extended_attention_mask
+
+    def get_head_mask(self, head_mask: Optional[tf.Tensor]):
+        if head_mask is None:
+            return [None] * self.config.num_hidden_layers
+        else:
+            n_dims = tf.rank(head_mask)
+            if n_dims == 1:
+                # Gets a tensor with masks for each head (H).
+                head_mask = tf.expand_dims(head_mask, axis=0)  # 1, H
+                head_mask = tf.expand_dims(head_mask, axis=0)  # 1, 1, H
+                head_mask = tf.expand_dims(head_mask, axis=-1)  # 1, 1, H, 1
+                head_mask = tf.expand_dims(head_mask, axis=-1)  # 1, 1, H, 1, 1
+                head_mask = tf.tile(head_mask, [self.config.num_hidden_layers, 1, 1, 1, 1])  # L, 1, H, 1, 1
+            elif n_dims == 2:
+                # Gets a tensor with masks for each layer (L) and head (H).
+                head_mask = tf.expand_dims(head_mask, axis=1)  # L, 1, H
+                head_mask = tf.expand_dims(head_mask, axis=-1)  # L, 1, H, 1
+                head_mask = tf.expand_dims(head_mask, axis=-1)  # L, 1, H, 1, 1
+            elif n_dims != 5:
+                raise ValueError(f"Wrong shape for head_mask (shape {head_mask.shape}).")
+            assert tf.rank(head_mask) == 5, f"Got head_mask rank of {tf.rank(head_mask)}, but require 5."
+            head_mask = tf.cast(head_mask, self.compute_dtype)
+            return head_mask
+
+    @unpack_inputs
+    def call(
+        self,
+        input_ids: Optional[tf.Tensor] = None,
+        bbox: Optional[tf.Tensor] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        pixel_values: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+    ):
+        # This method can be called with a variety of modalities:
+        # 1. text + layout
+        # 2. text + layout + image
+        # 3. image
+        # The complexity of this method is mostly just due to handling of these different modalities.
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        if input_ids is not None:
+            input_shape = tf.shape(input_ids)
+            batch_size = input_shape[0]
+            seq_length = input_shape[1]
+        elif inputs_embeds is not None:
+            input_shape = tf.shape(inputs_embeds)
+            batch_size = input_shape[0]
+            seq_length = input_shape[1]
+        elif pixel_values is not None:
+            batch_size = tf.shape(pixel_values)[0]
+        else:
+            raise ValueError("You have to specify either input_ids or inputs_embeds or pixel_values")
+
+        if input_ids is not None or inputs_embeds is not None:
+            if attention_mask is None:
+                attention_mask = tf.ones((batch_size, seq_length), dtype=tf.int64)
+            if token_type_ids is None:
+                token_type_ids = tf.zeros((batch_size, seq_length), dtype=tf.int64)
+            if bbox is None:
+                bbox = tf.zeros((batch_size, seq_length, 4), dtype=tf.int64)
+
+            embedding_output = self.embeddings(
+                input_ids=input_ids,
+                bbox=bbox,
+                position_ids=position_ids,
+                token_type_ids=token_type_ids,
+                inputs_embeds=inputs_embeds,
+                training=training,
+            )
+
+        final_bbox = None
+        final_position_ids = None
+        if pixel_values is not None:
+            # embed image
+            visual_embeddings = self.embed_image(pixel_values)
+
+            # calculate attention mask
+            visual_attention_mask = tf.ones((batch_size, tf.shape(visual_embeddings)[1]), dtype=tf.int64)
+            if attention_mask is None:
+                attention_mask = visual_attention_mask
+            else:
+                attention_mask = tf.concat([attention_mask, visual_attention_mask], axis=1)
+
+            # calculate bounding boxes
+            if self.config.has_spatial_attention_bias:
+                visual_bbox = self.calculate_visual_bbox(batch_size)
+                if bbox is None:
+                    final_bbox = visual_bbox
+                else:
+                    final_bbox = tf.concat([bbox, visual_bbox], axis=1)
+
+            # calculate position IDs
+            if self.config.has_relative_attention_bias or self.config.has_spatial_attention_bias:
+                visual_position_ids = tf.range(0, tf.shape(visual_embeddings)[1], dtype=tf.int64)
+                visual_position_ids = tf.expand_dims(visual_position_ids, axis=0)
+                visual_position_ids = tf.tile(visual_position_ids, [batch_size, 1])
+
+                if input_ids is not None or inputs_embeds is not None:
+                    position_ids = tf.expand_dims(tf.range(0, seq_length, dtype=tf.int64), axis=0)
+                    position_ids = tf.tile(position_ids, [batch_size, 1])
+                    final_position_ids = tf.concat([position_ids, visual_position_ids], axis=1)
+                else:
+                    final_position_ids = visual_position_ids
+
+            # calculate embeddings
+            if input_ids is None and inputs_embeds is None:
+                embedding_output = visual_embeddings
+            else:
+                embedding_output = tf.concat([embedding_output, visual_embeddings], axis=1)
+            embedding_output = self.LayerNorm(embedding_output)
+            embedding_output = self.dropout(embedding_output, training=training)
+
+        elif self.config.has_relative_attention_bias or self.config.has_spatial_attention_bias:
+            if self.config.has_relative_attention_bias:
+                position_ids = tf.expand_dims(tf.range(0, seq_length, dtype=tf.int64), axis=0)
+                position_ids = tf.tile(position_ids, [batch_size, 1])
+                final_position_ids = position_ids
+
+            if self.config.has_spatial_attention_bias:
+                final_bbox = bbox
+
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask)
+
+        # Prepare head mask if needed
+        # 1.0 in head_mask indicate we keep the head
+        # attention_probs has shape bsz x n_heads x N x N
+        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
+        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
+        head_mask = self.get_head_mask(head_mask)
+
+        encoder_outputs = self.encoder(
+            embedding_output,
+            bbox=final_bbox,
+            position_ids=final_position_ids,
+            attention_mask=extended_attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        sequence_output = encoder_outputs[0]
+
+        if return_dict:
+            return TFBaseModelOutput(
+                last_hidden_state=sequence_output,
+                hidden_states=encoder_outputs.hidden_states,
+                attentions=encoder_outputs.attentions,
+            )
+        else:
+            return (sequence_output,) + encoder_outputs[1:]
+
+
+class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = LayoutLMv3Config
+    base_model_prefix = "layoutlmv3"
+
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        size = self.config.input_size
+        image_shape = (2, self.config.num_channels, size, size)
+        pixel_values = tf.random.uniform(shape=image_shape, minval=-1, maxval=1)
+        return {
+            "input_ids": tf.constant(_DUMMY_INPUT_IDS, dtype=tf.int64),
+            "bbox": tf.constant(_DUMMY_BBOX, dtype=tf.int64),
+            "pixel_values": pixel_values,
+        }
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "bbox": tf.TensorSpec((None, None, 4), tf.int32, name="bbox"),
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
