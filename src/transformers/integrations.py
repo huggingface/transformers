@@ -1034,6 +1034,12 @@ class CodeCarbonCallback(TrainerCallback):
 class ClearMLCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that sends the logs to [ClearML](https://clear.ml/).
+
+    Environment:
+            CLEARML_PROJECT (`str`, *optional*, defaults to "HuggingFace Transformers"):
+                ClearML project name. If not set deafault project name will be assigned.
+            CLEARML_TASK (`str`, *optional* defaults to `"Trainer"`):
+                ClearML task name. If not set default task name will be assigned.
     """
 
     def __init__(self):
@@ -1064,9 +1070,7 @@ class ClearMLCallback(TrainerCallback):
             if self._clearml_task is None:
                 self._clearml_task = self._clearml.Task.init(
                                                     project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
-                                                    task_name=os.getenv("CLEARML_TASK", "Trainer"),
-                                                    continue_last_task=False,
-                                                    reuse_last_task_id=False
+                                                    task_name=os.getenv("CLEARML_TASK", "Trainer")
                                                     )
                 self._initialized = True
                 logger.info(
@@ -1088,26 +1092,6 @@ class ClearMLCallback(TrainerCallback):
             if tokenizer and self._clearml_task:
                 self._clearml_task.upload_artifact("Tokenizer", tokenizer)
 
-    def log_scalars(self):
-        logger.info('ClearML scalars reporting started from logs. Please wait ...')
-        eval_prefix = "eval_"
-        eval_prefix_len = len(eval_prefix)
-        test_prefix = "test_"
-        test_prefix_len = len(test_prefix)
-        for metric_name, values_list in self._clearml_log_dict.items():
-            if len(values_list) == 1:
-                self._clearml_task.get_logger().report_single_value(name=metric_name, value=values_list[0])
-            elif len(values_list) > 1:
-                for i, v in enumerate(values_list):
-                    if isinstance(v, (int, float)):
-                        if metric_name.startswith(eval_prefix):
-                            self._clearml_task.get_logger().report_scalar(title=str(metric_name[eval_prefix_len:]), series="eval", value=v, iteration = i + 1)
-                        elif metric_name.startswith(test_prefix):
-                            self._clearml_task.get_logger().report_scalar(title=str(metric_name[test_prefix_len:]), series="test", value=v, iteration = i + 1)
-                        else:
-                            self._clearml_task.get_logger().report_scalar(title=str(metric_name), series="train", value=v, iteration = i + 1)
-        logger.info('ClearML scalars reporting completed.')
-
     def on_train_begin(self, args, state, control, model=None, tokenizer=None, **kwargs):
         if self._clearml is None:
             return
@@ -1120,9 +1104,6 @@ class ClearMLCallback(TrainerCallback):
         if self._clearml is None:
             return
         if self._clearml_task and state.is_world_process_zero:
-            if self._clearml_log_dict:
-                # Report Single Value and Multi-Value Scalars to ClearML Experiment Managaer
-                self.log_scalars()
             # Close ClearML Task at the end end of training (It's stop reporting and tracking at this point)
             self._clearml_task.close()
 
@@ -1132,9 +1113,21 @@ class ClearMLCallback(TrainerCallback):
         if not self._initialized:
             self.setup(args, state, model, tokenizer, **kwargs)
         if state.is_world_process_zero:
+            eval_prefix = "eval_"
+            eval_prefix_len = len(eval_prefix)
+            test_prefix = "test_"
+            test_prefix_len = len(test_prefix)
+            single_value_scalars = ['train_runtime', 'train_samples_per_second', 'train_steps_per_second', 'train_loss', 'total_flos', 'epoch']
             for k, v in logs.items():
                 if isinstance(v, (int, float)):
-                    self._clearml_log_dict[str(k)].append(v)
+                    if k in single_value_scalars:
+                        self._clearml_task.get_logger().report_single_value(name=k, value=v)
+                    elif k.startswith(eval_prefix):
+                        self._clearml_task.get_logger().report_scalar(title=k[eval_prefix_len:], series="eval", value=v, iteration = state.global_step)
+                    elif k.startswith(test_prefix):
+                        self._clearml_task.get_logger().report_scalar(title=k[test_prefix_len:], series="test", value=v, iteration = state.global_step)
+                    else:
+                        self._clearml_task.get_logger().report_scalar(title=k, series="train", value=v, iteration = state.global_step)
                 else:
                     logger.warning("Trainer is attempting to log a value of "
                         f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
