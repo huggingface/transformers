@@ -1,5 +1,7 @@
 import collections
 from typing import Dict
+from typing import Optional
+from typing import Union
 
 import tensorflow as tf
 
@@ -11,6 +13,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
+from ...tf_utils import shape_list
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
 _CONFIG_FOR_DOC = "LayoutLMv3Config"
@@ -262,3 +265,109 @@ class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
         output = self.call(inputs)
 
         return self.serving_output(output)
+
+
+class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
+    def __init__(self, config: LayoutLMv3Config, **kwargs):
+        super().__init__(**kwargs)
+        if config.hidden_size % config.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
+                f"heads ({config.num_attention_heads})"
+            )
+
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.attention_score_normaliser = sqrt(self.attention_head_size)
+
+        self.query = tf.keras.layers.Dense(
+            self.all_head_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            bias_initializer="zeros",
+            name="query",
+        )
+        self.key = tf.keras.layers.Dense(
+            self.all_head_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            bias_initializer="zeros",
+            name="key",
+        )
+        self.value = tf.keras.layers.Dense(
+            self.all_head_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            bias_initializer="zeros",
+            name="value",
+        )
+
+        self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
+        self.has_relative_attention_bias = config.has_relative_attention_bias
+        self.has_spatial_attention_bias = config.has_spatial_attention_bias
+
+    def transpose_for_scores(self, x: tf.Tensor):
+        new_shape = (
+            *shape_list(x)[:-1],
+            self.num_attention_heads,
+            self.attention_head_size,
+        )
+        x = tf.reshape(x, new_shape)
+        return tf.transpose(x, perm=[0, 2, 1, 3])  # B, H, N, D
+
+    def cogview_attention(self, attention_scores: tf.Tensor, alpha: Union[float, int] = 32):
+        """
+        https://arxiv.org/abs/2105.13290 Section 2.4 Stabilization of training: Precision Bottleneck Relaxation
+        (PB-Relax). A replacement of the original tf.keras.layers.Softmax(axis=-1)(attention_scores). Seems the
+        new attention_probs will result in a slower speed and a little bias. Can use
+        tf.debugging.assert_near(standard_attention_probs, cogview_attention_probs, atol=1e-08) for comparison.
+        The smaller atol (e.g., 1e-08), the better.
+        """
+        scaled_attention_scores = attention_scores / alpha
+        max_value = tf.expand_dims(tf.reduce_max(scaled_attention_scores, axis=-1), axis=-1)
+        new_attention_scores = (scaled_attention_scores - max_value) * alpha
+        return tf.math.softmax(new_attention_scores, axis=-1)
+
+    def call(
+        self,
+        hidden_states: tf.Tensor,
+        attention_mask: Optional[tf.Tensor],
+        head_mask: Optional[tf.Tensor],
+        output_attentions: bool,
+        rel_pos: Optional[tf.Tensor] = None,
+        rel_2d_pos: Optional[tf.Tensor] = None,
+        training: bool = False,
+    ):
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
+        normalised_query_layer = query_layer / self.attention_score_normaliser
+        transposed_key_layer = tf.transpose(key_layer, perm=[0, 1, 3, 2])  # B, H, D, N
+        attention_scores = tf.matmul(normalised_query_layer, transposed_key_layer)
+
+        if self.has_relative_attention_bias and self.has_spatial_attention_bias:
+            attention_scores += (rel_pos + rel_2d_pos) / self.attention_score_normaliser
+        elif self.has_relative_attention_bias:
+            attention_scores += rel_pos / self.attention_score_normaliser
+
+        if attention_mask is not None:
+            # Apply the attention mask (is precomputed for all layers in TFLayoutLMv3Model call() function)
+            attention_scores += attention_mask
+
+        # Normalize the attention scores to probabilities.
+        # Use the trick of CogView paper to stabilize training.
+        attention_probs = self.cogview_attention(attention_scores)
+
+        attention_probs = self.dropout(attention_probs, training=training)
+
+        # Mask heads if we want to.
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        context_layer = tf.matmul(attention_probs, value_layer)
+        context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])  # B, N, H, D
+        context_layer = tf.reshape(context_layer, (*shape_list(context_layer)[:2], self.all_head_size))  # B, N, H * D
+
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        return outputs
