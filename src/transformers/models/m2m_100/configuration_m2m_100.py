@@ -94,6 +94,10 @@ class M2M100Config(PretrainedConfig):
     >>> configuration = M2M100Config()
 
     >>> # Initializing a model from the facebook/m2m100_418M style configuration
+    >>> model = M2M100Model(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "m2m_100"
     keys_to_ignore_at_inference = ["past_key_values"]

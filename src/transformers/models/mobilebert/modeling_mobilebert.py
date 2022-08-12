@@ -988,6 +988,10 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)
         >>> # Batch size 1
+        >>> outputs = model(input_ids)
+
+        >>> prediction_logits = outputs.prediction_logits
+        >>> seq_relationship_logits = outputs.seq_relationship_logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1176,6 +1180,10 @@ class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
         >>> encoding = tokenizer(prompt, next_sentence, return_tensors="pt")
+
+        >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
         ```"""
 
         if "next_sentence_label" in kwargs:

@@ -110,6 +110,10 @@ class BeitConfig(PretrainedConfig):
     >>> configuration = BeitConfig()
 
     >>> # Initializing a model from the beit-base-patch16-224-pt22k style configuration
+    >>> model = BeitModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "beit"
 

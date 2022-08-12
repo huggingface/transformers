@@ -188,6 +188,10 @@ class LayoutLMv3FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         >>> # dict_keys(['pixel_values', 'words', 'boxes'])
 
         >>> # option 2: with apply_ocr=False
+        >>> feature_extractor = LayoutLMv3FeatureExtractor(apply_ocr=False)
+        >>> encoding = feature_extractor(image, return_tensors="pt")
+        >>> print(encoding.keys())
+        >>> # dict_keys(['pixel_values'])
         ```"""
 
         # Input type checking for clearer error

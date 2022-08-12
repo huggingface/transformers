@@ -1013,6 +1013,10 @@ class TFTapasModel(TFTapasPreTrainedModel):
         >>> table = pd.DataFrame.from_dict(data)
         >>> queries = ["How many movies has George Clooney played in?", "How old is Brad Pitt?"]
 
+        >>> inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="tf")
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         outputs = self.tapas(
             input_ids=input_ids,
@@ -1104,6 +1108,10 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
         ... )
         >>> labels = tokenizer(
         ...     table=table, queries="How many movies has George Clooney played in?", return_tensors="tf"
+        ... )["input_ids"]
+
+        >>> outputs = model(**inputs, labels=labels)
+        >>> logits = outputs.logits
         ```"""
         outputs = self.tapas(
             input_ids=input_ids,
@@ -1334,6 +1342,10 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
         >>> queries = ["How many movies has George Clooney played in?", "How old is Brad Pitt?"]
 
         >>> inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="tf")
+        >>> outputs = model(**inputs)
+
+        >>> logits = outputs.logits
+        >>> logits_aggregation = outputs.logits_aggregation
         ```"""
 
         outputs = self.tapas(
@@ -1636,6 +1648,10 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
 
         >>> inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="tf")
         >>> labels = tf.convert_to_tensor([1, 0])  # 1 means entailed, 0 means refuted
+
+        >>> outputs = model(**inputs, labels=labels)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
         ```"""
 
         outputs = self.tapas(

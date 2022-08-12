@@ -101,6 +101,10 @@ class BlenderbotSmallConfig(PretrainedConfig):
     >>> configuration = BlenderbotSmallConfig()
 
     >>> # Initializing a model from the facebook/blenderbot_small-90M style configuration
+    >>> model = BlenderbotSmallModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "blenderbot-small"
     keys_to_ignore_at_inference = ["past_key_values"]

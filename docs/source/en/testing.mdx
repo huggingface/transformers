@@ -459,7 +459,11 @@ Inside tests:
 
 - How many GPUs are available:
 
-``````
+```python
+from transformers.testing_utils import get_gpu_count
+
+n_gpu = get_gpu_count()  # works with torch and tf
+```
 
 ### Distributed training
 
@@ -549,6 +553,10 @@ class TestMathUnitTest(unittest.TestCase):
             ("negative", -1.5, -2.0),
             ("integer", 1, 1.0),
             ("large fraction", 1.6, 1),
+        ]
+    )
+    def test_floor(self, name, input, expected):
+        assert_equal(math.floor(input), expected)
 ```
 
 Now, by default this test will be run 3 times, each time with the last 3 arguments of `test_floor` being assigned the
@@ -606,6 +614,10 @@ import pytest
         ("negative", -1.5, -2.0),
         ("integer", 1, 1.0),
         ("large fraction", 1.6, 1),
+    ],
+)
+def test_floor(name, input, expected):
+    assert_equal(math.floor(input), expected)
 ```
 
 Same as with `parameterized`, with `pytest.mark.parametrize` you can have a fine control over which sub-tests are
@@ -665,6 +677,10 @@ To start using those all you need is to make sure that the test resides in a sub
 ```python
 from transformers.testing_utils import TestCasePlus
 
+
+class PathExampleTest(TestCasePlus):
+    def test_something_involving_local_locations(self):
+        data_dir = self.tests_dir / "fixtures/tests_samples/wmt_en_ro"
 ```
 
 If you don't need to manipulate paths via `pathlib` or you just need a path as a string, you can always invoked
@@ -673,6 +689,10 @@ If you don't need to manipulate paths via `pathlib` or you just need a path as a
 ```python
 from transformers.testing_utils import TestCasePlus
 
+
+class PathExampleTest(TestCasePlus):
+    def test_something_involving_stringified_locations(self):
+        examples_dir = self.examples_dir_str
 ```
 
 ### Temporary files and directories
@@ -692,20 +712,30 @@ Here is an example of its usage:
 ```python
 from transformers.testing_utils import TestCasePlus
 
+
+class ExamplesTests(TestCasePlus):
+    def test_whatever(self):
+        tmp_dir = self.get_auto_remove_tmp_dir()
 ```
 
 This code creates a unique temporary directory, and sets `tmp_dir` to its location.
 
 - Create a unique temporary dir:
 
-``````
+```python
+def test_whatever(self):
+    tmp_dir = self.get_auto_remove_tmp_dir()
+```
 
 `tmp_dir` will contain the path to the created temporary dir. It will be automatically removed at the end of the
 test.
 
 - Create a temporary dir of my choice, ensure it's empty before the test starts and don't empty it after the test.
 
-``````
+```python
+def test_whatever(self):
+    tmp_dir = self.get_auto_remove_tmp_dir("./xxx")
+```
 
 This is useful for debug when you want to monitor a specific directory and want to make sure the previous tests didn't
 leave any data in there.
@@ -742,6 +772,10 @@ If you need to temporary override `sys.path` to import from another test for exa
 ```python
 import os
 from transformers.testing_utils import ExtendSysPath
+
+bindir = os.path.abspath(os.path.dirname(__file__))
+with ExtendSysPath(f"{bindir}/.."):
+    from test_trainer import TrainerIntegrationCommon  # noqa
 ```
 
 ### Skipping tests
@@ -786,20 +820,33 @@ def test_feature_x():
 
 - Here is how to skip a test based on some internal check inside the test:
 
-``````
+```python
+def test_feature_x():
+    if not has_something():
+        pytest.skip("unsupported configuration")
+```
 
 or the whole module:
 
 ```python
+import pytest
+
+if not pytest.config.getoption("--custom-flag"):
+    pytest.skip("--custom-flag is missing, skipping tests", allow_module_level=True)
 ```
 
 or the `xfail` way:
 
-``````
+```python
+def test_feature_x():
+    pytest.xfail("expected to fail until bug XYZ is fixed")
+```
 
 - Here is how to skip all tests in a module if some import is missing:
 
-``````
+```python
+docutils = pytest.importorskip("docutils", minversion="0.3")
+```
 
 -  Skip a test based on a condition:
 
@@ -920,6 +967,10 @@ def test_result_and_stdout(capsys):
     out, err = capsys.readouterr()  # consume the captured output streams
     # optional: if you want to replay the consumed streams:
     sys.stdout.write(out)
+    sys.stderr.write(err)
+    # test:
+    assert msg in out
+    assert msg in err
 ```
 
 And, of course, most of the time, `stderr` will come as a part of an exception, so try/except has to be used in such
@@ -934,6 +985,10 @@ def test_something_exception():
     msg = "Not a good value"
     error = ""
     try:
+        raise_exception(msg)
+    except Exception as e:
+        error = str(e)
+        assert msg in error, f"{msg} is in the exception:\n{error}"
 ```
 
 Another approach to capturing stdout is via `contextlib.redirect_stdout`:
@@ -953,6 +1008,10 @@ def test_result_and_stdout():
     with redirect_stdout(buffer):
         print_to_stdout(msg)
     out = buffer.getvalue()
+    # optional: if you want to replay the consumed streams:
+    sys.stdout.write(out)
+    # test:
+    assert msg in out
 ```
 
 An important potential issue with capturing stdout is that it may contain `\r` characters that in normal `print`
@@ -965,6 +1024,10 @@ some `\r`'s in it or not, so it's a simple:
 
 ```python
 from transformers.testing_utils import CaptureStdout
+
+with CaptureStdout() as cs:
+    function_that_writes_to_stdout()
+print(cs.out)
 ```
 
 Here is a full test example:
@@ -973,18 +1036,30 @@ Here is a full test example:
 from transformers.testing_utils import CaptureStdout
 
 msg = "Secret message\r"
+final = "Hello World"
+with CaptureStdout() as cs:
+    print(msg + final)
+assert cs.out == final + "\n", f"captured: {cs.out}, expecting {final}"
 ```
 
 If you'd like to capture `stderr` use the `CaptureStderr` class instead:
 
 ```python
 from transformers.testing_utils import CaptureStderr
+
+with CaptureStderr() as cs:
+    function_that_writes_to_stderr()
+print(cs.err)
 ```
 
 If you need to capture both streams at once, use the parent `CaptureStd` class:
 
 ```python
 from transformers.testing_utils import CaptureStd
+
+with CaptureStd() as cs:
+    function_that_writes_to_stdout_and_stderr()
+print(cs.err, cs.out)
 ```
 
 Also, to aid debugging test issues, by default these context managers automatically replay the captured streams on exit
@@ -1001,6 +1076,10 @@ from transformers.testing_utils import CaptureLogger
 
 msg = "Testing 1, 2, 3"
 logging.set_verbosity_info()
+logger = logging.get_logger("transformers.models.bart.tokenization_bart")
+with CaptureLogger(logger) as cl:
+    logger.info(msg)
+assert cl.out, msg + "\n"
 ```
 
 ### Testing with environment variables
@@ -1012,6 +1091,10 @@ If you want to test the impact of environment variables for a specific test you 
 from transformers.testing_utils import mockenv
 
 
+class HfArgumentParserTest(unittest.TestCase):
+    @mockenv(TRANSFORMERS_VERBOSITY="error")
+    def test_env_override(self):
+        env_level_str = os.getenv("TRANSFORMERS_VERBOSITY", None)
 ```
 
 At times an external program needs to be called, which requires setting `PYTHONPATH` in `os.environ` to include
@@ -1021,6 +1104,10 @@ multiple local paths. A helper class `transformers.test_utils.TestCasePlus` come
 from transformers.testing_utils import TestCasePlus
 
 
+class EnvExampleTest(TestCasePlus):
+    def test_external_prog(self):
+        env = self.get_env()
+        # now call the external program, passing `env` to it
 ```
 
 Depending on whether the test file was under the `tests` test suite or `examples` it'll correctly set up
@@ -1055,6 +1142,10 @@ if torch.cuda.is_available():
 # numpy RNG
 import numpy as np
 
+np.random.seed(seed)
+
+# tf RNG
+tf.random.set_seed(seed)
 ```
 
 ### Debugging tests

@@ -535,6 +535,10 @@ BLENDERBOT_GENERATION_EXAMPLE = r"""
     ...     "Are they trying to lose weight or are they just trying to be healthier?</s> "
     ...     "<s> I'm not sure."
     ... )
+    >>> inputs = tokenizer([NEXT_UTTERANCE], return_tensors="pt")
+    >>> next_reply_ids = model.generate(**inputs)
+    >>> print("Bot: ", tokenizer.batch_decode(next_reply_ids, skip_special_tokens=True)[0])
+    Bot:   That's too bad. Have you tried encouraging them to change their eating habits?
     ```
 """
 
@@ -1156,6 +1160,10 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
         >>> outputs = model(input_ids=inputs.input_ids, decoder_input_ids=decoder_input_ids)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 6, 1280]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1540,6 +1548,10 @@ class BlenderbotForCausalLM(BlenderbotPreTrainedModel):
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
+        >>> logits = outputs.logits
+        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
+        >>> list(logits.shape) == expected_shape
+        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

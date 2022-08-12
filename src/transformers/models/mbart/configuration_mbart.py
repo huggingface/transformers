@@ -99,6 +99,10 @@ class MBartConfig(PretrainedConfig):
     >>> configuration = MBartConfig()
 
     >>> # Initializing a model from the facebook/mbart-large-cc25 style configuration
+    >>> model = MBartModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "mbart"
     keys_to_ignore_at_inference = ["past_key_values"]

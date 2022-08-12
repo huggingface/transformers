@@ -72,6 +72,10 @@ class Trie:
         >>> trie.add("Hello 友達")
         >>> trie.data
         {"H": {"e": {"l": {"l": {"o": {" ": {"友": {"達": {"": 1}}}}}}}}}
+
+        >>> trie.add("Hello")
+        >>> trie.data
+        {"H": {"e": {"l": {"l": {"o": {"": 1, " ": {"友": {"達": {"": 1}}}}}}}}}
         ```
         """
         if not word:
@@ -98,6 +102,10 @@ class Trie:
         ["[CLS] This is a extra_id_100"]
 
         >>> trie.add("[CLS]")
+        >>> trie.add("extra_id_1")
+        >>> trie.add("extra_id_100")
+        >>> trie.split("[CLS] This is a extra_id_100")
+        ["[CLS]", " This is a ", "extra_id_100"]
         ```
         """
         # indexes are counted left of the chars index.
@@ -395,6 +403,10 @@ class PreTrainedTokenizer(PreTrainedTokenizerBase):
         tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
         model = BertModel.from_pretrained("bert-base-uncased")
 
+        num_added_toks = tokenizer.add_tokens(["new_tok1", "my_new-tok2"])
+        print("We have added", num_added_toks, "tokens")
+        # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
+        model.resize_token_embeddings(len(tokenizer))
         ```"""
         new_tokens = [str(tok) for tok in new_tokens]
 

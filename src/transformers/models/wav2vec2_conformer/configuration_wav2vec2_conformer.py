@@ -199,6 +199,10 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
     >>> configuration = Wav2Vec2ConformerConfig()
 
     >>> # Initializing a model from the facebook/wav2vec2-conformer-large-rel-pos style configuration
+    >>> model = Wav2Vec2ConformerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "wav2vec2-conformer"
 

@@ -79,6 +79,10 @@ class FNetConfig(PretrainedConfig):
     >>> configuration = FNetConfig()
 
     >>> # Initializing a model from the fnet-base style configuration
+    >>> model = FNetModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "fnet"
 

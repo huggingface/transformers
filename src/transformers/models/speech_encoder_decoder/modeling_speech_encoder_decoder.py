@@ -349,6 +349,10 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         >>> model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
         ...     "facebook/wav2vec2-base-960h", "bert-base-uncased"
         ... )
+        >>> # saving model after fine-tuning
+        >>> model.save_pretrained("./wav2vec2bert")
+        >>> # load fine-tuned model
+        >>> model = SpeechEncoderDecoderModel.from_pretrained("./wav2vec2bert")
         ```"""
 
         kwargs_encoder = {
@@ -478,6 +482,10 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         'Mr. Quilter ist der Apostel der Mittelschicht und wir freuen uns, sein Evangelium willkommen heißen zu können.'
 
         >>> # Training: Train model on English transcription
+        >>> labels = processor(text=ds[0]["text"], return_tensors="pt").input_ids
+
+        >>> loss = model(input_values, labels=labels).loss
+        >>> loss.backward()
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

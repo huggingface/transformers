@@ -20,7 +20,11 @@ This guide will show you how to fine-tune [BERT](https://huggingface.co/bert-bas
 
 Load the SWAG dataset from the 🤗 Datasets library:
 
-``````
+```py
+>>> from datasets import load_dataset
+
+>>> swag = load_dataset("swag", "regular")
+```
 
 Then take a look at an example:
 
@@ -33,6 +37,10 @@ Then take a look at an example:
  'fold-ind': '3416',
  'gold-source': 'gold',
  'label': 0,
+ 'sent1': 'Members of the procession walk down the street holding small horn brass instruments.',
+ 'sent2': 'A drum line',
+ 'startphrase': 'Members of the procession walk down the street holding small horn brass instruments. A drum line',
+ 'video-id': 'anetv_jkn6uvmqwh4'}
 ```
 
 The `sent1` and `sent2` fields show how a sentence begins, and each `ending` field shows how a sentence could end. Given the sentence beginning, the model must pick the correct sentence ending as indicated by the `label` field.
@@ -41,7 +49,11 @@ The `sent1` and `sent2` fields show how a sentence begins, and each `ending` fie
 
 Load the BERT tokenizer to process the start of each sentence and the four possible endings:
 
-``````
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
+```
 
 The preprocessing function needs to do:
 
@@ -61,11 +73,17 @@ The preprocessing function needs to do:
 ...     ]
 
 ...     first_sentences = sum(first_sentences, [])
+...     second_sentences = sum(second_sentences, [])
+
+...     tokenized_examples = tokenizer(first_sentences, second_sentences, truncation=True)
+...     return {k: [v[i : i + 4] for i in range(0, len(v), 4)] for k, v in tokenized_examples.items()}
 ```
 
 Use 🤗 Datasets [`~datasets.Dataset.map`] function to apply the preprocessing function over the entire dataset. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once:
 
-``````
+```py
+tokenized_swag = swag.map(preprocess_function, batched=True)
+```
 
 🤗 Transformers doesn't have a data collator for multiple choice, so you will need to create one. You can adapt the [`DataCollatorWithPadding`] to create a batch of examples for multiple choice. It will also *dynamically pad* your text and labels to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
 
@@ -108,6 +126,10 @@ Use 🤗 Datasets [`~datasets.Dataset.map`] function to apply the preprocessing 
 ...             pad_to_multiple_of=self.pad_to_multiple_of,
 ...             return_tensors="pt",
 ...         )
+
+...         batch = {k: v.view(batch_size, num_choices, -1) for k, v in batch.items()}
+...         batch["labels"] = torch.tensor(labels, dtype=torch.int64)
+...         return batch
 ```
 </pt>
 <tf>
@@ -146,6 +168,10 @@ Use 🤗 Datasets [`~datasets.Dataset.map`] function to apply the preprocessing 
 ...             pad_to_multiple_of=self.pad_to_multiple_of,
 ...             return_tensors="tf",
 ...         )
+
+...         batch = {k: tf.reshape(v, (batch_size, num_choices, -1)) for k, v in batch.items()}
+...         batch["labels"] = tf.convert_to_tensor(labels, dtype=tf.int64)
+...         return batch
 ```
 </tf>
 </frameworkcontent>
@@ -156,7 +182,11 @@ Use 🤗 Datasets [`~datasets.Dataset.map`] function to apply the preprocessing 
 <pt>
 Load BERT with [`AutoModelForMultipleChoice`]:
 
-``````
+```py
+>>> from transformers import AutoModelForMultipleChoice, TrainingArguments, Trainer
+
+>>> model = AutoModelForMultipleChoice.from_pretrained("bert-base-uncased")
+```
 
 <Tip>
 
@@ -187,6 +217,10 @@ At this point, only three steps remain:
 ...     train_dataset=tokenized_swag["train"],
 ...     eval_dataset=tokenized_swag["validation"],
 ...     tokenizer=tokenizer,
+...     data_collator=DataCollatorForMultipleChoice(tokenizer=tokenizer),
+... )
+
+>>> trainer.train()
 ```
 </pt>
 <tf>
@@ -205,6 +239,10 @@ To fine-tune a model in TensorFlow, start by converting your datasets to the `tf
 >>> tf_validation_set = tokenized_swag["validation"].to_tf_dataset(
 ...     columns=["attention_mask", "input_ids"],
 ...     label_cols=["labels"],
+...     shuffle=False,
+...     batch_size=batch_size,
+...     collate_fn=data_collator,
+... )
 ```
 
 <Tip>
@@ -218,19 +256,33 @@ Set up an optimizer function, learning rate schedule, and some training hyperpar
 ```py
 >>> from transformers import create_optimizer
 
+>>> batch_size = 16
+>>> num_train_epochs = 2
+>>> total_train_steps = (len(tokenized_swag["train"]) // batch_size) * num_train_epochs
+>>> optimizer, schedule = create_optimizer(init_lr=5e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
 ```
 
 Load BERT with [`TFAutoModelForMultipleChoice`]:
 
-``````
+```py
+>>> from transformers import TFAutoModelForMultipleChoice
+
+>>> model = TFAutoModelForMultipleChoice.from_pretrained("bert-base-uncased")
+```
 
 Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
 
 ```py
+>>> model.compile(
+...     optimizer=optimizer,
+...     loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
+... )
 ```
 
 Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to fine-tune the model:
 
-``````
+```py
+>>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=2)
+```
 </tf>
 </frameworkcontent>

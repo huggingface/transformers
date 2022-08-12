@@ -1008,6 +1008,10 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         >>> cls_token_location = [tokens.index(tokenizer.cls_token_id) for tokens in encoded_choices]
 
         >>> input_ids = tf.constant(encoded_choices)[None, :]  # Batch size: 1, number of choices: 2
+        >>> mc_token_ids = tf.constant([cls_token_location])  # Batch size: 1
+
+        >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
+        >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
         ```"""
 
         if input_ids is not None:

@@ -158,6 +158,10 @@ class ModelCard:
         ```python
         # Download model card from huggingface.co and cache.
         modelcard = ModelCard.from_pretrained("bert-base-uncased")
+        # Model card was saved using *save_pretrained('./test/saved_model/')*
+        modelcard = ModelCard.from_pretrained("./test/saved_model/")
+        modelcard = ModelCard.from_pretrained("./test/saved_model/modelcard.json")
+        modelcard = ModelCard.from_pretrained("bert-base-uncased", output_attentions=True, foo=False)
         ```"""
         cache_dir = kwargs.pop("cache_dir", None)
         proxies = kwargs.pop("proxies", None)

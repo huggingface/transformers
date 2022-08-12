@@ -1438,6 +1438,10 @@ class XLNetLMHeadModel(XLNetPreTrainedModel):
         ... ] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
 
         >>> outputs = model(input_ids, perm_mask=perm_mask, target_mapping=target_mapping, labels=labels)
+        >>> loss = outputs.loss
+        >>> next_token_logits = (
+        ...     outputs.logits
+        ... )  # Logits have shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1979,6 +1983,10 @@ class XLNetForQuestionAnswering(XLNetPreTrainedModel):
         ...     0
         ... )  # Batch size 1
         >>> start_positions = torch.tensor([1])
+        >>> end_positions = torch.tensor([3])
+        >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
+
+        >>> loss = outputs.loss
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -642,6 +642,10 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
             0.1599,
             2.0514,
             -1.1600,
+            0.5372,
+            0.2629,
+        ]
+        window_overlap = num_rows = 4
         ```
 
                      (pad & diagonalize) => [ 0.4983, 2.6918, -0.0071, 1.0492, 0.0000, 0.0000, 0.0000
@@ -2387,6 +2391,10 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         >>> tokenizer = LEDTokenizer.from_pretrained(mname)
         >>> TXT = "My friends are <mask> but they eat too many carbs."
         >>> model = TFLEDForConditionalGeneration.from_pretrained(mname)
+        >>> batch = tokenizer([TXT], return_tensors="tf")
+        >>> logits = model(inputs=batch.input_ids).logits
+        >>> probs = tf.nn.softmax(logits[0])
+        >>> # probs[5] is associated with the mask token
         ```"""
 
         if labels is not None:

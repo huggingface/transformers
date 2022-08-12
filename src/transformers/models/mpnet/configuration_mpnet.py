@@ -74,6 +74,10 @@ class MPNetConfig(PretrainedConfig):
     >>> configuration = MPNetConfig()
 
     >>> # Initializing a model from the mpnet-base style configuration
+    >>> model = MPNetModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "mpnet"
 

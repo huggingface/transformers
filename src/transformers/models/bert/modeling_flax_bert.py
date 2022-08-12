@@ -1119,6 +1119,10 @@ FLAX_BERT_FOR_PRETRAINING_DOCSTRING = """
     >>> model = FlaxBertForPreTraining.from_pretrained("bert-base-uncased")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
+    >>> outputs = model(**inputs)
+
+    >>> prediction_logits = outputs.prediction_logits
+    >>> seq_relationship_logits = outputs.seq_relationship_logits
     ```
 """
 
@@ -1274,6 +1278,10 @@ FLAX_BERT_FOR_NEXT_SENT_PRED_DOCSTRING = """
     >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
     >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
     >>> encoding = tokenizer(prompt, next_sentence, return_tensors="jax")
+
+    >>> outputs = model(**encoding)
+    >>> logits = outputs.logits
+    >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
     ```
 """
 

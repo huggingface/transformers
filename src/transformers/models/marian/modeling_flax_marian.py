@@ -985,6 +985,10 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
 
         >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
         >>> model = FlaxMarianMTModel.from_pretrained("Helsinki-NLP/opus-mt-en-de")
+
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, max_length=64, return_tensors="jax")
+        >>> encoder_outputs = model.encode(**inputs)
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1055,6 +1059,10 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> last_decoder_hidden_states = outputs.last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1320,6 +1328,10 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> logits = outputs.logits
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1475,6 +1487,10 @@ FLAX_MARIAN_MT_DOCSTRING = """
     >>> text = "My friends are cool but they eat too many carbs."
     >>> input_ids = tokenizer(text, max_length=64, return_tensors="jax").input_ids
 
+    >>> sequences = model.generate(input_ids, max_length=64, num_beams=2).sequences
+
+    >>> outputs = tokenizer.batch_decode(sequences, skip_special_tokens=True)
+    >>> # should give *Meine Freunde sind cool, aber sie essen zu viele Kohlenhydrate.*
     ```
 """
 

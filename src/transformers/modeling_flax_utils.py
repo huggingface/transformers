@@ -75,7 +75,10 @@ ACT2FN = {
 def dtype_byte_size(dtype):
     """
     Returns the size (in bytes) occupied by one parameter of type `dtype`. Example:
-    ```    ```
+    ```py
+    >>> dtype_byte_size(np.float32)
+    4
+    ```
     """
     if dtype == np.bool:
         return 1 / 8
@@ -344,6 +347,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         >>> flat_params = traverse_util.flatten_dict(model.params)
         >>> mask = {
         ...     path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale"))
+        ...     for path in flat_params
+        ... }
+        >>> mask = traverse_util.unflatten_dict(mask)
+        >>> model.params = model.to_bf16(model.params, mask)
         ```"""
         return self._cast_floating_to(params, jnp.bfloat16, mask)
 
@@ -367,6 +374,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         >>> # Download model and configuration from huggingface.co
         >>> model = FlaxBertModel.from_pretrained("bert-base-cased")
         >>> # By default, the model params will be in fp32, to illustrate the use of this method,
+        >>> # we'll first cast to fp16 and back to fp32
+        >>> model.params = model.to_f16(model.params)
+        >>> # now cast back to fp32
+        >>> model.params = model.to_fp32(model.params)
         ```"""
         return self._cast_floating_to(params, jnp.float32, mask)
 
@@ -402,6 +413,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         >>> flat_params = traverse_util.flatten_dict(model.params)
         >>> mask = {
         ...     path: (path[-2] != ("LayerNorm", "bias") and path[-2:] != ("LayerNorm", "scale"))
+        ...     for path in flat_params
+        ... }
+        >>> mask = traverse_util.unflatten_dict(mask)
+        >>> model.params = model.to_fp16(model.params, mask)
         ```"""
         return self._cast_floating_to(params, jnp.float16, mask)
 
@@ -561,6 +576,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         >>> # Download model and configuration from huggingface.co and cache.
         >>> model = FlaxBertModel.from_pretrained("bert-base-cased")
         >>> # Model was saved using *save_pretrained('./test/saved_model/')* (for example purposes, not runnable).
+        >>> model = FlaxBertModel.from_pretrained("./test/saved_model/")
+        >>> # Loading from a PyTorch checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
+        >>> config = BertConfig.from_json_file("./pt_model/config.json")
+        >>> model = FlaxBertModel.from_pretrained("./pt_model/pytorch_model.bin", from_pt=True, config=config)
         ```"""
         config = kwargs.pop("config", None)
         cache_dir = kwargs.pop("cache_dir", None)

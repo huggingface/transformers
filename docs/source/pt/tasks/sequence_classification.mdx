@@ -28,12 +28,20 @@ Consulte a [página de tarefas de classificação de texto](https://huggingface.
 
 Carregue o conjunto de dados IMDb utilizando a biblioteca 🤗 Datasets:
 
-``````
+```py
+>>> from datasets import load_dataset
+
+>>> imdb = load_dataset("imdb")
+```
 
 Em seguida, dê uma olhada em um exemplo:
 
 ```py
 >>> imdb["test"][0]
+{
+    "label": 0,
+    "text": "I love sci-fi and am willing to put up with a lot. Sci-fi movies/TV are usually underfunded, under-appreciated and misunderstood. I tried to like this, I really did, but it is to good TV sci-fi as Babylon 5 is to Star Trek (the original). Silly prosthetics, cheap cardboard sets, stilted dialogues, CG that doesn't match the background, and painfully one-dimensional characters cannot be overcome with a 'sci-fi' setting. (I'm sure there are those of you out there who think Babylon 5 is good sci-fi TV. It's not. It's clichéd and uninspiring.) While US viewers might like emotion and character development, sci-fi is a genre that does not take itself seriously (cf. Star Trek). It may treat important issues, yet not as a serious philosophy. It's really difficult to care about the characters here as they are not simply foolish, just missing a spark of life. Their actions and reactions are wooden and predictable, often painful to watch. The makers of Earth KNOW it's rubbish as they have to always say \"Gene Roddenberry's Earth...\" otherwise people would not continue watching. Roddenberry's ashes must be turning in their orbit as this dull, cheap, poorly edited (watching it without advert breaks really brings this home) trudging Trabant of a show lumbers into space. Spoiler. So, kill off a main character. And then bring him back as another actor. Jeeez! Dallas all over again.",
+}
 ```
 
 Existem dois campos neste dataset:
@@ -45,24 +53,41 @@ Existem dois campos neste dataset:
 
 Carregue o tokenizador do DistilBERT para processar o campo `text`:
 
-``````
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+```
 
 Crie uma função de pré-processamento para tokenizar o campo `text` e truncar as sequências para que não sejam maiores que o comprimento máximo de entrada do DistilBERT:
 
-``````
+```py
+>>> def preprocess_function(examples):
+...     return tokenizer(examples["text"], truncation=True)
+```
 
 Use a função [`map`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map) do 🤗 Datasets para aplicar a função de pré-processamento em todo o conjunto de dados. Você pode acelerar a função `map` definindo `batched=True` para processar vários elementos do conjunto de dados de uma só vez:
 
-``````
+```py
+tokenized_imdb = imdb.map(preprocess_function, batched=True)
+```
 
 Use o [`DataCollatorWithPadding`] para criar um batch de exemplos. Ele também *preencherá dinamicamente* seu texto até o comprimento do elemento mais longo em seu batch, para que os exemplos do batch tenham um comprimento uniforme. Embora seja possível preencher seu texto com a função `tokenizer` definindo `padding=True`, o preenchimento dinâmico utilizando um data collator é mais eficiente.
 
 <frameworkcontent>
 <pt>
-``````
+```py
+>>> from transformers import DataCollatorWithPadding
+
+>>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
+```
 </pt>
 <tf>
-``````
+```py
+>>> from transformers import DataCollatorWithPadding
+
+>>> data_collator = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
+```
 </tf>
 </frameworkcontent>
 
@@ -72,7 +97,11 @@ Use o [`DataCollatorWithPadding`] para criar um batch de exemplos. Ele também *
 <pt>
 Carregue o DistilBERT com [`AutoModelForSequenceClassification`] junto com o número de rótulos esperados:
 
-``````
+```py
+>>> from transformers import AutoModelForSequenceClassification, TrainingArguments, Trainer
+
+>>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
+```
 
 <Tip>
 
@@ -102,6 +131,10 @@ Nesse ponto, restam apenas três passos:
 ...     train_dataset=tokenized_imdb["train"],
 ...     eval_dataset=tokenized_imdb["test"],
 ...     tokenizer=tokenizer,
+...     data_collator=data_collator,
+... )
+
+>>> trainer.train()
 ```
 
 <Tip>
@@ -123,6 +156,10 @@ Para executar o fine-tuning de um modelo no TensorFlow, comece convertendo seu c
 
 >>> tf_validation_set = tokenized_imdb["test"].to_tf_dataset(
 ...     columns=["attention_mask", "input_ids", "label"],
+...     shuffle=False,
+...     batch_size=16,
+...     collate_fn=data_collator,
+... )
 ```
 
 <Tip>
@@ -138,19 +175,33 @@ Configure o otimizador e alguns hiperparâmetros de treinamento:
 >>> import tensorflow as tf
 
 >>> batch_size = 16
+>>> num_epochs = 5
+>>> batches_per_epoch = len(tokenized_imdb["train"]) // batch_size
+>>> total_train_steps = int(batches_per_epoch * num_epochs)
+>>> optimizer, schedule = create_optimizer(init_lr=2e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
 ```
 
 Carregue o DistilBERT com [`TFAutoModelForSequenceClassification`] junto com o número de rótulos esperados:
 
-``````
+```py
+>>> from transformers import TFAutoModelForSequenceClassification
+
+>>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
+```
 
 Configure o modelo para treinamento com o método [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
 
-``````
+```py
+>>> import tensorflow as tf
+
+>>> model.compile(optimizer=optimizer)
+```
 
 Chame o método [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) para executar o fine-tuning do modelo:
 
-``````
+```py
+>>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3)
+```
 </tf>
 </frameworkcontent>
 

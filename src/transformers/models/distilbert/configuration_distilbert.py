@@ -93,6 +93,10 @@ class DistilBertConfig(PretrainedConfig):
     >>> configuration = DistilBertConfig()
 
     >>> # Initializing a model from the configuration
+    >>> model = DistilBertModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "distilbert"
     attribute_map = {

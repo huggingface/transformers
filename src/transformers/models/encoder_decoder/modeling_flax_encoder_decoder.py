@@ -451,6 +451,10 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
 
         >>> tokenizer = BertTokenizer.from_pretrained("bert-base-cased")
+
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> input_ids = tokenizer.encode(text, return_tensors="np")
+        >>> encoder_outputs = model.encode(input_ids)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -531,6 +535,10 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         >>> encoder_outputs = model.encode(input_ids)
 
         >>> decoder_start_token_id = model.config.decoder.bos_token_id
+        >>> decoder_input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> logits = outputs.logits
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -659,6 +667,10 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
         >>> model.config.eos_token_id = model.config.decoder.eos_token_id
         >>> model.config.pad_token_id = model.config.eos_token_id
 
+        >>> sequences = model.generate(input_ids, num_beams=4, max_length=12).sequences
+
+        >>> summary = tokenizer_output.batch_decode(sequences, skip_special_tokens=True)[0]
+        >>> assert summary == "SAS Alpha Epsilon suspended Sigma Alpha Epsilon members"
         ```
         """
 
@@ -796,6 +808,10 @@ class FlaxEncoderDecoderModel(FlaxPreTrainedModel):
 
         >>> # initialize a bert2gpt2 from pretrained BERT and GPT2 models. Note that the cross-attention layers will be randomly initialized
         >>> model = FlaxEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-cased", "gpt2")
+        >>> # saving model after fine-tuning
+        >>> model.save_pretrained("./bert2gpt2")
+        >>> # load fine-tuned model
+        >>> model = FlaxEncoderDecoderModel.from_pretrained("./bert2gpt2")
         ```"""
 
         kwargs_encoder = {

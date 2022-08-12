@@ -125,6 +125,10 @@ class ElectraConfig(PretrainedConfig):
     >>> configuration = ElectraConfig()
 
     >>> # Initializing a model from the electra-base-uncased style configuration
+    >>> model = ElectraModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "electra"
 

@@ -173,7 +173,9 @@ class WavLMConfig(PretrainedConfig):
 
     Example:
 
-    ```    ```
+    ```python
+
+    ```
 
     Example:
 
@@ -184,6 +186,10 @@ class WavLMConfig(PretrainedConfig):
     >>> configuration = WavLMConfig()
 
     >>> # Initializing a model from the facebook/wavlm-base-960h style configuration
+    >>> model = WavLMModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "wavlm"
 

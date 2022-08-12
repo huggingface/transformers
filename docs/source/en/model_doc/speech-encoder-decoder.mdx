@@ -31,6 +31,10 @@ and the default [`BertForCausalLM`] configuration for the decoder.
 >>> from transformers import BertConfig, Wav2Vec2Config, SpeechEncoderDecoderConfig, SpeechEncoderDecoderModel
 
 >>> config_encoder = Wav2Vec2Config()
+>>> config_decoder = BertConfig()
+
+>>> config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
+>>> model = SpeechEncoderDecoderModel(config=config)
 ```
 
 ## Initialising `SpeechEncoderDecoderModel` from a pretrained encoder and a pretrained decoder.
@@ -42,6 +46,10 @@ To do so, the `SpeechEncoderDecoderModel` class provides a [`SpeechEncoderDecode
 
 ```python
 >>> from transformers import SpeechEncoderDecoderModel
+
+>>> model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
+...     "facebook/hubert-large-ll60k", "bert-base-uncased"
+... )
 ```
 
 ## Loading an existing `SpeechEncoderDecoderModel` checkpoint and perform inference.
@@ -64,6 +72,10 @@ To perform inference, one uses the [`generate`] method, which allows to autoregr
 >>> input_values = processor(ds[0]["audio"]["array"], return_tensors="pt").input_values
 
 >>> # autoregressively generate transcription (uses greedy decoding by default)
+>>> generated_ids = model.generate(input_values)
+>>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+>>> print(generated_text)
+Mr. Quilter ist der Apostel der Mittelschicht und wir freuen uns, sein Evangelium willkommen heißen zu können.
 ```
 
 ## Training
@@ -93,6 +105,10 @@ speech inputs) and `labels` (which are the `input_ids` of the encoded target seq
 
 >>> # load its corresponding transcription and tokenize to generate labels
 >>> labels = tokenizer(ds[0]["text"], return_tensors="pt").input_ids
+
+>>> # the forward function automatically creates the correct decoder_input_ids
+>>> loss = model(**input_features).loss
+>>> loss.backward()
 ```
 
 ## SpeechEncoderDecoderConfig

@@ -594,6 +594,10 @@ PEGASUS_GENERATION_EXAMPLE = r"""
     ...     "scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."
     ... )
     >>> inputs = tokenizer(ARTICLE_TO_SUMMARIZE, max_length=1024, return_tensors="tf")
+
+    >>> # Generate Summary
+    >>> summary_ids = model.generate(input_ids)
+    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
     ```
 """
 

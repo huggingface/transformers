@@ -98,6 +98,10 @@ class YolosConfig(PretrainedConfig):
     >>> configuration = YolosConfig()
 
     >>> # Initializing a model from the hustvl/yolos-base style configuration
+    >>> model = YolosModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "yolos"
 

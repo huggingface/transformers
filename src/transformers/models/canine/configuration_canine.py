@@ -84,6 +84,10 @@ class CanineConfig(PretrainedConfig):
     >>> configuration = CanineConfig()
 
     >>> # Initializing a model from the google/canine-s style configuration
+    >>> model = CanineModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "canine"
 

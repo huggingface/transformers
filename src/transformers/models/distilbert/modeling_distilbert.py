@@ -1091,6 +1091,10 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
 
         >>> encoding = tokenizer([[prompt, choice0], [prompt, choice1]], return_tensors="pt", padding=True)
         >>> outputs = model(**{k: v.unsqueeze(0) for k, v in encoding.items()}, labels=labels)  # batch size is 1
+
+        >>> # the linear classifier still needs to be trained
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]

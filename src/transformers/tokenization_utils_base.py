@@ -881,6 +881,10 @@ class SpecialTokensMixin:
 
         num_added_toks = tokenizer.add_special_tokens(special_tokens_dict)
         print("We have added", num_added_toks, "tokens")
+        # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e., the length of the tokenizer.
+        model.resize_token_embeddings(len(tokenizer))
+
+        assert tokenizer.cls_token == "<CLS>"
         ```"""
         if not special_tokens_dict:
             return 0
@@ -940,6 +944,10 @@ class SpecialTokensMixin:
         tokenizer = BertTokenizerFast.from_pretrained("bert-base-uncased")
         model = BertModel.from_pretrained("bert-base-uncased")
 
+        num_added_toks = tokenizer.add_tokens(["new_tok1", "my_new-tok2"])
+        print("We have added", num_added_toks, "tokens")
+        # Notice: resize_token_embeddings expect to receive the full size of the new vocabulary, i.e., the length of the tokenizer.
+        model.resize_token_embeddings(len(tokenizer))
         ```"""
         if not new_tokens:
             return 0
@@ -1628,6 +1636,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tokenizer = BertTokenizer.from_pretrained("./test/saved_model/my_vocab.txt")
 
         # You can link tokens to special vocabulary when instantiating
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", unk_token="<unk>")
+        # You should be sure '<unk>' is in the vocabulary when doing that.
+        # Otherwise use tokenizer.add_special_tokens({'unk_token': '<unk>'}) instead)
+        assert tokenizer.unk_token == "<unk>"
         ```"""
         cache_dir = kwargs.pop("cache_dir", None)
         force_download = kwargs.pop("force_download", False)

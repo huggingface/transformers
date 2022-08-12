@@ -91,6 +91,10 @@ class ViltConfig(PretrainedConfig):
     >>> configuration = ViLTConfig()
 
     >>> # Initializing a model from the dandelin/vilt-b32-mlm style configuration
+    >>> model = ViLTModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "vilt"
 

@@ -102,6 +102,10 @@ class VisualBertConfig(PretrainedConfig):
     >>> configuration = VisualBertConfig.from_pretrained("visualbert-vqa-coco-pre")
 
     >>> # Initializing a model from the visualbert-vqa-coco-pre style configuration
+    >>> model = VisualBertModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     model_type = "visual_bert"

@@ -470,6 +470,10 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
         >>> model = FlaxVisionTextDualEncoderModel.from_vision_text_pretrained(
         ...     "google/vit-base-patch16-224", "bert-base-uncased"
         ... )
+        >>> # saving model after fine-tuning
+        >>> model.save_pretrained("./vit-bert")
+        >>> # load fine-tuned model
+        >>> model = FlaxVisionTextDualEncoderModel.from_pretrained("./vit-bert")
         ```"""
 
         kwargs_vision = {
@@ -583,6 +587,10 @@ VISION_TEXT_DUAL_ENCODER_MODEL_DOCSTRING = r"""
     >>> model.save_pretrained("vit-bert")
     >>> model = FlaxVisionTextDualEncoderModel.from_pretrained("vit-bert")
 
+    >>> # inference
+    >>> outputs = model(**inputs)
+    >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
+    >>> probs = jax.nn.softmax(logits_per_image, axis=1)  # we can take the softmax to get the label probabilities
     ```
 """
 

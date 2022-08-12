@@ -83,6 +83,10 @@ class ViTConfig(PretrainedConfig):
     >>> configuration = ViTConfig()
 
     >>> # Initializing a model from the vit-base-patch16-224 style configuration
+    >>> model = ViTModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "vit"
 

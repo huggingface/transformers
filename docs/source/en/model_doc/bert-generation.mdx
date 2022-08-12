@@ -51,6 +51,10 @@ Usage:
 ...     "This is a long article to summarize", add_special_tokens=False, return_tensors="pt"
 ... ).input_ids
 >>> labels = tokenizer("This is a short summary", return_tensors="pt").input_ids
+
+>>> # train...
+>>> loss = bert2bert(input_ids=input_ids, decoder_input_ids=labels, labels=labels).loss
+>>> loss.backward()
 ```
 
 - Pretrained [`EncoderDecoderModel`] are also directly available in the model hub, e.g.,
@@ -64,6 +68,10 @@ Usage:
 >>> input_ids = tokenizer(
 ...     "This is the first sentence. This is the second sentence.", add_special_tokens=False, return_tensors="pt"
 ... ).input_ids
+
+>>> outputs = sentence_fuser.generate(input_ids)
+
+>>> print(tokenizer.decode(outputs[0]))
 ```
 
 Tips:

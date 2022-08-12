@@ -64,6 +64,10 @@ class ResnetConfig(PretrainedConfig):
         self.input_channels = input_channels
         self.cardinality = cardinality
         self.base_width = base_width
+        self.stem_width = stem_width
+        self.stem_type = stem_type
+        self.avg_down = avg_down
+        super().__init__(**kwargs)
 ```
 
 Le tre cose più importanti da ricordare quando scrivi le tue configurazioni sono le seguenti:
@@ -82,12 +86,17 @@ non voglia registrare il modello con le classi Auto (vedi l'ultima sezione).
 Una volta completato, puoi facilmente creare e salvare la tua configurazione come faresti con ogni altra configurazione
 di modelli della libreria. Ecco come possiamo creare la config di un resnet50d e salvarlo:
 
-``````
+```py
+resnet50d_config = ResnetConfig(block_type="bottleneck", stem_width=32, stem_type="deep", avg_down=True)
+resnet50d_config.save_pretrained("custom-resnet")
+```
 
 Questo salverà un file chiamato `config.json` all'interno della cartella `custom-resnet`. Potrai poi ricaricare la tua
 config con il metodo `from_pretrained`.
 
-``````
+```py
+resnet50d_config = ResnetConfig.from_pretrained("custom-resnet")
+```
 
 Puoi anche usare qualunque altro metodo della classe [`PretrainedConfig`], come [`~PretrainedConfig.push_to_hub`]
 per caricare direttamente la tua configurazione nell'hub.
@@ -128,6 +137,10 @@ class ResnetModel(PreTrainedModel):
             stem_width=config.stem_width,
             stem_type=config.stem_type,
             avg_down=config.avg_down,
+        )
+
+    def forward(self, tensor):
+        return self.model.forward_features(tensor)
 ```
 
 Per il modello che classificherà le immagini, cambiamo soltanto il metodo forward:
@@ -153,6 +166,10 @@ class ResnetModelForImageClassification(PreTrainedModel):
 
     def forward(self, tensor, labels=None):
         logits = self.model(tensor)
+        if labels is not None:
+            loss = torch.nn.cross_entropy(logits, labels)
+            return {"loss": loss, "logits": logits}
+        return {"logits": logits}
 ```
 
 Nota come, in entrambi i casi, ereditiamo da `PreTrainedModel` e chiamiamo l'inizializzazione della superclasse 
@@ -172,7 +189,9 @@ se hai in progetto di utilizzare un tuo loop di allenamento, o se utilizzerai un
 
 Ora che abbiamo la classe del nostro modello, creiamone uno:
 
-``````
+```py
+resnet50d = ResnetModelForImageClassification(resnet50d_config)
+```
 
 Ribadiamo, puoi usare qualunque metodo dei [`PreTrainedModel`], come [`~PreTrainedModel.save_pretrained`] o
 [`~PreTrainedModel.push_to_hub`]. Utilizzeremo quest'ultimo nella prossima sezione, e vedremo come caricare i pesi del
@@ -183,6 +202,10 @@ utilizzeremo la versione pre-allenata del resnet50d. Dato che il nostro modello 
 sarà facile trasferirne i pesi:
 
 ```py
+import timm
+
+pretrained_model = timm.create_model("resnet50d", pretrained=True)
+resnet50d.model.load_state_dict(pretrained_model.state_dict())
 ```
 
 Vediamo adesso come assicurarci che quando facciamo [`~PreTrainedModel.save_pretrained`] o [`~PreTrainedModel.push_to_hub`], 
@@ -224,12 +247,19 @@ Nota che puoi ri-utilizzare (o usare come sottoclassi) un modello/configurazione
 Per condividere il tuo modello con la community, segui questi passi: prima importa il modello ResNet e la sua configurazione 
 dai nuovi file creati:
 
-``````
+```py
+from resnet_model.configuration_resnet import ResnetConfig
+from resnet_model.modeling_resnet import ResnetModel, ResnetModelForImageClassification
+```
 
 Dopodichè dovrai dire alla libreria che vuoi copiare i file con il codice di quegli oggetti quando utilizzi il metodo
 `save_pretrained` e registrarli in modo corretto con una Auto classe (specialmente per i modelli). Utilizza semplicemente:
 
-``````
+```py
+ResnetConfig.register_for_auto_class()
+ResnetModel.register_for_auto_class("AutoModel")
+ResnetModelForImageClassification.register_for_auto_class("AutoModelForImageClassification")
+```
 
 Nota che non c'è bisogno di specificare una Auto classe per la configurazione (c'è solo una Auto classe per le configurazioni,
 [`AutoConfig`], ma è diversa per i modelli). Il tuo modello personalizato potrebbe essere utilizzato per diverse tasks, 
@@ -239,6 +269,10 @@ Successivamente, creiamo i modelli e la config come abbiamo fatto in precedenza:
 
 ```py
 resnet50d_config = ResnetConfig(block_type="bottleneck", stem_width=32, stem_type="deep", avg_down=True)
+resnet50d = ResnetModelForImageClassification(resnet50d_config)
+
+pretrained_model = timm.create_model("resnet50d", pretrained=True)
+resnet50d.model.load_state_dict(pretrained_model.state_dict())
 ```
 
 Adesso, per inviare il modello all'Hub, assicurati di aver effettuato l'accesso. Lancia dal tuo terminale:
@@ -249,11 +283,17 @@ huggingface-cli login
 
 O da un notebook:
 
-``````
+```py
+from huggingface_hub import notebook_login
+
+notebook_login()
+```
 
 Potrai poi inviare il tutto sul tuo profilo (o di un'organizzazione di cui fai parte) in questo modo:
 
-``````
+```py
+resnet50d.push_to_hub("custom-resnet50d")
+```
 
 Oltre ai pesi del modello e alla configurazione in formato json, questo ha anche copiato i file `.py` modeling e
 configuration all'interno della cartella `custom-resnet50d` e ha caricato i risultati sull'Hub. Puoi controllare
@@ -270,12 +310,20 @@ con le classi Auto e il metodo `from_pretrained`. Tutti i files e il codice cari
 ma dovresti comunque assicurarti dell'affidabilità del codice e dell'autore per evitare di eseguire codice dannoso sulla tua macchina. 
 Imposta `trust_remote_code=True` per usare un modello con codice personalizzato:
 
-``````
+```py
+from transformers import AutoModelForImageClassification
+
+model = AutoModelForImageClassification.from_pretrained("sgugger/custom-resnet50d", trust_remote_code=True)
+```
 
 Inoltre, raccomandiamo fortemente di passare un hash del commit come `revision` per assicurarti che le autrici o gli autori del modello 
 non abbiano modificato il codice con alcune nuove righe dannose (a meno che non ti fidi completamente della fonte):
 
 ```py
+commit_hash = "ed94a7c6247d8aedce4647f00f20de6875b5b292"
+model = AutoModelForImageClassification.from_pretrained(
+    "sgugger/custom-resnet50d", trust_remote_code=True, revision=commit_hash
+)
 ```
 
 Nota che quando cerchi la storia dei commit della repo del modello sull'Hub, c'è un bottone con cui facilmente copiare il 
@@ -292,6 +340,10 @@ classi modello hanno i corretti attributi `config_class`, potrai semplicemente a
 
 ```py
 from transformers import AutoConfig, AutoModel, AutoModelForImageClassification
+
+AutoConfig.register("resnet", ResnetConfig)
+AutoModel.register(ResnetConfig, ResnetModel)
+AutoModelForImageClassification.register(ResnetConfig, ResnetModelForImageClassification)
 ```
 
 Nota che il primo argomento utilizzato quando registri la configurazione di un modello personalizzato con [`AutoConfig`] 

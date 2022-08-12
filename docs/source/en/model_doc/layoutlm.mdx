@@ -55,6 +55,10 @@ Tips:
 def normalize_bbox(bbox, width, height):
     return [
         int(1000 * (bbox[0] / width)),
+        int(1000 * (bbox[1] / height)),
+        int(1000 * (bbox[2] / width)),
+        int(1000 * (bbox[3] / height)),
+    ]
 ```
 
 Here, `width` and `height` correspond to the width and height of the original document in which the token
@@ -62,6 +66,10 @@ occurs. Those can be obtained using the Python Image Library (PIL) library for e
 
 ```python
 from PIL import Image
+
+image = Image.open("name_of_your_document - can be a png file, pdf, etc.")
+
+width, height = image.size
 ```
 
 - For a demo which shows how to fine-tune [`LayoutLMForTokenClassification`] on the [FUNSD dataset](https://guillaumejaume.github.io/FUNSD/) (a collection of annotated forms), see [this notebook](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/LayoutLM/Fine_tuning_LayoutLMForTokenClassification_on_FUNSD.ipynb).

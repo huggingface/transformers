@@ -609,6 +609,10 @@ class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel):
         >>> config.is_decoder = True
         >>> model = GPTNeoXForCausalLM.from_pretrained("gpt-neox-20b", config=config)
 
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> prediction_logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

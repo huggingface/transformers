@@ -84,6 +84,10 @@ class FlavaImageConfig(PretrainedConfig):
     >>> configuration = FlavaImageConfig()
 
     >>> # Initializing a FlavaImageModel model from the style configuration
+    >>> model = FlavaImageModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     model_type = "flava_image_model"
@@ -209,6 +213,10 @@ class FlavaTextConfig(PretrainedConfig):
     >>> configuration = FlavaTextConfig()
 
     >>> # Initializing a FlavaTextConfig from the style configuration
+    >>> model = FlavaTextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "flava_text_model"
 
@@ -314,6 +322,10 @@ class FlavaMultimodalConfig(PretrainedConfig):
     >>> configuration = FlavaMultimodalConfig()
 
     >>> # Initializing a FlavaMultimodalModel model from the style configuration
+    >>> model = FlavaMultimodalModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     model_type = "flava_multimodal_model"
@@ -403,6 +415,10 @@ class FlavaImageCodebookConfig(PretrainedConfig):
     >>> # Initializing a FlavaImageCodebook with style configuration
     >>> configuration = FlavaImageCodebookConfig()
 
+    >>> # Initializing a FlavaImageCodebook model from the style configuration
+    >>> model = FlavaImageCodebook(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```
     """
 
@@ -507,6 +523,10 @@ class FlavaConfig(PretrainedConfig):
     >>> # Initializing a FlavaModel and FlavaForPreTraining model from the style configuration
     >>> model = FlavaModel(configuration)
     >>> model_pre = FlavaForPreTraining(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    >>> configuration_pre = model_pre.config
     ```
     """
 

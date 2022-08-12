@@ -94,6 +94,10 @@ class PegasusConfig(PretrainedConfig):
     >>> configuration = PegasusConfig()
 
     >>> # Initializing a model from the google/pegasus-large style configuration
+    >>> model = PegasusModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "pegasus"
     keys_to_ignore_at_inference = ["past_key_values"]

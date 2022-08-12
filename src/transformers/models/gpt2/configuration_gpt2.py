@@ -123,6 +123,10 @@ class GPT2Config(PretrainedConfig):
     >>> configuration = GPT2Config()
 
     >>> # Initializing a model from the configuration
+    >>> model = GPT2Model(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     model_type = "gpt2"

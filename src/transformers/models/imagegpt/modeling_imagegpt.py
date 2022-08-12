@@ -705,6 +705,10 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
 
         >>> feature_extractor = ImageGPTFeatureExtractor.from_pretrained("openai/imagegpt-small")
         >>> model = ImageGPTModel.from_pretrained("openai/imagegpt-small")
+
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
 
         if "pixel_values" in kwargs:
@@ -1012,6 +1016,10 @@ class ImageGPTForCausalImageModeling(ImageGPTPreTrainedModel):
         ...     np.reshape(np.rint(127.5 * (clusters[s] + 1.0)), [n_px, n_px, 3]).astype(np.uint8) for s in samples
         ... ]  # convert color cluster tokens back to pixels
         >>> f, axes = plt.subplots(1, batch_size, dpi=300)
+
+        >>> for img, ax in zip(samples_img, axes):
+        ...     ax.axis("off")
+        ...     ax.imshow(img)
         ```"""
 
         if "pixel_values" in kwargs:
@@ -1141,6 +1149,10 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
 
         >>> feature_extractor = ImageGPTFeatureExtractor.from_pretrained("openai/imagegpt-small")
         >>> model = ImageGPTForImageClassification.from_pretrained("openai/imagegpt-small")
+
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
         ```"""
 
         if "pixel_values" in kwargs:

@@ -20,7 +20,9 @@ Instantiating one of [`AutoConfig`], [`AutoModel`], and
 [`AutoTokenizer`] will directly create a class of the relevant architecture. For instance
 
 
-``````
+```python
+model = AutoModel.from_pretrained("bert-base-cased")
+```
 
 will create a model that is an instance of [`BertModel`].
 
@@ -33,6 +35,10 @@ custom class of model `NewModel`, make sure you have a `NewModelConfig` then you
 classes like this:
 
 ```python
+from transformers import AutoConfig, AutoModel
+
+AutoConfig.register("new-model", NewModelConfig)
+AutoModel.register(NewModelConfig, NewModel)
 ```
 
 You will then be able to use the auto classes like you would usually do!

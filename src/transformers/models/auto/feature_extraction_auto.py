@@ -170,6 +170,10 @@ def get_feature_extractor_config(
 
     # Save a pretrained tokenizer locally and you can reload its config
     from transformers import AutoTokenizer
+
+    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+    tokenizer.save_pretrained("tokenizer-test")
+    tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
     resolved_config_file = get_file_from_repo(
         pretrained_model_name_or_path,
@@ -275,6 +279,10 @@ class AutoFeatureExtractor:
         >>> from transformers import AutoFeatureExtractor
 
         >>> # Download feature extractor from huggingface.co and cache.
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-base-960h")
+
+        >>> # If feature extractor files are in a directory (e.g. feature extractor was saved using *save_pretrained('./test/saved_model/')*)
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("./test/saved_model/")
         ```"""
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.pop("trust_remote_code", False)

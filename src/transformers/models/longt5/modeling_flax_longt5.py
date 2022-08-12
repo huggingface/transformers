@@ -1801,6 +1801,10 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
 
         >>> tokenizer = T5Tokenizer.from_pretrained("t5-base")
         >>> model = FlaxLongT5ForConditionalGeneration.from_pretrained("google/long-t5-local-base")
+
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, return_tensors="np")
+        >>> encoder_outputs = model.encode(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1865,6 +1869,10 @@ class FlaxLongT5PreTrainedModel(FlaxPreTrainedModel):
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> logits = outputs.logits
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2079,6 +2087,10 @@ FLAX_LONGT5_MODEL_DOCSTRING = """
     ...     "Studies have been shown that owning a dog is good for you", return_tensors="np"
     ... ).input_ids
     >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="np").input_ids
+
+    >>> # forward pass
+    >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+    >>> last_hidden_states = outputs.last_hidden_state
     ```
 """
 
@@ -2229,6 +2241,10 @@ class FlaxLongT5ForConditionalGeneration(FlaxLongT5PreTrainedModel):
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> logits = outputs.logits
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -2370,6 +2386,10 @@ FLAX_LONGT5_CONDITIONAL_GENERATION_DOCSTRING = """
 
     >>> ARTICLE_TO_SUMMARIZE = "summarize: My friends are cool but they eat too many carbs."
     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], return_tensors="np")
+
+    >>> # Generate Summary
+    >>> summary_ids = model.generate(inputs["input_ids"]).sequences
+    >>> print(tokenizer.decode(summary_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=False))
     ```
 """
 

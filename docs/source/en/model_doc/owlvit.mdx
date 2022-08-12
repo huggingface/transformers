@@ -55,6 +55,10 @@ OWL-ViT is a zero-shot text-conditioned object detection model. OWL-ViT uses [CL
 >>> score_threshold = 0.1
 >>> for box, score, label in zip(boxes, scores, labels):
 ...     box = [round(i, 2) for i in box.tolist()]
+...     if score >= score_threshold:
+...         print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
+Detected a photo of a cat with confidence 0.707 at location [324.97, 20.44, 640.58, 373.29]
+Detected a photo of a cat with confidence 0.717 at location [1.46, 55.26, 315.55, 472.17]
 ```
 
 This model was contributed by [adirik](https://huggingface.co/adirik). The original code can be found [here](https://github.com/google-research/scenic/tree/main/scenic/projects/owl_vit).

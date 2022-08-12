@@ -696,6 +696,10 @@ class TFOpenAIGPTDoubleHeadsModel(TFOpenAIGPTPreTrainedModel):
         >>> inputs["mc_token_ids"] = tf.constant(
         ...     [inputs["input_ids"].shape[-1] - 1, inputs["input_ids"].shape[-1] - 1]
         ... )[
+        ...     None, :
+        ... ]  # Batch size 1
+        >>> outputs = model(inputs)
+        >>> lm_prediction_scores, mc_prediction_scores = outputs[:2]
         ```"""
 
         if input_ids is not None:

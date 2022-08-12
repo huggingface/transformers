@@ -877,6 +877,10 @@ class LayoutLMv3Model(LayoutLMv3PreTrainedModel):
         >>> words = example["tokens"]
         >>> boxes = example["bboxes"]
 
+        >>> encoding = processor(image, words, boxes=boxes, return_tensors="pt")
+
+        >>> outputs = model(**encoding)
+        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1093,6 +1097,10 @@ class LayoutLMv3ForTokenClassification(LayoutLMv3PreTrainedModel):
         >>> word_labels = example["ner_tags"]
 
         >>> encoding = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
+
+        >>> outputs = model(**encoding)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1211,6 +1219,10 @@ class LayoutLMv3ForQuestionAnswering(LayoutLMv3PreTrainedModel):
         >>> start_positions = torch.tensor([1])
         >>> end_positions = torch.tensor([3])
 
+        >>> outputs = model(**encoding, start_positions=start_positions, end_positions=end_positions)
+        >>> loss = outputs.loss
+        >>> start_scores = outputs.start_logits
+        >>> end_scores = outputs.end_logits
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1326,6 +1338,10 @@ class LayoutLMv3ForSequenceClassification(LayoutLMv3PreTrainedModel):
 
         >>> encoding = processor(image, words, boxes=boxes, return_tensors="pt")
         >>> sequence_label = torch.tensor([1])
+
+        >>> outputs = model(**encoding, labels=sequence_label)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

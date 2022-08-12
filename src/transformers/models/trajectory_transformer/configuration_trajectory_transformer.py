@@ -99,6 +99,10 @@ class TrajectoryTransformerConfig(PretrainedConfig):
     >>> configuration = TrajectoryTransformerConfig()
 
     >>> # Initializing a model from the CarlCochet/trajectory-transformer-halfcheetah-medium-v2 style configuration
+    >>> model = TrajectoryTransformerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "trajectory_transformer"
     keys_to_ignore_at_inference = ["past_key_values"]

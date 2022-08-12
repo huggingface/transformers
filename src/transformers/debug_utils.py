@@ -38,7 +38,9 @@ class DebugUnderflowOverflow:
 
     To activate the underflow/overflow detection, initialize the object with the model :
 
-    ```    ```
+    ```python
+    debug_overflow = DebugUnderflowOverflow(model)
+    ```
 
     then run the training as normal and if `nan` or `inf` gets detected in at least one of the weight, input or output
     elements this module will throw an exception and will print `max_frames_to_save` frames that lead to this event,
@@ -87,7 +89,9 @@ class DebugUnderflowOverflow:
 
     By default the last 21 frames are printed. You can change the default to adjust for your needs. For example :
 
-    ```    ```
+    ```python
+    debug_overflow = DebugUnderflowOverflow(model, max_frames_to_save=100)
+    ```
 
         To validate that you have set up this debugging feature correctly, and you intend to use it in a training that
         may take hours to complete, first run it with normal tracing enabled for one of a few batches as explained in
@@ -101,7 +105,9 @@ class DebugUnderflowOverflow:
         Let's say you want to watch the absolute min and max values for all the ingredients of each `forward` call of a
     given batch, and only do that for batches 1 and 3. Then you instantiate this class as :
 
-    ```    ```
+    ```python
+    debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3])
+    ```
 
     And now full batches 1 and 3 will be traced using the same format as explained above. Batches are 0-indexed.
 
@@ -113,7 +119,9 @@ class DebugUnderflowOverflow:
 
     You can also specify the batch number after which to stop the training, with :
 
-    ```    ```
+    ```python
+    debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3], abort_after_batch_num=3)
+    ```
 
     This feature is mainly useful in the tracing mode, but you can use it for any mode.
 

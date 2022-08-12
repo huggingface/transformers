@@ -102,6 +102,10 @@ class BartConfig(PretrainedConfig):
     >>> configuration = BartConfig()
 
     >>> # Initializing a model from the facebook/bart-large style configuration
+    >>> model = BartModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "bart"
     keys_to_ignore_at_inference = ["past_key_values"]

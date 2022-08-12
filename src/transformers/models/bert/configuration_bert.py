@@ -129,6 +129,10 @@ class BertConfig(PretrainedConfig):
     >>> configuration = BertConfig()
 
     >>> # Initializing a model from the bert-base-uncased style configuration
+    >>> model = BertModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "bert"
 

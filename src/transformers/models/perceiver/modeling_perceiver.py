@@ -846,6 +846,10 @@ class PerceiverModel(PerceiverPreTrainedModel):
         >>> logits = outputs.logits
 
         >>> # to train, one can train the model using standard cross-entropy:
+        >>> criterion = torch.nn.CrossEntropyLoss()
+
+        >>> labels = torch.tensor([1])
+        >>> loss = criterion(logits, labels)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1026,6 +1030,10 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
         >>> with torch.no_grad():
         ...     outputs = model(**encoding)
         >>> logits = outputs.logits
+
+        >>> masked_tokens_predictions = logits[0, 52:61].argmax(dim=-1).tolist()
+        >>> tokenizer.decode(masked_tokens_predictions)
+        ' missing.'
         ```"""
         if inputs is not None and input_ids is not None:
             raise ValueError("You cannot use both `inputs` and `input_ids`")
@@ -1116,6 +1124,10 @@ class PerceiverForSequenceClassification(PerceiverPreTrainedModel):
         >>> tokenizer = PerceiverTokenizer.from_pretrained("deepmind/language-perceiver")
         >>> model = PerceiverForSequenceClassification.from_pretrained("deepmind/language-perceiver")
 
+        >>> text = "hello world"
+        >>> inputs = tokenizer(text, return_tensors="pt").input_ids
+        >>> outputs = model(inputs=inputs)
+        >>> logits = outputs.logits
         ```"""
         if inputs is not None and input_ids is not None:
             raise ValueError("You cannot use both `inputs` and `input_ids`")
@@ -1252,6 +1264,10 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
         >>> outputs = model(inputs=inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_class_idx = logits.argmax(-1).item()
+        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         ```"""
         if inputs is not None and pixel_values is not None:
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
@@ -1385,6 +1401,10 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
         >>> outputs = model(inputs=inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_class_idx = logits.argmax(-1).item()
+        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         ```"""
         if inputs is not None and pixel_values is not None:
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
@@ -1518,6 +1538,10 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt").pixel_values
         >>> outputs = model(inputs=inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_class_idx = logits.argmax(-1).item()
+        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
         ```"""
         if inputs is not None and pixel_values is not None:
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
@@ -1661,6 +1685,10 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         >>> # in the Perceiver IO paper, the authors extract a 3 x 3 patch around each pixel,
         >>> # leading to 3 x 3 x 3 = 27 values for each pixel (as each pixel also has 3 color channels)
         >>> # patches have shape (batch_size, num_frames, num_channels, height, width)
+        >>> # the authors train on resolutions of 368 x 496
+        >>> patches = torch.randn(1, 2, 27, 368, 496)
+        >>> outputs = model(inputs=patches)
+        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1883,6 +1911,10 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         ...     "image": torch.arange(image_chunk_size * chunk_idx, image_chunk_size * (chunk_idx + 1)),
         ...     "audio": torch.arange(audio_chunk_size * chunk_idx, audio_chunk_size * (chunk_idx + 1)),
         ...     "label": None,
+        ... }
+
+        >>> outputs = model(inputs=inputs, subsampled_output_points=subsampling)
+        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

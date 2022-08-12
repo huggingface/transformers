@@ -83,6 +83,10 @@ class MegatronBertConfig(PretrainedConfig):
     >>> configuration = MegatronBertConfig()
 
     >>> # Initializing a model from the bert-base-uncased style configuration
+    >>> model = MegatronBertModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "megatron-bert"
 

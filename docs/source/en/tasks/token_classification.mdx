@@ -28,12 +28,20 @@ See the token classification [task page](https://huggingface.co/tasks/token-clas
 
 Load the WNUT 17 dataset from the 🤗 Datasets library:
 
-``````
+```py
+>>> from datasets import load_dataset
+
+>>> wnut = load_dataset("wnut_17")
+```
 
 Then take a look at an example:
 
 ```py
 >>> wnut["train"][0]
+{'id': '0',
+ 'ner_tags': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 7, 8, 8, 0, 7, 0, 0, 0, 0, 0, 0, 0, 0],
+ 'tokens': ['@paulwalk', 'It', "'s", 'the', 'view', 'from', 'where', 'I', "'m", 'living', 'for', 'two', 'weeks', '.', 'Empire', 'State', 'Building', '=', 'ESB', '.', 'Pretty', 'bad', 'storm', 'here', 'last', 'evening', '.']
+}
 ```
 
 Each number in `ner_tags` represents an entity. Convert the number to a label name for more information:
@@ -52,6 +60,10 @@ Each number in `ner_tags` represents an entity. Convert the number to a label na
     "B-location",
     "I-location",
     "B-person",
+    "I-person",
+    "B-product",
+    "I-product",
+]
 ```
 
 The `ner_tag` describes an entity, such as a corporation, location, or person. The letter that prefixes each `ner_tag` indicates the token position of the entity:
@@ -67,11 +79,19 @@ The `ner_tag` describes an entity, such as a corporation, location, or person. T
 
 Load the DistilBERT tokenizer to process the `tokens`:
 
-``````
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+```
 
 Since the input has already been split into words, set `is_split_into_words=True` to tokenize the words into subwords:
 
 ```py
+>>> tokenized_input = tokenizer(example["tokens"], is_split_into_words=True)
+>>> tokens = tokenizer.convert_ids_to_tokens(tokenized_input["input_ids"])
+>>> tokens
+['[CLS]', '@', 'paul', '##walk', 'it', "'", 's', 'the', 'view', 'from', 'where', 'i', "'", 'm', 'living', 'for', 'two', 'weeks', '.', 'empire', 'state', 'building', '=', 'es', '##b', '.', 'pretty', 'bad', 'storm', 'here', 'last', 'evening', '.', '[SEP]']
 ```
 
 Adding the special tokens `[CLS]` and `[SEP]` and subword tokenization creates a mismatch between the input and labels. A single word corresponding to a single label may be split into two subwords. You will need to realign the tokens and labels by:
@@ -100,20 +120,34 @@ Here is how you can create a function to realign the tokens and labels, and trun
 ...             else:
 ...                 label_ids.append(-100)
 ...             previous_word_idx = word_idx
+...         labels.append(label_ids)
+
+...     tokenized_inputs["labels"] = labels
+...     return tokenized_inputs
 ```
 
 Use 🤗 Datasets [`~datasets.Dataset.map`] function to tokenize and align the labels over the entire dataset. You can speed up the `map` function by setting `batched=True` to process multiple elements of the dataset at once:
 
-``````
+```py
+>>> tokenized_wnut = wnut.map(tokenize_and_align_labels, batched=True)
+```
 
 Use [`DataCollatorForTokenClassification`] to create a batch of examples. It will also *dynamically pad* your text and labels to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
 
 <frameworkcontent>
 <pt>
-``````
+```py
+>>> from transformers import DataCollatorForTokenClassification
+
+>>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer)
+```
 </pt>
 <tf>
-``````
+```py
+>>> from transformers import DataCollatorForTokenClassification
+
+>>> data_collator = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="tf")
+```
 </tf>
 </frameworkcontent>
 
@@ -123,7 +157,11 @@ Use [`DataCollatorForTokenClassification`] to create a batch of examples. It wil
 <pt>
 Load DistilBERT with [`AutoModelForTokenClassification`] along with the number of expected labels:
 
-``````
+```py
+>>> from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
+
+>>> model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels=14)
+```
 
 <Tip>
 
@@ -154,6 +192,10 @@ At this point, only three steps remain:
 ...     train_dataset=tokenized_wnut["train"],
 ...     eval_dataset=tokenized_wnut["test"],
 ...     tokenizer=tokenizer,
+...     data_collator=data_collator,
+... )
+
+>>> trainer.train()
 ```
 </pt>
 <tf>
@@ -169,6 +211,10 @@ To fine-tune a model in TensorFlow, start by converting your datasets to the `tf
 
 >>> tf_validation_set = tokenized_wnut["validation"].to_tf_dataset(
 ...     columns=["attention_mask", "input_ids", "labels"],
+...     shuffle=False,
+...     batch_size=16,
+...     collate_fn=data_collator,
+... )
 ```
 
 <Tip>
@@ -187,19 +233,33 @@ Set up an optimizer function, learning rate schedule, and some training hyperpar
 >>> num_train_steps = (len(tokenized_wnut["train"]) // batch_size) * num_train_epochs
 >>> optimizer, lr_schedule = create_optimizer(
 ...     init_lr=2e-5,
+...     num_train_steps=num_train_steps,
+...     weight_decay_rate=0.01,
+...     num_warmup_steps=0,
+... )
 ```
 
 Load DistilBERT with [`TFAutoModelForTokenClassification`] along with the number of expected labels:
 
-``````
+```py
+>>> from transformers import TFAutoModelForTokenClassification
+
+>>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
+```
 
 Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
 
-``````
+```py
+>>> import tensorflow as tf
+
+>>> model.compile(optimizer=optimizer)
+```
 
 Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to fine-tune the model:
 
-``````
+```py
+>>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3)
+```
 </tf>
 </frameworkcontent>
 

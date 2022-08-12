@@ -96,6 +96,10 @@ class DecisionTransformerConfig(PretrainedConfig):
     >>> configuration = DecisionTransformerConfig()
 
     >>> # Initializing a model from the configuration
+    >>> model = DecisionTransformerConfig(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     model_type = "decision_transformer"

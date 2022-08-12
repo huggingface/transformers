@@ -995,6 +995,10 @@ class FlaxBlenderbotPreTrainedModel(FlaxPreTrainedModel):
 
         >>> model = FlaxBlenderbotForConditionalGeneration.from_pretrained("facebook/blenderbot-400M-distill")
         >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
+
+        >>> text = "My friends are cool but they eat too many carbs."
+        >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
+        >>> encoder_outputs = model.encode(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1066,6 +1070,10 @@ class FlaxBlenderbotPreTrainedModel(FlaxPreTrainedModel):
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> last_decoder_hidden_states = outputs.last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1332,6 +1340,10 @@ class FlaxBlenderbotForConditionalGeneration(FlaxBlenderbotPreTrainedModel):
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
+        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+
+        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
+        >>> logits = outputs.logits
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

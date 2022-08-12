@@ -44,6 +44,10 @@ Example of use:
 
 >>> # With TensorFlow 2.0+:
 >>> from transformers import TFAutoModel
+
+>>> bartpho = TFAutoModel.from_pretrained("vinai/bartpho-syllable")
+>>> input_ids = tokenizer(line, return_tensors="tf")
+>>> features = bartpho(**input_ids)
 ```
 
 Tips:
@@ -60,6 +64,10 @@ Tips:
 >>> TXT = "Chúng tôi là <mask> nghiên cứu viên."
 >>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
 >>> logits = bartpho(input_ids).logits
+>>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
+>>> probs = logits[0, masked_index].softmax(dim=0)
+>>> values, predictions = probs.topk(5)
+>>> print(tokenizer.decode(predictions).split())
 ```
 
 - This implementation is only for tokenization: "monolingual_vocab_file" consists of Vietnamese-specialized types

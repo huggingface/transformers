@@ -122,6 +122,10 @@ class RealmConfig(PretrainedConfig):
     >>> configuration = RealmConfig()
 
     >>> # Initializing a model from the google/realm-cc-news-pretrained-embedder style configuration
+    >>> model = RealmEmbedder(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "realm"
 

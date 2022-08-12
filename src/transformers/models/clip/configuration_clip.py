@@ -86,6 +86,10 @@ class CLIPTextConfig(PretrainedConfig):
     >>> configuration = CLIPTextConfig()
 
     >>> # Initializing a CLIPTextConfig from the openai/clip-vit-base-patch32 style configuration
+    >>> model = CLIPTextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "clip_text_model"
 
@@ -188,6 +192,10 @@ class CLIPVisionConfig(PretrainedConfig):
     >>> configuration = CLIPVisionConfig()
 
     >>> # Initializing a CLIPVisionModel model from the openai/clip-vit-base-patch32 style configuration
+    >>> model = CLIPVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     model_type = "clip_vision_model"

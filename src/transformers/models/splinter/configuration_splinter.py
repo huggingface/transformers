@@ -83,6 +83,10 @@ class SplinterConfig(PretrainedConfig):
     >>> configuration = SplinterConfig()
 
     >>> # Initializing a model from the tau/splinter-base style configuration
+    >>> model = SplinterModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "splinter"
 

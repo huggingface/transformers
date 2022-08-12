@@ -757,6 +757,10 @@ class VisualBertModel(VisualBertPreTrainedModel):
                 "visual_attention_mask": visual_attention_mask,
             }
         )
+
+        outputs = model(**inputs)
+
+        last_hidden_states = outputs.last_hidden_state
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -944,6 +948,10 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
         sentence_image_labels = torch.tensor(1).unsqueeze(0)  # Batch_size
 
 
+        outputs = model(**inputs, labels=labels, sentence_image_labels=sentence_image_labels)
+        loss = outputs.loss
+        prediction_logits = outputs.prediction_logits
+        seq_relationship_logits = outputs.seq_relationship_logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1084,6 +1092,10 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
                 "labels": labels,
             }
         )
+        outputs = model(**inputs_dict)
+
+        loss = outputs.loss
+        logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
@@ -1223,6 +1235,10 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
         )
 
         labels = torch.tensor([[0.0, 1.0]]).unsqueeze(0)  # Batch size 1, Num labels 2
+
+        outputs = model(**inputs, labels=labels)
+        loss = outputs.loss
+        scores = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1345,6 +1361,10 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
         )
 
         labels = torch.tensor(1).unsqueeze(0)  # Batch size 1, Num choices 2
+
+        outputs = model(**inputs, labels=labels)
+        loss = outputs.loss
+        scores = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1509,6 +1529,10 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
         labels = torch.ones(
             (1, inputs["input_ids"].shape[-1] + visual_embeds.shape[-2], visual_embeds.shape[-2])
         )  # Batch size 1
+
+        outputs = model(**inputs, labels=labels)
+        loss = outputs.loss
+        scores = outputs.logits
         ```"""
         if region_to_phrase_position is None:
             raise ValueError("`region_to_phrase_position` should not be None when using Flickr Model.")

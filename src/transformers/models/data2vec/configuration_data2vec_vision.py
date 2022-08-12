@@ -109,6 +109,10 @@ class Data2VecVisionConfig(PretrainedConfig):
     >>> configuration = Data2VecVisionConfig()
 
     >>> # Initializing a model from the data2vec_vision-base-patch16-224-in22k style configuration
+    >>> model = Data2VecVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "data2vec-vision"
 

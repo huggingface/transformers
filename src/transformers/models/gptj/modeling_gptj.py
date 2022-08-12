@@ -447,6 +447,10 @@ PARALLELIZE_DOCSTRING = r"""
     device_map = {
         0: [0, 1, 2, 3, 4, 5, 6],
         1: [7, 8, 9, 10, 11, 12, 13],
+        2: [14, 15, 16, 17, 18, 19, 20],
+        3: [21, 22, 23, 24, 25, 26, 27],
+    }
+    model.parallelize(device_map)
     ```
 """
 
@@ -462,6 +466,10 @@ DEPARALLELIZE_DOCSTRING = r"""
         0: [0, 1, 2, 3, 4, 5, 6],
         1: [7, 8, 9, 10, 11, 12, 13],
         2: [14, 15, 16, 17, 18, 19, 20],
+        3: [21, 22, 23, 24, 25, 26, 27],
+    }
+    model.parallelize(device_map)  # Splits the model across several devices
+    model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
     ```
 """
 

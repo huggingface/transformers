@@ -106,6 +106,10 @@ class MobileViTConfig(PretrainedConfig):
     >>> configuration = MobileViTConfig()
 
     >>> # Initializing a model from the mobilevit-small style configuration
+    >>> model = MobileViTModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "mobilevit"
 

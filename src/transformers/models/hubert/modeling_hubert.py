@@ -1044,6 +1044,10 @@ class HubertModel(HubertPreTrainedModel):
 
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.map(map_to_array)
+
+        >>> input_values = processor(ds["speech"][0], return_tensors="pt").input_values  # Batch size 1
+        >>> hidden_states = model(input_values).last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

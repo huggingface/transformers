@@ -86,6 +86,10 @@ into a single instance to both extract the input features and decode the predict
 ... )
 
 >>> sequence = processor.batch_decode(outputs.sequences)[0]
+>>> sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
+>>> sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
+>>> print(processor.token2json(sequence))
+{'class': 'advertisement'}
 ```
 
 - Step-by-step Document Parsing
@@ -127,6 +131,10 @@ into a single instance to both extract the input features and decode the predict
 ... )
 
 >>> sequence = processor.batch_decode(outputs.sequences)[0]
+>>> sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
+>>> sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
+>>> print(processor.token2json(sequence))
+{'menu': {'nm': 'CINNAMON SUGAR', 'unitprice': '17,000', 'cnt': '1 x', 'price': '17,000'}, 'sub_total': {'subtotal_price': '17,000'}, 'total': {'total_price': '17,000', 'cashprice': '20,000', 'changeprice': '3,000'}}
 ```
 
 - Step-by-step Document Visual Question Answering (DocVQA)
@@ -170,6 +178,10 @@ into a single instance to both extract the input features and decode the predict
 ... )
 
 >>> sequence = processor.batch_decode(outputs.sequences)[0]
+>>> sequence = sequence.replace(processor.tokenizer.eos_token, "").replace(processor.tokenizer.pad_token, "")
+>>> sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
+>>> print(processor.token2json(sequence))
+{'question': 'When is the coffee break?', 'answer': '11-14 to 11:39 a.m.'}
 ```
 
 See the [model hub](https://huggingface.co/models?filter=donut) to look for Donut checkpoints.

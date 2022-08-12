@@ -924,6 +924,10 @@ class TapasModel(TapasPreTrainedModel):
         >>> table = pd.DataFrame.from_dict(data)
         >>> queries = ["How many movies has George Clooney played in?", "How old is Brad Pitt?"]
 
+        >>> inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1065,6 +1069,10 @@ class TapasForMaskedLM(TapasPreTrainedModel):
         ... )
         >>> labels = tokenizer(
         ...     table=table, queries="How many movies has George Clooney played in?", return_tensors="pt"
+        ... )["input_ids"]
+
+        >>> outputs = model(**inputs, labels=labels)
+        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1211,6 +1219,10 @@ class TapasForQuestionAnswering(TapasPreTrainedModel):
         >>> queries = ["How many movies has George Clooney played in?", "How old is Brad Pitt?"]
 
         >>> inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> logits = outputs.logits
+        >>> logits_aggregation = outputs.logits_aggregation
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1510,6 +1522,10 @@ class TapasForSequenceClassification(TapasPreTrainedModel):
 
         >>> inputs = tokenizer(table=table, queries=queries, padding="max_length", return_tensors="pt")
         >>> labels = torch.tensor([1, 0])  # 1 means entailed, 0 means refuted
+
+        >>> outputs = model(**inputs, labels=labels)
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

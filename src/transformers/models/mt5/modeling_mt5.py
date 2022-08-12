@@ -40,6 +40,10 @@ class MT5Model(T5Model):
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> summary = "Weiter Verhandlung in Syrien."
     >>> inputs = tokenizer(article, return_tensors="pt")
+    >>> labels = tokenizer(text_target=summary, return_tensors="pt")
+
+    >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=labels["input_ids"])
+    >>> hidden_states = outputs.last_hidden_state
     ```"""
     model_type = "mt5"
     config_class = MT5Config
@@ -68,6 +72,10 @@ class MT5ForConditionalGeneration(T5ForConditionalGeneration):
     >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
     >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
     >>> summary = "Weiter Verhandlung in Syrien."
+    >>> inputs = tokenizer(article, text_target=summary, return_tensors="pt")
+
+    >>> outputs = model(**inputs)
+    >>> loss = outputs.loss
     ```"""
 
     model_type = "mt5"
@@ -92,6 +100,10 @@ class MT5EncoderModel(T5EncoderModel):
 
     >>> model = MT5EncoderModel.from_pretrained("google/mt5-small")
     >>> tokenizer = T5Tokenizer.from_pretrained("google/mt5-small")
+    >>> article = "UN Offizier sagt, dass weiter verhandelt werden muss in Syrien."
+    >>> input_ids = tokenizer(article, return_tensors="pt").input_ids
+    >>> outputs = model(input_ids)
+    >>> hidden_state = outputs.last_hidden_state
     ```"""
 
     model_type = "mt5"

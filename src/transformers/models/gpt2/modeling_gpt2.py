@@ -651,6 +651,10 @@ PARALLELIZE_DOCSTRING = r"""
     device_map = {
         0: [0, 1, 2, 3, 4, 5, 6, 7, 8],
         1: [9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21],
+        2: [22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34],
+        3: [35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47],
+    }
+    model.parallelize(device_map)
     ```
 """
 DEPARALLELIZE_DOCSTRING = r"""
@@ -665,6 +669,10 @@ DEPARALLELIZE_DOCSTRING = r"""
         0: [0, 1, 2, 3, 4, 5, 6, 7],
         1: [8, 9, 10, 11, 12, 13, 14, 15],
         2: [16, 17, 18, 19, 20, 21, 22, 23],
+        3: [24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35],
+    }
+    model.parallelize(device_map)  # Splits the model across several devices
+    model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
     ```
 """
 
@@ -1248,6 +1256,10 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel):
 
         >>> input_ids = torch.tensor(encoded_choices).unsqueeze(0)  # Batch size: 1, number of choices: 2
         >>> mc_token_ids = torch.tensor([cls_token_location])  # Batch size: 1
+
+        >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
+        >>> lm_logits = outputs.logits
+        >>> mc_logits = outputs.mc_logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

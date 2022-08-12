@@ -64,6 +64,10 @@ class LongformerConfig(RobertaConfig):
     >>> configuration = LongformerConfig()
 
     >>> # Initializing a model from the configuration
+    >>> model = LongformerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "longformer"
 

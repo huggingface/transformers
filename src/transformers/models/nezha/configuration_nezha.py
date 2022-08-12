@@ -58,6 +58,10 @@ class NezhaConfig(PretrainedConfig):
     >>> configuration = NezhaConfig()
 
     >>> # Initializing a model from the Nezha-base style configuration model
+    >>> model = NezhaModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     pretrained_config_archive_map = NEZHA_PRETRAINED_CONFIG_ARCHIVE_MAP

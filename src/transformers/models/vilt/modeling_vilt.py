@@ -791,6 +791,10 @@ class ViltModel(ViltPreTrainedModel):
 
         >>> processor = ViltProcessor.from_pretrained("dandelin/vilt-b32-mlm")
         >>> model = ViltModel.from_pretrained("dandelin/vilt-b32-mlm")
+
+        >>> inputs = processor(image, text, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -974,6 +978,10 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         ...         inferred_token = [processor.decode(encoded)]
 
         >>> selected_token = ""
+        >>> encoded = processor.tokenizer(inferred_token)
+        >>> output = processor.decode(encoded.input_ids[0], skip_special_tokens=True)
+        >>> print(output)
+        a bunch of cats laying on a couch.
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1120,6 +1128,10 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
 
         >>> # forward pass
         >>> outputs = model(**encoding)
+        >>> logits = outputs.logits
+        >>> idx = logits.argmax(-1).item()
+        >>> print("Predicted answer:", model.config.id2label[idx])
+        Predicted answer: 2
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1217,6 +1229,10 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
         >>> # forward pass
         >>> scores = dict()
         >>> for text in texts:
+        ...     # prepare inputs
+        ...     encoding = processor(image, text, return_tensors="pt")
+        ...     outputs = model(**encoding)
+        ...     scores[text] = outputs.logits[0, :].item()
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1321,6 +1337,10 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
 
         >>> # forward pass
         >>> outputs = model(input_ids=encoding.input_ids, pixel_values=encoding.pixel_values.unsqueeze(0))
+        >>> logits = outputs.logits
+        >>> idx = logits.argmax(-1).item()
+        >>> print("Predicted answer:", model.config.id2label[idx])
+        Predicted answer: True
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

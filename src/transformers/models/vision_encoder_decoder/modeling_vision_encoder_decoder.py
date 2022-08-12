@@ -308,6 +308,10 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         >>> model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
         ...     "google/vit-base-patch16-224-in21k", "bert-base-uncased"
         ... )
+        >>> # saving model after fine-tuning
+        >>> model.save_pretrained("./vit-bert")
+        >>> # load fine-tuned model
+        >>> model = VisionEncoderDecoderModel.from_pretrained("./vit-bert")
         ```"""
 
         kwargs_encoder = {
@@ -439,6 +443,10 @@ class VisionEncoderDecoderModel(PreTrainedModel):
         >>> labels = processor.tokenizer(text, return_tensors="pt").input_ids
         >>> outputs = model(pixel_values=pixel_values, labels=labels)
         >>> loss = outputs.loss
+
+        >>> # inference (generation)
+        >>> generated_ids = model.generate(pixel_values)
+        >>> generated_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

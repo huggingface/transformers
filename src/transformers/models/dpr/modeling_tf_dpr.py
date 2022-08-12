@@ -566,6 +566,10 @@ class TFDPRContextEncoder(TFDPRPretrainedContextEncoder):
         ```python
         >>> from transformers import TFDPRContextEncoder, DPRContextEncoderTokenizer
 
+        >>> tokenizer = DPRContextEncoderTokenizer.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base")
+        >>> model = TFDPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base", from_pt=True)
+        >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors="tf")["input_ids"]
+        >>> embeddings = model(input_ids).pooler_output
         ```
         """
         if input_ids is not None and inputs_embeds is not None:
@@ -649,6 +653,10 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
         ```python
         >>> from transformers import TFDPRQuestionEncoder, DPRQuestionEncoderTokenizer
 
+        >>> tokenizer = DPRQuestionEncoderTokenizer.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
+        >>> model = TFDPRQuestionEncoder.from_pretrained("facebook/dpr-question_encoder-single-nq-base", from_pt=True)
+        >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors="tf")["input_ids"]
+        >>> embeddings = model(input_ids).pooler_output
         ```
         """
         if input_ids is not None and inputs_embeds is not None:
@@ -738,6 +746,10 @@ class TFDPRReader(TFDPRPretrainedReader):
         ...     texts=["'What Is Love' is a song recorded by the artist Haddaway"],
         ...     return_tensors="tf",
         ... )
+        >>> outputs = model(encoded_inputs)
+        >>> start_logits = outputs.start_logits
+        >>> end_logits = outputs.end_logits
+        >>> relevance_logits = outputs.relevance_logits
         ```
         """
         if input_ids is not None and inputs_embeds is not None:

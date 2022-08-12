@@ -888,6 +888,10 @@ class TFAlbertForPreTraining(TFAlbertPreTrainedModel, TFAlbertPreTrainingLoss):
 
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True))[None, :]
         >>> # Batch size 1
+        >>> outputs = model(input_ids)
+
+        >>> prediction_logits = outputs.prediction_logits
+        >>> sop_logits = outputs.sop_logits
         ```"""
 
         outputs = self.albert(
@@ -1007,10 +1011,18 @@ class TFAlbertForMaskedLM(TFAlbertPreTrainedModel, TFMaskedLanguageModelingLoss)
         >>> logits = model(**inputs).logits
 
         >>> # retrieve index of [MASK]
+        >>> mask_token_index = tf.where(inputs.input_ids == tokenizer.mask_token_id)[0][1]
+        >>> predicted_token_id = tf.math.argmax(logits[0, mask_token_index], axis=-1)
+        >>> tokenizer.decode(predicted_token_id)
+        'france'
         ```
 
         ```python
         >>> labels = tokenizer("The capital of France is Paris.", return_tensors="tf")["input_ids"]
+        >>> labels = tf.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
+        >>> outputs = model(**inputs, labels=labels)
+        >>> round(float(outputs.loss), 2)
+        0.81
         ```
         """
         outputs = self.albert(

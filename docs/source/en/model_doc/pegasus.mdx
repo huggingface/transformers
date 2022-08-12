@@ -81,6 +81,10 @@ All the [checkpoints](https://huggingface.co/models?search=pegasus) are fine-tun
 ... batch = tokenizer(src_text, truncation=True, padding="longest", return_tensors="pt").to(device)
 ... translated = model.generate(**batch)
 ... tgt_text = tokenizer.batch_decode(translated, skip_special_tokens=True)
+... assert (
+...     tgt_text[0]
+...     == "California's largest electricity provider has turned off power to hundreds of thousands of customers."
+... )
 ```
 
 ## PegasusConfig

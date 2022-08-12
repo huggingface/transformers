@@ -87,6 +87,10 @@ class SwinConfig(PretrainedConfig):
     >>> configuration = SwinConfig()
 
     >>> # Initializing a model from the microsoft/swin-tiny-patch4-window7-224 style configuration
+    >>> model = SwinModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "swin"
 

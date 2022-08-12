@@ -25,6 +25,10 @@ Antes de entrar en detalles, comencemos creando un tokenizador dummy en unas cua
 
 >>> tokenizer = Tokenizer(BPE(unk_token="[UNK]"))
 >>> trainer = BpeTrainer(special_tokens=["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]"])
+
+>>> tokenizer.pre_tokenizer = Whitespace()
+>>> files = [...]
+>>> tokenizer.train(files, trainer)
 ```
 
 Ahora tenemos un tokenizador entrenado en los archivos que definimos. Lo podemos seguir utilizando en ese entorno de ejecución (runtime en inglés), o puedes guardarlo
@@ -36,7 +40,11 @@ Veamos cómo utilizar este objeto tokenizador en la biblioteca 🤗 Transformers
 [`PreTrainedTokenizerFast`] permite una instanciación fácil, al aceptar el objeto
 *tokenizer* instanciado como argumento:
 
-``````
+```python
+>>> from transformers import PreTrainedTokenizerFast
+
+>>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_object=tokenizer)
+```
 
 Este objeto ya puede ser utilizado con todos los métodos compartidos por los tokenizadores de 🤗 Transformers! Visita la [página sobre tokenizadores
 ](main_classes/tokenizer) para más información.
@@ -45,12 +53,18 @@ Este objeto ya puede ser utilizado con todos los métodos compartidos por los to
 
 Para cargar un tokenizador desde un archivo JSON, comencemos por guardar nuestro tokenizador:
 
-``````
+```python
+>>> tokenizer.save("tokenizer.json")
+```
 
 La localización (path en inglés) donde este archivo es guardado puede ser incluida en el método de inicialización de [`PreTrainedTokenizerFast`]
 utilizando el parámetro `tokenizer_file`:
 
-``````
+```python
+>>> from transformers import PreTrainedTokenizerFast
+
+>>> fast_tokenizer = PreTrainedTokenizerFast(tokenizer_file="tokenizer.json")
+```
 
 Este objeto ya puede ser utilizado con todos los métodos compartidos por los tokenizadores de 🤗 Transformers! Visita la [página sobre tokenizadores
 ](main_classes/tokenizer) para más información.

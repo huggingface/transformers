@@ -46,6 +46,10 @@ class MyPipeline(Pipeline):
         outputs = self.model(**model_inputs)
         # Maybe {"logits": Tensor(...)}
         return outputs
+
+    def postprocess(self, model_outputs):
+        best_class = model_outputs["logits"].softmax(-1)
+        return best_class
 ```
 
 The structure of this breakdown is to support relatively seamless support for CPU/GPU, while supporting doing
@@ -74,6 +78,10 @@ A classic example would be a `top_k` argument in the post processing in classifi
 >>> pipe = pipeline("my-new-task")
 >>> pipe("This is a test")
 [{"label": "1-star", "score": 0.8}, {"label": "2-star", "score": 0.1}, {"label": "3-star", "score": 0.05}
+{"label": "4-star", "score": 0.025}, {"label": "5-star", "score": 0.025}]
+
+>>> pipe("This is a test", top_k=2)
+[{"label": "1-star", "score": 0.8}, {"label": "2-star", "score": 0.1}]
 ```
 
 In order to achieve that, we'll update our `postprocess` method with a default parameter to `5`. and edit
@@ -92,6 +100,10 @@ def _sanitize_parameters(self, **kwargs):
     if "maybe_arg" in kwargs:
         preprocess_kwargs["maybe_arg"] = kwargs["maybe_arg"]
 
+    postprocess_kwargs = {}
+    if "top_k" in kwargs:
+        postprocess_kwargs["top_k"] = kwargs["top_k"]
+    return preprocess_kwargs, {}, postprocess_kwargs
 ```
 
 Try to keep the inputs/outputs very simple and ideally JSON-serializable as it makes the pipeline usage very easy
@@ -108,6 +120,10 @@ To register your `new-task` to the list of supported tasks, you have to add it t
 from transformers.pipelines import PIPELINE_REGISTRY
 
 PIPELINE_REGISTRY.register_pipeline(
+    "new-task",
+    pipeline_class=MyPipeline,
+    pt_model=AutoModelForSequenceClassification,
+)
 ```
 
 You can specify a default model if you want, in which case it should come with a specific revision (which can be the name of a branch or a commit hash, here we took `"abcdef"`) as well was the type:
@@ -116,6 +132,10 @@ You can specify a default model if you want, in which case it should come with a
 PIPELINE_REGISTRY.register_pipeline(
     "new-task",
     pipeline_class=MyPipeline,
+    pt_model=AutoModelForSequenceClassification,
+    default={"pt": ("user/awesome_model", "abcdef")},
+    type="text",  # current support type: text, audio, image, multimodal
+)
 ```
 
 ## Share your pipeline on the Hub
@@ -153,6 +173,10 @@ class PairClassificationPipeline(Pipeline):
         probabilities = softmax(logits)
 
         best_class = np.argmax(probabilities)
+        label = self.model.config.id2label[best_class]
+        score = probabilities[best_class].item()
+        logits = logits.tolist()
+        return {"label": label, "score": score, "logits": logits}
 ```
 
 The implementation is framework agnostic, and will work for PyTorch and TensorFlow models. If we have saved this in
@@ -165,17 +189,29 @@ from transformers import AutoModelForSequenceClassification, TFAutoModelForSeque
 
 PIPELINE_REGISTRY.register_pipeline(
     "pair-classification",
+    pipeline_class=PairClassificationPipeline,
+    pt_model=AutoModelForSequenceClassification,
+    tf_model=TFAutoModelForSequenceClassification,
+)
 ```
 
 Once this is done, we can use it with a pretrained model. For instance `sgugger/finetuned-bert-mrpc` has been
 fine-tuned on the MRPC dataset, which classifies pairs of sentences as paraphrases or not.
 
-``````
+```py
+from transformers import pipeline
+
+classifier = pipeline("pair-classification", model="sgugger/finetuned-bert-mrpc")
+```
 
 Then we can share it on the Hub by using the `save_pretrained` method in a `Repository`:
 
 ```py
 from huggingface_hub import Repository
+
+repo = Repository("test-dynamic-pipeline", clone_from="{your_username}/test-dynamic-pipeline")
+classifier.save_pretrained("test-dynamic-pipeline")
+repo.push_to_hub()
 ```
 
 This will copy the file where you defined `PairClassificationPipeline` inside the folder `"test-dynamic-pipeline"`,
@@ -183,7 +219,11 @@ along with saving the model and tokenizer of the pipeline, before pushing everyt
 `{your_username}/test-dynamic-pipeline`. After that anyone can use it as long as they provide the option
 `trust_remote_code=True`:
 
-``````
+```py
+from transformers import pipeline
+
+classifier = pipeline(model="{your_username}/test-dynamic-pipeline", trust_remote_code=True)
+```
 
 ## Add the pipeline to Transformers
 

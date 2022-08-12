@@ -89,6 +89,10 @@ class ConvBertConfig(PretrainedConfig):
 
     >>> # Initializing a ConvBERT convbert-base-uncased style configuration
     >>> configuration = ConvBertConfig()
+    >>> # Initializing a model from the convbert-base-uncased style configuration
+    >>> model = ConvBertModel(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "convbert"
 

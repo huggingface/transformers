@@ -37,6 +37,10 @@ and the default [`BertForCausalLM`] configuration for the decoder.
 >>> from transformers import BertConfig, ViTConfig, VisionEncoderDecoderConfig, VisionEncoderDecoderModel
 
 >>> config_encoder = ViTConfig()
+>>> config_decoder = BertConfig()
+
+>>> config = VisionEncoderDecoderConfig.from_encoder_decoder_configs(config_encoder, config_decoder)
+>>> model = VisionEncoderDecoderModel(config=config)
 ```
 
 ## Initialising `VisionEncoderDecoderModel` from a pretrained encoder and a pretrained decoder.
@@ -48,6 +52,10 @@ To do so, the `VisionEncoderDecoderModel` class provides a [`VisionEncoderDecode
 
 ```python
 >>> from transformers import VisionEncoderDecoderModel
+
+>>> model = VisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+...     "microsoft/swin-base-patch4-window7-224-in22k", "bert-base-uncased"
+... )
 ```
 
 ## Loading an existing `VisionEncoderDecoderModel` checkpoint and perform inference.
@@ -73,6 +81,10 @@ To perform inference, one uses the [`generate`] method, which allows to autoregr
 >>> pixel_values = feature_extractor(image, return_tensors="pt").pixel_values
 
 >>> # autoregressively generate caption (uses greedy decoding by default)
+>>> generated_ids = model.generate(pixel_values)
+>>> generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+>>> print(generated_text)
+a cat laying on a blanket next to a cat laying on a bed
 ```
 
 ## Loading a PyTorch checkpoint into `TFVisionEncoderDecoderModel`.
@@ -90,6 +102,10 @@ checkpoints for a particular vision encoder-decoder model, a workaround is:
 >>> _model.decoder.save_pretrained("./decoder")
 
 >>> model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+...     "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
+... )
+>>> # This is only for copying some specific attributes of this particular model.
+>>> model.config = _model.config
 ```
 
 ## Training
@@ -118,6 +134,10 @@ images) and `labels` (which are the `input_ids` of the encoded target sequence).
 >>> labels = tokenizer(
 ...     "an image of two cats chilling on a couch",
 ...     return_tensors="pt",
+... ).input_ids
+
+>>> # the forward function automatically creates the correct decoder_input_ids
+>>> loss = model(pixel_values=pixel_values, labels=labels).loss
 ```
 
 This model was contributed by [nielsr](https://github.com/nielsrogge). This model's TensorFlow and Flax versions

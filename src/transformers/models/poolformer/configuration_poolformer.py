@@ -80,6 +80,10 @@ class PoolFormerConfig(PretrainedConfig):
     >>> configuration = PoolFormerConfig()
 
     >>> # Initializing a model from the sail/poolformer_s12 style configuration
+    >>> model = PoolFormerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```
     """
     model_type = "poolformer"

@@ -111,6 +111,10 @@ class RoFormerTokenizer(PreTrainedTokenizer):
 
     ```python
     >>> from transformers import RoFormerTokenizer
+
+    >>> tokenizer = RoFormerTokenizer.from_pretrained("junnyu/roformer_chinese_base")
+    >>> tokenizer.tokenize("今天天气非常好。")
+    # ['今', '天', '天', '气', '非常', '好', '。']
     ```"""
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP

@@ -88,6 +88,10 @@ class MaskFormerConfig(PretrainedConfig):
     >>> configuration = MaskFormerConfig()
 
     >>> # Initializing a model from the facebook/maskformer-swin-base-ade style configuration
+    >>> model = MaskFormerModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```
 
     """

@@ -785,6 +785,10 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
 
+        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
+        >>> loss, logits = outputs.loss, outputs.logits
+        >>> list(logits.shape)
+        [1, 196, 8192]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1224,6 +1228,10 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
         >>> model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
 
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> # logits are of shape (batch_size, num_labels, height, width)
+        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (

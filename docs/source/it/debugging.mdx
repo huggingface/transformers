@@ -75,7 +75,11 @@ ai normali argomenti della riga di comando, o passa `debug="underflow_overflow"`
 
 Se stai usando il tuo ciclo di allenamento o un altro trainer, puoi ottenere lo stesso risultato con:
 
-``````
+```python
+from .debug_utils import DebugUnderflowOverflow
+
+debug_overflow = DebugUnderflowOverflow(model)
+```
 
 [`~debug_utils.DebugUnderflowOverflow`] inserisce dei ganci nel modello che dopo ogni chiamata
 testeranno le variabili di ingresso e di uscita e anche i pesi del modulo corrispondente. Non appena viene rilevato `inf` o
@@ -188,6 +192,10 @@ class T5DenseGatedGeluDense(nn.Module):
     def forward(self, hidden_states):
         hidden_gelu = self.gelu_act(self.wi_0(hidden_states))
         hidden_linear = self.wi_1(hidden_states)
+        hidden_states = hidden_gelu * hidden_linear
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.wo(hidden_states)
+        return hidden_states
 ```
 
 Ora è facile vedere la chiamata `dropout`, e tutte le chiamate precedenti.
@@ -211,6 +219,10 @@ import torch
 
 def forward(self, hidden_states):
     if torch.is_autocast_enabled():
+        with torch.cuda.amp.autocast(enabled=False):
+            return self._forward(hidden_states)
+    else:
+        return self._forward(hidden_states)
 ```
 
 Poiché il rilevatore automatico riporta solo gli ingressi e le uscite di fotogrammi completi, una volta che si sa dove cercare, si può
@@ -225,6 +237,10 @@ class T5LayerFF(nn.Module):
 
     def forward(self, hidden_states):
         forwarded_states = self.layer_norm(hidden_states)
+        detect_overflow(forwarded_states, "after layer_norm")
+        forwarded_states = self.DenseReluDense(forwarded_states)
+        detect_overflow(forwarded_states, "after DenseReluDense")
+        return hidden_states + self.dropout(forwarded_states)
 ```
 
 Si può vedere che abbiamo aggiunto 2 di questi e ora teniamo traccia se `inf` o `nan` per `forwarded_states` è stato rilevato
@@ -236,7 +252,11 @@ diciamo che se avessimo dei calcoli diretti locali, questo è il modo in cui lo 
 Inoltre, se si istanzia il debugger nel proprio codice, è possibile modificare il numero di fotogrammi stampati rispetto a
 predefinito, ad esempio.:
 
-``````
+```python
+from .debug_utils import DebugUnderflowOverflow
+
+debug_overflow = DebugUnderflowOverflow(model, max_frames_to_save=100)
+```
 
 ### Tracciamento della mistura assoluta del lotto specifico e del valore massimo
 
@@ -245,7 +265,9 @@ La stessa classe di debug può essere utilizzata per il tracciamento per-batch c
 Supponiamo di voler osservare i valori minimi e massimi assoluti per tutti gli ingredienti di ogni chiamata `forward` di un dato lotto.
 lotto, e che lo si voglia fare solo per i lotti 1 e 3. Si istanzia questa classe come:
 
-``````
+```python
+debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3])
+```
 
 Ora i batch completi 1 e 3 saranno tracciati utilizzando lo stesso formato del rilevatore di underflow/overflow.
 
@@ -287,4 +309,6 @@ Qui verrà scaricato un numero enorme di fotogrammi, tanti quanti sono le chiama
 
 È inoltre possibile specificare il numero di batch dopo il quale interrompere l'addestramento, con:
 
-``````
+```python
+debug_overflow = DebugUnderflowOverflow(model, trace_batch_nums=[1, 3], abort_after_batch_num=3)
+```

@@ -206,16 +206,26 @@ Outra opção para usar o 🤗 Transformers offline é baixar os arquivos antes 
     1. Baixa os arquivos previamente com [`PreTrainedModel.from_pretrained`]:
 
     ```py
+    >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+    >>> tokenizer = AutoTokenizer.from_pretrained("bigscience/T0_3B")
+    >>> model = AutoModelForSeq2SeqLM.from_pretrained("bigscience/T0_3B")
     ```
 
 
     2. Salve os arquivos em um diretório específico com [`PreTrainedModel.save_pretrained`]:
 
-    ```    ```
+    ```py
+    >>> tokenizer.save_pretrained("./your/path/bigscience_t0")
+    >>> model.save_pretrained("./your/path/bigscience_t0")
+    ```
 
     3. Quando estiver offline, acesse os arquivos com [`PreTrainedModel.from_pretrained`] do diretório especificado:
 
-    ```    ```
+    ```py
+    >>> tokenizer = AutoTokenizer.from_pretrained("./your/path/bigscience_t0")
+    >>> model = AutoModel.from_pretrained("./your/path/bigscience_t0")
+    ```
 
 * Baixando arquivos programaticamente com a biblioteca [huggingface_hub](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub):
 
@@ -227,11 +237,19 @@ Outra opção para usar o 🤗 Transformers offline é baixar os arquivos antes 
 
     2. Utiliza a função [`hf_hub_download`](https://huggingface.co/docs/hub/adding-a-library#download-files-from-the-hub) para baixar um arquivo para um caminho específico. Por exemplo, o comando a seguir baixará o arquivo `config.json` para o modelo [T0](https://huggingface.co/bigscience/T0_3B) no caminho desejado:
 
-    ```    ```
+    ```py
+    >>> from huggingface_hub import hf_hub_download
+
+    >>> hf_hub_download(repo_id="bigscience/T0_3B", filename="config.json", cache_dir="./your/path/bigscience_t0")
+    ```
 
 Depois que o arquivo for baixado e armazenado no cachê local, especifique seu caminho local para carregá-lo e usá-lo:
 
-``````
+```py
+>>> from transformers import AutoConfig
+
+>>> config = AutoConfig.from_pretrained("./your/path/bigscience_t0/config.json")
+```
 
 <Tip>
 

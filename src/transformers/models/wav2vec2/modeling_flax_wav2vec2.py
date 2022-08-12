@@ -1082,6 +1082,10 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
     >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
     >>> ds = ds.map(map_to_array)
 
+    >>> input_values = processor(
+    ...     ds["speech"][0], sampling_rate=16_000, return_tensors="np"
+    ... ).input_values  # Batch size 1
+    >>> hidden_states = model(input_values).last_hidden_state
     ```
 """
 
@@ -1201,6 +1205,10 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
     ...     ds["speech"][0], sampling_rate=16_000, return_tensors="np"
     ... ).input_values  # Batch size 1
     >>> logits = model(input_values).logits
+    >>> predicted_ids = jnp.argmax(logits, axis=-1)
+
+    >>> transcription = processor.decode(predicted_ids[0])
+    >>> # should give:  "A MAN SAID TO THE UNIVERSE SIR I EXIST"
     ```
 """
 
@@ -1248,7 +1256,9 @@ class FlaxWav2Vec2ForPreTrainingModule(nn.Module):
 
         Example:
 
-        ```        ```"""
+        ```python
+
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1402,6 +1412,10 @@ FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING = """
     >>> outputs = model(input_values, mask_time_indices=mask_time_indices)
 
     >>> # compute cosine similarity between predicted (=projected_states) and target (=projected_quantized_states)
+    >>> cosine_sim = optax.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states)
+
+    >>> # show that cosine similarity is much higher than random
+    >>> assert np.asarray(cosine_sim)[mask_time_indices].mean() > 0.5
     ```
 """
 

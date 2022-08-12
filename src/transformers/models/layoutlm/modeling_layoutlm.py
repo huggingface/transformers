@@ -772,6 +772,10 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         >>> bbox = torch.tensor([token_boxes])
 
         >>> outputs = model(
+        ...     input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids
+        ... )
+
+        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -921,6 +925,10 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         ...     bbox=bbox,
         ...     attention_mask=attention_mask,
         ...     token_type_ids=token_type_ids,
+        ...     labels=labels,
+        ... )
+
+        >>> loss = outputs.loss
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1039,6 +1047,10 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
         ...     attention_mask=attention_mask,
         ...     token_type_ids=token_type_ids,
         ...     labels=sequence_label,
+        ... )
+
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1170,6 +1182,10 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         ...     attention_mask=attention_mask,
         ...     token_type_ids=token_type_ids,
         ...     labels=token_labels,
+        ... )
+
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

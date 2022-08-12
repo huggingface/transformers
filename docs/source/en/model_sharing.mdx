@@ -37,7 +37,11 @@ The Model Hub's built-in versioning is based on git and [git-lfs](https://git-lf
 
 As a result, you can load a specific model version with the `revision` parameter:
 
-``````
+```py
+>>> model = AutoModel.from_pretrained(
+...     "julien-c/EsperBERTo-small", revision="v2.0.1"  # tag name, or branch name, or commit hash
+... )
+```
 
 Files are also easily edited in a repository, and you can view the commit history as well as the difference:
 
@@ -59,7 +63,11 @@ pip install huggingface_hub
 
 Then use `notebook_login` to sign-in to the Hub, and follow the link [here](https://huggingface.co/settings/token) to generate a token to login with:
 
-``````
+```py
+>>> from huggingface_hub import notebook_login
+
+>>> notebook_login()
+```
 
 ## Convert a model for all frameworks
 
@@ -71,21 +79,32 @@ Converting a checkpoint for another framework is easy. Make sure you have PyTorc
 <pt>
 Specify `from_tf=True` to convert a checkpoint from TensorFlow to PyTorch:
 
-``````
+```py
+>>> pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
+>>> pt_model.save_pretrained("path/to/awesome-name-you-picked")
+```
 </pt>
 <tf>
 Specify `from_pt=True` to convert a checkpoint from PyTorch to TensorFlow:
 
-``````
+```py
+>>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
+```
 
 Then you can save your new TensorFlow model with it's new checkpoint:
 
-``````
+```py
+>>> tf_model.save_pretrained("path/to/awesome-name-you-picked")
+```
 </tf>
 <jax>
 If a model is available in Flax, you can also convert a checkpoint from PyTorch to Flax:
 
-``````
+```py
+>>> flax_model = FlaxDistilBertForSequenceClassification.from_pretrained(
+...     "path/to/awesome-name-you-picked", from_pt=True
+... )
+```
 </jax>
 </frameworkcontent>
 
@@ -97,7 +116,9 @@ If a model is available in Flax, you can also convert a checkpoint from PyTorch 
 
 Sharing a model to the Hub is as simple as adding an extra parameter or callback. Remember from the [fine-tuning tutorial](training), the [`TrainingArguments`] class is where you specify hyperparameters and additional training options. One of these training options includes the ability to push a model directly to the Hub. Set `push_to_hub=True` in your [`TrainingArguments`]:
 
-``````
+```py
+>>> training_args = TrainingArguments(output_dir="my-awesome-model", push_to_hub=True)
+```
 
 Pass your training arguments as usual to [`Trainer`]:
 
@@ -105,11 +126,17 @@ Pass your training arguments as usual to [`Trainer`]:
 >>> trainer = Trainer(
 ...     model=model,
 ...     args=training_args,
+...     train_dataset=small_train_dataset,
+...     eval_dataset=small_eval_dataset,
+...     compute_metrics=compute_metrics,
+... )
 ```
 
 After you fine-tune your model, call [`~transformers.Trainer.push_to_hub`] on [`Trainer`] to push the trained model to the Hub. 🤗 Transformers will even automatically add training hyperparameters, training results and framework versions to your model card!
 
-``````
+```py
+>>> trainer.push_to_hub()
+```
 </pt>
 <tf>
 Share a model to the Hub with [`PushToHubCallback`]. In the [`PushToHubCallback`] function, add:
@@ -120,11 +147,17 @@ Share a model to the Hub with [`PushToHubCallback`]. In the [`PushToHubCallback`
 
 ```py
 >>> from transformers.keras.callbacks import PushToHubCallback
+
+>>> push_to_hub_callback = PushToHubCallback(
+...     output_dir="./your_model_save_path", tokenizer=tokenizer, hub_model_id="your-username/my-awesome-model"
+... )
 ```
 
 Add the callback to [`fit`](https://keras.io/api/models/model_training_apis/), and 🤗 Transformers will push the trained model to the Hub:
 
-``````
+```py
+>>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3, callbacks=push_to_hub_callback)
+```
 </tf>
 </frameworkcontent>
 
@@ -134,23 +167,35 @@ You can also call `push_to_hub` directly on your model to upload it to the Hub.
 
 Specify your model name in `push_to_hub`:
 
-``````
+```py
+>>> pt_model.push_to_hub("my-awesome-model")
+```
 
 This creates a repository under your username with the model name `my-awesome-model`. Users can now load your model with the `from_pretrained` function:
 
-``````
+```py
+>>> from transformers import AutoModel
+
+>>> model = AutoModel.from_pretrained("your_username/my-awesome-model")
+```
 
 If you belong to an organization and want to push your model under the organization name instead, just add it to the `repo_id`:
 
-``````
+```py
+>>> pt_model.push_to_hub("my-awesome-org/my-awesome-model")
+```
 
 The `push_to_hub` function can also be used to add other files to a model repository. For example, add a tokenizer to a model repository:
 
-``````
+```py
+>>> tokenizer.push_to_hub("my-awesome-model")
+```
 
 Or perhaps you'd like to add the TensorFlow version of your fine-tuned PyTorch model:
 
-``````
+```py
+>>> tf_model.push_to_hub("my-awesome-model")
+```
 
 Now when you navigate to the your Hugging Face profile, you should see your newly created model repository. Clicking on the **Files** tab will display all the files you've uploaded to the repository.
 

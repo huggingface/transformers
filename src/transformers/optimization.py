@@ -429,17 +429,25 @@ class Adafactor(Optimizer):
 
     Example:
 
-    ```    ```
+    ```python
+    Adafactor(model.parameters(), scale_parameter=False, relative_step=False, warmup_init=False, lr=1e-3)
+    ```
 
     Others reported the following combination to work well:
 
-    ```    ```
+    ```python
+    Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
+    ```
 
     When using `lr=None` with [`Trainer`] you will most likely need to use [`~optimization.AdafactorSchedule`]
     scheduler as following:
 
     ```python
     from transformers.optimization import Adafactor, AdafactorSchedule
+
+    optimizer = Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
+    lr_scheduler = AdafactorSchedule(optimizer)
+    trainer = Trainer(..., optimizers=(optimizer, lr_scheduler))
     ```
 
     Usage:
@@ -454,6 +462,10 @@ class Adafactor(Optimizer):
         decay_rate=-0.8,
         beta1=None,
         weight_decay=0.0,
+        relative_step=False,
+        scale_parameter=False,
+        warmup_init=False,
+    )
     ```"""
 
     def __init__(

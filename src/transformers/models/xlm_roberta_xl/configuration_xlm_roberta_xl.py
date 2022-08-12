@@ -92,6 +92,10 @@ class XLMRobertaXLConfig(PretrainedConfig):
     >>> configuration = XLMRobertaXLConfig()
 
     >>> # Initializing a model from the bert-base-uncased style configuration
+    >>> model = XLMRobertaXLModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "xlm-roberta-xl"
 

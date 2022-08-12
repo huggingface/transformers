@@ -71,6 +71,10 @@ class ConvNextConfig(PretrainedConfig):
 
     >>> # Initializing a ConvNext convnext-tiny-224 style configuration
     >>> configuration = ConvNextConfig()
+    >>> # Initializing a model from the convnext-tiny-224 style configuration
+    >>> model = ConvNextModel(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "convnext"
 

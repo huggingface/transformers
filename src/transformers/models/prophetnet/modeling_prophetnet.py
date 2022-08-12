@@ -1315,6 +1315,10 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
         >>> tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
         >>> model = ProphetNetEncoder.from_pretrained("patrickvonplaten/prophetnet-large-uncased-standalone")
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1488,6 +1492,10 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
 
         >>> tokenizer = ProphetNetTokenizer.from_pretrained("microsoft/prophetnet-large-uncased")
         >>> model = ProphetNetDecoder.from_pretrained("microsoft/prophetnet-large-uncased", add_cross_attention=False)
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1832,6 +1840,10 @@ class ProphetNetModel(ProphetNetPreTrainedModel):
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+
+        >>> last_hidden_states = outputs.last_hidden_state  # main stream hidden states
+        >>> last_hidden_states_ngram = outputs.last_hidden_state_ngram  # predict hidden states
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1950,6 +1962,10 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
+
+        >>> logits_next_token = outputs.logits  # logits to predict next token as usual
+        >>> logits_ngram_next_tokens = outputs.logits_ngram  # logits to predict 2nd, 3rd, ... next tokens
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2212,6 +2228,10 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         >>> input_ids = tokenizer_enc(ARTICLE, return_tensors="pt").input_ids
         >>> labels = tokenizer_dec(
         ...     "us rejects charges against its ambassador in bolivia", return_tensors="pt"
+        ... ).input_ids
+        >>> outputs = model(input_ids=input_ids, decoder_input_ids=labels[:, :-1], labels=labels[:, 1:])
+
+        >>> loss = outputs.loss
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

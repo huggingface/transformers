@@ -77,6 +77,10 @@ The complexity of this mechanism is `O(l(r + l/k))`.
 ...     batch["predicted_abstract"] = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 ...     return batch
 
+
+>>> result = dataset.map(generate_answer, batched=True, batch_size=2)
+>>> rouge = evaluate.load("rouge")
+>>> rouge.compute(predictions=result["predicted_abstract"], references=result["abstract"])
 ```
 
 This model was contributed by [stancld](https://huggingface.co/stancld).

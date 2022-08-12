@@ -69,6 +69,10 @@ This returns a label ("POSITIVE" or "NEGATIVE") alongside a score, as follows:
 >>> result = classifier("I hate you")[0]
 >>> print(f"label: {result['label']}, with score: {round(result['score'], 4)}")
 label: NEGATIVE, with score: 0.9991
+
+>>> result = classifier("I love you")[0]
+>>> print(f"label: {result['label']}, with score: {round(result['score'], 4)}")
+label: POSITIVE, with score: 0.9999
 ```
 
 Here is an example of doing a sequence classification using a model to determine if two sequences are paraphrases of
@@ -116,6 +120,10 @@ not paraphrase: 10%
 is paraphrase: 90%
 
 >>> # Should not be paraphrase
+>>> for i in range(len(classes)):
+...     print(f"{classes[i]}: {int(round(not_paraphrase_results[i] * 100))}%")
+not paraphrase: 94%
+is paraphrase: 6%
 ```
 </pt>
 <tf>
@@ -150,6 +158,10 @@ not paraphrase: 10%
 is paraphrase: 90%
 
 >>> # Should not be paraphrase
+>>> for i in range(len(classes)):
+...     print(f"{classes[i]}: {int(round(not_paraphrase_results[i] * 100))}%")
+not paraphrase: 94%
+is paraphrase: 6%
 ```
 </tf>
 </frameworkcontent>
@@ -172,6 +184,10 @@ leverages a fine-tuned model on SQuAD.
 >>> question_answerer = pipeline("question-answering")
 
 >>> context = r"""
+... Extractive Question Answering is the task of extracting an answer from a text given a question. An example of a
+... question answering dataset is the SQuAD dataset, which is entirely based on that task. If you would like to fine-tune
+... a model on a SQuAD task, you may leverage the examples/pytorch/question-answering/run_squad.py script.
+... """
 ```
 
 This returns an answer extracted from the text, a confidence score, alongside "start" and "end" values, which are the
@@ -185,6 +201,10 @@ positions of the extracted answer in the text.
 Answer: 'the task of extracting an answer from a text given a question', score: 0.6177, start: 34, end: 95
 
 >>> result = question_answerer(question="What is a good example of a question answering dataset?", context=context)
+>>> print(
+...     f"Answer: '{result['answer']}', score: {round(result['score'], 4)}, start: {result['start']}, end: {result['end']}"
+... )
+Answer: 'SQuAD dataset', score: 0.5152, start: 147, end: 160
 ```
 
 Here is an example of question answering using a model and a tokenizer. The process is the following:
@@ -243,6 +263,10 @@ Here is an example of question answering using a model and a tokenizer. The proc
 ...     print(f"Answer: {answer}")
 Question: How many pretrained models are available in 🤗 Transformers?
 Answer: over 32 +
+Question: What does 🤗 Transformers provide?
+Answer: general - purpose architectures
+Question: 🤗 Transformers provides interoperability between which frameworks?
+Answer: tensorflow 2. 0 and pytorch
 ```
 </pt>
 <tf>
@@ -287,6 +311,10 @@ Answer: over 32 +
 ...     print(f"Answer: {answer}")
 Question: How many pretrained models are available in 🤗 Transformers?
 Answer: over 32 +
+Question: What does 🤗 Transformers provide?
+Answer: general - purpose architectures
+Question: 🤗 Transformers provides interoperability between which frameworks?
+Answer: tensorflow 2. 0 and pytorch
 ```
 </tf>
 </frameworkcontent>
@@ -311,7 +339,11 @@ task, you may leverage the [run_mlm.py](https://github.com/huggingface/transform
 
 Here is an example of using pipelines to replace a mask from a sequence:
 
-``````
+```py
+>>> from transformers import pipeline
+
+>>> unmasker = pipeline("fill-mask")
+```
 
 This outputs the sequences with the mask filled, the confidence score, and the token id in the tokenizer vocabulary:
 
@@ -344,6 +376,10 @@ This outputs the sequences with the mask filled, the confidence score, and the t
   'token': 8503,
   'token_str': ' database'},
  {'score': 0.0286,
+  'sequence': 'HuggingFace is creating a prototype that the community uses to '
+              'solve NLP tasks.',
+  'token': 17715,
+  'token_str': ' prototype'}]
 ```
 
 Here is an example of doing masked language modeling using a model and a tokenizer. The process is the following:
@@ -383,6 +419,10 @@ Here is an example of doing masked language modeling using a model and a tokeniz
 >>> for token in top_5_tokens:
 ...     print(sequence.replace(tokenizer.mask_token, tokenizer.decode([token])))
 Distilled models are smaller than the models they mimic. Using them instead of the large versions would help reduce our carbon footprint.
+Distilled models are smaller than the models they mimic. Using them instead of the large versions would help increase our carbon footprint.
+Distilled models are smaller than the models they mimic. Using them instead of the large versions would help decrease our carbon footprint.
+Distilled models are smaller than the models they mimic. Using them instead of the large versions would help offset our carbon footprint.
+Distilled models are smaller than the models they mimic. Using them instead of the large versions would help improve our carbon footprint.
 ```
 </pt>
 <tf>
@@ -409,6 +449,10 @@ Distilled models are smaller than the models they mimic. Using them instead of t
 >>> for token in top_5_tokens:
 ...     print(sequence.replace(tokenizer.mask_token, tokenizer.decode([token])))
 Distilled models are smaller than the models they mimic. Using them instead of the large versions would help reduce our carbon footprint.
+Distilled models are smaller than the models they mimic. Using them instead of the large versions would help increase our carbon footprint.
+Distilled models are smaller than the models they mimic. Using them instead of the large versions would help decrease our carbon footprint.
+Distilled models are smaller than the models they mimic. Using them instead of the large versions would help offset our carbon footprint.
+Distilled models are smaller than the models they mimic. Using them instead of the large versions would help improve our carbon footprint.
 ```
 </tf>
 </frameworkcontent>
@@ -456,6 +500,10 @@ of tokens.
 >>> next_token = torch.multinomial(probs, num_samples=1)
 
 >>> generated = torch.cat([input_ids, next_token], dim=-1)
+
+>>> resulting_string = tokenizer.decode(generated.tolist()[0])
+>>> print(resulting_string)
+Hugging Face is based in DUMBO, New York City, and ...
 ```
 </pt>
 <tf>
@@ -485,6 +533,10 @@ of tokens.
 >>> next_token = tf.random.categorical(filtered_next_token_logits, dtype=tf.int32, num_samples=1)
 
 >>> generated = tf.concat([input_ids, next_token], axis=1)
+
+>>> resulting_string = tokenizer.decode(generated.numpy().tolist()[0])
+>>> print(resulting_string)
+Hugging Face is based in DUMBO, New York City, and ...
 ```
 </tf>
 </frameworkcontent>
@@ -507,6 +559,10 @@ As a default all models apply *Top-K* sampling when used in pipelines, as config
 ```py
 >>> from transformers import pipeline
 
+>>> text_generator = pipeline("text-generation")
+>>> print(text_generator("As far as I am concerned, I will", max_length=50, do_sample=False))
+[{'generated_text': 'As far as I am concerned, I will be the first to admit that I am not a fan of the idea of a
+"free market." I think that the idea of a free market is a bit of a stretch. I think that the idea'}]
 ```
 
 Here, the model generates a random text with a total maximal length of *50* tokens from context *"As far as I am
@@ -539,6 +595,10 @@ Below is an example of text generation using `XLNet` and its tokenizer, which in
 
 >>> prompt_length = len(tokenizer.decode(inputs[0]))
 >>> outputs = model.generate(inputs, max_length=250, do_sample=True, top_p=0.95, top_k=60)
+>>> generated = prompt + tokenizer.decode(outputs[0])[prompt_length + 1 :]
+
+>>> print(generated)
+Today the weather is really nice and I am planning ...
 ```
 </pt>
 <tf>
@@ -565,6 +625,10 @@ Below is an example of text generation using `XLNet` and its tokenizer, which in
 
 >>> prompt_length = len(tokenizer.decode(inputs[0]))
 >>> outputs = model.generate(inputs, max_length=250, do_sample=True, top_p=0.95, top_k=60)
+>>> generated = prompt + tokenizer.decode(outputs[0])[prompt_length + 1 :]
+
+>>> print(generated)
+Today the weather is really nice and I am planning ...
 ```
 </tf>
 </frameworkcontent>
@@ -603,6 +667,10 @@ It leverages a fine-tuned model on CoNLL-2003, fine-tuned by [@stefan-it](https:
 ```py
 >>> from transformers import pipeline
 
+>>> ner_pipe = pipeline("ner")
+
+>>> sequence = """Hugging Face Inc. is a company based in New York City. Its headquarters are in DUMBO,
+... therefore very close to the Manhattan Bridge which is visible from the window."""
 ```
 
 This outputs a list of all words that have been identified as one of the entities from the 9 classes defined above.
@@ -619,6 +687,10 @@ Here are the expected results:
 {'entity': 'I-LOC', 'score': 0.9993, 'index': 12, 'word': 'York', 'start': 44, 'end': 48}
 {'entity': 'I-LOC', 'score': 0.9994, 'index': 13, 'word': 'City', 'start': 49, 'end': 53}
 {'entity': 'I-LOC', 'score': 0.9863, 'index': 19, 'word': 'D', 'start': 79, 'end': 80}
+{'entity': 'I-LOC', 'score': 0.9514, 'index': 20, 'word': '##UM', 'start': 80, 'end': 82}
+{'entity': 'I-LOC', 'score': 0.9337, 'index': 21, 'word': '##BO', 'start': 82, 'end': 84}
+{'entity': 'I-LOC', 'score': 0.9762, 'index': 28, 'word': 'Manhattan', 'start': 114, 'end': 123}
+{'entity': 'I-LOC', 'score': 0.9915, 'index': 29, 'word': 'Bridge', 'start': 124, 'end': 130}
 ```
 
 Note how the tokens of the sequence "Hugging Face" have been identified as an organisation, and "New York City",
@@ -652,6 +724,10 @@ Here is an example of doing named entity recognition, using a model and a tokeni
 ... )
 
 >>> inputs = tokenizer(sequence, return_tensors="pt")
+>>> tokens = inputs.tokens()
+
+>>> outputs = model(**inputs).logits
+>>> predictions = torch.argmax(outputs, dim=2)
 ```
 </pt>
 <tf>
@@ -668,6 +744,10 @@ Here is an example of doing named entity recognition, using a model and a tokeni
 ... )
 
 >>> inputs = tokenizer(sequence, return_tensors="tf")
+>>> tokens = inputs.tokens()
+
+>>> outputs = model(**inputs)[0]
+>>> predictions = tf.argmax(outputs, axis=2)
 ```
 </tf>
 </frameworkcontent>
@@ -711,6 +791,10 @@ illustrated below:
 ('close', 'O')
 ('to', 'O')
 ('the', 'O')
+('Manhattan', 'I-LOC')
+('Bridge', 'I-LOC')
+('.', 'O')
+('[SEP]', 'O')
 ```
 
 ## Summarization
@@ -745,6 +829,10 @@ Here is an example of using the pipelines to do summarization. It leverages a Ba
 ... Prosecutors said the immigration scam involved some of her husbands, who filed for permanent residence status shortly after the marriages.
 ... Any divorces happened only after such filings were approved. It was unclear whether any of the men will be prosecuted.
 ... The case was referred to the Bronx District Attorney\'s Office by Immigration and Customs Enforcement and the Department of Homeland Security\'s
+... Investigation Division. Seven of the men are from so-called "red-flagged" countries, including Egypt, Turkey, Georgia, Pakistan and Mali.
+... Her eighth husband, Rashid Rajput, was deported in 2006 to his native Pakistan after an investigation by the Joint Terrorism Task Force.
+... If convicted, Barrientos faces up to four years in prison.  Her next court appearance is scheduled for May 18.
+... """
 ```
 
 Because the summarization pipeline depends on the `PreTrainedModel.generate()` method, we can override the default
@@ -752,6 +840,10 @@ arguments of `PreTrainedModel.generate()` directly in the pipeline for `max_leng
 below. This outputs the following summary:
 
 ```py
+>>> print(summarizer(ARTICLE, max_length=130, min_length=30, do_sample=False))
+[{'summary_text': ' Liana Barrientos, 39, is charged with two counts of "offering a false instrument for filing in
+the first degree" In total, she has been married 10 times, with nine of her marriages occurring between 1999 and
+2002 . At one time, she was married to eight men at once, prosecutors say .'}]
 ```
 
 Here is an example of doing summarization using a model and a tokenizer. The process is the following:
@@ -779,6 +871,10 @@ CNN / Daily Mail), it yields very good results.
 ...     inputs["input_ids"], max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True
 ... )
 
+>>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+prosecutors say the marriages were part of an immigration scam. if convicted, barrientos faces two criminal
+counts of "offering a false instrument for filing in the first degree" she has been married 10 times, nine of them
+between 1999 and 2002.
 ```
 </pt>
 <tf>
@@ -794,6 +890,10 @@ CNN / Daily Mail), it yields very good results.
 ...     inputs["input_ids"], max_length=150, min_length=40, length_penalty=2.0, num_beams=4, early_stopping=True
 ... )
 
+>>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+prosecutors say the marriages were part of an immigration scam. if convicted, barrientos faces two criminal
+counts of "offering a false instrument for filing in the first degree" she has been married 10 times, nine of them
+between 1999 and 2002.
 ```
 </tf>
 </frameworkcontent>
@@ -812,6 +912,10 @@ multi-task mixture dataset (including WMT), yet, yielding impressive translation
 
 ```py
 >>> from transformers import pipeline
+
+>>> translator = pipeline("translation_en_to_de")
+>>> print(translator("Hugging Face is a technology company based in New York and Paris", max_length=40))
+[{'translation_text': 'Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.'}]
 ```
 
 Because the translation pipeline depends on the `PreTrainedModel.generate()` method, we can override the default
@@ -837,6 +941,10 @@ Here is an example of doing translation using a model and a tokenizer. The proce
 ...     "translate English to German: Hugging Face is a technology company based in New York and Paris",
 ...     return_tensors="pt",
 ... )
+>>> outputs = model.generate(inputs["input_ids"], max_length=40, num_beams=4, early_stopping=True)
+
+>>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
 ```
 </pt>
 <tf>
@@ -850,6 +958,10 @@ Here is an example of doing translation using a model and a tokenizer. The proce
 ...     "translate English to German: Hugging Face is a technology company based in New York and Paris",
 ...     return_tensors="tf",
 ... )
+>>> outputs = model.generate(inputs["input_ids"], max_length=40, num_beams=4, early_stopping=True)
+
+>>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+Hugging Face ist ein Technologieunternehmen mit Sitz in New York und Paris.
 ```
 </tf>
 </frameworkcontent>
@@ -876,6 +988,10 @@ The following examples demonstrate how to use a [`pipeline`] and a model and tok
 >>> audio_classifier = pipeline(
 ...     task="audio-classification", model="ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
 ... )
+>>> predictions = audio_classifier(audio_file)
+>>> predictions = [{"score": round(pred["score"], 4), "label": pred["label"]} for pred in predictions]
+>>> predictions
+[{'score': 0.1315, 'label': 'calm'}, {'score': 0.1307, 'label': 'neutral'}, {'score': 0.1274, 'label': 'sad'}, {'score': 0.1261, 'label': 'fearful'}, {'score': 0.1242, 'label': 'happy'}]
 ```
 
 The general process for using a model and feature extractor for audio classification is:
@@ -904,6 +1020,10 @@ The general process for using a model and feature extractor for audio classifica
 >>> with torch.no_grad():
 ...     logits = model(**inputs).logits
 
+>>> predicted_class_ids = torch.argmax(logits, dim=-1).item()
+>>> predicted_label = model.config.id2label[predicted_class_ids]
+>>> predicted_label
+'_unknown_'
 ```
 </pt>
 </frameworkcontent>
@@ -921,6 +1041,10 @@ The following examples demonstrate how to use a [`pipeline`] and a model and tok
 >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_demo", "clean", split="validation")
 >>> dataset = dataset.sort("id")
 >>> audio_file = dataset[0]["audio"]["path"]
+
+>>> speech_recognizer = pipeline(task="automatic-speech-recognition", model="facebook/wav2vec2-base-960h")
+>>> speech_recognizer(audio_file)
+{'text': 'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'}
 ```
 
 The general process for using a model and processor for automatic speech recognition is:
@@ -948,6 +1072,10 @@ The general process for using a model and processor for automatic speech recogni
 >>> with torch.no_grad():
 ...     logits = model(**inputs).logits
 >>> predicted_ids = torch.argmax(logits, dim=-1)
+
+>>> transcription = processor.batch_decode(predicted_ids)
+>>> transcription[0]
+'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'
 ```
 </pt>
 </frameworkcontent>
@@ -967,6 +1095,10 @@ The following examples demonstrate how to use a [`pipeline`] and a model and tok
 ... )
 >>> print("\n".join([f"Class {d['label']} with score {round(d['score'], 4)}" for d in result]))
 Class lynx, catamount with score 0.4335                                                    
+Class cougar, puma, catamount, mountain lion, painter, panther, Felis concolor with score 0.0348
+Class snow leopard, ounce, Panthera uncia with score 0.0324          
+Class Egyptian cat with score 0.0239                                                       
+Class tiger cat with score 0.0229
 ```
 
 The general process for using a model and feature extractor for image classification is:
@@ -993,6 +1125,10 @@ The general process for using a model and feature extractor for image classifica
 
 >>> with torch.no_grad():
 ...     logits = model(**inputs).logits
+
+>>> predicted_label = logits.argmax(-1).item()
+>>> print(model.config.id2label[predicted_label])
+Egyptian cat
 ```
 </pt>
 </frameworkcontent>

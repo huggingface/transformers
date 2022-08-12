@@ -2543,6 +2543,10 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         >>> class_queries_logits = outputs.class_queries_logits
         >>> masks_queries_logits = outputs.masks_queries_logits
 
+        >>> # you can pass them to feature_extractor for postprocessing
+        >>> output = feature_extractor.post_process_segmentation(outputs)
+        >>> output = feature_extractor.post_process_semantic_segmentation(outputs)
+        >>> output = feature_extractor.post_process_panoptic_segmentation(outputs)
         ```
         """
 

@@ -101,6 +101,10 @@ processed as follows:
 >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
 >>> labels = tokenizer("<extra_id_0> cute dog <extra_id_1> the <extra_id_2>", return_tensors="pt").input_ids
 
+>>> # the forward function automatically creates the correct decoder_input_ids
+>>> loss = model(input_ids=input_ids, labels=labels).loss
+>>> loss.item()
+3.7837
 ```
 
 If you're interested in pre-training T5 on a new corpus, check out the [run_t5_mlm_flax.py](https://github.com/huggingface/transformers/tree/main/examples/flax/language-modeling) script in the Examples
@@ -122,6 +126,10 @@ the model as follows:
 >>> input_ids = tokenizer("translate English to German: The house is wonderful.", return_tensors="pt").input_ids
 >>> labels = tokenizer("Das Haus ist wunderbar.", return_tensors="pt").input_ids
 
+>>> # the forward function automatically creates the correct decoder_input_ids
+>>> loss = model(input_ids=input_ids, labels=labels).loss
+>>> loss.item()
+0.2542
 ```
 
 As you can see, only 2 inputs are required for the model in order to compute a loss: `input_ids` (which are the
@@ -187,6 +195,10 @@ ignored. The code example below illustrates all of this.
 >>> labels = torch.tensor(labels)
 >>> labels[labels == tokenizer.pad_token_id] = -100
 
+>>> # forward pass
+>>> loss = model(input_ids=input_ids, attention_mask=attention_mask, labels=labels).loss
+>>> loss.item()
+0.188
 ```
 
 Additional training tips:
@@ -222,6 +234,10 @@ generation works in general in encoder-decoder models.
 >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
 >>> model = T5ForConditionalGeneration.from_pretrained("t5-small")
 
+>>> input_ids = tokenizer("translate English to German: The house is wonderful.", return_tensors="pt").input_ids
+>>> outputs = model.generate(input_ids)
+>>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
+Das Haus ist wunderbar.
 ```
 
 Note that T5 uses the `pad_token_id` as the `decoder_start_token_id`, so when doing generation without using
@@ -245,6 +261,10 @@ The example above only shows a single example. You can also do batched inference
 ...     input_ids=inputs["input_ids"],
 ...     attention_mask=inputs["attention_mask"],
 ...     do_sample=False,  # disable sampling to test if batching affects output
+... )
+
+>>> print(tokenizer.batch_decode(output_sequences, skip_special_tokens=True))
+['Das Haus ist wunderbar.', 'Ich arbeite gerne in NYC.']
 ```
 
 Because T5 has been trained with the span-mask denoising objective,
@@ -259,6 +279,10 @@ The predicted tokens will then be placed between the sentinel tokens.
 
 >>> input_ids = tokenizer("The <extra_id_0> walks in <extra_id_1> park", return_tensors="pt").input_ids
 
+>>> sequence_ids = model.generate(input_ids)
+>>> sequences = tokenizer.batch_decode(sequence_ids)
+>>> sequences
+['<pad> <extra_id_0> park offers<extra_id_1> the<extra_id_2> park.</s>']
 ```
 
 

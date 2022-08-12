@@ -86,6 +86,10 @@ class RemBertConfig(PretrainedConfig):
     >>> configuration = RemBertConfig()
 
     >>> # Initializing a model from the rembert style configuration
+    >>> model = RemBertModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "rembert"
 

@@ -687,6 +687,10 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
 
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-mae-base")
         >>> model = ViTMAEModel.from_pretrained("facebook/vit-mae-base")
+
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -977,6 +981,10 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         >>> model = ViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> loss = outputs.loss
+        >>> mask = outputs.mask
+        >>> ids_restore = outputs.ids_restore
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

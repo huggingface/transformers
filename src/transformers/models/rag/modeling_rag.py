@@ -307,6 +307,10 @@ class RagPreTrainedModel(PreTrainedModel):
         >>> model = RagModel.from_pretrained_question_encoder_generator(
         ...     "facebook/dpr-question_encoder-single-nq-base", "t5-small"
         ... )
+        >>> # saving model after fine-tuning
+        >>> model.save_pretrained("./rag")
+        >>> # load fine-tuned model
+        >>> model = RagModel.from_pretrained("./rag")
         ```"""
 
         kwargs_question_encoder = {
@@ -564,6 +568,10 @@ class RagModel(RagPreTrainedModel):
         ...     "facebook/rag-token-base", index_name="exact", use_dummy_dataset=True
         ... )
         >>> # initialize with RagRetriever to do everything in one forward call
+        >>> model = RagModel.from_pretrained("facebook/rag-token-base", retriever=retriever)
+
+        >>> inputs = tokenizer("How many people live in Paris?", return_tensors="pt")
+        >>> outputs = model(input_ids=inputs["input_ids"])
         ```"""
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -827,6 +835,10 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         >>> # 3. Forward to generator
         >>> outputs = model(
         ...     context_input_ids=docs_dict["context_input_ids"],
+        ...     context_attention_mask=docs_dict["context_attention_mask"],
+        ...     doc_scores=doc_scores,
+        ...     decoder_input_ids=labels,
+        ... )
         ```"""
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         exclude_bos_score = exclude_bos_score if exclude_bos_score is not None else self.config.exclude_bos_score
@@ -1299,6 +1311,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
         >>> # or directly generate
         >>> generated = model.generate(
         ...     context_input_ids=docs_dict["context_input_ids"],
+        ...     context_attention_mask=docs_dict["context_attention_mask"],
+        ...     doc_scores=doc_scores,
+        ... )
+        >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         ```"""
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         do_marginalize = do_marginalize if do_marginalize is not None else self.config.do_marginalize

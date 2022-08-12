@@ -104,6 +104,10 @@ class DPTConfig(PretrainedConfig):
     >>> configuration = DPTConfig()
 
     >>> # Initializing a model from the dpt-large style configuration
+    >>> model = DPTModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "dpt"
 

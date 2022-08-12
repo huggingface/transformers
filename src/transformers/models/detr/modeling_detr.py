@@ -1245,6 +1245,10 @@ class DetrModel(DetrPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> # the last hidden states are the final query embeddings of the Transformer decoder
+        >>> # these are of shape (batch_size, num_queries, hidden_size)
+        >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 100, 256]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1418,6 +1422,10 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         ...             f"{round(score.item(), 3)} at location {box}"
         ...         )
         Detected remote with confidence 0.998 at location [40.16, 70.81, 175.55, 117.98]
+        Detected remote with confidence 0.996 at location [333.24, 72.55, 368.33, 187.66]
+        Detected couch with confidence 0.995 at location [-0.02, 1.15, 639.73, 473.76]
+        Detected cat with confidence 0.999 at location [13.24, 52.05, 314.02, 470.93]
+        Detected cat with confidence 0.999 at location [345.4, 23.85, 640.37, 368.72]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1587,6 +1595,10 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> # the segmentation is stored in a special-format png
         >>> panoptic_seg = Image.open(io.BytesIO(result["png_string"]))
         >>> panoptic_seg = numpy.array(panoptic_seg, dtype=numpy.uint8)
+        >>> # retrieve the ids corresponding to each mask
+        >>> panoptic_seg_id = rgb_to_id(panoptic_seg)
+        >>> panoptic_seg_id.shape
+        (800, 1066)
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

@@ -95,6 +95,10 @@ class PLBartConfig(PretrainedConfig):
 
     >>> # Initializing a PLBART uclanlp/plbart-base style configuration
     >>> configuration = PLBartConfig()
+    >>> # Initializing a model from the uclanlp/plbart-base style configuration
+    >>> model = PLBartModel(configuration)
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     model_type = "plbart"

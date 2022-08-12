@@ -1041,6 +1041,10 @@ class XLMForQuestionAnswering(XLMPreTrainedModel):
         ...     0
         ... )  # Batch size 1
         >>> start_positions = torch.tensor([1])
+        >>> end_positions = torch.tensor([3])
+
+        >>> outputs = model(input_ids, start_positions=start_positions, end_positions=end_positions)
+        >>> loss = outputs.loss
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

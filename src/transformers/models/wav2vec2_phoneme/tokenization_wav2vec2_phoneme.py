@@ -594,6 +594,10 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         tokenizer = Wav2Vec2PhonemeCTCTokenizer.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
         model = Wav2Vec2PhonemeForCTC.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft")
 
+        num_added_toks = tokenizer.add_tokens(["new_tok1", "my_new-tok2"])
+        print("We have added", num_added_toks, "tokens")
+        # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
+        model.resize_token_embeddings(len(tokenizer))
         ```"""
         new_tokens = [str(tok) for tok in new_tokens]
 

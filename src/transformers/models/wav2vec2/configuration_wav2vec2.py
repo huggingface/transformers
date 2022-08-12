@@ -190,6 +190,10 @@ class Wav2Vec2Config(PretrainedConfig):
     >>> configuration = Wav2Vec2Config()
 
     >>> # Initializing a model from the facebook/wav2vec2-base-960h style configuration
+    >>> model = Wav2Vec2Model(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "wav2vec2"
 

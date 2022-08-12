@@ -1187,6 +1187,10 @@ class RealmEmbedder(RealmPreTrainedModel):
         >>> tokenizer = RealmTokenizer.from_pretrained("google/realm-cc-news-pretrained-embedder")
         >>> model = RealmEmbedder.from_pretrained("google/realm-cc-news-pretrained-embedder")
 
+        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> projected_score = outputs.projected_score
         ```
         """
 
@@ -1306,6 +1310,10 @@ class RealmScorer(RealmPreTrainedModel):
         >>> outputs = model(
         ...     **inputs,
         ...     candidate_input_ids=candidates_inputs.input_ids,
+        ...     candidate_attention_mask=candidates_inputs.attention_mask,
+        ...     candidate_token_type_ids=candidates_inputs.token_type_ids,
+        ... )
+        >>> relevance_score = outputs.relevance_score
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1437,6 +1445,10 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
 
         >>> # batch_size = 2, num_candidates = 2
         >>> text = [["Hello world!", "Nice to meet you!"], ["The cute cat.", "The adorable dog."]]
+
+        >>> inputs = tokenizer.batch_encode_candidates(text, max_length=10, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1782,6 +1794,10 @@ class RealmForOpenQA(RealmPreTrainedModel):
         ...     return_token_type_ids=False,
         ...     return_attention_mask=False,
         ... ).input_ids
+
+        >>> reader_output, predicted_answer_ids = model(**question_ids, answer_ids=answer_ids, return_dict=False)
+        >>> predicted_answer = tokenizer.decode(predicted_answer_ids)
+        >>> loss = reader_output.loss
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

@@ -1337,6 +1337,10 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = tf.random.uniform((1, num_patches)) >= 0.5
 
+        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
+        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
+        >>> list(reconstructed_pixel_values.shape)
+        [1, 3, 224, 224]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

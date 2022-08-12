@@ -305,6 +305,10 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         >>> _model.encoder.save_pretrained("./encoder")
         >>> _model.decoder.save_pretrained("./decoder")
         >>> model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
+        ...     "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
+        ... )
+        >>> # This is only for copying some specific attributes of this particular model.
+        >>> model.config = _model.config
         ```
 
         Example:
@@ -326,6 +330,10 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         ...     pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True
         ... ).sequences
 
+        >>> preds = decoder_tokenizer.batch_decode(output_ids, skip_special_tokens=True)
+        >>> preds = [pred.strip() for pred in preds]
+
+        >>> assert preds == ["a cat laying on top of a couch next to another cat"]
         ```"""
 
         from_pt = kwargs.pop("from_pt", False)
@@ -396,6 +404,10 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         >>> model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
         ...     "google/vit-base-patch16-224-in21k", "bert-base-uncased"
         ... )
+        >>> # saving model after fine-tuning
+        >>> model.save_pretrained("./vit-bert")
+        >>> # load fine-tuned model
+        >>> model = TFVisionEncoderDecoderModel.from_pretrained("./vit-bert")
         ```"""
 
         kwargs_encoder = {
@@ -552,6 +564,10 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
 
         >>> # save and load from pretrained
         >>> model.save_pretrained("vit-gpt2")
+        >>> model = TFVisionEncoderDecoderModel.from_pretrained("vit-gpt2")
+
+        >>> # generation
+        >>> generated = model.generate(pixel_values, decoder_start_token_id=model.config.decoder.bos_token_id)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

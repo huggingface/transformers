@@ -88,6 +88,10 @@ class ViTMAEConfig(PretrainedConfig):
     >>> configuration = ViTMAEConfig()
 
     >>> # Initializing a model from the vit-mae-base style configuration
+    >>> model = ViTMAEModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "vit_mae"
 

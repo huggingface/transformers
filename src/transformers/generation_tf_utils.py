@@ -570,6 +570,10 @@ class TFGenerationMixin:
         bad_words_ids = [
             tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ["idiot", "stupid", "shut up"]
         ]
+        input_ids = tokenizer.encode(input_context, return_tensors="tf")  # encode input context
+        outputs = model.generate(
+            input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids
+        )  # generate sequences without allowing bad_words to be generated
         ```"""
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         do_sample = do_sample if do_sample is not None else self.config.do_sample
@@ -1474,6 +1478,10 @@ class TFGenerationMixin:
         input_context = "My cute dog"
         bad_words_ids = [
             tokenizer.encode(bad_word, add_prefix_space=True) for bad_word in ["idiot", "stupid", "shut up"]
+        ]
+        input_ids = tokenizer.encode(input_context, return_tensors="tf")
+        # generate sequences without allowing bad_words to be generated
+        outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)
         ```"""
         # 1. Set generation parameters if not already defined
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
@@ -2117,6 +2125,10 @@ class TFGenerationMixin:
         ...         TFMinLengthLogitsProcessor(15, eos_token_id=model.config.eos_token_id),
         ...     ]
         ... )
+
+        >>> outputs = model.greedy_search(input_ids, logits_processor=logits_processor)
+
+        >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         ```"""
 
         # 1. init greedy_search values
@@ -2381,6 +2393,10 @@ class TFGenerationMixin:
         ...         TFTemperatureLogitsWarper(0.7),
         ...     ]
         ... )
+
+        >>> outputs = model.sample(input_ids, logits_processor=logits_processor, logits_warper=logits_warper)
+
+        >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         ```"""
 
         # 1. init greedy_search values
@@ -2650,6 +2666,10 @@ class TFGenerationMixin:
         >>> logits_processor = TFLogitsProcessorList(
         ...     [TFMinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id)]
         ... )
+
+        >>> outputs = model.beam_search(input_ids, logits_processor=logits_processor, **model_kwargs)
+
+        >>> print("Generated:", tokenizer.batch_decode(outputs, skip_special_tokens=True))
         ```"""
 
         def flatten_beam_dim(tensor, batch_axis=0):

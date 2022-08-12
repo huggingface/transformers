@@ -78,6 +78,10 @@ class QDQBertConfig(PretrainedConfig):
     >>> configuration = QDQBertConfig()
 
     >>> # Initializing a model from the bert-base-uncased style configuration
+    >>> model = QDQBertModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "qdqbert"
 

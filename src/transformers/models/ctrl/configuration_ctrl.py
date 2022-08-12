@@ -71,6 +71,10 @@ class CTRLConfig(PretrainedConfig):
     >>> configuration = CTRLConfig()
 
     >>> # Initializing a model from the configuration
+    >>> model = CTRLModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     model_type = "ctrl"

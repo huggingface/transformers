@@ -99,6 +99,10 @@ class MarianConfig(PretrainedConfig):
     >>> configuration = MarianConfig()
 
     >>> # Initializing a model from the Helsinki-NLP/opus-mt-en-de style configuration
+    >>> model = MarianModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "marian"
     keys_to_ignore_at_inference = ["past_key_values"]

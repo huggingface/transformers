@@ -98,6 +98,10 @@ class TransfoXLConfig(PretrainedConfig):
     >>> configuration = TransfoXLConfig()
 
     >>> # Initializing a model from the configuration
+    >>> model = TransfoXLModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
 
     model_type = "transfo-xl"

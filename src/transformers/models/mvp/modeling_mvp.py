@@ -706,10 +706,18 @@ MVP_CONDITIONAL_GENERATION_EXAMPLE = r"""
     ...     "Summarize: You may want to stick it to your boss and leave your job, but don't do it if these are your reasons.",
     ...     return_tensors="pt",
     ... )
+    >>> labels = tokenizer("Bad Reasons To Quit Your Job", return_tensors="pt")["input_ids"]
+
+    >>> loss = model(**inputs, labels=labels).loss
+    >>> loss.backward()
     ```
 
     Inference after the model fine-tuned
     ```python
+    >>> with torch.no_grad():
+    ...     generated_ids = model.generate(**inputs)
+
+    >>> generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
     ```
 """
 
@@ -726,10 +734,18 @@ MVP_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> model = MvpForSequenceClassification.from_pretrained("RUCAIBox/mvp", num_labels=num_labels)
 
     >>> inputs = tokenizer("Classify: Hello, my dog is cute", return_tensors="pt")
+    >>> labels = torch.tensor(1)  # the real label for inputs
+
+    >>> loss = model(**inputs, labels=labels).loss
+    >>> loss.backward()
     ```
 
     Inference after the model fine-tuned
     ```python
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+
+    >>> predicted_class_id = logits.argmax()
     ```
 """
 
@@ -750,6 +766,10 @@ MVP_QUESTION_ANSWERING_SAMPLE = r"""
     ...     return_tensors="pt",
     ... )
     >>> target_start_index = torch.tensor([18])
+    >>> target_end_index = torch.tensor([19])
+
+    >>> loss = model(**inputs, start_positions=target_start_index, end_positions=target_end_index).loss
+    >>> loss.backward()
     ```
 
     Inference after the model fine-tuned
@@ -758,6 +778,10 @@ MVP_QUESTION_ANSWERING_SAMPLE = r"""
     ...     outputs = model(**inputs)
 
     >>> answer_start_index = outputs.start_logits.argmax()
+    >>> answer_end_index = outputs.end_logits.argmax()
+
+    >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+    >>> predict_answer = tokenizer.decode(predict_answer_tokens)
     ```
 """
 
@@ -1961,6 +1985,10 @@ class MvpForCausalLM(MvpPreTrainedModel):
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
+
+        >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 8, 50267]
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

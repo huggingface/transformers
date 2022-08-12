@@ -682,6 +682,10 @@ class OpenAIGPTDoubleHeadsModel(OpenAIGPTPreTrainedModel):
         >>> choices = ["Hello, my dog is cute [CLS]", "Hello, my cat is cute [CLS]"]
         >>> input_ids = torch.tensor([tokenizer.encode(s) for s in choices]).unsqueeze(0)  # Batch size 1, 2 choices
         >>> mc_token_ids = torch.tensor([input_ids.size(-1) - 1, input_ids.size(-1) - 1]).unsqueeze(0)  # Batch size 1
+
+        >>> outputs = model(input_ids, mc_token_ids=mc_token_ids)
+        >>> lm_logits = outputs.logits
+        >>> mc_logits = outputs.mc_logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

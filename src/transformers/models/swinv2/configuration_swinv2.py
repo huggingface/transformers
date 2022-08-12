@@ -86,6 +86,10 @@ class Swinv2Config(PretrainedConfig):
     >>> configuration = Swinv2Config()
 
     >>> # Initializing a model from the microsoft/swinv2_tiny_patch4_windows8_256 style configuration
+    >>> model = Swinv2Model(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "swinv2"
 

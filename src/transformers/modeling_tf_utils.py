@@ -581,7 +581,10 @@ def dtype_byte_size(dtype):
 
     Example:
 
-    ```    ```
+    ```py
+    >>> dtype_byte_size(tf.float32)
+    4
+    ```
     """
     if dtype == tf.bool:
         return 1 / 8
@@ -2136,6 +2139,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         >>> model = TFBertModel.from_pretrained("./test/saved_model/")
         >>> # Update configuration during loading.
         >>> model = TFBertModel.from_pretrained("bert-base-uncased", output_attentions=True)
+        >>> assert model.config.output_attentions == True
+        >>> # Loading from a Pytorch model file instead of a TensorFlow checkpoint (slower, for example purposes, not runnable).
+        >>> config = BertConfig.from_json_file("./pt_model/my_pt_model_config.json")
+        >>> model = TFBertModel.from_pretrained("./pt_model/my_pytorch_model.bin", from_pt=True, config=config)
         ```"""
         config = kwargs.pop("config", None)
         cache_dir = kwargs.pop("cache_dir", None)
@@ -2487,6 +2494,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         model = TFAutoModel.from_pretrained("bert-base-cased")
 
         # Push the model to your namespace with the name "my-finetuned-bert".
+        model.push_to_hub("my-finetuned-bert")
+
+        # Push the model to an organization with the name "my-finetuned-bert".
+        model.push_to_hub("huggingface/my-finetuned-bert")
         ```
         """
         if "repo_path_or_name" in model_card_kwargs:

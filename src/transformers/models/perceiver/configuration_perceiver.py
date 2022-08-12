@@ -110,6 +110,10 @@ class PerceiverConfig(PretrainedConfig):
     >>> configuration = PerceiverConfig()
 
     >>> # Initializing a model from the deepmind/language-perceiver style configuration
+    >>> model = PerceiverModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "perceiver"
 

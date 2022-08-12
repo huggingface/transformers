@@ -855,6 +855,10 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
         >>> encoding = processor(image, return_tensors="pt")
 
         >>> outputs = model(**encoding)
+        >>> last_hidden_states = outputs.last_hidden_state
+
+        >>> last_hidden_states.shape
+        torch.Size([1, 342, 768])
         ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1026,6 +1030,10 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
         >>> outputs = model(**encoding, labels=sequence_label)
 
         >>> loss, logits = outputs.loss, outputs.logits
+        >>> predicted_idx = logits.argmax(dim=-1).item()
+        >>> predicted_answer = dataset.info.features["label"].names[4]
+        >>> predicted_idx, predicted_answer
+        (4, 'advertisement')
         ```
         """
 
@@ -1212,6 +1220,10 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
         >>> outputs = model(**encoding)
         >>> logits, loss = outputs.logits, outputs.loss
 
+        >>> predicted_token_class_ids = logits.argmax(-1)
+        >>> predicted_tokens_classes = [id2label[t.item()] for t in predicted_token_class_ids[0]]
+        >>> predicted_tokens_classes[:5]
+        ['B-ANSWER', 'B-HEADER', 'B-HEADER', 'B-HEADER', 'B-HEADER']
         ```
         """
 
@@ -1337,12 +1349,20 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
         >>> predicted_start_idx, predicted_end_idx
         (154, 287)
 
+        >>> predicted_answer_tokens = encoding.input_ids.squeeze()[predicted_start_idx : predicted_end_idx + 1]
+        >>> predicted_answer = processor.tokenizer.decode(predicted_answer_tokens)
+        >>> predicted_answer  # results are not very good without further fine-tuning
+        'council mem - bers conducted by trrf treasurer philip g. kuehn to get answers which the public ...
         ```
 
         ```python
         >>> target_start_index = torch.tensor([7])
         >>> target_end_index = torch.tensor([14])
         >>> outputs = model(**encoding, start_positions=target_start_index, end_positions=target_end_index)
+        >>> predicted_answer_span_start = outputs.start_logits.argmax(-1).item()
+        >>> predicted_answer_span_end = outputs.end_logits.argmax(-1).item()
+        >>> predicted_answer_span_start, predicted_answer_span_end
+        (154, 287)
         ```
         """
 

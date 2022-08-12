@@ -530,6 +530,10 @@ PEGASUS_GENERATION_EXAMPLE = r"""
     ... )
     >>> inputs = tokenizer(ARTICLE_TO_SUMMARIZE, max_length=1024, return_tensors="pt")
 
+    >>> # Generate Summary
+    >>> summary_ids = model.generate(inputs["input_ids"])
+    >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+    "California's largest electricity provider has turned off power to hundreds of thousands of customers."
     ```
 """
 
@@ -1219,6 +1223,10 @@ class PegasusModel(PegasusPreTrainedModel):
         >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")
         >>> decoder_inputs = tokenizer("Studies show that", return_tensors="pt")
         >>> outputs = model(input_ids=inputs.input_ids, decoder_input_ids=decoder_inputs.input_ids)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 4, 1024]
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1637,6 +1645,10 @@ class PegasusForCausalLM(PegasusPreTrainedModel):
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
+        >>> logits = outputs.logits
+        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
+        >>> list(logits.shape) == expected_shape
+        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

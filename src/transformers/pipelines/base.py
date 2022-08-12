@@ -856,6 +856,10 @@ class Pipeline(_ScikitCompat):
 
         ```python
         # Explicitly ask for tensor allocation on CUDA device :0
+        pipe = pipeline(..., device=0)
+        with pipe.device_placement():
+            # Every framework specific tensor allocation will be done on the request device
+            output = pipe(...)
         ```"""
         if self.framework == "tf":
             with tf.device("/CPU:0" if self.device == -1 else f"/device:GPU:{self.device}"):

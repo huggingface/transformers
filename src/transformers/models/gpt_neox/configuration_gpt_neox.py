@@ -75,6 +75,10 @@ class GPTNeoXConfig(PretrainedConfig):
     >>> configuration = GPTNeoXConfig()
 
     >>> # Initializing a model from the gpt-neox-20b style configuration
+    >>> model = GPTNeoXModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
     ```"""
     model_type = "gpt_neox"
 

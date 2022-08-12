@@ -471,6 +471,10 @@ class DPRContextEncoder(DPRPretrainedContextEncoder):
         ```python
         >>> from transformers import DPRContextEncoder, DPRContextEncoderTokenizer
 
+        >>> tokenizer = DPRContextEncoderTokenizer.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base")
+        >>> model = DPRContextEncoder.from_pretrained("facebook/dpr-ctx_encoder-single-nq-base")
+        >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors="pt")["input_ids"]
+        >>> embeddings = model(input_ids).pooler_output
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -548,6 +552,10 @@ class DPRQuestionEncoder(DPRPretrainedQuestionEncoder):
         ```python
         >>> from transformers import DPRQuestionEncoder, DPRQuestionEncoderTokenizer
 
+        >>> tokenizer = DPRQuestionEncoderTokenizer.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
+        >>> model = DPRQuestionEncoder.from_pretrained("facebook/dpr-question_encoder-single-nq-base")
+        >>> input_ids = tokenizer("Hello, is my dog cute ?", return_tensors="pt")["input_ids"]
+        >>> embeddings = model(input_ids).pooler_output
         ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -632,6 +640,10 @@ class DPRReader(DPRPretrainedReader):
         ...     texts=["'What Is Love' is a song recorded by the artist Haddaway"],
         ...     return_tensors="pt",
         ... )
+        >>> outputs = model(**encoded_inputs)
+        >>> start_logits = outputs.start_logits
+        >>> end_logits = outputs.end_logits
+        >>> relevance_logits = outputs.relevance_logits
         ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

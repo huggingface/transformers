@@ -292,6 +292,10 @@ class TFRagPreTrainedModel(TFPreTrainedModel):
 
         >>> # load retriever
         >>> retriever = RagRetriever.from_pretrained(
+        ...     "facebook/rag-token-base", index_name="exact", use_dummy_dataset=True
+        ... )
+        >>> # load fine-tuned model with retriever
+        >>> model = TFRagModel.from_pretrained("./rag", retriever=retriever)
         ```"""
 
         kwargs_question_encoder = {
@@ -569,6 +573,10 @@ class TFRagModel(TFRagPreTrainedModel):
         >>> model = TFRagModel.from_pretrained("facebook/rag-token-base", retriever=retriever, from_pt=True)
 
         >>> input_dict = tokenizer.prepare_seq2seq_batch(
+        ...     "How many people live in Paris?", "In Paris, there are 10 million people.", return_tensors="tf"
+        ... )
+        >>> input_ids = input_dict["input_ids"]
+        >>> outputs = model(input_ids)
         ```"""
         assert (
             "decoder_cached_states" not in kwargs
@@ -899,6 +907,10 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         >>> # or directly generate
         >>> generated = model.generate(
         ...     context_input_ids=docs_dict["context_input_ids"],
+        ...     context_attention_mask=docs_dict["context_attention_mask"],
+        ...     doc_scores=doc_scores,
+        ... )
+        >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         ```"""
 
         assert (
@@ -1489,6 +1501,10 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         >>> # or directly generate
         >>> generated = model.generate(
         ...     context_input_ids=docs_dict["context_input_ids"],
+        ...     context_attention_mask=docs_dict["context_attention_mask"],
+        ...     doc_scores=doc_scores,
+        ... )
+        >>> generated_string = tokenizer.batch_decode(generated, skip_special_tokens=True)
         ```"""
 
         assert (
