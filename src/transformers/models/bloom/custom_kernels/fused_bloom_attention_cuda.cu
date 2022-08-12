@@ -86,7 +86,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
 
     // `split_heads`
     const auto fused_qkv_view = fused_qkv.view({batch_size, q_length, num_heads, 3 * head_dim});
-    const auto tensor_list = fused_qkv_view.tensor_split(head_dim, -1);
+    const auto tensor_list = fused_qkv_view.split(head_dim, -1);
     const auto query_layer = tensor_list[0].transpose(1, 2).reshape({batch_size_times_num_heads, q_length, head_dim});
     auto key_layer = tensor_list[1].permute({0, 2, 3, 1}).reshape({batch_size_times_num_heads, head_dim, q_length});
     auto value_layer = tensor_list[2].transpose(1, 2).reshape({batch_size_times_num_heads, q_length, head_dim});
