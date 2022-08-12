@@ -20,5 +20,5 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-# Featrue extractor for GLPN is being replace by image processor
+# Feature extractor for GLPN is being replaced by image processor
 GLPNFeatureExtractor = GLPNImageProcessor
