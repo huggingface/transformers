@@ -1,5 +1,6 @@
-#include <ATen/ATen.h>
 #include <ATen/Dispatch.h>
+#include <THC/THCAtomics.cuh>
+#include <ATen/ATen.h>
 #include <torch/torch.h>
 #include <vector>
 
@@ -47,7 +48,7 @@ __global__ void forward_masked_softmax_kernel(
 
     // Compute max
     // TODO @thomasw21 get a MUCH faster sum mechanism in parallel?
-    atomicMax(&temp_storage[0], elt);
+    gpuAtomicMax(&temp_storage[0], elt);
     __syncthreads();
 
     // Compute exp(elt - max) masked
@@ -59,7 +60,7 @@ __global__ void forward_masked_softmax_kernel(
     }
 
     // Compute sum of exponential
-    atomicAdd(&temp_storage[0], exponential);
+    gpuAtomicAdd(&temp_storage[0], exponential);
     __syncthreads();
 
     // Compute softmax
