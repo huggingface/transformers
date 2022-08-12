@@ -154,8 +154,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             forward_masked_softmax_kernel<<<gridDim, blockDim, shared_mem_forward>>>(
                 attention_scores.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
                 attention_mask.packed_accessor32<bool, 3, torch::RestrictPtrTraits>(),
-                attention_probs.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
-                blockDim
+                attention_probs.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>()
             );
         });
     } else {
