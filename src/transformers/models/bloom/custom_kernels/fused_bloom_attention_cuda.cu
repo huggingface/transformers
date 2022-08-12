@@ -15,9 +15,9 @@
 **/
 template<typename attention_scores_scalar>
 __global__ void forward_masked_softmax_kernel(
-    const torch::PackedTensorAccessor32<attention_scores_scalar, 3> attention_scores, // [B, N, D]
-    const torch::PackedTensorAccessor32<bool, 3> mask, // [B, N, D]
-    torch::PackedTensorAccessor32<scalar_t, 3> result, // [B, N, D]
+    const torch::PackedTensorAccessor32<attention_scores_scalar, 3,torch::RestrictPtrTraits> attention_scores, // [B, N, D]
+    const torch::PackedTensorAccessor32<bool, 3,torch::RestrictPtrTraits> mask, // [B, N, D]
+    torch::PackedTensorAccessor32<attention_scores_scalar, 3,torch::RestrictPtrTraits> result, // [B, N, D]
 ) {
     const int batch_id = blockIdx.x;
     const int q_length_id = blockIdx.y;
@@ -55,41 +55,38 @@ __global__ void forward_masked_softmax_kernel(
 }
 
 std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forward(
-    at::Tensor fused_qkv,
-    std::optional<std::vector<at::Tensor>> layer_past,
-    at::Tensor alibi,
-    at::Tensor attention_mask,
-    std::optional<at::Tensor> head_mask,
-    float beta,
-    float inv_norm_factor,
-    int num_heads,
-    bool use_cache
+    const at::Tensor fused_qkv,
+    const std::optional<std::vector<at::Tensor>> layer_past,
+    const at::Tensor alibi,
+    const at::Tensor attention_mask,
+    const std::optional<at::Tensor> head_mask,
+    const float beta,
+    const float inv_norm_factor,
+    const int num_heads,
+    const bool use_cache
 ) {
-    auto batch_size = fused_qkv.size(0);
-    auto q_length = fused_qkv.size(1);
-    auto three_times_hidden_size = fused_qkv.size(2);
-    auto three_times_num_heads = 3 * num_heads;
-    auto head_dim = three_times_hidden_size / three_times_num_heads;
-    auto batch_size_times_num_heads = batch_size * num_heads;
+    const auto batch_size = fused_qkv.size(0);
+    const auto q_length = fused_qkv.size(1);
+    const auto three_times_hidden_size = fused_qkv.size(2);
+    const auto three_times_num_heads = 3 * num_heads;
+    const auto head_dim = three_times_hidden_size / three_times_num_heads;
+    const auto batch_size_times_num_heads = batch_size * num_heads;
 
     // `split_heads`
-    const fused_qkv = fused_qkv.view({batch_size, q_length, num_heads, three_times_num_heads});
-    auto tensor_list = fused_qkv.tensor_split(head_dim, -1);
-    const auto query_layer = tensor_list[0];
-    const auto key_layer = tensor_list[1];
-    const auto value_layer = tensor_list[2];
-    const query_layer = query_layer.transpose(1, 2).reshape({batch_size_times_num_heads, q_length, three_times_num_heads});
-    key_layer = key_layer.permute({0, 2, 3, 1}).reshape({batch_size_times_num_heads, three_times_num_heads, q_length});
-    value_layer = value_layer.transpose(1, 2).reshape({batch_size_times_num_heads, q_length, three_times_num_heads});
+    const auto fused_qkv_view = fused_qkv.view({batch_size, q_length, num_heads, three_times_num_heads});
+    const auto tensor_list = fused_qkv_view.tensor_split(head_dim, -1);
+    const auto query_layer = tensor_list[0].transpose(1, 2).reshape({batch_size_times_num_heads, q_length, three_times_num_heads});
+    auto key_layer = tensor_list[1].permute({0, 2, 3, 1}).reshape({batch_size_times_num_heads, three_times_num_heads, q_length});
+    auto value_layer = tensor_list[2].transpose(1, 2).reshape({batch_size_times_num_heads, q_length, three_times_num_heads});
 
     if (layer_past) {
-        auto past_key = (*layer_past).at(0);
-        auto past_value = (*layer_past).at(1);
+        const auto past_key = (*layer_past).at(0);
+        const auto past_value = (*layer_past).at(1);
         key_layer = at::cat({past_key, key_layer}, 2);
         key_layer = at::cat({past_value, value_layer}, 1);
     }
 
-    std::optional<std::vector<at::Tensor>> present;
+    const std::optional<std::vector<at::Tensor>> present;
     if (use_cache) {
         present = {key_layer, value_layer};
     } else {
@@ -100,11 +97,9 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
 
     if (true) {
         const auto attention_probs = at::empty_like(attention_scores);
-        AT_CHECK()
         // TODO @thomasw21: Check that input are both in the correct device + contiguous
         DISPATCH_CASE_FLOATING_TYPES(key_layer.scalar_type(), "masked_softmax", [&] {
-
-            auto stream = at::cuda::getCurrentCUDAStream().stream();
+            const auto stream = at::cuda::getCurrentCUDAStream().stream();
             // TODO @thomasw21 I think this is necessary if you want to support all kinds of gpus.
             // const uint64_t maxGridY = at::cuda::getCurrentDeviceProperties()->maxGridSize[1];
 
@@ -137,10 +132,10 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             AT_CHECK(gridDim.x * gridDim.y * gridDim.z < MAX_SMs, "A100s only have 108 SMs. Raising as require blocks is bigger.");
             AT_CHECK(blockDim.x * blockDim.y * blockDim.z < MAX_THREADS_PER_SM, "A100s only have 2048 threads per block. Raising as require requested threads is higher.");
 
-            fast_weight_forward_kernel<<<blockDim, threadDim, shared_mem_forward, stream>>>(
+            forward_masked_softmax_kernel<<<blockDim, threadDim, shared_mem_forward, stream>>>(
                 attention_scores.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
-                mask.packed_accessor32<bool, 3, torch::RestrictPtrTraits>(),
-                result.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
+                attention_mask.packed_accessor32<bool, 3, torch::RestrictPtrTraits>(),
+                attention_probs.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
             );
         });
 
