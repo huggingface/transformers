@@ -38,21 +38,21 @@ __global__ void forward_masked_softmax_kernel(
 
     // Compute mask
     float elt;
-    if (mask[batch_id][q_length_id][kv_length_id] = 1) {
-        elt = -std::numeric_limits<float>::infinity()
+    if (mask[batch_id][q_length_id][kv_length_id] == 1) {
+        elt = -std::numeric_limits<float>::infinity();
     } else {
-        elt = attention_scores[batch_id][q_length_id][kv_length_id]
+        elt = attention_scores[batch_id][q_length_id][kv_length_id];
     }
 
     // Compute max
-    const float max = BlockReduce(temp_storage).Reduce(elt, cu::Max);
+    const float max = BlockReduce(temp_storage).Reduce(elt, cub::Max);
 
     // Compute exp(elt - max) masked
     float exponential;
-    if (mask[batch_id][q_length_id][kv_length_id] = 1) {
-        exponential = 0
+    if (mask[batch_id][q_length_id][kv_length_id] == 1) {
+        exponential = 0;
     } else {
-        exponential = std::exp(attention_scores[batch_id][q_length_id][kv_length_id] - max)
+        exponential = std::exp(attention_scores[batch_id][q_length_id][kv_length_id] - max);
     }
 
     // Compute sum of exponential
