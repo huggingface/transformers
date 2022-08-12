@@ -1,4 +1,5 @@
 #include <ATen/ATen.h>
+#include <ATen/Dispatch.h>
 #include <torch/torch.h>
 #include <cub/cub.cuh>
 #include <vector>
@@ -10,11 +11,12 @@
 * Check example at https://github.com/thomasw21/LinearTransformers/blob/main/model/attention/fast_weight/fast_weight_cuda.cu
 **/
 
-#define DISPATCH_CASE_FLOATING_TYPES(...) \
-  at::AT_DISPATCH_CASE(at::ScalarType::Double, __VA_ARGS__) \
-  at::AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__) \
-  at::AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__) \
-  at::AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__) \
+// Available in pytorch main
+//#define DISPATCH_CASE_FLOATING_TYPES(...) \
+//  at::AT_DISPATCH_CASE(at::ScalarType::Double, __VA_ARGS__) \
+//  at::AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__) \
+//  at::AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__) \
+//  at::AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__) \
 
 /**
 * cast to fp32 if in fp16 + mask + softmax computation in fp32 + cast back to original dtype
@@ -99,14 +101,17 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
         present = {};
     }
 
-    const auto attention_scores = alibi.baddbmm(query_layer, key_layer, beta, inv_norm_factor);
+    auto attention_scores = alibi.baddbmm(query_layer, key_layer, beta, inv_norm_factor);
 
     torch::Tensor attention_probs;
     if (true) {
         attention_probs = at::empty_like(attention_scores);
         const auto kv_length = key_layer.size(2);
         // TODO @thomasw21: Check that input are both in the correct device + contiguous
-        DISPATCH_CASE_FLOATING_TYPES(key_layer.scalar_type(), "masked_softmax", [&] {
+
+        // TODO @thomas21: change by to this as it's cleaner when pytorch 1.13 comes out
+        // DISPATCH_CASE_FLOATING_TYPES(key_layer.scalar_type(), "masked_softmax", [&] {
+        AT_DISPATCH_FLOATING_TYPES_AND2(at::ScalarType::Half, at::ScalarType::BFloat16, key_layer.scalar_type(), "masked_softmax", [&] {
             // TODO @thomasw21 I think this is necessary if you want to support all kinds of gpus.
             // const uint64_t maxGridY = at::cuda::getCurrentDeviceProperties()->maxGridSize[1];
 
@@ -147,7 +152,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             );
         });
     } else {
-        auto input_dtype = attention_scores.dtype();
+        auto input_dtype = attention_scores.scalar_type();
         if (input_dtype == at::ScalarType::Float) {
             attention_scores = attention_scores.to(at::ScalarType::Float);
         };
