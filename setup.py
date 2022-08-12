@@ -399,7 +399,6 @@ install_requires = [
     deps["tokenizers"],
     deps["tqdm"],  # progress bars in model download and training scripts
 ]
-
 def get_extensions():
     # TODO @thomasw21 add cpp versions
     extensions = []

@@ -380,6 +380,9 @@ class BloomAttention(nn.Module):
         fused_qkv = self.query_key_value(hidden_states)  # [batch_size, seq_length, 3 x hidden_size]
         batch_size, q_length, _ = fused_qkv.shape
 
+        model = AutoModel.from_pretrained(...)
+        graph_module = trace_fx(model)
+        model = jit(graph_module)
         if CUSTOM_KERNELS_ENABLED:
             assert self.training is False, "Only foward pass was implemented"
             context_layer, present, attention_probs = fused_bloom_attention.forward(
