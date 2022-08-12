@@ -159,6 +159,7 @@ class Seq2SeqTSModelOutput(ModelOutput):
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
         scale
+        static_features
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -186,23 +187,6 @@ class Seq2SeqTSPredictionOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     scale: Optional[torch.FloatTensor] = None
     static_features: Optional[torch.FloatTensor] = None
-
-
-# class TimeSeriesTransformerLearnedPositionalEmbedding(nn.Embedding):
-#     """
-#     This module learns positional embeddings up to a fixed maximum size.
-#     """
-
-#     def __init__(self, num_embeddings: int, embedding_dim: int):
-#         super().__init__(num_embeddings, embedding_dim)
-
-#     def forward(self, input_ids_shape: torch.Size, past_key_values_length: int = 0):
-#         """`input_ids_shape` is expected to be [bsz x seqlen]."""
-#         bsz, seq_len = input_ids_shape[:2]
-#         positions = torch.arange(
-#             past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
-#         )
-#         return super().forward(positions)
 
 
 class TimeSeriesTransformerAttention(nn.Module):
@@ -727,30 +711,15 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
 
     Args:
         config: TimeSeriesTransformerConfig
-        embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: TimeSeriesTransformerConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
         self.layerdrop = config.encoder_layerdrop
 
         embed_dim = config.d_model
-        # self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
-
-        # self.padding_idx = config.pad_token_id
-        # self.max_source_positions = config.max_position_embeddings
-
-        # if embed_tokens is not None:
-        #     self.embed_tokens = embed_tokens
-        # else:
-        #     self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
-
-        # self.embed_positions = TimeSeriesTransformerLearnedPositionalEmbedding(
-        #     config.max_position_embeddings,
-        #     embed_dim,
-        # )
 
         self.layers = nn.ModuleList([TimeSeriesTransformerEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
@@ -762,7 +731,6 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
     def forward(
         self,
         inputs_embeds: torch.Tensor,
-        # input_ids=None,
         attention_mask=None,
         head_mask=None,
         output_attentions=None,
@@ -771,15 +739,7 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
     ):
         r"""
         Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using [`~TimeSeriesTransformerTokenizer`]. See
-                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`]
-                for details.
-
-                [What are input IDs?](../glossary#input-ids)
+            inputs_embeds
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -811,22 +771,6 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # # retrieve input_ids and inputs_embeds
-        # if input_ids is not None and inputs_embeds is not None:
-        #     raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        # elif input_ids is not None:
-        #     input_shape = input_ids.size()
-        #     input_ids = input_ids.view(-1, input_shape[-1])
-        # elif inputs_embeds is not None:
-        #     input_shape = inputs_embeds.size()[:-1]
-        # else:
-        #     raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        # if inputs_embeds is None:
-        #     inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-
-        # embed_pos = self.embed_positions(input_shape)
 
         hidden_states = inputs_embeds  # + embed_pos
 
@@ -898,27 +842,12 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
 
     Args:
         config: TimeSeriesTransformerConfig
-        embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: TimeSeriesTransformerConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
-
-        # self.padding_idx = config.pad_token_id
-        # self.max_target_positions = config.max_position_embeddings
-        # self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
-
-        # if embed_tokens is not None:
-        #     self.embed_tokens = embed_tokens
-        # else:
-        #     self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
-
-        # self.embed_positions = TimeSeriesTransformerLearnedPositionalEmbedding(
-        #     config.max_position_embeddings,
-        #     config.d_model,
-        # )
 
         self.layers = nn.ModuleList([TimeSeriesTransformerDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
@@ -926,12 +855,6 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
-
-    # def get_input_embeddings(self):
-    #     return self.embed_tokens
-
-    # def set_input_embeddings(self, value):
-    #     self.embed_tokens = value
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
@@ -954,7 +877,6 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
     def forward(
         self,
         inputs_embeds: torch.Tensor,
-        # input_ids=None,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
@@ -968,15 +890,7 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
     ):
         r"""
         Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using [`~TimeSeriesTransformerTokenizer`]. See
-                [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`]
-                for details.
-
-                [What are input IDs?](../glossary#input-ids)
+            inputs_embeds
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1037,23 +951,10 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # # retrieve input_ids and inputs_embeds
-        # if input_ids is not None and inputs_embeds is not None:
-        #     raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        # elif input_ids is not None:
-        #     input_shape = input_ids.size()
-        #     input_ids = input_ids.view(-1, input_shape[-1])
-        # elif inputs_embeds is not None:
-        #     input_shape = inputs_embeds.size()[:-1]
-        # else:
-        #     raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
         input_shape = inputs_embeds.size()[:-1]
 
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
-        # if inputs_embeds is None:
-        #     inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -1063,9 +964,6 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
-
-        # # embed positions
-        # positions = self.embed_positions(input_shape, past_key_values_length)
 
         hidden_states = inputs_embeds  # + positions
         hidden_states = self.layernorm_embedding(hidden_states)
