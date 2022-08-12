@@ -33,7 +33,7 @@ __global__ void forward_masked_softmax_kernel(
 
     // Specialize BlockReduce
     // 800 refers to CUDA_ARCH
-    typedef cub::BlockReduce<float, blockDim.x, cub::BLOCK_REDUCE_WARP_REDUCTIONS, blockDim.y, blockDim.z, 800> BlockReduce;
+    typedef cub::BlockReduce<float, static_cast<int>blockDim.x, cub::BLOCK_REDUCE_WARP_REDUCTIONS, static_cast<int>blockDim.y, static_cast<int>blockDim.z, 800> BlockReduce;
     __shared__ typename BlockReduce::TempStorage temp_storage;
 
     // Compute mask
@@ -45,7 +45,7 @@ __global__ void forward_masked_softmax_kernel(
     }
 
     // Compute max
-    const float max = BlockReduce(temp_storage).Reduce(elt, cub::Max);
+    const float max = BlockReduce(temp_storage).Reduce(elt, cub::Max());
 
     // Compute exp(elt - max) masked
     float exponential;
