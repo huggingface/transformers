@@ -215,7 +215,7 @@ PYTORCH_EXPORT_MODELS = {
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
-    ("bloom", "bigscience/bloom-350m"),
+    ("bloom", "bigscience/bloom-560m"),
     ("gpt2", "gpt2"),
     ("gpt-neo", "EleutherAI/gpt-neo-125M"),
 }

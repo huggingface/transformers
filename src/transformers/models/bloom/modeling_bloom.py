@@ -38,17 +38,17 @@ from .configuration_bloom import BloomConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "bigscience/bloom-350m"
+_CHECKPOINT_FOR_DOC = "bigscience/bloom-560m"
 _CONFIG_FOR_DOC = "BloomConfig"
 _TOKENIZER_FOR_DOC = "BloomTokenizerFast"
 
 BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "bigscience/bigscience-small-testing",
-    "bigscience/bloom-350m",
-    "bigscience/bloom-760m",
-    "bigscience/bloom-1b3",
-    "bigscience/bloom-2b5",
-    "bigscience/bloom-6b3",
+    "bigscience/bloom-560m",
+    "bigscience/bloom-1b1",
+    "bigscience/bloom-1b7",
+    "bigscience/bloom-3b",
+    "bigscience/bloom-7b1",
     "bigscience/bloom",
 ]
 
