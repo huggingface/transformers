@@ -264,7 +264,7 @@ def main():
         accelerator_log_kwargs["log_with"] = args.report_to
         accelerator_log_kwargs["logging_dir"] = args.output_dir
 
-    accelerator = Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps, **accelerator_log_kwargs)
+    accelerator = Accelerator(log_with=args.report_to, logging_dir=args.output_dir, gradient_accumulation_steps=args.gradient_accumulation_steps) if args.with_tracking else Accelerator(gradient_accumulation_steps=args.gradient_accumulation_steps)
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
@@ -527,7 +527,7 @@ def main():
 
     # Scheduler and math around the number of training steps.
     overrode_max_train_steps = False
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader)
     if args.max_train_steps is None:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
@@ -545,7 +545,7 @@ def main():
     )
 
     # We need to recalculate our total training steps as the size of the training dataloader may have changed.
-    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader)
     if overrode_max_train_steps:
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
     # Afterwards we recalculate our number of training epochs
@@ -611,6 +611,7 @@ def main():
         if args.with_tracking:
             total_loss = 0
         for step, batch in enumerate(train_dataloader):
+            with accelerator.accumulate(model):
             # We need to skip steps until we reach the resumed step
             if args.resume_from_checkpoint and epoch == starting_epoch:
                 if resume_step is not None and step < resume_step:
