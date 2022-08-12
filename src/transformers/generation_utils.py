@@ -1200,7 +1200,7 @@ class GenerationMixin:
         input_ids_seq_length = input_ids.shape[-1]
         if max_length is None and max_new_tokens is None:
             warnings.warn(
-                "Neither `max_length` nor `max_new_tokens` have been set, `max_length` will default to "
+                "Neither `max_length` nor `max_new_tokens` has been set, `max_length` will default to "
                 f"{self.config.max_length} (`self.config.max_length`). Controlling `max_length` via the config is "
                 "deprecated and `max_length` will be removed from the config in v5 of Transformers -- we recommend "
                 "using `max_new_tokens` to control the maximum length of the generation.",
