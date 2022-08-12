@@ -608,6 +608,9 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
         if return_dict:
             return TFBaseModelOutput(
                 last_hidden_state=hidden_states,
