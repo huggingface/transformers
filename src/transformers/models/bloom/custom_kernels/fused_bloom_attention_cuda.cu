@@ -1,7 +1,6 @@
 #include <ATen/ATen.h>
 #include <ATen/Dispatch.h>
 #include <torch/torch.h>
-#include <cub/cub.cuh>
 #include <vector>
 
 #include <optional>
@@ -18,6 +17,10 @@
 //  at::AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__) \
 //  at::AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__) \
 
+/*
+* Forward passes
+*/
+
 /**
 * cast to fp32 if in fp16 + mask + softmax computation in fp32 + cast back to original dtype
 **/
@@ -25,46 +28,44 @@ template<typename attention_scores_scalar>
 __global__ void forward_masked_softmax_kernel(
     const torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> attention_scores, // [B, N, D]
     const torch::PackedTensorAccessor32<bool, 3, torch::RestrictPtrTraits> mask, // [B, N, D]
-    torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> result, // [B, N, D]
-    dim3 blockDim
+    torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> result // [B, N, D]
 ) {
     const int batch_id = blockIdx.x;
     const int q_length_id = blockIdx.y;
     const int kv_length_id = threadIdx.x;
 
-    const int blockDimX = blockDim.x;
-    const int blockDimY = blockDim.y;
-    const int blockDimZ = blockDim.z;
-
     // Specialize BlockReduce
     // 800 refers to CUDA_ARCH
-    typedef cub::BlockReduce<float, blockDimX, cub::BLOCK_REDUCE_WARP_REDUCTIONS, blockDimY, blockDimZ, 800> BlockReduce;
-    __shared__ typename BlockReduce::TempStorage temp_storage;
+    __shared__ typename float temp_storage[1];
 
     // Compute mask
     float elt;
-    if (mask[batch_id][q_length_id][kv_length_id] == 1) {
+    const auto mask_elt = mask[batch_id][q_length_id][kv_length_id];
+    if (mask_elt == 1) {
         elt = -std::numeric_limits<float>::infinity();
     } else {
         elt = attention_scores[batch_id][q_length_id][kv_length_id];
     }
 
     // Compute max
-    const float max = BlockReduce(temp_storage).Reduce(elt, cub::Max());
+    // TODO @thomasw21 get a MUCH faster sum mechanism in parallel?
+    atomicMax(&temp_storage[0], elt);
+    __syncthreads();
 
     // Compute exp(elt - max) masked
     float exponential;
-    if (mask[batch_id][q_length_id][kv_length_id] == 1) {
+    if (mask_elt == 1) {
         exponential = 0;
     } else {
-        exponential = std::exp(attention_scores[batch_id][q_length_id][kv_length_id] - max);
+        exponential = std::exp(elt - temp_storage[0]);
     }
 
     // Compute sum of exponential
-    const float exponential_sum = BlockReduce(temp_storage).Sum(elt);
+    atomicAdd(&temp_storage[0], exponential);
+    __syncthreads();
 
     // Compute softmax
-    result[batch_id][q_length_id][kv_length_id] = exponential_sum;
+    result[batch_id][q_length_id][kv_length_id] = static_cast<attention_scores_scalar>(exponential / temp_storage[0]);
 }
 
 std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forward(
