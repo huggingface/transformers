@@ -790,8 +790,10 @@ class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
 class DonutModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_docvqa(self):
-        processor = DonutProcessor.from_pretrained("nielsr/donut-base-finetuned-docvqa")
-        model = VisionEncoderDecoderModel.from_pretrained("nielsr/donut-base-finetuned-docvqa").to(torch_device)
+        processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
+        model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa").to(
+            torch_device
+        )
 
         dataset = load_dataset("hf-internal-testing/example-documents", split="test")
         image = dataset[0]["image"]
@@ -852,8 +854,10 @@ class DonutModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_cordv2(self):
-        processor = DonutProcessor.from_pretrained("nielsr/donut-base-finetuned-cord-v2")
-        model = VisionEncoderDecoderModel.from_pretrained("nielsr/donut-base-finetuned-cord-v2").to(torch_device)
+        processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
+        model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2").to(
+            torch_device
+        )
 
         dataset = load_dataset("hf-internal-testing/example-documents", split="test")
         image = dataset[2]["image"]
@@ -914,8 +918,10 @@ class DonutModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_rvlcdip(self):
-        processor = DonutProcessor.from_pretrained("nielsr/donut-base-finetuned-rvlcdip")
-        model = VisionEncoderDecoderModel.from_pretrained("nielsr/donut-base-finetuned-rvlcdip").to(torch_device)
+        processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
+        model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip").to(
+            torch_device
+        )
 
         dataset = load_dataset("hf-internal-testing/example-documents", split="test")
         image = dataset[1]["image"]

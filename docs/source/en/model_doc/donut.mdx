@@ -56,8 +56,8 @@ into a single instance to both extract the input features and decode the predict
 >>> from datasets import load_dataset
 >>> import torch
 
->>> processor = DonutProcessor.from_pretrained("nielsr/donut-base-finetuned-rvlcdip")
->>> model = VisionEncoderDecoderModel.from_pretrained("nielsr/donut-base-finetuned-rvlcdip")
+>>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
+>>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-rvlcdip")
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 >>> model.to(device)  # doctest: +IGNORE_RESULT
@@ -101,8 +101,8 @@ into a single instance to both extract the input features and decode the predict
 >>> from datasets import load_dataset
 >>> import torch
 
->>> processor = DonutProcessor.from_pretrained("nielsr/donut-base-finetuned-cord-v2")
->>> model = VisionEncoderDecoderModel.from_pretrained("nielsr/donut-base-finetuned-cord-v2")
+>>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
+>>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-cord-v2")
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 >>> model.to(device)  # doctest: +IGNORE_RESULT
@@ -146,8 +146,8 @@ into a single instance to both extract the input features and decode the predict
 >>> from datasets import load_dataset
 >>> import torch
 
->>> processor = DonutProcessor.from_pretrained("nielsr/donut-base-finetuned-docvqa")
->>> model = VisionEncoderDecoderModel.from_pretrained("nielsr/donut-base-finetuned-docvqa")
+>>> processor = DonutProcessor.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
+>>> model = VisionEncoderDecoderModel.from_pretrained("naver-clova-ix/donut-base-finetuned-docvqa")
 
 >>> device = "cuda" if torch.cuda.is_available() else "cpu"
 >>> model.to(device)  # doctest: +IGNORE_RESULT
