@@ -170,13 +170,13 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_pat
     # inputs = feature_extractor(images=image, return_tensors="pt")
 
     tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-    input_ids = tokenizer(["playing sports", "eating spaghetti", "go shopping"], return_tensors="pt").input_ids
+    input_ids = tokenizer(["playing sports", "eating spaghetti", "go shopping"], padding="max_length", return_tensors="pt").input_ids
 
     with torch.no_grad():
         outputs = model(input_ids=input_ids, pixel_values=pixel_values)
 
     # TODO verify outputs
-    print(outputs.logits_per_image)
+    print(outputs.keys())
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")

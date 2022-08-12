@@ -422,25 +422,18 @@ class XClipVisionEncoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
+        print("Initial values of hidden states:", hidden_states[0, :3, :3])
+
         bt, l, d = hidden_states.size()
         b = bt // self.T
         msg_token = self.message_fc(hidden_states[:, 0, :])
         msg_token = msg_token.view(b, self.T, d)
 
-        print("Shape of msg_token:", msg_token.shape)
-        print("Initial values of msg_token:", msg_token[0, :3, :3])
-
         msg_token = msg_token + self.drop_path(self.message_attn(self.message_ln(msg_token))[0])
         # add dummy sequence dimension
         msg_token = msg_token.view(-1, 1, d)
 
-        print("Shape of msg_token after self-attention:", msg_token.shape)
-        print("Initial values of msg_token after self-attention:", msg_token[0, :3, :3])
-
         hidden_states = torch.cat([hidden_states, msg_token], dim=1)
-
-        print("Shape of hidden states after concatentation:", hidden_states.shape)
-        print("Initial values of hidden states after concatenation:", hidden_states[0, :3, :3])
 
         residual = hidden_states
 
@@ -453,10 +446,14 @@ class XClipVisionEncoderLayer(nn.Module):
         )
         hidden_states = residual + hidden_states
 
+        hidden_states = hidden_states[:, :l, :]
+
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
+
+        print("Initial values of hidden states after residual:", hidden_states[0, :3, :3])
 
         outputs = (hidden_states,)
 
@@ -775,6 +772,8 @@ class XClipTextTransformer(nn.Module):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
 
+        print("Initial hidden states of the Text encoder:", hidden_states[0, :3, :3])
+
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
@@ -791,6 +790,8 @@ class XClipTextTransformer(nn.Module):
         # take features from the eot embedding (eot_token is the highest number in each sequence)
         pooled_output = last_hidden_state[torch.arange(last_hidden_state.shape[0]), input_ids.argmax(dim=-1)]
 
+        print("Initial values of the text pooled output:", pooled_output[0,:3])
+        
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
@@ -928,9 +929,7 @@ class XClipVisionEncoder(nn.Module):
 
         hidden_states = inputs_embeds
         for idx, encoder_layer in enumerate(self.layers):
-            if idx == 0:
-                print(f"Shape of hidden states before layer {idx}:", hidden_states.shape)
-                print(f"Initial values of hidden states before layer {idx}:", hidden_states[0, :3, :3])
+            print("---------LAYER ---------", idx)
 
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
@@ -957,10 +956,6 @@ class XClipVisionEncoder(nn.Module):
                 )
 
             hidden_states = layer_outputs[0]
-
-            if idx == 0:
-                print(f"Shape of hidden states after layer {idx}:", hidden_states.shape)
-                print(f"Initial values of hidden states after layer {idx}:", hidden_states[0, :3, :3])
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
@@ -1012,9 +1007,6 @@ class XClipVisionTransformer(nn.Module):
         hidden_states = self.embeddings(pixel_values)
         hidden_states = self.pre_layernorm(hidden_states)
 
-        print("Initial hidden states:", hidden_states.shape)
-        print("Initial values of hidden states:", hidden_states[0, :3, :3])
-
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
@@ -1025,6 +1017,9 @@ class XClipVisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
+
+        print("Shape of pooled output:", pooled_output.shape)
+        print("Initial values of pooled output:", pooled_output[0, :3])
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -1282,13 +1277,15 @@ class XClipModel(XClipPreTrainedModel):
 
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(-1, num_channels, height, width)
-        
+
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+
+        print("Shape of input_ids:", input_ids.shape)
 
         text_outputs = self.text_model(
             input_ids=input_ids,
@@ -1304,7 +1301,7 @@ class XClipModel(XClipPreTrainedModel):
 
         text_embeds = text_outputs[1]
         text_embeds = self.text_projection(text_embeds)
-        
+
         # normalized features
         image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
