@@ -170,6 +170,7 @@ class Seq2SeqTSModelOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     scale: Optional[torch.FloatTensor] = None
+    static_features: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -184,6 +185,7 @@ class Seq2SeqTSPredictionOutput(ModelOutput):
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
     scale: Optional[torch.FloatTensor] = None
+    static_features: Optional[torch.FloatTensor] = None
 
 
 # class TimeSeriesTransformerLearnedPositionalEmbedding(nn.Embedding):
@@ -1351,14 +1353,14 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         output_attentions: bool = False,
         return_dict: Optional[bool] = None,
     ):
-        transformer_inputs, scale, _ = self.create_network_inputs(
-            feat_static_cat,
-            feat_static_real,
-            past_time_feat,
-            past_target,
-            past_observed_values,
-            future_time_feat,
-            future_target,
+        transformer_inputs, scale, static_feat = self.create_network_inputs(
+            feat_static_real=feat_static_cat,
+            feat_static_real=feat_static_real,
+            past_time_feat=past_time_feat,
+            past_target=past_target,
+            past_observed_values=past_observed_values,
+            future_time_feat=future_time_feat,
+            future_target=future_target,
         )
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1395,7 +1397,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         )
 
         if not return_dict:
-            return decoder_outputs + encoder_outputs + (scale,)
+            return decoder_outputs + encoder_outputs + (scale, static_feat)
 
         return Seq2SeqTSModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1407,6 +1409,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
             scale=scale,
+            static_features=static_feat,
         )
 
 
@@ -1484,7 +1487,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
 
             if not return_dict:
                 outputs = (params) + outputs[1:]
-                return ((prediction_loss,) + outputs) if prediction_loss is not None else output
+                return ((prediction_loss,) + outputs) if prediction_loss is not None else outputs
 
             return Seq2SeqTSPredictionOutput(
                 loss=prediction_loss,
@@ -1497,6 +1500,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
                 encoder_hidden_states=outputs.encoder_hidden_states,
                 encoder_attentions=outputs.encoder_attentions,
                 scale=outputs.scale,
+                static_features=outputs.static_features,
             )
 
         else:
@@ -1507,11 +1511,11 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             num_parallel_samples = self.config.num_parallel_samples
 
             encoder_inputs, scale, static_feat = self.create_network_inputs(
-                feat_static_cat,
-                feat_static_real,
-                past_time_feat,
-                past_target,
-                past_observed_values,
+                feat_static_cat=feat_static_cat,
+                feat_static_real=feat_static_real,
+                past_time_feat=past_time_feat,
+                past_target=past_target,
+                past_observed_values=past_observed_values,
             )
 
             encoder_outputs = encoder(inputs_embeds=encoder_inputs)
