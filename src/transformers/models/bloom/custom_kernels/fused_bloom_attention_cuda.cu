@@ -11,10 +11,10 @@
 **/
 
 #define DISPATCH_CASE_FLOATING_TYPES(...) \
-  AT_DISPATCH_CASE(at::ScalarType::Double, __VA_ARGS__) \
-  AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__) \
-  AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__) \
-  AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__) \
+  at::AT_DISPATCH_CASE(at::ScalarType::Double, __VA_ARGS__) \
+  at::AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__) \
+  at::AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__) \
+  at::AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__) \
 
 /**
 * cast to fp32 if in fp16 + mask + softmax computation in fp32 + cast back to original dtype
@@ -92,7 +92,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
         key_layer = at::cat({past_value, value_layer}, 1);
     }
 
-    const std::optional<std::vector<at::Tensor>> present;
+    std::optional<std::vector<at::Tensor>> present;
     if (use_cache) {
         present = {key_layer, value_layer};
     } else {
@@ -101,8 +101,9 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
 
     const auto attention_scores = alibi.baddbmm(query_layer, key_layer, beta, inv_norm_factor);
 
+    torch::Tensor attention_probs;
     if (true) {
-        const auto attention_probs = at::empty_like(attention_scores);
+        attention_probs = at::empty_like(attention_scores);
         const auto kv_length = key_layer.size(2);
         // TODO @thomasw21: Check that input are both in the correct device + contiguous
         DISPATCH_CASE_FLOATING_TYPES(key_layer.scalar_type(), "masked_softmax", [&] {
@@ -152,7 +153,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
         };
         // TODO @thomasw21 Figure out how to get minimum value
         auto attn_weights = attention_scores.masked_fill_(attention_mask, -1e34);
-        auto attention_probs = attn_weights.softmax(-1, at::ScalarType::Float).to(input_dtype);
+        attention_probs = attn_weights.softmax(-1, at::ScalarType::Float).to(input_dtype);
     }
 
     auto context_layer = attention_probs.bmm(value_layer);
