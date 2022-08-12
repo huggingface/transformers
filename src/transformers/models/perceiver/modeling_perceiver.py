@@ -2866,9 +2866,7 @@ class PerceiverMultimodalPostprocessor(nn.Module):
         self.modalities = nn.ModuleDict(modalities)
         self.input_is_dict = input_is_dict
 
-    def forward(
-        self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, modality_sizes=None
-    ) -> Mapping[str, torch.Tensor]:
+    def forward(self, inputs: torch.Tensor, modality_sizes=None) -> Mapping[str, torch.Tensor]:
         if not self.input_is_dict:
             # Slice up modalities by their sizes.
             if modality_sizes is None:
@@ -2876,7 +2874,7 @@ class PerceiverMultimodalPostprocessor(nn.Module):
             inputs = restructure(modality_sizes=modality_sizes, inputs=inputs)
 
         outputs = {
-            modality: postprocessor(inputs[modality], pos=pos, modality_sizes=None)
+            modality: postprocessor(inputs[modality], modality_sizes=None)
             for modality, postprocessor in self.modalities.items()
         }
         return outputs
@@ -2897,7 +2895,7 @@ class PerceiverClassificationPostprocessor(nn.Module):
         super().__init__()
         self.classifier = nn.Linear(in_channels, config.num_labels)
 
-    def forward(self, inputs, pos: Optional[torch.Tensor] = None, modality_sizes=None) -> torch.Tensor:
+    def forward(self, inputs, modality_sizes=None) -> torch.Tensor:
         logits = self.classifier(inputs)
         return logits[:, 0, :]
 
@@ -2924,7 +2922,7 @@ class PerceiverAudioPostprocessor(nn.Module):
         # Architecture parameters:
         self.classifier = nn.Linear(in_channels, config.samples_per_patch)
 
-    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, modality_sizes=None) -> torch.Tensor:
+    def forward(self, inputs: torch.Tensor, modality_sizes=None) -> torch.Tensor:
 
         logits = self.classifier(inputs)
         return torch.reshape(logits, [inputs.shape[0], -1])
@@ -2946,7 +2944,7 @@ class PerceiverProjectionPostprocessor(nn.Module):
         super().__init__()
         self.classifier = nn.Linear(in_channels, out_channels)
 
-    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, modality_sizes=None) -> torch.Tensor:
+    def forward(self, inputs: torch.Tensor, modality_sizes=None) -> torch.Tensor:
         logits = self.classifier(inputs)
         return logits
 
@@ -3095,7 +3093,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
 
         return inp_dim + pos_dim
 
-    def _build_network_inputs(self, inputs: torch.Tensor, pos: torch.Tensor, network_input_is_1d: bool = True):
+    def _build_network_inputs(self, inputs: torch.Tensor, network_input_is_1d: bool = True):
         """
         Construct the final input, including position encoding.
 
@@ -3130,7 +3128,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
             inputs_with_pos = inputs + pos_enc
         return inputs_with_pos, inputs
 
-    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
+    def forward(self, inputs: torch.Tensor, network_input_is_1d: bool = True):
         if self.prep_type == "conv":
             # Convnet image featurization.
             # Downsamples spatially by a factor of 4
@@ -3174,7 +3172,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
             else:
                 raise ValueError("Unsupported data format for conv1x1.")
 
-        inputs, inputs_without_pos = self._build_network_inputs(inputs, pos, network_input_is_1d)
+        inputs, inputs_without_pos = self._build_network_inputs(inputs, network_input_is_1d)
         modality_sizes = None  # Size for each modality, only needed for multimodal
 
         return inputs, modality_sizes, inputs_without_pos
@@ -3197,7 +3195,7 @@ class PerceiverOneHotPreprocessor(AbstractPreprocessor):
     def num_channels(self) -> int:
         return self.config.num_labels
 
-    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
+    def forward(self, inputs: torch.Tensor, network_input_is_1d: bool = True):
         # Add a dummy index dimension.
         inputs = inputs[:, None, :]
 
@@ -3273,7 +3271,7 @@ class PerceiverAudioPreprocessor(AbstractPreprocessor):
             return pos_dim
         return self.samples_per_patch + pos_dim
 
-    def _build_network_inputs(self, inputs, pos):
+    def _build_network_inputs(self, inputs):
         """Construct the final input, including position encoding."""
         batch_size = inputs.shape[0]
         index_dims = inputs.shape[1:-1]
@@ -3294,10 +3292,10 @@ class PerceiverAudioPreprocessor(AbstractPreprocessor):
 
         return inputs_with_pos, inputs
 
-    def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True):
+    def forward(self, inputs: torch.Tensor, network_input_is_1d: bool = True):
         inputs = torch.reshape(inputs, [inputs.shape[0], -1, self.samples_per_patch])
 
-        inputs, inputs_without_pos = self._build_network_inputs(inputs, pos)
+        inputs, inputs_without_pos = self._build_network_inputs(inputs)
         modality_sizes = None  # Size for each modality, only needed for multimodal
 
         return inputs, modality_sizes, inputs_without_pos
@@ -3346,16 +3344,14 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         common_channel_size = max_channel_size + self.min_padding_size
         return common_channel_size
 
-    def forward(
-        self, inputs: Mapping[str, torch.Tensor], pos: Optional[torch.Tensor] = None, network_input_is_1d: bool = True
-    ) -> PreprocessorOutputType:
+    def forward(self, inputs: Mapping[str, torch.Tensor], network_input_is_1d: bool = True) -> PreprocessorOutputType:
         padded = {}
         modality_sizes = {}
         inputs_without_pos = {}
         for modality, preprocessor in self.modalities.items():
             # preprocess each modality using the respective preprocessor.
             output, _, inputs_without_pos[modality] = preprocessor(
-                inputs[modality], pos=pos, network_input_is_1d=network_input_is_1d
+                inputs[modality], network_input_is_1d=network_input_is_1d
             )
 
             # pad to the same common_channel_size.
