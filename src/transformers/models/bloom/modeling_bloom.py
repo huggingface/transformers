@@ -382,7 +382,7 @@ class BloomAttention(nn.Module):
 
         if CUSTOM_KERNELS_ENABLED:
             assert self.training is False, "Only foward pass was implemented"
-            context_layer, present, attention_probs = fused_bloom_attention.forward(
+            context_layer, present, attention_probs = fused_bloom_attention_cuda.forward(
                 fused_qkv=fused_qkv,
                 layer_past=layer_past,
                 alibi=alibi,
