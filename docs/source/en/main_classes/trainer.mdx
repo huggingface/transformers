@@ -598,7 +598,15 @@ This unlocks the ability to perform machine learning workflows like prototyping 
 Apple's Metal Performance Shaders (MPS) as a backend for PyTorch enables this and can be used via the new `"mps"` device. 
 This will map computational graphs and primitives on the MPS Graph framework and tuned kernels provided by MPS.
 For more information please refer official documents [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/)
-and [MPS BACKEND](https://pytorch.org/docs/stable/notes/mps.html).
+and [MPS BACKEND](https://pytorch.org/docs/stable/notes/mps.html). 
+
+<Tip warning={false}>
+
+We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing) on your MacOS machine. 
+It has major fixes related to model correctness and performance improvements for transformer based models.
+Please refer to https://github.com/pytorch/pytorch/issues/82707 for more details.
+
+</Tip>
 
 **Benefits of Training and Inference using Apple M1 Chips**
 
@@ -633,13 +641,10 @@ python examples/pytorch/text-classification/run_glue.py \
 
 **A few caveats to be aware of**
 
-1. We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing) on your MacOS machine. 
-It has major fixes related to model correctness and performance improvements for transformer based models.
-Please refer to https://github.com/pytorch/pytorch/issues/82707 for more details.
-2. Some PyTorch operations have not been implemented in mps and will throw an error. 
+1. Some PyTorch operations have not been implemented in mps and will throw an error. 
 One way to get around that is to set the environment variable `PYTORCH_ENABLE_MPS_FALLBACK=1`, 
 which will fallback to CPU for these operations. It still throws a UserWarning however.
-3. Distributed setups `gloo` and `nccl` are not working with `mps` device. 
+2. Distributed setups `gloo` and `nccl` are not working with `mps` device. 
 This means that currently only single GPU of `mps` device type can be used.
 
 Finally, please, remember that, 🤗 `Trainer` only integrates MPS backend, therefore if you

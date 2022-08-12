@@ -22,6 +22,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
+from packaging import version
+
 from .debug_utils import DebugOption
 from .trainer_utils import (
     EvaluationStrategy,
@@ -1388,15 +1390,13 @@ class TrainingArguments:
                             "and/or you do not have an MPS-enabled device on this machine."
                         )
                 else:
-                    # from .utils import is_torch_version
-
-                    # if not is_torch_version(">", "1.12.0"):
-                    #     warnings.warn(
-                    #         "We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing)"
-                    #         " on your MacOS machine. It has major fixes related to model correctness and performance"
-                    #         " improvements for transformer based models. Please refer to"
-                    #         " https://github.com/pytorch/pytorch/issues/82707 for more details."
-                    #     )
+                    if not version.parse(version.parse(torch.__version__).base_version) > version.parse("1.12.0"):
+                        warnings.warn(
+                            "We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing)"
+                            " on your MacOS machine. It has major fixes related to model correctness and performance"
+                            " improvements for transformer based models. Please refer to"
+                            " https://github.com/pytorch/pytorch/issues/82707 for more details."
+                        )
                     device = torch.device("mps")
 
             else:
