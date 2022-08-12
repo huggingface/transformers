@@ -23,9 +23,9 @@
 **/
 template<typename attention_scores_scalar>
 __global__ void forward_masked_softmax_kernel(
-    const torch::PackedTensorAccessor32<attention_scores_scalar, 3,torch::RestrictPtrTraits> attention_scores, // [B, N, D]
-    const torch::PackedTensorAccessor32<bool, 3,torch::RestrictPtrTraits> mask, // [B, N, D]
-    torch::PackedTensorAccessor32<attention_scores_scalar, 3,torch::RestrictPtrTraits> result // [B, N, D]
+    const torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> attention_scores, // [B, N, D]
+    const torch::PackedTensorAccessor32<bool, 3, torch::RestrictPtrTraits> mask, // [B, N, D]
+    torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> result // [B, N, D]
 ) {
     const int batch_id = blockIdx.x;
     const int q_length_id = blockIdx.y;
@@ -37,7 +37,7 @@ __global__ void forward_masked_softmax_kernel(
     __shared__ typename BlockReduce::TempStorage temp_storage;
 
     // Compute mask
-    const float elt;
+    float elt;
     if (mask[batch_id][q_length_id][kv_length_id] = 1) {
         elt = -std::numeric_limits<float>::infinity()
     } else {
@@ -48,7 +48,7 @@ __global__ void forward_masked_softmax_kernel(
     const float max = BlockReduce(temp_storage).Reduce(elt, cu::Max);
 
     // Compute exp(elt - max) masked
-    const float exponential;
+    float exponential;
     if (mask[batch_id][q_length_id][kv_length_id] = 1) {
         exponential = 0
     } else {
@@ -148,7 +148,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             forward_masked_softmax_kernel<<<gridDim, blockDim, shared_mem_forward>>>(
                 attention_scores.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
                 attention_mask.packed_accessor32<bool, 3, torch::RestrictPtrTraits>(),
-                attention_probs.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
+                attention_probs.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>()
             );
         });
     } else {
