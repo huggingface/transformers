@@ -33,7 +33,13 @@ from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_te
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import TFOwlViTModel, TFOwlViTTextModel, TFOwlViTVisionModel, TFSharedEmbeddings
+    from transformers import (
+        TFOwlViTForObjectDetection,
+        TFOwlViTModel,
+        TFOwlViTTextModel,
+        TFOwlViTVisionModel,
+        TFSharedEmbeddings,
+    )
     from transformers.models.owlvit.modeling_tf_owlvit import TF_OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
@@ -41,6 +47,7 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import OwlViTProcessor
+
 
 class TFOwlViTVisionModelTester:
     def __init__(
@@ -128,7 +135,9 @@ class TFOwlViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TFOwlViTVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=OwlViTVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=OwlViTVisionConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -553,10 +562,6 @@ class TFOwlViTModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="OWLVIT does not use inputs_embeds")
-    def test_model_common_attributes(self):
-        pass
-
     @unittest.skip(reason="Retain_grad is tested in individual model tests")
     def test_retain_grad_hidden_states_attentions(self):
         pass
@@ -683,7 +688,7 @@ class TFOwlViTModelIntegrationTest(unittest.TestCase):
         tf.debugging.assert_near(outputs.logits_per_image, expected_logits, atol=1e-3)
 
 
-class OwlViTForObjectDetectionTester:
+class TFOwlViTForObjectDetectionTester:
     def __init__(self, parent, is_training=False):
         self.parent = parent
         self.text_model_tester = TFOwlViTTextModelTester(parent)
@@ -702,14 +707,14 @@ class OwlViTForObjectDetectionTester:
         return OwlViTConfig.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
 
     def create_and_check_model(self, config, pixel_values, input_ids, attention_mask):
-        model = OwlViTForObjectDetection(config)
+        model = TFOwlViTForObjectDetection(config)
 
         result = model(
             pixel_values=pixel_values,
             input_ids=input_ids,
             attention_mask=attention_mask,
             return_dict=True,
-            training=False
+            training=False,
         )
 
         pred_boxes_size = (
@@ -743,8 +748,8 @@ class OwlViTForObjectDetectionTester:
 
 
 @require_tf
-class TFOwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TFOwlViTModel,) if is_tf_available() else ()
+class TFOwlViTForObjectDetectionTest(TFModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TFOwlViTForObjectDetection,) if is_tf_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -780,10 +785,6 @@ class TFOwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Test_forward_signature is tested in individual model tests")
     def test_forward_signature(self):
-        pass
-
-    @unittest.skip(reason="Test_save_load_fast_init_from_base is tested in individual model tests")
-    def test_save_load_fast_init_from_base(self):
         pass
 
     @unittest.skip(reason="OWL-ViT does not support training yet")
