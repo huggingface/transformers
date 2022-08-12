@@ -1355,6 +1355,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         prediction_loss = None
         if future_target is not None and future_observed_values is not None:
             # training
