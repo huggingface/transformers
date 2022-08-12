@@ -21,12 +21,16 @@ from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
+from ...pytorch_utils import (
+    Conv1D,
+    find_pruneable_heads_and_indices,
+    is_torch_greater_or_equal_than_1_6,
+    prune_conv1d_layer,
+)
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -36,7 +40,7 @@ from ...utils import (
 )
 
 
-if version.parse(torch.__version__) >= version.parse("1.6"):
+if is_torch_greater_or_equal_than_1_6:
     is_amp_available = True
     from torch.cuda.amp import autocast
 else:
@@ -178,7 +182,9 @@ class DecisionTransformerGPT2Attention(nn.Module):
         attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
         if self.scale_attn_weights:
-            attn_weights = attn_weights / (value.size(-1) ** 0.5)
+            attn_weights = attn_weights / torch.tensor(
+                value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
+            )
 
         # Layer-wise attention scaling
         if self.scale_attn_by_inverse_layer_idx:

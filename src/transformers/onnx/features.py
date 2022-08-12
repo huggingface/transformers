@@ -201,6 +201,10 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.camembert.CamembertOnnxConfig",
         ),
+        "clip": supported_features_mapping(
+            "default",
+            onnx_config_cls="models.clip.CLIPOnnxConfig",
+        ),
         "codegen": supported_features_mapping(
             "default",
             "causal-lm",
@@ -228,6 +232,12 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls="models.data2vec.Data2VecTextOnnxConfig",
+        ),
+        "data2vec-vision": supported_features_mapping(
+            "default",
+            "image-classification",
+            "image-segmentation",
+            onnx_config_cls="models.data2vec.Data2VecVisionOnnxConfig",
         ),
         "deberta": supported_features_mapping(
             "default",
@@ -333,6 +343,9 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls="models.layoutlmv3.LayoutLMv3OnnxConfig",
         ),
+        "levit": supported_features_mapping(
+            "default", "image-classification", onnx_config_cls="models.levit.LevitOnnxConfig"
+        ),
         "longt5": supported_features_mapping(
             "default",
             "default-with-past",
@@ -373,6 +386,13 @@ class FeaturesManager:
             "default",
             "image-classification",
             onnx_config_cls="models.mobilevit.MobileViTOnnxConfig",
+        ),
+        "mt5": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls="models.mt5.MT5OnnxConfig",
         ),
         "m2m-100": supported_features_mapping(
             "default",
@@ -451,6 +471,11 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls="models.xlm_roberta.XLMRobertaOnnxConfig",
+        ),
+        "yolos": supported_features_mapping(
+            "default",
+            "object-detection",
+            onnx_config_cls="models.yolos.YolosOnnxConfig",
         ),
     }
 

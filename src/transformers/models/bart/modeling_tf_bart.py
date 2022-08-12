@@ -910,11 +910,11 @@ class TFBartDecoder(tf.keras.layers.Layer):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`tf.Tensor` of
-                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
-                control over how to convert `input_ids` indices into associated vectors than the model's internal
-                embedding lookup matrix.
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`tf.Tensor` of shape
+                `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids`
+                you can choose to directly pass an embedded representation. This is useful if you want more control
+                over how to convert `input_ids` indices into associated vectors than the model's internal embedding
+                lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1267,7 +1267,7 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         super().__init__(config, *inputs, **kwargs)
         self.model = TFBartMainLayer(config, load_weight_prefix=load_weight_prefix, name="model")
         self.use_cache = config.use_cache
-        # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
+        # final_bias_logits is registered as a buffer in pytorch, so not trainable for the sake of consistency.
         self.final_logits_bias = self.add_weight(
             name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )

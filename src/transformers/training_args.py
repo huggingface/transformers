@@ -34,6 +34,7 @@ from .trainer_utils import (
 from .utils import (
     ExplicitEnum,
     cached_property,
+    ccl_version,
     get_full_repo_name,
     is_accelerate_available,
     is_sagemaker_dp_enabled,
@@ -44,6 +45,7 @@ from .utils import (
     is_torch_tf32_available,
     is_torch_tpu_available,
     logging,
+    requires_backends,
     torch_required,
 )
 
@@ -104,6 +106,7 @@ class OptimizerNames(ExplicitEnum):
 
 @dataclass
 class TrainingArguments:
+    framework = "pt"
     """
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
     itself**.
@@ -412,8 +415,8 @@ class TrainingArguments:
             down the training and evaluation speed.
         push_to_hub (`bool`, *optional*, defaults to `False`):
             Whether or not to push the model to the Hub every time the model is saved. If this is activated,
-            `output_dir` will begin a git directory synced with the the repo (determined by `hub_model_id`) and the
-            content will be pushed each time a save is triggered (depending on your `save_strategy`). Calling
+            `output_dir` will begin a git directory synced with the repo (determined by `hub_model_id`) and the content
+            will be pushed each time a save is triggered (depending on your `save_strategy`). Calling
             [`~Trainer.save_model`] will also trigger a push.
 
             <Tip warning={true}>
@@ -434,7 +437,7 @@ class TrainingArguments:
             `"organization_name/model"`. Will default to `user_name/output_dir_name` with *output_dir_name* being the
             name of `output_dir`.
 
-            Will default to to the name of `output_dir`.
+            Will default to the name of `output_dir`.
         hub_strategy (`str` or [`~trainer_utils.HubStrategy`], *optional*, defaults to `"every_save"`):
             Defines the scope of what is pushed to the Hub and when. Possible values are:
 
@@ -787,10 +790,10 @@ class TrainingArguments:
         metadata={
             "help": (
                 "Whether or not to use PyTorch Fully Sharded Data Parallel (FSDP) training (in distributed training"
-                " only). The base option should be `full_shard` or `shard_grad_op` and you can add CPU-offload to"
-                " `full_shard` or `shard_grad_op` like this: full_shard offload` or `shard_grad_op offload`. You can"
-                " add auto-wrap to `full_shard` or `shard_grad_op` with the same syntax: full_shard auto_wrap` or"
-                " `shard_grad_op auto_wrap`."
+                " only). The base option should be `full_shard`, `shard_grad_op` or `no_shard` and you can add"
+                " CPU-offload to `full_shard` or `shard_grad_op` like this: full_shard offload` or `shard_grad_op"
+                " offload`. You can add auto-wrap to `full_shard` or `shard_grad_op` with the same syntax: full_shard"
+                " auto_wrap` or `shard_grad_op auto_wrap`."
             ),
         },
     )
@@ -800,6 +803,15 @@ class TrainingArguments:
             "help": (
                 "FSDP's minimum number of parameters for Default Auto Wrapping. (useful only when `fsdp` field is"
                 " passed)."
+            )
+        },
+    )
+    fsdp_transformer_layer_cls_to_wrap: Optional[str] = field(
+        default=None,
+        metadata={
+            "help": (
+                "Transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` .... "
+                "(useful only when `fsdp` flag is passed)."
             )
         },
     )
@@ -935,7 +947,7 @@ class TrainingArguments:
                 " are two options - eager and nvfuser. Eager defaults to pytorch eager and is useful for debugging."
                 " nvfuser path uses AOT Autograd and nvfuser compiler to optimize the models."
             ),
-            "choices": ["eager", "nvfuser"],
+            "choices": ["eager", "nvfuser", "fx2trt", "fx2trt-fp16"],
         },
     )
     ray_scope: Optional[str] = field(
@@ -1028,25 +1040,25 @@ class TrainingArguments:
             self.greater_is_better = self.metric_for_best_model not in ["loss", "eval_loss"]
         if self.run_name is None:
             self.run_name = self.output_dir
-
-        if self.fp16_backend and self.fp16_backend != "auto":
-            warnings.warn(
-                "`fp16_backend` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
-                " `half_precision_backend` instead",
-                FutureWarning,
-            )
-            self.half_precision_backend = self.fp16_backend
-
-        if self.bf16 or self.bf16_full_eval:
-
-            if self.no_cuda and not is_torch_bf16_cpu_available():
-                # cpu
-                raise ValueError("Your setup doesn't support bf16/cpu. You need torch>=1.10")
-            elif not self.no_cuda and not is_torch_bf16_gpu_available():
-                # gpu
-                raise ValueError(
-                    "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
+        if self.framework == "pt" and is_torch_available():
+            if self.fp16_backend and self.fp16_backend != "auto":
+                warnings.warn(
+                    "`fp16_backend` is deprecated and will be removed in version 5 of 🤗 Transformers. Use"
+                    " `half_precision_backend` instead",
+                    FutureWarning,
                 )
+                self.half_precision_backend = self.fp16_backend
+
+            if self.bf16 or self.bf16_full_eval:
+
+                if self.no_cuda and not is_torch_bf16_cpu_available():
+                    # cpu
+                    raise ValueError("Your setup doesn't support bf16/cpu. You need torch>=1.10")
+                elif not self.no_cuda and not is_torch_bf16_gpu_available():
+                    # gpu
+                    raise ValueError(
+                        "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
+                    )
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
@@ -1073,7 +1085,8 @@ class TrainingArguments:
             self.optim = OptimizerNames.ADAFACTOR
 
         if (
-            is_torch_available()
+            self.framework == "pt"
+            and is_torch_available()
             and (self.device.type != "cuda")
             and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
             and (self.fp16 or self.fp16_full_eval)
@@ -1084,7 +1097,8 @@ class TrainingArguments:
             )
 
         if (
-            is_torch_available()
+            self.framework == "pt"
+            and is_torch_available()
             and (self.device.type != "cuda")
             and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
             and (self.device.type != "cpu")
@@ -1095,7 +1109,7 @@ class TrainingArguments:
                 " (`--bf16_full_eval`) can only be used on CUDA or CPU devices."
             )
 
-        if is_torch_available() and self.tf32 is not None:
+        if self.framework == "pt" and is_torch_available() and self.tf32 is not None:
             if self.tf32:
                 if is_torch_tf32_available():
                     torch.backends.cuda.matmul.allow_tf32 = True
@@ -1159,6 +1173,14 @@ class TrainingArguments:
 
         if len(self.fsdp) == 0 and self.fsdp_min_num_params > 0:
             warnings.warn("`--fsdp_min_num_params` is useful only when `--fsdp` is specified.")
+
+        if len(self.fsdp) == 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
+            warnings.warn("`--fsdp_transformer_layer_cls_to_wrap` is useful only when `--fsdp` is specified.")
+
+        if len(self.fsdp) > 0 and self.fsdp_min_num_params > 0 and self.fsdp_transformer_layer_cls_to_wrap is not None:
+            raise ValueError(
+                "`--fsdp_min_num_params` and `--fsdp_transformer_layer_cls_to_wrap` are mutually exclusive."
+            )
 
         if self.tpu_metrics_debug:
             warnings.warn(
@@ -1284,11 +1306,17 @@ class TrainingArguments:
                         "CPU distributed training backend is not properly set. "
                         "Please set '--xpu_backend' to either 'mpi' or 'ccl'."
                     )
-                if self.xpu_backend == "ccl" and int(os.environ.get("CCL_WORKER_COUNT", 0)) < 1:
-                    raise ValueError(
-                        "CPU distributed training backend is ccl. but CCL_WORKER_COUNT is not correctly set. "
-                        "Please use like 'export CCL_WORKER_COUNT = 1' to set."
-                    )
+                if self.xpu_backend == "ccl":
+                    requires_backends(self, "oneccl_bind_pt")
+                    if ccl_version >= "1.12":
+                        import oneccl_bindings_for_pytorch  # noqa: F401
+                    else:
+                        import torch_ccl  # noqa: F401
+                    if int(os.environ.get("CCL_WORKER_COUNT", 0)) < 1:
+                        raise ValueError(
+                            "CPU distributed training backend is ccl. but CCL_WORKER_COUNT is not correctly set. "
+                            "Please use like 'export CCL_WORKER_COUNT = 1' to set."
+                        )
 
                 # Try to get launch configuration from environment variables set by MPI launcher - works for Intel MPI, OpenMPI and MVAPICH
                 rank = get_int_from_env(["RANK", "PMI_RANK", "OMPI_COMM_WORLD_RANK", "MV2_COMM_WORLD_RANK"], 0)
@@ -1316,6 +1344,8 @@ class TrainingArguments:
             device = torch.device("cuda", local_rank)
             self._n_gpu = 1
         elif is_sagemaker_dp_enabled():
+            import smdistributed.dataparallel.torch.torch_smddp  # noqa: F401
+
             dist.init_process_group(backend="smddp")
             self.local_rank = int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))
             device = torch.device("cuda", self.local_rank)

@@ -567,14 +567,22 @@ as the model saving with FSDP activated is only available with recent fixes.
   For this, add `--fsdp full_shard` to the command line arguments. 
   - SHARD_GRAD_OP : Shards optimizer states + gradients across data parallel workers/GPUs.
     For this, add `--fsdp shard_grad_op` to the command line arguments.
+  - NO_SHARD : No sharding. For this, add `--fsdp no_shard` to the command line arguments.
 - To offload the parameters and gradients to the CPU, 
 add `--fsdp "full_shard offload"` or `--fsdp "shard_grad_op offload"` to the command line arguments.
 -  To automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`, 
 add `--fsdp "full_shard auto_wrap"` or `--fsdp "shard_grad_op auto_wrap"` to the command line arguments.
 - To enable both CPU offloading and auto wrapping, 
 add `--fsdp "full_shard offload auto_wrap"` or `--fsdp "shard_grad_op offload auto_wrap"` to the command line arguments.
-- If auto wrapping is enabled, please add `--fsdp_min_num_params <number>` to command line arguments.
-It specifies FSDP's minimum number of parameters for Default Auto Wrapping.
+- If auto wrapping is enabled, you can either use transformer based auto wrap policy or size based auto wrap policy.
+  - For transformer based auto wrap policy, please add `--fsdp_transformer_layer_cls_to_wrap <value>` to command line arguments.
+  This specifies the transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` ....
+  This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units. 
+  Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 
+  Remaining layers including the shared embeddings are conviniently wrapped in same outermost FSDP unit.
+  Therefore, use this for transformer based models.
+  - For size based auto wrap policy, please add `--fsdp_min_num_params <number>` to command line arguments.
+  It specifies FSDP's minimum number of parameters for auto wrapping.
 
 **Few caveats to be aware of**
 - Mixed precision is currently not supported with FSDP as we wait for PyTorch to fix support for it.

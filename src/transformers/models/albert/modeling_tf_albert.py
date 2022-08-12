@@ -118,20 +118,18 @@ class TFAlbertPreTrainingLoss:
         # make sure only labels that are not equal to -100
         # are taken into account for the loss computation
         lm_loss_mask = tf.cast(labels["labels"] != -100, dtype=unmasked_lm_losses.dtype)
-        # Avoid division by zero later
-        lm_loss_denominator = tf.math.maximum(tf.cast(1, lm_loss_mask.dtype), tf.reduce_sum(lm_loss_mask, axis=1))
         masked_lm_losses = unmasked_lm_losses * lm_loss_mask
-        reduced_masked_lm_loss = tf.reduce_sum(masked_lm_losses, axis=1) / lm_loss_denominator
+        reduced_masked_lm_loss = tf.reduce_sum(masked_lm_losses) / tf.reduce_sum(lm_loss_mask)
 
         sop_logits = tf.reshape(logits[1], (-1, 2))
         # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
         unmasked_sop_loss = loss_fn(y_true=tf.nn.relu(labels["sentence_order_label"]), y_pred=sop_logits)
         sop_loss_mask = tf.cast(labels["sentence_order_label"] != -100, dtype=unmasked_sop_loss.dtype)
 
-        # No reduction because this already has shape (num_samples,)
         masked_sop_loss = unmasked_sop_loss * sop_loss_mask
+        reduced_masked_sop_loss = tf.reduce_sum(masked_sop_loss) / tf.reduce_sum(sop_loss_mask)
 
-        return reduced_masked_lm_loss + masked_sop_loss
+        return tf.reshape(reduced_masked_lm_loss + reduced_masked_sop_loss, (1,))
 
 
 class TFAlbertEmbeddings(tf.keras.layers.Layer):

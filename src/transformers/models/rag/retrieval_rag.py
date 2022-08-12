@@ -23,7 +23,7 @@ import numpy as np
 
 from ...tokenization_utils import PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import cached_path, is_datasets_available, is_faiss_available, is_remote_url, logging, requires_backends
+from ...utils import cached_file, is_datasets_available, is_faiss_available, logging, requires_backends
 from .configuration_rag import RagConfig
 from .tokenization_rag import RagTokenizer
 
@@ -111,22 +111,21 @@ class LegacyIndex(Index):
         self._index_initialized = False
 
     def _resolve_path(self, index_path, filename):
-        assert os.path.isdir(index_path) or is_remote_url(index_path), "Please specify a valid `index_path`."
-        archive_file = os.path.join(index_path, filename)
+        is_local = os.path.isdir(index_path)
         try:
             # Load from URL or cache if already cached
-            resolved_archive_file = cached_path(archive_file)
+            resolved_archive_file = cached_file(index_path, filename)
         except EnvironmentError:
             msg = (
-                f"Can't load '{archive_file}'. Make sure that:\n\n"
+                f"Can't load '{filename}'. Make sure that:\n\n"
                 f"- '{index_path}' is a correct remote path to a directory containing a file named {filename}\n\n"
                 f"- or '{index_path}' is the correct path to a directory containing a file named {filename}.\n\n"
             )
             raise EnvironmentError(msg)
-        if resolved_archive_file == archive_file:
-            logger.info(f"loading file {archive_file}")
+        if is_local:
+            logger.info(f"loading file {resolved_archive_file}")
         else:
-            logger.info(f"loading file {archive_file} from cache at {resolved_archive_file}")
+            logger.info(f"loading file {filename} from cache at {resolved_archive_file}")
         return resolved_archive_file
 
     def _load_passages(self):
