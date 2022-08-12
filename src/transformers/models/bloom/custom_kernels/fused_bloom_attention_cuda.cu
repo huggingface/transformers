@@ -10,6 +10,12 @@
 * Check example at https://github.com/thomasw21/LinearTransformers/blob/main/model/attention/fast_weight/fast_weight_cuda.cu
 **/
 
+#define DISPATCH_CASE_FLOATING_TYPES(...) \
+  AT_DISPATCH_CASE(at::ScalarType::Double, __VA_ARGS__) \
+  AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__) \
+  AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__) \
+  AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__) \
+
 /**
 * cast to fp32 if in fp16 + mask + softmax computation in fp32 + cast back to original dtype
 **/
@@ -17,7 +23,7 @@ template<typename attention_scores_scalar>
 __global__ void forward_masked_softmax_kernel(
     const torch::PackedTensorAccessor32<attention_scores_scalar, 3,torch::RestrictPtrTraits> attention_scores, // [B, N, D]
     const torch::PackedTensorAccessor32<bool, 3,torch::RestrictPtrTraits> mask, // [B, N, D]
-    torch::PackedTensorAccessor32<attention_scores_scalar, 3,torch::RestrictPtrTraits> result, // [B, N, D]
+    torch::PackedTensorAccessor32<attention_scores_scalar, 3,torch::RestrictPtrTraits> result // [B, N, D]
 ) {
     const int batch_id = blockIdx.x;
     const int q_length_id = blockIdx.y;
@@ -97,9 +103,9 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
 
     if (true) {
         const auto attention_probs = at::empty_like(attention_scores);
+        const auto kv_length = key_layer.size(2);
         // TODO @thomasw21: Check that input are both in the correct device + contiguous
         DISPATCH_CASE_FLOATING_TYPES(key_layer.scalar_type(), "masked_softmax", [&] {
-            const auto stream = at::cuda::getCurrentCUDAStream().stream();
             // TODO @thomasw21 I think this is necessary if you want to support all kinds of gpus.
             // const uint64_t maxGridY = at::cuda::getCurrentDeviceProperties()->maxGridSize[1];
 
@@ -128,18 +134,17 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             // 192 * 2 ** 10
             const auto MAX_L1_MEMORY = 196608;
             const auto MAX_SMs = 108;
-            AT_CHECK(batch_size_times_num_heads * q_length < MAX_L1_MEMORY, "Shared memory exceeds 192KB limitation.");
-            AT_CHECK(gridDim.x * gridDim.y * gridDim.z < MAX_SMs, "A100s only have 108 SMs. Raising as require blocks is bigger.");
-            AT_CHECK(blockDim.x * blockDim.y * blockDim.z < MAX_THREADS_PER_SM, "A100s only have 2048 threads per block. Raising as require requested threads is higher.");
+            const auto MAX_THREADS_PER_SM = 2048;
+            TORCH_CHECK(batch_size_times_num_heads * q_length < MAX_L1_MEMORY, "Shared memory exceeds 192KB limitation.");
+            TORCH_CHECK(gridDim.x * gridDim.y * gridDim.z < MAX_SMs, "A100s only have 108 SMs. Raising as require blocks is bigger.");
+            TORCH_CHECK(blockDim.x * blockDim.y * blockDim.z < MAX_THREADS_PER_SM, "A100s only have 2048 threads per block. Raising as require requested threads is higher.");
 
-            forward_masked_softmax_kernel<<<blockDim, threadDim, shared_mem_forward, stream>>>(
+            forward_masked_softmax_kernel<<<gridDim, blockDim, shared_mem_forward>>>(
                 attention_scores.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
                 attention_mask.packed_accessor32<bool, 3, torch::RestrictPtrTraits>(),
                 attention_probs.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
             );
         });
-
-
     } else {
         auto input_dtype = attention_scores.dtype();
         if (input_dtype == at::ScalarType::Float) {
@@ -159,12 +164,6 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
 
     return std::make_tuple(context_layer, present, attention_probs);
 }
-
-#define DISPATCH_CASE_FLOATING_TYPES(...) \
-  AT_DISPATCH_CASE(at::ScalarType::Double, __VA_ARGS__) \
-  AT_DISPATCH_CASE(at::ScalarType::Float, __VA_ARGS__) \
-  AT_DISPATCH_CASE(at::ScalarType::Half, __VA_ARGS__) \
-  AT_DISPATCH_CASE(at::ScalarType::BFloat16, __VA_ARGS__) \
 
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def(
