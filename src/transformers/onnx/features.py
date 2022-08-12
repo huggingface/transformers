@@ -587,7 +587,7 @@ class FeaturesManager:
                 framework = "tf"
             else:
                 raise FileNotFoundError(
-                    "Cannot determine framework based on checkpoint location given."
+                    "Cannot determine framework from given checkpoint location."
                     f" There should be a {WEIGHTS_NAME} for PyTorch"
                     f" or {TF2_WEIGHTS_NAME} for TensorFlow."
                 )
