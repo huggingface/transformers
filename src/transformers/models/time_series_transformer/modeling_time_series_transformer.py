@@ -1252,7 +1252,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         return_dict: Optional[bool] = None,
     ):
         transformer_inputs, scale, static_feat = self.create_network_inputs(
-            feat_static_real=feat_static_cat,
+            feat_static_cat=feat_static_cat,
             feat_static_real=feat_static_real,
             past_time_feat=past_time_feat,
             past_target=past_target,
