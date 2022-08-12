@@ -1357,22 +1357,22 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        outputs = self.model(
+            feat_static_cat=feat_static_cat,
+            feat_static_real=feat_static_real,
+            past_time_feat=past_time_feat,
+            past_target=past_target,
+            past_observed_values=past_observed_values,
+            future_time_feat=future_time_feat,
+            future_target=future_target,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            use_cache=use_cache,
+        )
+
         prediction_loss = None
         if future_target is not None and future_observed_values is not None:
-            # training
-            outputs = self.model(
-                feat_static_cat,
-                feat_static_real,
-                past_time_feat,
-                past_target,
-                past_observed_values,
-                future_time_feat,
-                future_target,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-                use_cache=use_cache,
-            )
             params = self.output_params(outputs.last_hidden_state)
             distr = self.output_distribution(params, outputs.scale)
 
@@ -1405,22 +1405,13 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
 
         else:
             # prediction
-            encoder = self.model.get_encoder()
             decoder = self.model.get_decoder()
 
+            enc_last_hidden = outputs.encoder_last_hidden_state
+            scale = outputs.scale
+            static_feat = outputs.static_features
+
             num_parallel_samples = self.config.num_parallel_samples
-
-            encoder_inputs, scale, static_feat = self.create_network_inputs(
-                feat_static_cat=feat_static_cat,
-                feat_static_real=feat_static_real,
-                past_time_feat=past_time_feat,
-                past_target=past_target,
-                past_observed_values=past_observed_values,
-            )
-
-            encoder_outputs = encoder(inputs_embeds=encoder_inputs)
-            enc_last_hidden = encoder_outputs.last_hidden_state
-
             repeated_scale = scale.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
             repeated_past_target = past_target.repeat_interleave(repeats=num_parallel_samples, dim=0) / repeated_scale
