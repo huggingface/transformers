@@ -114,10 +114,6 @@ class LayoutLMv3Config(PretrainedConfig):
     >>> configuration = LayoutLMv3Config()
 
     >>> # Initializing a model from the microsoft/layoutlmv3-base style configuration
-    >>> model = LayoutLMv3Model(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "layoutlmv3"
 

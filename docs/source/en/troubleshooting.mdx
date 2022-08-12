@@ -69,19 +69,11 @@ TensorFlow's [model.save](https://www.tensorflow.org/tutorials/keras/save_and_lo
 
 ```py
 >>> from transformers import TFPreTrainedModel
->>> from tensorflow import keras
-
->>> model.save_weights("some_folder/tf_model.h5")
->>> model = TFPreTrainedModel.from_pretrained("some_folder")
 ```
 
 - Save the model with [`~TFPretrainedModel.save_pretrained`] and load it again with [`~TFPreTrainedModel.from_pretrained`]:
 
 ```py
->>> from transformers import TFPreTrainedModel
-
->>> model.save_pretrained("path_to/model")
->>> model = TFPreTrainedModel.from_pretrained("path_to/model")
 ```
 
 ## ImportError
@@ -108,19 +100,11 @@ RuntimeError: CUDA error: device-side assert triggered
 
 You should try to run the code on a CPU first to get a more descriptive error message. Add the following environment variable to the beginning of your code to switch to a CPU:
 
-```py
->>> import os
-
->>> os.environ["CUDA_VISIBLE_DEVICES"] = ""
-```
+``````
 
 Another option is to get a better traceback from the GPU. Add the following environment variable to the beginning of your code to get the traceback to point to the source of the error:
 
-```py
->>> import os
-
->>> os.environ["CUDA_LAUNCH_BLOCKING"] = "1"
-```
+``````
 
 ## Incorrect output when padding tokens aren't masked
 
@@ -129,29 +113,17 @@ In some cases, the output `hidden_state` may be incorrect if the `input_ids` inc
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 >>> import torch
-
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-uncased")
->>> model.config.pad_token_id
-0
 ```
 
 The following example shows the output without masking the padding tokens:
 
 ```py
 >>> input_ids = torch.tensor([[7592, 2057, 2097, 2393, 9611, 2115], [7592, 0, 0, 0, 0, 0]])
->>> output = model(input_ids)
->>> print(output.logits)
-tensor([[ 0.0082, -0.2307],
-        [ 0.1317, -0.1683]], grad_fn=<AddmmBackward0>)
 ```
 
 Here is the actual output of the second sequence:
 
 ```py
->>> input_ids = torch.tensor([[7592]])
->>> output = model(input_ids)
->>> print(output.logits)
-tensor([[-0.1008, -0.4061]], grad_fn=<AddmmBackward0>)
 ```
 
 Most of the time, you should provide an `attention_mask` to your model to ignore the padding tokens to avoid this silent error. Now the output of the second sequence matches its actual output:
@@ -164,10 +136,6 @@ By default, the tokenizer creates an `attention_mask` for you based on your spec
 
 ```py
 >>> attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1], [1, 0, 0, 0, 0, 0]])
->>> output = model(input_ids, attention_mask=attention_mask)
->>> print(output.logits)
-tensor([[ 0.0082, -0.2307],
-        [-0.1008, -0.4061]], grad_fn=<AddmmBackward0>)
 ```
 
 🤗 Transformers doesn't automatically create an `attention_mask` to mask a padding token if it is provided because:

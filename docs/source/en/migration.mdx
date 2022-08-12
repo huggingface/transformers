@@ -35,17 +35,9 @@ This introduces two breaking changes:
 - The auto-tokenizers now return rust tokenizers. In order to obtain the python tokenizers instead, the user may use the `use_fast` flag by setting it to `False`:
 
 In version `v3.x`:
-```py
-from transformers import AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-```
+``````
 to obtain the same in version `v4.x`:
-```py
-from transformers import AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("bert-base-cased", use_fast=False)
-```
+``````
 
 #### 2. SentencePiece is removed from the required dependencies
 
@@ -221,10 +213,6 @@ loss = outputs[0]
 # In 🤗 Transformers you can also have access to the logits:
 loss, logits = outputs[:2]
 
-# And even the attention weights if you configure the model to output them (and other outputs too, see the docstrings and documentation)
-model = BertForSequenceClassification.from_pretrained("bert-base-uncased", output_attentions=True)
-outputs = model(input_ids, labels=labels)
-loss, logits, attentions = outputs
 ```
 
 ### Serialization
@@ -254,10 +242,6 @@ train(model)
 ### Now let's save our model and tokenizer to a directory
 model.save_pretrained("./my_saved_model_directory/")
 tokenizer.save_pretrained("./my_saved_model_directory/")
-
-### Reload the model and the tokenizer
-model = BertForSequenceClassification.from_pretrained("./my_saved_model_directory/")
-tokenizer = BertTokenizer.from_pretrained("./my_saved_model_directory/")
 ```
 
 ### Optimizers: BertAdam & OpenAIAdam are now AdamW, schedules are standard PyTorch schedules
@@ -308,8 +292,4 @@ for batch in train_data:
     loss = model(batch)
     loss.backward()
     torch.nn.utils.clip_grad_norm_(
-        model.parameters(), max_grad_norm
-    )  # Gradient clipping is not in AdamW anymore (so you can use amp without issue)
-    optimizer.step()
-    scheduler.step()
 ```

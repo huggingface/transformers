@@ -382,10 +382,6 @@ class CTRLModel(CTRLPreTrainedModel):
         >>> assert inputs["input_ids"][0, 0].item() in tokenizer.control_codes.values()
 
         >>> outputs = model(**inputs)
-
-        >>> last_hidden_states = outputs.last_hidden_state
-        >>> list(last_hidden_states.shape)
-        [1, 5, 1280]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         use_cache = use_cache if use_cache is not None else self.config.use_cache
@@ -573,10 +569,6 @@ class CTRLLMHeadModel(CTRLPreTrainedModel):
 
         >>> outputs = model(**inputs, labels=inputs["input_ids"])
         >>> round(outputs.loss.item(), 2)
-        9.21
-
-        >>> list(outputs.logits.shape)
-        [1, 5, 246534]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -694,10 +686,6 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
 
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
-
-        >>> predicted_class_id = logits.argmax().item()
-        >>> model.config.id2label[predicted_class_id]
-        'LABEL_0'
         ```
 
         ```python
@@ -708,10 +696,6 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
         >>> num_labels = len(model.config.id2label)
         >>> model = CTRLForSequenceClassification.from_pretrained("ctrl", num_labels=num_labels)
 
-        >>> labels = torch.tensor(1)
-        >>> loss = model(**inputs, labels=labels).loss
-        >>> round(loss.item(), 2)
-        0.35
         ```
 
         Example of multi-label classification:
@@ -729,10 +713,6 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
 
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
-
-        >>> predicted_class_id = logits.argmax().item()
-        >>> model.config.id2label[predicted_class_id]
-        'LABEL_0'
         ```
 
         ```python
@@ -742,10 +722,6 @@ class CTRLForSequenceClassification(CTRLPreTrainedModel):
 
         >>> num_labels = len(model.config.id2label)
         >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
-        ...     torch.float
-        ... )
-        >>> loss = model(**inputs, labels=labels).loss
-        >>> loss.backward()  # doctest: +IGNORE_RESULT
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

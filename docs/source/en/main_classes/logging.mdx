@@ -19,11 +19,7 @@ Currently the default verbosity of the library is `WARNING`.
 To change the level of verbosity, just use one of the direct setters. For instance, here is how to change the verbosity
 to the INFO level.
 
-```python
-import transformers
-
-transformers.logging.set_verbosity_info()
-```
+``````
 
 You can also use the environment variable `TRANSFORMERS_VERBOSITY` to override the default verbosity. You can set it
 to one of the following: `debug`, `info`, `warning`, `error`, `critical`. For example:
@@ -45,10 +41,6 @@ Here is an example of how to use the same logger as the library in your own modu
 ```python
 from transformers.utils import logging
 
-logging.set_verbosity_info()
-logger = logging.get_logger("transformers")
-logger.info("INFO")
-logger.warning("WARN")
 ```
 
 

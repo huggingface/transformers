@@ -69,10 +69,6 @@ CANINE works on raw characters, so it can be used without a tokenizer:
 >>> text = "hello world"
 >>> # use Python's built-in ord() function to turn each character into its unicode code point id
 >>> input_ids = torch.tensor([[ord(char) for char in text]])
-
->>> outputs = model(input_ids)  # forward pass
->>> pooled_output = outputs.pooler_output
->>> sequence_output = outputs.last_hidden_state
 ```
 
 For batched inference and training, it is however recommended to make use of the tokenizer (to pad/truncate all
@@ -86,10 +82,6 @@ sequences to the same length):
 
 >>> inputs = ["Life is like a box of chocolates.", "You never know what you gonna get."]
 >>> encoding = tokenizer(inputs, padding="longest", truncation=True, return_tensors="pt")
-
->>> outputs = model(**encoding)  # forward pass
->>> pooled_output = outputs.pooler_output
->>> sequence_output = outputs.last_hidden_state
 ```
 
 ## CANINE specific outputs

@@ -212,10 +212,6 @@ class MMBTModel(nn.Module, ModuleUtilsMixin):
         Examples:
 
         ```python
-        # For example purposes. Not runnable.
-        transformer = BertModel.from_pretrained("bert-base-uncased")
-        encoder = ImageEncoder(args)
-        mmbt = MMBTModel(config, transformer, encoder)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -334,10 +330,6 @@ class MMBTForClassification(nn.Module):
     ```python
     # For example purposes. Not runnable.
     transformer = BertModel.from_pretrained("bert-base-uncased")
-    encoder = ImageEncoder(args)
-    model = MMBTForClassification(config, transformer, encoder)
-    outputs = model(input_modal, input_ids, labels=labels)
-    loss, logits = outputs[:2]
     ```"""
 
     def __init__(self, config, transformer, encoder):

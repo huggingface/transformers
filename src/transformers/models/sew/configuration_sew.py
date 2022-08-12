@@ -144,10 +144,6 @@ class SEWConfig(PretrainedConfig):
     >>> configuration = SEWConfig()
 
     >>> # Initializing a model from the asapp/sew-tiny-100k style configuration
-    >>> model = SEWModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "sew"
 

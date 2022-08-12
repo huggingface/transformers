@@ -109,10 +109,6 @@ class LayoutLMv2Config(PretrainedConfig):
     >>> configuration = LayoutLMv2Config()
 
     >>> # Initializing a model from the microsoft/layoutlmv2-base-uncased style configuration
-    >>> model = LayoutLMv2Model(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "layoutlmv2"
 

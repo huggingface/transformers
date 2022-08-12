@@ -1102,10 +1102,6 @@ class NezhaForPreTraining(NezhaPreTrainedModel):
         >>> model = NezhaForPreTraining.from_pretrained("sijunhe/nezha-cn-base")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.prediction_logits
-        >>> seq_relationship_logits = outputs.seq_relationship_logits
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1301,10 +1297,6 @@ class NezhaForNextSentencePrediction(NezhaPreTrainedModel):
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
         >>> encoding = tokenizer(prompt, next_sentence, return_tensors="pt")
-
-        >>> outputs = model(**encoding, labels=torch.LongTensor([1]))
-        >>> logits = outputs.logits
-        >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
         ```
         """
 

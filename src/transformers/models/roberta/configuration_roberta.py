@@ -56,10 +56,6 @@ class RobertaConfig(BertConfig):
     >>> configuration = RobertaConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = RobertaModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "roberta"
 

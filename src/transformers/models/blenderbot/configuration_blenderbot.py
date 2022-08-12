@@ -101,10 +101,6 @@ class BlenderbotConfig(PretrainedConfig):
     >>> configuration = BlenderbotConfig()
 
     >>> # Initializing a model from the facebook/blenderbot-3B style configuration
-    >>> model = BlenderbotModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "blenderbot"
     keys_to_ignore_at_inference = ["past_key_values"]

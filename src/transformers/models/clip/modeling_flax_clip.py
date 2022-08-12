@@ -849,10 +849,6 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
         >>> from transformers import CLIPTokenizer, FlaxCLIPModel
 
         >>> model = FlaxCLIPModel.from_pretrained("openai/clip-vit-base-patch32")
-        >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="np")
-        >>> text_features = model.get_text_features(**inputs)
         ```"""
         if position_ids is None:
             position_ids = jnp.broadcast_to(jnp.arange(jnp.atleast_2d(input_ids).shape[-1]), input_ids.shape)
@@ -911,10 +907,6 @@ class FlaxCLIPPreTrainedModel(FlaxPreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="np")
-
-        >>> image_features = model.get_image_features(**inputs)
         ```"""
         pixel_values = jnp.transpose(pixel_values, (0, 2, 3, 1))
 
@@ -982,10 +974,6 @@ FLAX_CLIP_TEXT_MODEL_DOCSTRING = """
     >>> tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
 
     >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="np")
-
-    >>> outputs = model(**inputs)
-    >>> last_hidden_state = outputs.last_hidden_state
-    >>> pooler_output = outputs.pooler_output  # pooled (EOS token) states
     ```
 """
 
@@ -1040,10 +1028,6 @@ FLAX_CLIP_VISION_MODEL_DOCSTRING = """
     >>> image = Image.open(requests.get(url, stream=True).raw)
 
     >>> inputs = processor(images=image, return_tensors="np")
-
-    >>> outputs = model(**inputs)
-    >>> last_hidden_state = outputs.last_hidden_state
-    >>> pooler_output = outputs.pooler_output  # pooled CLS states
     ```
 """
 
@@ -1169,10 +1153,6 @@ FLAX_CLIP_MODEL_DOCSTRING = """
     >>> inputs = processor(
     ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="np", padding=True
     ... )
-
-    >>> outputs = model(**inputs)
-    >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-    >>> probs = jax.nn.softmax(logits_per_image, axis=1)  # we can take the softmax to get the label probabilities
     ```
 """
 

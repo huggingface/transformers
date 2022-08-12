@@ -104,10 +104,6 @@ seen before, by decomposing them into known subwords. For instance, the [`~trans
 
 ```py
 >>> from transformers import BertTokenizer
-
->>> tokenizer = BertTokenizer.from_pretrained("bert-base-uncased")
->>> tokenizer.tokenize("I have a new GPU!")
-["i", "have", "a", "new", "gp", "##u", "!"]
 ```
 
 Because we are considering the uncased model, the sentence was lowercased first. We can see that the words `["i", "have", "a", "new"]` are present in the tokenizer's vocabulary, but the word `"gpu"` is not. Consequently, the
@@ -118,10 +114,6 @@ As another example, [`~transformers.XLNetTokenizer`] tokenizes our previously ex
 
 ```py
 >>> from transformers import XLNetTokenizer
-
->>> tokenizer = XLNetTokenizer.from_pretrained("xlnet-base-cased")
->>> tokenizer.tokenize("Don't you love 🤗 Transformers? We sure do.")
-["▁Don", "'", "t", "▁you", "▁love", "▁", "🤗", "▁", "Transform", "ers", "?", "▁We", "▁sure", "▁do", "."]
 ```
 
 We'll get back to the meaning of those `"▁"` when we look at [SentencePiece](#sentencepiece). As one can see,

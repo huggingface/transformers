@@ -354,11 +354,7 @@ def get_class_from_dynamic_module(
 
     Examples:
 
-    ```python
-    # Download module `modeling.py` from huggingface.co and cache then extract the class `MyBertModel` from this
-    # module.
-    cls = get_class_from_dynamic_module("sgugger/my-bert-model", "modeling.py", "MyBertModel")
-    ```"""
+    ```    ```"""
     # And lastly we get the class inside our newly created module
     final_module = get_cached_module_file(
         pretrained_model_name_or_path,

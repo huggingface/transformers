@@ -109,10 +109,6 @@ class MCTCTConfig(PretrainedConfig):
     >>> configuration = MCTCTConfig()
 
     >>> # Initializing a model from the mctct-large style configuration
-    >>> model = MCTCTModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "mctct"
 

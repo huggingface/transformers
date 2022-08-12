@@ -70,10 +70,6 @@ Let's demonstrate this process with GPT-2.
 ```python
 from transformers import GPT2LMHeadModel, GPT2TokenizerFast
 
-device = "cuda"
-model_id = "gpt2-large"
-model = GPT2LMHeadModel.from_pretrained(model_id).to(device)
-tokenizer = GPT2TokenizerFast.from_pretrained(model_id)
 ```
 
 We'll load in the WikiText-2 dataset and evaluate the perplexity using a few different sliding-window strategies. Since
@@ -81,10 +77,6 @@ this dataset is small and we're just doing one forward pass over the set, we can
 dataset in memory.
 
 ```python
-from datasets import load_dataset
-
-test = load_dataset("wikitext", "wikitext-2-raw-v1", split="test")
-encodings = tokenizer("\n\n".join(test["text"]), return_tensors="pt")
 ```
 
 With 🤗 Transformers, we can simply pass the `input_ids` as the `labels` to our model, and the average negative
@@ -114,10 +106,6 @@ for i in tqdm(range(0, encodings.input_ids.size(1), stride)):
     with torch.no_grad():
         outputs = model(input_ids, labels=target_ids)
         neg_log_likelihood = outputs[0] * trg_len
-
-    nlls.append(neg_log_likelihood)
-
-ppl = torch.exp(torch.stack(nlls).sum() / end_loc)
 ```
 
 Running this with the stride length equal to the max input length is equivalent to the suboptimal, non-sliding-window

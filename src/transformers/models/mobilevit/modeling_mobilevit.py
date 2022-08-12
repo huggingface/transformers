@@ -1040,10 +1040,6 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
 
         >>> with torch.no_grad():
-        ...     outputs = model(**inputs)
-
-        >>> # logits are of shape (batch_size, num_labels, height, width)
-        >>> logits = outputs.logits
         ```"""
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

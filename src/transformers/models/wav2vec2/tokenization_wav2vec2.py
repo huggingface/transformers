@@ -577,10 +577,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         ...     }
         ...     for d in outputs.word_offsets
         ... ]
-        >>> # compare word offsets with audio `common_voice_en_100038.mp3` online on the dataset viewer:
-        >>> # https://huggingface.co/datasets/common_voice/viewer/en/train
-        >>> word_offsets[:3]
-        [{'word': 'WHY', 'start_time': 1.42, 'end_time': 1.54}, {'word': 'DOES', 'start_time': 1.64, 'end_time': 1.9}, {'word': 'MILISANDRA', 'start_time': 2.26, 'end_time': 2.9}]
         ```"""
         # Convert inputs to python lists
         token_ids = to_py_obj(token_ids)
@@ -629,10 +625,6 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         tokenizer = Wav2Vec2CTCTokenizer.from_pretrained("facebook/wav2vec2-base-960h")
         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-base-960h")
 
-        num_added_toks = tokenizer.add_tokens(["new_tok1", "my_new-tok2"])
-        print("We have added", num_added_toks, "tokens")
-        # Note: resize_token_embeddings expects to receive the full size of the new vocabulary, i.e. the length of the tokenizer.
-        model.resize_token_embeddings(len(tokenizer))
         ```"""
         new_tokens = [str(tok) for tok in new_tokens]
 

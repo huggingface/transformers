@@ -894,10 +894,6 @@ class Speech2Text2ForCausalLM(Speech2Text2PreTrainedModel):
         >>> decoder_input_ids = tokenizer(ds[0]["text"], return_tensors="pt").input_ids
         >>> # compute loss
 
-        >>> loss = model(inputs=input_values, labels=decoder_input_ids).loss
-        >>> # backprop loss
-
-        >>> loss.backward()  # doctest: +IGNORE_RESULT
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

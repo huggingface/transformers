@@ -164,10 +164,6 @@ class SEWDConfig(PretrainedConfig):
     >>> configuration = SEWDConfig()
 
     >>> # Initializing a model from the asapp/sew-d-tiny-100k style configuration
-    >>> model = SEWDModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "sew-d"
 

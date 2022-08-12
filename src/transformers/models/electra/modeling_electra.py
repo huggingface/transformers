@@ -1114,10 +1114,6 @@ class ElectraForPreTraining(ElectraPreTrainedModel):
         >>> predictions = torch.round((torch.sign(discriminator_outputs[0]) + 1) / 2)
 
         >>> fake_tokens
-        ['[CLS]', 'the', 'quick', 'brown', 'fox', 'fake', 'over', 'the', 'lazy', 'dog', '[SEP]']
-
-        >>> predictions.squeeze().tolist()
-        [0.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1613,10 +1609,6 @@ class ElectraForCausalLM(ElectraPreTrainedModel):
         >>> config.is_decoder = True
         >>> model = ElectraForCausalLM.from_pretrained("google/electra-base-generator", config=config)
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:

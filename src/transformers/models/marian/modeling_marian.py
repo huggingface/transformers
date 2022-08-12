@@ -543,10 +543,6 @@ MARIAN_GENERATION_EXAMPLE = r"""
 
     >>> sample_text = "où est l'arrêt de bus ?"
     >>> batch = tokenizer([sample_text], return_tensors="pt")
-
-    >>> generated_ids = model.generate(**batch)
-    >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
-    "Where's the bus stop?"
     ```
 """
 
@@ -1206,10 +1202,6 @@ class MarianModel(MarianPreTrainedModel):
         ...     add_special_tokens=False,
         ... )
         >>> outputs = model(input_ids=inputs.input_ids, decoder_input_ids=decoder_inputs.input_ids)
-
-        >>> last_hidden_states = outputs.last_hidden_state
-        >>> list(last_hidden_states.shape)
-        [1, 26, 512]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1666,10 +1658,6 @@ class MarianForCausalLM(MarianPreTrainedModel):
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> logits = outputs.logits
-        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
-        >>> list(logits.shape) == expected_shape
-        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

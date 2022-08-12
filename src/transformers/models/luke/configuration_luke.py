@@ -86,10 +86,6 @@ class LukeConfig(PretrainedConfig):
     >>> configuration = LukeConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = LukeModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "luke"
 

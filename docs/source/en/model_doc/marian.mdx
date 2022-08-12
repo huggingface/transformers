@@ -78,10 +78,6 @@ require 3 character language codes:
 
 >>> model = MarianMTModel.from_pretrained(model_name)
 >>> translated = model.generate(**tokenizer(src_text, return_tensors="pt", padding=True))
->>> [tokenizer.decode(t, skip_special_tokens=True) for t in translated]
-["c'est une phrase en anglais que nous voulons traduire en français",
- 'Isto deve ir para o português.',
- 'Y esto al español']
 ```
 
 Here is the code to see all available pretrained models on the hub:
@@ -90,10 +86,6 @@ Here is the code to see all available pretrained models on the hub:
 from huggingface_hub import list_models
 
 model_list = list_models()
-org = "Helsinki-NLP"
-model_ids = [x.modelId for x in model_list if x.modelId.startswith(org)]
-suffix = [x.split("/")[1] for x in model_ids]
-old_style_multi_models = [f"{org}/{s}" for s in suffix if s != s.lower()]
 ```
 
 ## Old Style Multi-Lingual Models
@@ -142,10 +134,6 @@ Example of translating english to many romance languages, using old-style 2 char
 
 >>> model = MarianMTModel.from_pretrained(model_name)
 >>> translated = model.generate(**tokenizer(src_text, return_tensors="pt", padding=True))
->>> tgt_text = [tokenizer.decode(t, skip_special_tokens=True) for t in translated]
-["c'est une phrase en anglais que nous voulons traduire en français", 
- 'Isto deve ir para o português.',
- 'Y esto al español']
 ```
 
 ## MarianConfig

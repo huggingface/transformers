@@ -101,10 +101,6 @@ class BloomConfig(PretrainedConfig):
     >>> configuration = BloomConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = BloomModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
 
     model_type = "bloom"

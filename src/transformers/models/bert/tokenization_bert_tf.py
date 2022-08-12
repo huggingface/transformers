@@ -92,10 +92,6 @@ class TFBertTokenizer(tf.keras.layers.Layer):
         Examples:
 
         ```python
-        from transformers import AutoTokenizer, TFBertTokenizer
-
-        tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-        tf_tokenizer = TFBertTokenizer.from_tokenizer(tokenizer)
         ```
         """
         vocab = tokenizer.get_vocab()
@@ -121,11 +117,7 @@ class TFBertTokenizer(tf.keras.layers.Layer):
 
         Examples:
 
-        ```python
-        from transformers import TFBertTokenizer
-
-        tf_tokenizer = TFBertTokenizer.from_pretrained("bert-base-uncased")
-        ```
+        ```        ```
         """
         try:
             tokenizer = BertTokenizer.from_pretrained(pretrained_model_name_or_path, *init_inputs, **kwargs)

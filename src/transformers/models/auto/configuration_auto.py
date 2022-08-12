@@ -725,10 +725,6 @@ class AutoConfig:
         ...     "bert-base-uncased", output_attentions=True, foo=False, return_unused_kwargs=True
         ... )
         >>> config.output_attentions
-        True
-
-        >>> unused_kwargs
-        {'foo': False}
         ```"""
         kwargs["_from_auto"] = True
         kwargs["name_or_path"] = pretrained_model_name_or_path

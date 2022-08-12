@@ -1278,10 +1278,6 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         >>> from transformers.models.unispeech.modeling_unispeech import _compute_mask_indices
 
         >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
-        ...     "hf-internal-testing/tiny-random-unispeech-sat"
-        ... )
-        >>> model = UniSpeechForPreTraining.from_pretrained("microsoft/unispeech-large-1500h-cv")
-        >>> # TODO: Add full pretraining example
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

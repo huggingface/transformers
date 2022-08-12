@@ -302,10 +302,6 @@ os.environ["RANK"] = "0"
 os.environ["LOCAL_RANK"] = "0"
 os.environ["WORLD_SIZE"] = "1"
 
-# Now proceed as normal, plus pass the deepspeed config file
-training_args = TrainingArguments(..., deepspeed="ds_config_zero3.json")
-trainer = Trainer(...)
-trainer.train()
 ```
 
 Note: `...` stands for the normal arguments that you'd pass to the functions.
@@ -506,16 +502,11 @@ the file system before passing it to [`TrainingArguments`].
 
 To summarize you can do:
 
-```python
-TrainingArguments(..., deepspeed="/path/to/ds_config.json")
-```
+``````
 
 or:
 
-```python
-ds_config_dict = dict(scheduler=scheduler_params, optimizer=optimizer_params)
-TrainingArguments(..., deepspeed=ds_config_dict)
-```
+``````
 
 <a id='deepspeed-config-shared'></a>
 
@@ -1480,10 +1471,6 @@ If you have saved at least one checkpoint, and you want to use the latest one, y
 
 ```python
 from transformers.trainer_utils import get_last_checkpoint
-from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
-
-checkpoint_dir = get_last_checkpoint(trainer.args.output_dir)
-fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
 ```
 
 If you're using the `--load_best_model_at_end` class:*~transformers.TrainingArguments* argument (to track the best
@@ -1491,10 +1478,6 @@ checkpoint), then you can finish the training by first saving the final model ex
 
 ```python
 from deepspeed.utils.zero_to_fp32 import load_state_dict_from_zero_checkpoint
-
-checkpoint_dir = os.path.join(trainer.args.output_dir, "checkpoint-final")
-trainer.deepspeed.save_checkpoint(checkpoint_dir)
-fp32_model = load_state_dict_from_zero_checkpoint(trainer.model, checkpoint_dir)
 ```
 
 <Tip>
@@ -1514,10 +1497,6 @@ these yourself as is shown in the following example:
 
 ```python
 from deepspeed.utils.zero_to_fp32 import get_fp32_state_dict_from_zero_checkpoint
-
-state_dict = get_fp32_state_dict_from_zero_checkpoint(checkpoint_dir)  # already on cpu
-model = model.cpu()
-model.load_state_dict(state_dict)
 ```
 
 **Offline FP32 Weights Recovery:**
@@ -1583,10 +1562,6 @@ context manager (which is also a function decorator), like so:
 ```python
 from transformers import T5ForConditionalGeneration, T5Config
 import deepspeed
-
-with deepspeed.zero.Init():
-    config = T5Config.from_pretrained("t5-small")
-    model = T5ForConditionalGeneration(config)
 ```
 
 As you can see this gives you a randomly initialized model.
@@ -1599,10 +1574,6 @@ section. Thus you must create the [`TrainingArguments`] object **before** callin
 
 ```python
 from transformers import AutoModel, Trainer, TrainingArguments
-
-training_args = TrainingArguments(..., deepspeed=ds_config)
-model = AutoModel.from_pretrained("t5-small")
-trainer = Trainer(model=model, args=training_args, ...)
 ```
 
 If you're using the official example scripts and your command line arguments include `--deepspeed ds_config.json`
@@ -1629,9 +1600,7 @@ limitations.
 
 Also under ZeRO-3, if you write your own code and run into a model parameter weight that looks like:
 
-```python
-tensor([1.0], device="cuda:0", dtype=torch.float16, requires_grad=True)
-```
+``````
 
 stress on `tensor([1.])`, or if you get an error where it says the parameter is of size `1`, instead of some much
 larger multi-dimensional shape, this means that the parameter is partitioned and what you see is a ZeRO-3 placeholder.
@@ -1871,10 +1840,6 @@ from transformers import AutoModel
 import deepspeed
 
 ds_config = {...}  # deepspeed config object or path to the file
-# must run before instantiating the model to detect zero 3
-dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
-model = AutoModel.from_pretrained("gpt2")
-engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 ```
 
 or for non-pretrained model:
@@ -1886,10 +1851,6 @@ import deepspeed
 
 ds_config = {...}  # deepspeed config object or path to the file
 # must run before instantiating the model to detect zero 3
-dschf = HfDeepSpeedConfig(ds_config)  # keep this object alive
-config = AutoConfig.from_pretrained("gpt2")
-model = AutoModel.from_config(config)
-engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 ```
 
 Please note that if you're not using the [`Trainer`] integration, you're completely on your own. Basically follow the documentation on the [Deepspeed](https://www.deepspeed.ai/) website. Also you have to configure explicitly the config file - you can't use `"auto"` values and you will have to put real values instead.
@@ -2043,10 +2004,6 @@ elif rank == 1:
 
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 inputs = tokenizer.encode(text_in, return_tensors="pt").to(device=local_rank)
-with torch.no_grad():
-    outputs = ds_engine.module.generate(inputs, synced_gpus=True)
-text_out = tokenizer.decode(outputs[0], skip_special_tokens=True)
-print(f"rank{rank}:\n   in={text_in}\n  out={text_out}")
 ```
 
 Let's save it as `t0.py` and run it:

@@ -90,9 +90,7 @@ class BigBirdConfig(PretrainedConfig):
 
     Example:
 
-    ```python
-
-    ```
+    ```    ```
 
         >>> from transformers import BigBirdModel, BigBirdConfig
 

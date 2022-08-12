@@ -765,10 +765,6 @@ FLAX_BEIT_MODEL_DOCSTRING = """
 
     >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
     >>> model = FlaxBeitModel.from_pretrained("microsoft/beit-base-patch16-224-pt22k-ft22k")
-
-    >>> inputs = feature_extractor(images=image, return_tensors="np")
-    >>> outputs = model(**inputs)
-    >>> last_hidden_states = outputs.last_hidden_state
     ```
 """
 
@@ -852,10 +848,6 @@ FLAX_BEIT_MLM_DOCSTRING = """
 
     >>> feature_extractor = BeitFeatureExtractor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
     >>> model = BeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
-
-    >>> inputs = feature_extractor(images=image, return_tensors="np")
-    >>> outputs = model(**inputs)
-    >>> logits = outputs.logits
     ```
 """
 
@@ -939,10 +931,6 @@ FLAX_BEIT_CLASSIF_DOCSTRING = """
 
     >>> inputs = feature_extractor(images=image, return_tensors="np")
     >>> outputs = model(**inputs)
-    >>> logits = outputs.logits
-    >>> # model predicts one of the 1000 ImageNet classes
-    >>> predicted_class_idx = logits.argmax(-1).item()
-    >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
     ```
 """
 

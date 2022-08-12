@@ -1179,10 +1179,6 @@ class TFT5Model(TFT5PreTrainedModel):
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="tf"
         ... ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
-
-        >>> # forward pass
-        >>> outputs = model(input_ids, decoder_input_ids=decoder_input_ids)
-        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
         if head_mask is not None and decoder_head_mask is None:
@@ -1366,10 +1362,6 @@ class TFT5ForConditionalGeneration(TFT5PreTrainedModel, TFCausalLanguageModeling
         >>> # inference
         >>> inputs = tokenizer(
         ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="tf"
-        ... ).input_ids  # Batch size 1
-        >>> outputs = model.generate(inputs)
-        >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        >>> # studies have shown that owning a dog is good for you
         ```"""
         # FutureWarning: head_mask was separated into two input args - head_mask, decoder_head_mask
         if head_mask is not None and decoder_head_mask is None:
@@ -1591,10 +1583,6 @@ class TFT5EncoderModel(TFT5PreTrainedModel):
         >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
         >>> model = TFT5EncoderModel.from_pretrained("t5-small")
 
-        >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="tf"
-        ... ).input_ids  # Batch size 1
-        >>> outputs = model(input_ids)
         ```"""
 
         encoder_outputs = self.encoder(

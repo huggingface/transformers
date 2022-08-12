@@ -133,10 +133,6 @@ features = squad_convert_examples_to_features(
     examples=examples,
     tokenizer=tokenizer,
     max_seq_length=max_seq_length,
-    doc_stride=args.doc_stride,
-    max_query_length=max_query_length,
-    is_training=not evaluate,
-)
 ```
 
 Using *tensorflow_datasets* is as easy as using a data file:
@@ -150,10 +146,6 @@ features = squad_convert_examples_to_features(
     examples=examples,
     tokenizer=tokenizer,
     max_seq_length=max_seq_length,
-    doc_stride=args.doc_stride,
-    max_query_length=max_query_length,
-    is_training=not evaluate,
-)
 ```
 
 Another example using these processors is given in the [run_squad.py](https://github.com/huggingface/transformers/tree/main/examples/legacy/question-answering/run_squad.py) script.

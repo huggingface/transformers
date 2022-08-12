@@ -362,10 +362,6 @@ class LEDEncoderSelfAttention(nn.Module):
             0.1599,
             2.0514,
             -1.1600,
-            0.5372,
-            0.2629,
-        ]
-        window_overlap = num_rows = 4
         ```
 
                      (pad & diagonalize) => [ 0.4983, 2.6918, -0.0071, 1.0492, 0.0000, 0.0000, 0.0000
@@ -1496,10 +1492,6 @@ LED_GENERATION_EXAMPLE = r"""
     >>> # Global attention on the first token (cf. Beltagy et al. 2020)
     >>> global_attention_mask = torch.zeros_like(inputs)
     >>> global_attention_mask[:, 0] = 1
-
-    >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs, global_attention_mask=global_attention_mask, num_beams=3, max_length=32)
-    >>> print(tokenizer.decode(summary_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=True))
     ```
 """
 
@@ -2378,10 +2370,6 @@ class LEDForConditionalGeneration(LEDPreTrainedModel):
         >>> TXT = "My friends are <mask> but they eat too many carbs."
 
         >>> model = LEDForConditionalGeneration.from_pretrained("allenai/led-base-16384")
-        >>> input_ids = tokenizer([TXT], return_tensors="pt")["input_ids"]
-
-        >>> prediction = model.generate(input_ids)[0]
-        >>> print(tokenizer.decode(prediction, skip_special_tokens=True))
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

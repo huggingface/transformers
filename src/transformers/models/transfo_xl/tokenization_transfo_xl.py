@@ -86,10 +86,7 @@ def tokenize_numbers(text_array: List[str]) -> List[str]:
 
     Example:
 
-    ```python
-    >>> tokenize_numbers(["$", "5,000", "1.73", "m"])
-    ["$", "5", "@,@", "000", "1", "@.@", "73", "m"]
-    ```"""
+    ```    ```"""
     tokenized = []
     for i in range(len(text_array)):
         reg, sub = MATCH_NUMBERS
@@ -111,10 +108,7 @@ def detokenize_numbers(text: str) -> str:
 
     Example:
 
-    ```python
-    >>> detokenize_numbers("$ 5 @,@ 000 1 @.@ 73 m")
-    "$ 5,000 1.73 m"
-    ```"""
+    ```    ```"""
     for reg, sub in DETOKENIZE_NUMBERS:
         text = re.sub(reg, sub, text)
     return text
@@ -433,11 +427,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
 
         Example:
 
-        ```python
-        >>> tokenizer = TransfoXLTokenizer.from_pretrained("transfo-xl-wt103")
-        >>> tokenizer.moses_pipeline("23,000 people are 1.80 m tall")
-        ['23', '@,@', '000', 'people', 'are', '1', '@.@', '80', 'm', 'tall']
-        ```"""
+        ```        ```"""
         text = self.moses_punct_norm(text)
         text = self.moses_tokenize(text)
         text = tokenize_numbers(text)

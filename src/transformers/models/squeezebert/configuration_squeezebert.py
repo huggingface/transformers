@@ -100,10 +100,6 @@ class SqueezeBertConfig(PretrainedConfig):
     >>> configuration = SqueezeBertConfig()
 
     >>> # Initializing a model from the configuration above
-    >>> model = SqueezeBertModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```
 
     Attributes: pretrained_config_archive_map (Dict[str, str]): A dictionary containing all the available pre-trained

@@ -28,17 +28,11 @@ See the automatic speech recognition [task page](https://huggingface.co/tasks/au
 
 Load the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) from the 🤗 Datasets library:
 
-```py
->>> from datasets import load_dataset, Audio
-
->>> minds = load_dataset("PolyAI/minds14", name="en-US", split="train")
-```
+``````
 
 Split this dataset into a train and test set:
 
-```py
->>> minds = minds.train_test_split(test_size=0.2)
-```
+``````
 
 Then take a look at the dataset:
 
@@ -50,17 +44,11 @@ DatasetDict({
         num_rows: 450
     })
     test: Dataset({
-        features: ['path', 'audio', 'transcription', 'english_transcription', 'intent_class', 'lang_id'],
-        num_rows: 113
-    })
-})
 ```
 
 While the dataset contains a lot of helpful information, like `lang_id` and `intent_class`, you will focus on the `audio` and `transcription` columns in this guide. Remove the other columns:
 
-```py
->>> minds = minds.remove_columns(["english_transcription", "intent_class", "lang_id"])
-```
+``````
 
 Take a look at the example again:
 
@@ -68,10 +56,6 @@ Take a look at the example again:
 >>> minds["train"][0]
 {'audio': {'array': array([-0.00024414,  0.        ,  0.        , ...,  0.00024414,
           0.00024414,  0.00024414], dtype=float32),
-  'path': '/root/.cache/huggingface/datasets/downloads/extracted/f14948e0e84be638dd7943ac36518a4cf3324e8b7aa331c5ab11541518e9368c/en-US~APP_ERROR/602ba9e2963e11ccd901cd4f.wav',
-  'sampling_rate': 8000},
- 'path': '/root/.cache/huggingface/datasets/downloads/extracted/f14948e0e84be638dd7943ac36518a4cf3324e8b7aa331c5ab11541518e9368c/en-US~APP_ERROR/602ba9e2963e11ccd901cd4f.wav',
- 'transcription': "hi I'm trying to use the banking app on my phone and currently my checking and savings account balance is not refreshing"}
 ```
 
 The `audio` column contains a 1-dimensional `array` of the speech signal that must be called to load and resample the audio file.
@@ -80,11 +64,7 @@ The `audio` column contains a 1-dimensional `array` of the speech signal that mu
 
 Load the Wav2Vec2 processor to process the audio signal and transcribed text:
 
-```py
->>> from transformers import AutoProcessor
-
->>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base")
-```
+``````
 
 The [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset has a sampling rate of 8000khz. You will need to resample the dataset to use the pretrained Wav2Vec2 model:
 
@@ -93,10 +73,6 @@ The [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset has a sam
 >>> minds["train"][0]
 {'audio': {'array': array([-2.38064706e-04, -1.58618059e-04, -5.43987835e-06, ...,
           2.78103951e-04,  2.38446111e-04,  1.18740834e-04], dtype=float32),
-  'path': '/root/.cache/huggingface/datasets/downloads/extracted/f14948e0e84be638dd7943ac36518a4cf3324e8b7aa331c5ab11541518e9368c/en-US~APP_ERROR/602ba9e2963e11ccd901cd4f.wav',
-  'sampling_rate': 16000},
- 'path': '/root/.cache/huggingface/datasets/downloads/extracted/f14948e0e84be638dd7943ac36518a4cf3324e8b7aa331c5ab11541518e9368c/en-US~APP_ERROR/602ba9e2963e11ccd901cd4f.wav',
- 'transcription': "hi I'm trying to use the banking app on my phone and currently my checking and savings account balance is not refreshing"}
 ```
 
 The preprocessing function needs to:
@@ -110,17 +86,11 @@ The preprocessing function needs to:
 ...     audio = batch["audio"]
 
 ...     batch = processor(audio=audio["array"], sampling_rate=audio["sampling_rate"]).input_values[0]
-...     batch["input_length"] = len(batch["input_values"])
-
-...     batch["labels"] = processor(text=batch["transcription"]).input_ids
-...     return batch
 ```
 
 Use 🤗 Datasets [`~datasets.Dataset.map`] function to apply the preprocessing function over the entire dataset. You can speed up the map function by increasing the number of processes with `num_proc`. Remove the columns you don't need:
 
-```py
->>> encoded_minds = minds.map(prepare_dataset, remove_columns=minds.column_names["train"], num_proc=4)
-```
+``````
 
 🤗 Transformers doesn't have a data collator for automatic speech recognition, so you will need to create one. You can adapt the [`DataCollatorWithPadding`] to create a batch of examples for automatic speech recognition. It will also dynamically pad your text and labels to the length of the longest element in its batch, so they are a uniform length. While it is possible to pad your text in the `tokenizer` function by setting `padding=True`, dynamic padding is more efficient.
 
@@ -151,17 +121,11 @@ Unlike other data collators, this specific data collator needs to apply a differ
 
 ...         # replace padding with -100 to ignore loss correctly
 ...         labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
-
-...         batch["labels"] = labels
-
-...         return batch
 ```
 
 Create a batch of examples and dynamically pad them with `DataCollatorForCTCWithPadding`:
 
-```py
->>> data_collator = DataCollatorCTCWithPadding(processor=processor, padding=True)
-```
+``````
 
 ## Train
 
@@ -173,10 +137,6 @@ Load Wav2Vec2 with [`AutoModelForCTC`]. For `ctc_loss_reduction`, it is often be
 >>> from transformers import AutoModelForCTC, TrainingArguments, Trainer
 
 >>> model = AutoModelForCTC.from_pretrained(
-...     "facebook/wav2vec2-base",
-...     ctc_loss_reduction="mean",
-...     pad_token_id=processor.tokenizer.pad_token_id,
-... )
 ```
 
 <Tip>
@@ -211,10 +171,6 @@ At this point, only three steps remain:
 ...     train_dataset=encoded_minds["train"],
 ...     eval_dataset=encoded_minds["test"],
 ...     tokenizer=processor.feature_extractor,
-...     data_collator=data_collator,
-... )
-
->>> trainer.train()
 ```
 </pt>
 </frameworkcontent>

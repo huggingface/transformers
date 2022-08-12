@@ -514,10 +514,6 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel):
         ...     "google/bert_for_seq_generation_L-24_bbc_encoder", config=config
         ... )
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_token_type_ids=False, return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:

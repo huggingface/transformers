@@ -35,11 +35,7 @@ Since version 4.18.0, model checkpoints that end up taking more than 10GB of spa
 
 You can control the maximum size before sharding with the `max_shard_size` parameter, so for the sake of an example, we'll use a normal-size models with a small shard size: let's take a traditional BERT model.
 
-```py
-from transformers import AutoModel
-
-model = AutoModel.from_pretrained("bert-base-cased")
-```
+``````
 
 If you save it using [`~PreTrainedModel.save_pretrained`], you will get a new folder with two files: the config of the model and its weights:
 
@@ -47,28 +43,16 @@ If you save it using [`~PreTrainedModel.save_pretrained`], you will get a new fo
 >>> import os
 >>> import tempfile
 
->>> with tempfile.TemporaryDirectory() as tmp_dir:
-...     model.save_pretrained(tmp_dir)
-...     print(sorted(os.listdir(tmp_dir)))
-['config.json', 'pytorch_model.bin']
 ```
 
 Now let's use a maximum shard size of 200MB:
 
 ```py
->>> with tempfile.TemporaryDirectory() as tmp_dir:
-...     model.save_pretrained(tmp_dir, max_shard_size="200MB")
-...     print(sorted(os.listdir(tmp_dir)))
-['config.json', 'pytorch_model-00001-of-00003.bin', 'pytorch_model-00002-of-00003.bin', 'pytorch_model-00003-of-00003.bin', 'pytorch_model.bin.index.json']
 ```
 
 On top of the configuration of the model, we see three different weights files, and an `index.json` file which is our index. A checkpoint like this can be fully reloaded using the [`~PreTrainedModel.from_pretrained`] method:
 
-```py
->>> with tempfile.TemporaryDirectory() as tmp_dir:
-...     model.save_pretrained(tmp_dir, max_shard_size="200MB")
-...     new_model = AutoModel.from_pretrained(tmp_dir)
-```
+``````
 
 The main advantage of doing this for big models is that during step 2 of the workflow shown above, each shard of the checkpoint is loaded after the previous one, capping the memory usage in RAM to the model size plus the size of the biggest shard.
 
@@ -80,36 +64,21 @@ Beind the scenes, the index file is used to determine which keys are in the chec
 >>> with tempfile.TemporaryDirectory() as tmp_dir:
 ...     model.save_pretrained(tmp_dir, max_shard_size="200MB")
 ...     with open(os.path.join(tmp_dir, "pytorch_model.bin.index.json"), "r") as f:
-...         index = json.load(f)
-
->>> print(index.keys())
-dict_keys(['metadata', 'weight_map'])
 ```
 
 The metadata just consists of the total size of the model for now. We plan to add several other informations in the future:
 
-```py
->>> index["metadata"]
-{'total_size': 433245184}
-```
+``````
 
 The weights map is the main part of this index, which maps each parameter name (as usually found in a PyTorch model `state_dict`) to the file it's stored in:
 
 ```py
->>> index["weight_map"]
-{'embeddings.LayerNorm.bias': 'pytorch_model-00001-of-00003.bin',
- 'embeddings.LayerNorm.weight': 'pytorch_model-00001-of-00003.bin',
- ...
 ```
 
 If you want to directly load such a sharded checkpoint inside a model without using [`~PreTrainedModel.from_pretrained`] (like you would do `model.load_state_dict()` for a full checkpoint) you should use [`~modeling_utils.load_sharded_checkpoint`]:
 
 ```py
 >>> from transformers.modeling_utils import load_sharded_checkpoint
-
->>> with tempfile.TemporaryDirectory() as tmp_dir:
-...     model.save_pretrained(tmp_dir, max_shard_size="200MB")
-...     load_sharded_checkpoint(model, tmp_dir)
 ```
 
 ## Low memory loading

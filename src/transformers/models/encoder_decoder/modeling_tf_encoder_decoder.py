@@ -304,19 +304,11 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         >>> _model.encoder.save_pretrained("./encoder")
         >>> _model.decoder.save_pretrained("./decoder")
         >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-        ...     "./encoder", "./decoder", encoder_from_pt=True, decoder_from_pt=True
-        ... )
-        >>> # This is only for copying some specific attributes of this particular model.
-        >>> model.config = _model.config
         ```
 
         Example:
 
-        ```python
-        >>> from transformers import TFEncoderDecoderModel
-
-        >>> model = TFEncoderDecoderModel.from_pretrained("ydshieh/bert2bert-cnn_dailymail-fp16")
-        ```"""
+        ```        ```"""
 
         from_pt = kwargs.pop("from_pt", False)
         if from_pt:
@@ -385,10 +377,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
 
         >>> # initialize a bert2gpt2 from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
         >>> model = TFEncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "gpt2")
-        >>> # saving model after fine-tuning
-        >>> model.save_pretrained("./bert2gpt2")
-        >>> # load fine-tuned model
-        >>> model = TFEncoderDecoderModel.from_pretrained("./bert2gpt2")
         ```"""
 
         kwargs_encoder = {
@@ -538,10 +526,6 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
 
         >>> # save and load from pretrained
         >>> model.save_pretrained("bert2gpt2")
-        >>> model = TFEncoderDecoderModel.from_pretrained("bert2gpt2")
-
-        >>> # generation
-        >>> generated = model.generate(input_ids, decoder_start_token_id=model.config.decoder.bos_token_id)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

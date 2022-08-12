@@ -229,10 +229,6 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> from transformers import VisionTextDualEncoderModel, AutoTokenizer
 
         >>> model = VisionTextDualEncoderModel.from_pretrained("clip-italian/clip-italian")
-        >>> tokenizer = AutoTokenizer.from_pretrained("clip-italian/clip-italian")
-
-        >>> inputs = tokenizer(["una foto di un gatto", "una foto di un cane"], padding=True, return_tensors="pt")
-        >>> text_features = model.get_text_features(**inputs)
         ```"""
         text_outputs = self.text_model(
             input_ids=input_ids,
@@ -274,10 +270,6 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-
-        >>> image_features = model.get_image_features(**inputs)
         ```"""
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
@@ -348,10 +340,6 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> model.save_pretrained("vit-bert")
         >>> model = VisionTextDualEncoderModel.from_pretrained("vit-bert")
 
-        >>> # inference
-        >>> outputs = model(**inputs)
-        >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
@@ -470,10 +458,6 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> model = VisionTextDualEncoderModel.from_vision_text_pretrained(
         ...     "google/vit-base-patch16-224", "bert-base-uncased"
         ... )
-        >>> # saving model after fine-tuning
-        >>> model.save_pretrained("./vit-bert")
-        >>> # load fine-tuned model
-        >>> model = VisionTextDualEncoderModel.from_pretrained("./vit-bert")
         ```"""
         kwargs_vision = {
             argument[len("vision_") :]: value for argument, value in kwargs.items() if argument.startswith("vision_")

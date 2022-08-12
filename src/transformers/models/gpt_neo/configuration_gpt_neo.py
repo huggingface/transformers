@@ -88,10 +88,6 @@ class GPTNeoConfig(PretrainedConfig):
     >>> configuration = GPTNeoConfig()
 
     >>> # Initializing a model from the EleutherAI/gpt-neo-1.3B style configuration
-    >>> model = GPTNeoModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "gpt_neo"
     keys_to_ignore_at_inference = ["past_key_values"]

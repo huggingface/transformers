@@ -2374,10 +2374,6 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
 
         >>> # retrieve index of [MASK]
         >>> mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
-
-        >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
-        >>> tokenizer.decode(predicted_token_id)
-        'it'
         ```
 
         ```python
@@ -2386,10 +2382,6 @@ class ReformerForMaskedLM(ReformerPreTrainedModel):
         >>> labels = torch.where(
         ...     inputs.input_ids == tokenizer.mask_token_id, labels[:, : inputs["input_ids"].shape[-1]], -100
         ... )
-
-        >>> outputs = model(**inputs, labels=labels)
-        >>> round(outputs.loss.item(), 2)
-        7.09
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2484,10 +2476,6 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
 
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
-
-        >>> predicted_class_id = logits.argmax().item()
-        >>> model.config.id2label[predicted_class_id]
-        'LABEL_1'
         ```
 
         ```python
@@ -2497,10 +2485,6 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
         ...     "hf-internal-testing/tiny-random-reformer", num_labels=num_labels
         ... )
 
-        >>> labels = torch.tensor(1)
-        >>> loss = model(**inputs, labels=labels).loss
-        >>> round(loss.item(), 2)
-        0.69
         ```
 
         Example of multi-label classification:
@@ -2520,10 +2504,6 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
 
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
-
-        >>> predicted_class_id = logits.argmax().item()
-        >>> model.config.id2label[predicted_class_id]
-        'LABEL_1'
         ```
 
         ```python
@@ -2536,10 +2516,6 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
 
         >>> num_labels = len(model.config.id2label)
         >>> labels = torch.nn.functional.one_hot(torch.tensor([predicted_class_id]), num_classes=num_labels).to(
-        ...     torch.float
-        ... )
-        >>> loss = model(**inputs, labels=labels).loss
-        >>> loss.backward()  # doctest: +IGNORE_RESULT
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

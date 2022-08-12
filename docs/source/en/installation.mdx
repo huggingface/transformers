@@ -189,25 +189,15 @@ Another option for using 🤗 Transformers offline is to download the files ahea
     1. Download your files ahead of time with [`PreTrainedModel.from_pretrained`]:
 
     ```py
-    >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("bigscience/T0_3B")
-    >>> model = AutoModelForSeq2SeqLM.from_pretrained("bigscience/T0_3B")
     ```
 
     2. Save your files to a specified directory with [`PreTrainedModel.save_pretrained`]:
 
-    ```py
-    >>> tokenizer.save_pretrained("./your/path/bigscience_t0")
-    >>> model.save_pretrained("./your/path/bigscience_t0")
-    ```
+    ```    ```
 
     3. Now when you're offline, reload your files with [`PreTrainedModel.from_pretrained`] from the specified directory:
 
-    ```py
-    >>> tokenizer = AutoTokenizer.from_pretrained("./your/path/bigscience_t0")
-    >>> model = AutoModel.from_pretrained("./your/path/bigscience_t0")
-    ```
+    ```    ```
 
 * Programmatically download files with the [huggingface_hub](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub) library:
 
@@ -219,19 +209,11 @@ Another option for using 🤗 Transformers offline is to download the files ahea
 
     2. Use the [`hf_hub_download`](https://huggingface.co/docs/hub/adding-a-library#download-files-from-the-hub) function to download a file to a specific path. For example, the following command downloads the `config.json` file from the [T0](https://huggingface.co/bigscience/T0_3B) model to your desired path:
 
-    ```py
-    >>> from huggingface_hub import hf_hub_download
-
-    >>> hf_hub_download(repo_id="bigscience/T0_3B", filename="config.json", cache_dir="./your/path/bigscience_t0")
-    ```
+    ```    ```
 
 Once your file is downloaded and locally cached, specify it's local path to load and use it:
 
-```py
->>> from transformers import AutoConfig
-
->>> config = AutoConfig.from_pretrained("./your/path/bigscience_t0/config.json")
-```
+``````
 
 <Tip>
 

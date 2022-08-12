@@ -99,10 +99,6 @@ class RoFormerConfig(PretrainedConfig):
     >>> configuration = RoFormerConfig()
 
     >>> # Initializing a model from the junnyu/roformer_chinese_base style configuration
-    >>> model = RoFormerModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "roformer"
 

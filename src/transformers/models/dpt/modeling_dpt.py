@@ -917,10 +917,6 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         ...     align_corners=False,
         ... )
 
-        >>> # visualize the prediction
-        >>> output = prediction.squeeze().cpu().numpy()
-        >>> formatted = (output * 255 / np.max(output)).astype("uint8")
-        >>> depth = Image.fromarray(formatted)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
@@ -1062,10 +1058,6 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         >>> feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-large-ade")
         >>> model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade")
 
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (

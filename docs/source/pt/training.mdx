@@ -40,10 +40,6 @@ Comece carregando o dataset [Yelp Reviews](https://huggingface.co/datasets/yelp_
 ```py
 >>> from datasets import load_dataset
 
->>> dataset = load_dataset("yelp_review_full")
->>> dataset[100]
-{'label': 0,
- 'text': 'My expectations for McDonalds are t rarely high. But for one to still fail so spectacularly...that takes something special!\\nThe cashier took my friends\'s order, then promptly ignored me. I had to force myself in front of a cashier who opened his register to wait on the person BEHIND me. I waited over five minutes for a gigantic order that included precisely one kid\'s meal. After watching two people who ordered after me be handed their food, I asked where mine was. The manager started yelling at the cashiers for \\"serving off their orders\\" when they didn\'t have their food. But neither cashier was anywhere near those controls, and the manager was the one serving food to customers and clearing the boards.\\nThe manager was rude when giving me my order. She didn\'t make sure that I had everything ON MY RECEIPT, and never even had the decency to apologize that I felt I was getting poor service.\\nI\'ve eaten at various McDonalds restaurants for over 30 years. I\'ve worked at more than one location. I expect bad days, bad moods, and the occasional mistake. But I have yet to have a decent experience at this store. It will remain a place I avoid unless someone in my party needs to avoid illness from low blood sugar. Perhaps I should go back to the racially biased service of Steak n Shake instead!'}
 ```
 
 Como já sabe, é necessário ter um tokenizador para processar o texto e incluir uma estratégia de padding e truncamento,
@@ -58,18 +54,11 @@ todo o dataset.
 
 
 >>> def tokenize_function(examples):
-...     return tokenizer(examples["text"], padding="max_length", truncation=True)
-
-
->>> tokenized_datasets = dataset.map(tokenize_function, batched=True)
 ```
 
 Se desejar, é possível criar um subconjunto menor do dataset completo para aplicar o fine-tuning e assim reduzir o tempo necessário.
 
-```py
->>> small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000))
->>> small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(1000))
-```
+``````
 
 <a id='trainer'></a>
 
@@ -86,11 +75,7 @@ Comece carregando seu modelo e especifique o número de labels de previsão.
 A partir do [Card Dataset](https://huggingface.co/datasets/yelp_review_full#data-fields) do Yelp Reveiw, que ja
 sabemos ter 5 labels usamos o seguinte código:
 
-```py
->>> from transformers import AutoModelForSequenceClassification
-
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
-```
+``````
 
 <Tip>
 
@@ -111,11 +96,7 @@ porém, sinta-se livre para experimentar com eles e encontrar uma configuração
 
 Especifique onde salvar os checkpoints do treinamento:
 
-```py
->>> from transformers import TrainingArguments
-
->>> training_args = TrainingArguments(output_dir="test_trainer")
-```
+``````
 
 ### Métricas
 
@@ -125,10 +106,6 @@ uma função de [`accuracy`](https://huggingface.co/metrics/accuracy) simples qu
 `load_metric` (ver este [tutorial](https://huggingface.co/docs/datasets/metrics.html) para mais informações):
 
 ```py
->>> import numpy as np
->>> from datasets import load_metric
-
->>> metric = load_metric("accuracy")
 ```
 
 Defina a função `compute` dentro de `metric` para calcular a precisão das suas predições.
@@ -136,20 +113,12 @@ Antes de passar as suas predições ao `compute`, é necessário converter as pr
 todos os modelos de 🤗 Transformers retornam logits).
 
 ```py
->>> def compute_metrics(eval_pred):
-...     logits, labels = eval_pred
-...     predictions = np.argmax(logits, axis=-1)
-...     return metric.compute(predictions=predictions, references=labels)
 ```
 
 Se quiser controlar as suas métricas de avaliação durante o fine-tuning, especifique o parâmetro `evaluation_strategy`
 nos seus argumentos de treinamento para que o modelo considere a métrica de avaliação ao final de cada época:
 
-```py
->>> from transformers import TrainingArguments
-
->>> training_args = TrainingArguments(output_dir="test_trainer", evaluation_strategy="epoch")
-```
+``````
 
 ### Trainer
 
@@ -159,17 +128,11 @@ Crie um objeto [`Trainer`] com o seu modelo, argumentos de treinamento, conjunto
 >>> trainer = Trainer(
 ...     model=model,
 ...     args=training_args,
-...     train_dataset=small_train_dataset,
-...     eval_dataset=small_eval_dataset,
-...     compute_metrics=compute_metrics,
-... )
 ```
 
 Em seguida, aplique o fine-tuning a seu modelo chamado [`~transformers.Trainer.train`]:
 
-```py
->>> trainer.train()
-```
+``````
 
 <a id='keras'></a>
 
@@ -185,11 +148,7 @@ Contudo, será necessário fazer algumas mudanças antes de realizar o fine-tuni
 O [`DefaultDataCollator`] junta os tensores em um batch para que o modelo possa ser treinado em cima deles.
 Assegure-se de especificar os `return_tensors` para retornar os tensores do TensorFlow:
 
-```py
->>> from transformers import DefaultDataCollator
-
->>> data_collator = DefaultDataCollator(return_tensors="tf")
-```
+``````
 
 <Tip>
 
@@ -214,10 +173,6 @@ Especifique suas entradas em `columns` e seu rótulo em `label_cols`:
 >>> tf_validation_dataset = small_eval_dataset.to_tf_dataset(
 ...     columns=["attention_mask", "input_ids", "token_type_ids"],
 ...     label_cols=["labels"],
-...     shuffle=False,
-...     collate_fn=data_collator,
-...     batch_size=8,
-... )
 ```
 
 ### Compilação e ajustes
@@ -225,10 +180,6 @@ Especifique suas entradas em `columns` e seu rótulo em `label_cols`:
 Carregue um modelo do TensorFlow com o número esperado de rótulos:
 
 ```py
->>> import tensorflow as tf
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
 ```
 
 A seguir, compile e ajuste o fine-tuning a seu modelo com [`fit`](https://keras.io/api/models/model_training_apis/) como
@@ -238,10 +189,6 @@ faria com qualquer outro modelo do Keras:
 >>> model.compile(
 ...     optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5),
 ...     loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-...     metrics=tf.metrics.SparseCategoricalAccuracy(),
-... )
-
->>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3)
 ```
 
 <a id='pytorch_native'></a>
@@ -258,68 +205,43 @@ Neste momento, talvez ocorra a necessidade de reinicar seu notebook ou executar 
 memória:
 
 ```py
-del model
-del pytorch_model
-del trainer
-torch.cuda.empty_cache()
 ```
 
 Em sequência, faremos um post-processing manual do `tokenized_dataset` e assim prepará-lo para o treinamento.
 
 1. Apague a coluna de `text` porque o modelo não aceita texto cru como entrada:
 
-    ```py
-    >>> tokenized_datasets = tokenized_datasets.remove_columns(["text"])
-    ```
+    ```    ```
 
 2. Troque o nome da coluna `label` para `labels`, pois o modelo espera um argumento de mesmo nome:
 
-    ```py
-    >>> tokenized_datasets = tokenized_datasets.rename_column("label", "labels")
-    ```
+    ```    ```
 
 3. Defina o formato do dataset para retornar tensores do PyTorch no lugar de listas:
 
-    ```py
-    >>> tokenized_datasets.set_format("torch")
-    ```
+    ```    ```
 
 Em sequência, crie um subconjunto menor do dataset, como foi mostrado anteriormente, para acelerá-lo o fine-tuning.
 
-```py
->>> small_train_dataset = tokenized_datasets["train"].shuffle(seed=42).select(range(1000))
->>> small_eval_dataset = tokenized_datasets["test"].shuffle(seed=42).select(range(1000))
-```
+``````
 
 ### DataLoader
 
 Crie um `DataLoader` para os seus datasets de treinamento e de teste para poder iterar sobre batches de dados:
 
 ```py
->>> from torch.utils.data import DataLoader
-
->>> train_dataloader = DataLoader(small_train_dataset, shuffle=True, batch_size=8)
->>> eval_dataloader = DataLoader(small_eval_dataset, batch_size=8)
 ```
 
 Carregue seu modelo com o número de labels esperados:
 
-```py
->>> from transformers import AutoModelForSequenceClassification
-
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
-```
+``````
 
 ### Otimização e configuração do Learning Rate
 
 Crie um otimizador e um learning rate para aplicar o fine-tuning ao modelo.
 Iremos utilizar o otimizador [`AdamW`](https://pytorch.org/docs/stable/generated/torch.optim.AdamW.html) do PyTorch:
 
-```py
->>> from torch.optim import AdamW
-
->>> optimizer = AdamW(model.parameters(), lr=5e-5)
-```
+``````
 
 Defina o learning rate do [`Trainer`]:
 
@@ -327,20 +249,12 @@ Defina o learning rate do [`Trainer`]:
 >>> from transformers import get_scheduler
 
 >>> num_epochs = 3
->>> num_training_steps = num_epochs * len(train_dataloader)
->>> lr_scheduler = get_scheduler(
-...     name="linear", optimizer=optimizer, num_warmup_steps=0, num_training_steps=num_training_steps
-... )
 ```
 
 Por último, especifique o `device` do ambiente para utilizar uma GPU se tiver acesso à alguma. Caso contrário, o treinamento
 em uma CPU pode acabar levando várias horas em vez de minutos.
 
 ```py
->>> import torch
-
->>> device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
->>> model.to(device)
 ```
 
 <Tip>
@@ -371,10 +285,6 @@ uma barra de progresso sobre o número de passos percorridos no treinamento atua
 ...         loss = outputs.loss
 ...         loss.backward()
 
-...         optimizer.step()
-...         lr_scheduler.step()
-...         optimizer.zero_grad()
-...         progress_bar.update(1)
 ```
 
 ### Métricas
@@ -393,10 +303,6 @@ e calcular a métrica apenas no final.
 ...         outputs = model(**batch)
 
 ...     logits = outputs.logits
-...     predictions = torch.argmax(logits, dim=-1)
-...     metric.add_batch(predictions=predictions, references=batch["labels"])
-
->>> metric.compute()
 ```
 
 <a id='additional-resources'></a>

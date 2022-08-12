@@ -65,10 +65,6 @@ class VisionEncoderDecoderConfig(PretrainedConfig):
 
     >>> # Saving the model, including its configuration
     >>> model.save_pretrained("my-model")
-
-    >>> # loading model and config from pretrained folder
-    >>> encoder_decoder_config = VisionEncoderDecoderConfig.from_pretrained("my-model")
-    >>> model = VisionEncoderDecoderModel.from_pretrained("my-model", config=encoder_decoder_config)
     ```"""
     model_type = "vision-encoder-decoder"
     is_composition = True

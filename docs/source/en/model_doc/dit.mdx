@@ -35,29 +35,17 @@ alt="drawing" width="600"/>
 
 One can directly use the weights of DiT with the AutoModel API:
 
-```python
-from transformers import AutoModel
-
-model = AutoModel.from_pretrained("microsoft/dit-base")
-```
+``````
 
 This will load the model pre-trained on masked image modeling. Note that this won't include the language modeling head on top, used to predict visual tokens.
 
 To include the head, you can load the weights into a `BeitForMaskedImageModeling` model, like so:
 
-```python
-from transformers import BeitForMaskedImageModeling
-
-model = BeitForMaskedImageModeling.from_pretrained("microsoft/dit-base")
-```
+``````
 
 You can also load a fine-tuned model from the [hub](https://huggingface.co/models?other=dit), like so:
 
-```python
-from transformers import AutoModelForImageClassification
-
-model = AutoModelForImageClassification.from_pretrained("microsoft/dit-base-finetuned-rvlcdip")
-```
+``````
 
 This particular checkpoint was fine-tuned on [RVL-CDIP](https://www.cs.cmu.edu/~aharley/rvl-cdip/), an important benchmark for document image classification.
 A notebook that illustrates inference for document image classification can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/DiT/Inference_with_DiT_(Document_Image_Transformer)_for_document_image_classification.ipynb).

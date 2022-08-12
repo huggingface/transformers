@@ -1270,10 +1270,6 @@ class FlavaModel(FlavaPreTrainedModel):
         >>> model = FlavaModel.from_pretrained("{0}")
         >>> processor = FlavaProcessor.from_pretrained("{0}")
 
-        >>> inputs = processor(
-        ...     text=["a photo of a cat", "a photo of a dog"], max_length=77, padding="max_length", return_tensors="pt"
-        ... )
-        >>> text_features = model.get_text_features(**inputs)
         ```""".format(
             _CHECKPOINT_FOR_DOC
         )
@@ -1321,10 +1317,6 @@ class FlavaModel(FlavaPreTrainedModel):
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> image_features = model.get_image_features(**inputs)
         ```""".format(
             _CHECKPOINT_FOR_DOC
         )
@@ -1379,10 +1371,6 @@ class FlavaModel(FlavaPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(text=["a photo of a cat"], images=image, return_tensors="pt", padding=True)
-
-        >>> outputs = model(**inputs)
-        >>> logits_per_image = outputs.contrastive_logits_per_image  # this is the image-text similarity score
-        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```
         """
 
@@ -1587,10 +1575,6 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = feature_extractor([image], return_codebook_pixels=True, return_tensors="pt")
-        >>> inputs = dict(pixel_values=inputs.codebook_pixel_values)
-
-        >>> outputs = model.get_codebook_indices(**inputs)
         ```
         """.format(
             _CHECKPOINT_FOR_CODEBOOK_DOC
@@ -1624,10 +1608,6 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
 
         >>> inputs = feature_extractor([image], return_codebook_pixels=True, return_tensors="pt")
         >>> inputs = dict(pixel_values=inputs.codebook_pixel_values)
-
-        >>> outputs = model(**inputs)
-        >>> print(outputs.shape)
-        (1, 196)
         ```
         """.format(
             _CHECKPOINT_FOR_CODEBOOK_DOC
@@ -1815,10 +1795,6 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         ...     padding=True,
         ...     max_length=77,
         ...     return_tensors="pt",
-        ... )
-
-
-        >>> output = model(**inputs)
         ```
 
         Return:

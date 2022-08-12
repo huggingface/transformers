@@ -82,10 +82,6 @@ class GPTJConfig(PretrainedConfig):
     >>> configuration = GPTJConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = GPTJModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "gptj"
     attribute_map = {

@@ -106,10 +106,6 @@ class Speech2TextConfig(PretrainedConfig):
     >>> configuration = Speech2TextConfig()
 
     >>> # Initializing a model from the s2t_transformer_s style configuration
-    >>> model = Speech2TextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "speech_to_text"
     keys_to_ignore_at_inference = ["past_key_values"]

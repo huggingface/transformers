@@ -33,20 +33,12 @@ Casi cualquier tarea de Procesamiento de Lenguaje Natural comienza con un tokeni
 
 Carga un tokenizador con [`AutoTokenizer.from_pretrained`]:
 
-```py
->>> from transformers import AutoTokenizer
-
->>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-```
+``````
 
 Luego tokeniza tu input como lo mostrado a continuación:
 
 ```py
 >>> sequence = "In a hole in the ground there lived a hobbit."
->>> print(tokenizer(sequence))
-{'input_ids': [101, 1999, 1037, 4920, 1999, 1996, 2598, 2045, 2973, 1037, 7570, 10322, 4183, 1012, 102], 
- 'token_type_ids': [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], 
- 'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
 
 ## AutoFeatureExtractor
@@ -57,10 +49,6 @@ Carga un extractor de características con [`AutoFeatureExtractor.from_pretraine
 
 ```py
 >>> from transformers import AutoFeatureExtractor
-
->>> feature_extractor = AutoFeatureExtractor.from_pretrained(
-...     "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
-... )
 ```
 
 ## AutoProcessor
@@ -69,11 +57,7 @@ Las tareas multimodales requieren un procesador que combine dos tipos de herrami
 
 Carga un procesador con [`AutoProcessor.from_pretrained`]:
 
-```py
->>> from transformers import AutoProcessor
-
->>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv2-base-uncased")
-```
+``````
 
 ## AutoModel
 
@@ -81,38 +65,22 @@ Carga un procesador con [`AutoProcessor.from_pretrained`]:
 <pt>
 Finalmente, las clases `AutoModelFor` te permiten cargar un modelo preentrenado para una tarea dada (revisa [aquí](model_doc/auto) para conocer la lista completa de tareas disponibles). Por ejemplo, cargue un modelo para clasificación de secuencias con [`AutoModelForSequenceClassification.from_pretrained`]:
 
-```py
->>> from transformers import AutoModelForSequenceClassification
-
->>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
-```
+``````
 
 Reutiliza fácilmente el mismo checkpoint para cargar una aquitectura para alguna tarea diferente:
 
-```py
->>> from transformers import AutoModelForTokenClassification
-
->>> model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
-```
+``````
 
 Generalmente recomendamos utilizar las clases `AutoTokenizer` y `AutoModelFor` para cargar instancias pre-entrenadas de modelos. Ésto asegurará que cargues la arquitectura correcta en cada ocasión. En el siguiente [tutorial](preprocessing), aprende a usar tu tokenizador recién cargado, el extractor de características y el procesador para preprocesar un dataset para fine-tuning.
 </pt>
 <tf>
 Finalmente, la clase `TFAutoModelFor` te permite cargar tu modelo pre-entrenado para una tarea dada (revisa [aquí](model_doc/auto) para conocer la lista completa de tareas disponibles). Por ejemplo, carga un modelo para clasificación de secuencias con [`TFAutoModelForSequenceClassification.from_pretrained`]:
 
-```py
->>> from transformers import TFAutoModelForSequenceClassification
-
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
-```
+``````
 
 Reutiliza fácilmente el mismo checkpoint para cargar una aquitectura para alguna tarea diferente:
 
-```py
->>> from transformers import TFAutoModelForTokenClassification
-
->>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased")
-```
+``````
 
 Generalmente recomendamos utilizar las clases `AutoTokenizer` y `TFAutoModelFor` para cargar instancias de modelos pre-entrenados. Ésto asegurará que cargues la arquitectura correcta cada vez. En el siguiente [tutorial](preprocessing), aprende a usar tu tokenizador recién cargado, el extractor de características y el procesador para preprocesar un dataset para fine-tuning.
 </tf>

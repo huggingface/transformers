@@ -356,10 +356,6 @@ def squad_convert_examples_to_features(
         examples=examples,
         tokenizer=tokenizer,
         max_seq_length=args.max_seq_length,
-        doc_stride=args.doc_stride,
-        max_query_length=args.max_query_length,
-        is_training=not evaluate,
-    )
     ```"""
     # Defining helper methods
     features = []
@@ -588,10 +584,6 @@ class SquadProcessor(DataProcessor):
         ```python
         >>> import tensorflow_datasets as tfds
 
-        >>> dataset = tfds.load("squad")
-
-        >>> training_examples = get_examples_from_dataset(dataset, evaluate=False)
-        >>> evaluation_examples = get_examples_from_dataset(dataset, evaluate=True)
         ```"""
 
         if evaluate:

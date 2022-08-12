@@ -1168,10 +1168,6 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             0.1599,
             2.0514,
             -1.1600,
-            0.5372,
-            0.2629,
-        ]
-        window_overlap = num_rows = 4
         ```
 
                      (pad & diagonalize) => [ 0.4983, 2.6918, -0.0071, 1.0492, 0.0000, 0.0000, 0.0000

@@ -77,10 +77,6 @@ class GroupViTTextConfig(PretrainedConfig):
     >>> # Initializing a GroupViTTextModel with nvidia/groupvit-gcc-yfcc style configuration
     >>> configuration = GroupViTTextConfig()
 
-    >>> model = GroupViTTextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "groupvit_text_model"
 
@@ -186,10 +182,6 @@ class GroupViTVisionConfig(PretrainedConfig):
     >>> # Initializing a GroupViTVisionModel with nvidia/groupvit-gcc-yfcc style configuration
     >>> configuration = GroupViTVisionConfig()
 
-    >>> model = GroupViTVisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
 
     model_type = "groupvit_vision_model"

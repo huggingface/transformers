@@ -93,10 +93,6 @@ class CodeGenConfig(PretrainedConfig):
     >>> configuration = CodeGenConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = CodeGenModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "codegen"
     attribute_map = {

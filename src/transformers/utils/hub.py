@@ -333,10 +333,7 @@ def cached_file(
 
     Examples:
 
-    ```python
-    # Download a model weight from the Hub and cache it.
-    model_weights_file = cached_file("bert-base-uncased", "pytorch_model.bin")
-    ```"""
+    ```    ```"""
     # Private arguments
     #     _raise_exceptions_for_missing_entries: if False, do not raise an exception for missing entries but return
     #         None.
@@ -503,10 +500,6 @@ def get_file_from_repo(
     Examples:
 
     ```python
-    # Download a tokenizer configuration from huggingface.co and cache.
-    tokenizer_config = get_file_from_repo("bert-base-uncased", "tokenizer_config.json")
-    # This model does not have a tokenizer config so the result will be None.
-    tokenizer_config = get_file_from_repo("xlm-roberta-base", "tokenizer_config.json")
     ```"""
     return cached_file(
         path_or_repo_id=path_or_repo,
@@ -703,10 +696,6 @@ class PushToHubMixin:
         {object} = {object_class}.from_pretrained("bert-base-cased")
 
         # Push the {object} to your namespace with the name "my-finetuned-bert".
-        {object}.push_to_hub("my-finetuned-bert")
-
-        # Push the {object} to an organization with the name "my-finetuned-bert".
-        {object}.push_to_hub("huggingface/my-finetuned-bert")
         ```
         """
         if "repo_path_or_name" in deprecated_kwargs:
@@ -799,10 +788,7 @@ def convert_file_size_to_int(size: Union[int, str]):
         size (`int` or `str`): The size to convert. Will be directly returned if an `int`.
 
     Example:
-    ```py
-    >>> convert_file_size_to_int("1MiB")
-    1048576
-    ```
+    ```    ```
     """
     if isinstance(size, int):
         return size

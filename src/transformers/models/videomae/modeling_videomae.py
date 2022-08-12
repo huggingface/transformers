@@ -615,10 +615,6 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
         >>> inputs = feature_extractor(video, return_tensors="pt")
 
         >>> # forward pass
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
-        >>> list(last_hidden_states.shape)
-        [1, 1568, 768]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -782,10 +778,6 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
 
         >>> num_patches_per_frame = (model.config.image_size // model.config.patch_size) ** 2
         >>> seq_length = (num_frames // model.config.tubelet_size) * num_patches_per_frame
-        >>> bool_masked_pos = torch.randint(0, 2, (1, seq_length)).bool()
-
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss = outputs.loss
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -980,10 +972,6 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         ...     outputs = model(**inputs)
         ...     logits = outputs.logits
 
-        >>> # model predicts one of the 400 Kinetics-400 classes
-        >>> predicted_label = logits.argmax(-1).item()
-        >>> print(model.config.id2label[predicted_label])
-        eating spaghetti
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

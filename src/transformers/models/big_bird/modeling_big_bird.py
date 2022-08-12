@@ -2323,10 +2323,6 @@ class BigBirdForPreTraining(BigBirdPreTrainedModel):
         >>> model = BigBirdForPreTraining.from_pretrained("google/bigbird-roberta-base")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.prediction_logits
-        >>> seq_relationship_logits = outputs.seq_relationship_logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2442,18 +2438,10 @@ class BigBirdForMaskedLM(BigBirdPreTrainedModel):
         >>> with torch.no_grad():
         ...     logits = model(**inputs).logits
         >>> # retrieve index of [MASK]
-        >>> mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
-        >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
-        >>> tokenizer.decode(predicted_token_id)
-        'maximum'
         ```
 
         ```python
         >>> labels = tokenizer(LONG_ARTICLE_TARGET, return_tensors="pt")["input_ids"]
-        >>> labels = torch.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
-        >>> outputs = model(**inputs, labels=labels)
-        >>> round(outputs.loss.item(), 2)
-        1.08
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2726,10 +2714,6 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         [1, 919]
 
         >>> with torch.no_grad():
-        ...     logits = model(**inputs).logits
-        >>> predicted_class_id = logits.argmax().item()
-        >>> model.config.id2label[predicted_class_id]
-        'LABEL_0'
         ```
 
         ```python
@@ -2737,10 +2721,6 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
         >>> model = BigBirdForSequenceClassification.from_pretrained(
         ...     "l-yohai/bigbird-roberta-base-mnli", num_labels=num_labels
         ... )
-        >>> labels = torch.tensor(1)
-        >>> loss = model(**inputs, labels=labels).loss
-        >>> round(loss.item(), 2)
-        1.13
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -3070,18 +3050,10 @@ class BigBirdForQuestionAnswering(BigBirdPreTrainedModel):
         ...     outputs = model(**inputs)
 
         >>> answer_start_index = outputs.start_logits.argmax()
-        >>> answer_end_index = outputs.end_logits.argmax()
-        >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
-        >>> tokenizer.decode(predict_answer_tokens)
-        '80 °C (176 °F) or more'
         ```
 
         ```python
         >>> target_start_index, target_end_index = torch.tensor([130]), torch.tensor([132])
-        >>> outputs = model(**inputs, start_positions=target_start_index, end_positions=target_end_index)
-        >>> loss = outputs.loss
-        >>> round(outputs.loss.item(), 2)
-        7.63
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

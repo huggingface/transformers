@@ -227,10 +227,7 @@ def dtype_byte_size(dtype):
 
     Example:
 
-    ```py
-    >>> dtype_byte_size(torch.float32)
-    4
-    ```
+    ```    ```
     """
     if dtype == torch.bool:
         return 1 / 8
@@ -1791,10 +1788,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         >>> model = BertModel.from_pretrained("bert-base-uncased", output_attentions=True)
         >>> assert model.config.output_attentions == True
         >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower, for example purposes, not runnable).
-        >>> config = BertConfig.from_json_file("./tf_model/my_tf_model_config.json")
-        >>> model = BertModel.from_pretrained("./tf_model/my_tf_checkpoint.ckpt.index", from_tf=True, config=config)
-        >>> # Loading from a Flax checkpoint file instead of a PyTorch model (slower)
-        >>> model = BertModel.from_pretrained("bert-base-uncased", from_flax=True)
         ```
 
         * `low_cpu_mem_usage` algorithm:

@@ -1020,10 +1020,6 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
 
         >>> model = FlaxBartForConditionalGeneration.from_pretrained("facebook/bart-large-cnn")
         >>> tokenizer = BartTokenizer.from_pretrained("facebook/bart-large-cnn")
-
-        >>> text = "My friends are cool but they eat too many carbs."
-        >>> inputs = tokenizer(text, max_length=1024, return_tensors="jax")
-        >>> encoder_outputs = model.encode(**inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1093,10 +1089,6 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
-        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
-
-        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-        >>> last_decoder_hidden_states = outputs.last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1362,10 +1354,6 @@ class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
         >>> encoder_outputs = model.encode(**inputs)
 
         >>> decoder_start_token_id = model.config.decoder_start_token_id
-        >>> decoder_input_ids = jnp.ones((inputs.input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
-
-        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-        >>> logits = outputs.logits
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1515,10 +1503,6 @@ FLAX_BART_CONDITIONAL_GENERATION_DOCSTRING = """
 
     >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="np")
-
-    >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs["input_ids"]).sequences
-    >>> print(tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
     ```
 
     Mask filling example:
@@ -1535,10 +1519,6 @@ FLAX_BART_CONDITIONAL_GENERATION_DOCSTRING = """
 
     >>> logits = model(input_ids).logits
     >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero()[0].item()
-    >>> probs = jax.nn.softmax(logits[0, masked_index], axis=0)
-    >>> values, predictions = jax.lax.top_k(probs, k=1)
-
-    >>> tokenizer.decode(predictions).split()
     ```
 """
 

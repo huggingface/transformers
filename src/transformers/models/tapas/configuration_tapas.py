@@ -146,10 +146,6 @@ class TapasConfig(PretrainedConfig):
 
     >>> # Initializing a default (SQA) Tapas configuration
     >>> configuration = TapasConfig()
-    >>> # Initializing a model from the configuration
-    >>> model = TapasModel(configuration)
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
 
     model_type = "tapas"

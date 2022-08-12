@@ -340,10 +340,6 @@ class EncoderDecoderModel(PreTrainedModel):
 
         >>> # initialize a bert2bert from two pretrained BERT models. Note that the cross-attention layers will be randomly initialized
         >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
-        >>> # saving model after fine-tuning
-        >>> model.save_pretrained("./bert2bert")
-        >>> # load fine-tuned model
-        >>> model = EncoderDecoderModel.from_pretrained("./bert2bert")
         ```"""
 
         kwargs_encoder = {
@@ -472,10 +468,6 @@ class EncoderDecoderModel(PreTrainedModel):
 
         >>> # save and load from pretrained
         >>> model.save_pretrained("bert2bert")
-        >>> model = EncoderDecoderModel.from_pretrained("bert2bert")
-
-        >>> # generation
-        >>> generated = model.generate(input_ids)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

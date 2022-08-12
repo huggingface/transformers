@@ -60,10 +60,6 @@ class RegNetConfig(PretrainedConfig):
 
     >>> # Initializing a RegNet regnet-y-40 style configuration
     >>> configuration = RegNetConfig()
-    >>> # Initializing a model from the regnet-y-40 style configuration
-    >>> model = RegNetModel(configuration)
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```
     """
     model_type = "regnet"

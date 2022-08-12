@@ -66,10 +66,6 @@ class VisionTextDualEncoderConfig(PretrainedConfig):
 
     >>> # Saving the model, including its configuration
     >>> model.save_pretrained("my-model")
-
-    >>> # loading model and config from pretrained folder
-    >>> vision_text_config = VisionTextDualEncoderConfig.from_pretrained("vit-bert")
-    >>> model = VisionTextDualEncoderModel.from_pretrained("vit-bert", config=vision_text_config)
     ```"""
 
     model_type = "vision-text-dual-encoder"

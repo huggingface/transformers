@@ -89,10 +89,6 @@ class VideoMAEConfig(PretrainedConfig):
     >>> configuration = VideoMAEConfig()
 
     >>> # Randomly initializing a model from the configuration
-    >>> model = VideoMAEModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "videomae"
 

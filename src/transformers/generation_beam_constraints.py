@@ -8,11 +8,7 @@ class Constraint(ABC):
 
     All classes that inherit Constraint must follow the requirement that
 
-    ```py
-    completed = False
-    while not completed:
-        _, completed = constraint.update(constraint.advance())
-    ```
+    ```    ```
 
     will always terminate (halt).
     """

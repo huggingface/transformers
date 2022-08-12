@@ -50,10 +50,6 @@ FROM_CONFIG_DOCSTRING = """
 
         ```python
         >>> from transformers import AutoConfig, BaseAutoModelClass
-
-        >>> # Download configuration from huggingface.co and cache.
-        >>> config = AutoConfig.from_pretrained("checkpoint_placeholder")
-        >>> model = BaseAutoModelClass.from_config(config)
         ```
 """
 
@@ -155,10 +151,6 @@ FROM_PRETRAINED_TORCH_DOCSTRING = """
         True
 
         >>> # Loading from a TF checkpoint file instead of a PyTorch model (slower)
-        >>> config = AutoConfig.from_pretrained("./tf_model/shortcut_placeholder_tf_model_config.json")
-        >>> model = BaseAutoModelClass.from_pretrained(
-        ...     "./tf_model/shortcut_placeholder_tf_checkpoint.ckpt.index", from_tf=True, config=config
-        ... )
         ```
 """
 
@@ -251,10 +243,6 @@ FROM_PRETRAINED_TF_DOCSTRING = """
         True
 
         >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-        >>> config = AutoConfig.from_pretrained("./pt_model/shortcut_placeholder_pt_model_config.json")
-        >>> model = BaseAutoModelClass.from_pretrained(
-        ...     "./pt_model/shortcut_placeholder_pytorch_model.bin", from_pt=True, config=config
-        ... )
         ```
 """
 
@@ -347,10 +335,6 @@ FROM_PRETRAINED_FLAX_DOCSTRING = """
         True
 
         >>> # Loading from a PyTorch checkpoint file instead of a TensorFlow model (slower)
-        >>> config = AutoConfig.from_pretrained("./pt_model/shortcut_placeholder_pt_model_config.json")
-        >>> model = BaseAutoModelClass.from_pretrained(
-        ...     "./pt_model/shortcut_placeholder_pytorch_model.bin", from_pt=True, config=config
-        ... )
         ```
 """
 

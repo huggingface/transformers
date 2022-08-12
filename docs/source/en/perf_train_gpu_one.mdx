@@ -44,10 +44,6 @@ from datasets import Dataset
 seq_len, dataset_size = 512, 512
 dummy_data = {
     "input_ids": np.random.randint(100, 30000, (dataset_size, seq_len)),
-    "labels": np.random.randint(0, 1, (dataset_size)),
-}
-ds = Dataset.from_dict(dummy_data)
-ds.set_format("pt")
 ```
 
 We want to print some summary statistics for the GPU utilization and the training run with the [`Trainer`]. We setup a two helper functions to do just that:
@@ -63,28 +59,17 @@ def print_gpu_utilization():
     print(f"GPU memory occupied: {info.used//1024**2} MB.")
 
 
-def print_summary(result):
-    print(f"Time: {result.metrics['train_runtime']:.2f}")
-    print(f"Samples/second: {result.metrics['train_samples_per_second']:.2f}")
-    print_gpu_utilization()
 ```
 
 Let's verify that we start with a free GPU memory:
 
-```py
->>> print_gpu_utilization()
-GPU memory occupied: 0 MB.
-```
+``````
 
 That looks good: the GPU memory is not occupied as we would expect before we load any models. If that's not the case on your machine make sure to stop all processes that are using GPU memory. However, not all free GPU memory can be used by the user. When a model is loaded to the GPU also the kernels are loaded which can take up 1-2GB of memory. To see how much it is we load a tiny tensor into the GPU which triggers the kernels to be loaded as well.
 
 ```py
 >>> import torch
 
-
->>> torch.ones((1, 1)).to("cuda")
->>> print_gpu_utilization()
-GPU memory occupied: 1343 MB.
 ```
 
 We see that the kernels alone take up 1.3GB of GPU memory. Now let's see how much space the model uses.
@@ -97,10 +82,6 @@ First, we load the `bert-large-uncased` model. We load the model weights directl
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
-
->>> model = AutoModelForSequenceClassification.from_pretrained("bert-large-uncased").to("cuda")
->>> print_gpu_utilization()
-GPU memory occupied: 2631 MB.
 ```
 
 We can see that the model weights alone take up 1.3 GB of the GPU memory. The exact number depends on the specific GPU you are using. Note that on newer GPUs a model can sometimes take up more space since the weights are loaded in an optimized fashion that speeds up the usage of the model. Now we can also quickly check if we get the same result as with `nvidia-smi` CLI:
@@ -139,10 +120,6 @@ We get the same number as before and you can also see that we are using a V100 G
 default_args = {
     "output_dir": "tmp",
     "evaluation_strategy": "steps",
-    "num_train_epochs": 1,
-    "log_level": "error",
-    "report_to": "none",
-}
 ```
 
 <Tip>
@@ -161,10 +138,6 @@ from transformers import TrainingArguments, Trainer, logging
 logging.set_verbosity_error()
 
 
-training_args = TrainingArguments(per_device_train_batch_size=4, **default_args)
-trainer = Trainer(model=model, args=training_args, train_dataset=ds)
-result = trainer.train()
-print_summary(result)
 ```
 
 ```
@@ -263,10 +236,6 @@ We can use gradient accumulation in the [`Trainer`] by simply adding the `gradie
 
 ```py
 training_args = TrainingArguments(per_device_train_batch_size=1, gradient_accumulation_steps=4, **default_args)
-
-trainer = Trainer(model=model, args=training_args, train_dataset=ds)
-result = trainer.train()
-print_summary(result)
 ```
 
 ```
@@ -294,10 +263,6 @@ To enable gradient checkpointing in the [`Trainer`] we only need ot pass it as a
 training_args = TrainingArguments(
     per_device_train_batch_size=1, gradient_accumulation_steps=4, gradient_checkpointing=True, **default_args
 )
-
-trainer = Trainer(model=model, args=training_args, train_dataset=ds)
-result = trainer.train()
-print_summary(result)
 ```
 
 ```
@@ -332,10 +297,6 @@ The idea of mixed precision training is that no all variables need to be stored 
 
 ```py
 training_args = TrainingArguments(per_device_train_batch_size=4, fp16=True, **default_args)
-
-trainer = Trainer(model=model, args=training_args, train_dataset=ds)
-result = trainer.train()
-print_summary(result)
 ```
 
 ```
@@ -355,10 +316,6 @@ training_args = TrainingArguments(
     fp16=True,
     **default_args,
 )
-
-trainer = Trainer(model=model, args=training_args, train_dataset=ds)
-result = trainer.train()
-print_summary(result)
 ```
 
 ```
@@ -374,9 +331,7 @@ If you have access to a Ampere or newer hardware you can use bf16 for your train
 
 You can enable BF16 in the 🤗 Trainer with:
 
-```python
-TrainingArguments(bf16=True)
-```
+``````
 
 ### TF32
 The Ampere hardware uses a magical data type called tf32. It has the same numerical range as fp32 (8-bits), but instead of 23 bits precision it has only 10 bits (same as fp16) and uses only 19 bits in total.
@@ -395,9 +350,7 @@ Like all cases with reduced precision this may or may not be satisfactory for yo
 If you're already using fp16 or bf16 mixed precision it may help with the throughput as well.
 
 You can enable this mode in the 🤗 Trainer with:
-```python
-TrainingArguments(tf32=True)
-```
+``````
 By default the PyTorch default is used.
 
 Note: tf32 mode is internal to CUDA and can't be accessed directly via `tensor.to(dtype=torch.tf32)` as `torch.tf32` doesn't exist.
@@ -442,10 +395,6 @@ Instead of keeping the rolling average for each element in the weight matrices A
 
 ```py
 training_args = TrainingArguments(per_device_train_batch_size=4, optim="adafactor", **default_args)
-
-trainer = Trainer(model=model, args=training_args, train_dataset=ds)
-result = trainer.train()
-print_summary(result)
 ```
 
 ```
@@ -466,10 +415,6 @@ training_args = TrainingArguments(
     optim="adafactor",
     **default_args,
 )
-
-trainer = Trainer(model=model, args=training_args, train_dataset=ds)
-result = trainer.train()
-print_summary(result)
 ```
 
 ```
@@ -520,18 +465,10 @@ optimizer_kwargs = {
 optimizer_kwargs["lr"] = training_args.learning_rate
 adam_bnb_optim = bnb.optim.Adam8bit(
     optimizer_grouped_parameters,
-    betas=(training_args.adam_beta1, training_args.adam_beta2),
-    eps=training_args.adam_epsilon,
-    lr=training_args.learning_rate,
-)
 ```
 
 We can now pass the custom optimizer as an argument to the `Trainer`:
-```py
-trainer = Trainer(model=model, args=training_args, train_dataset=ds, optimizers=(adam_bnb_optim, None))
-result = trainer.train()
-print_summary(result)
-```
+``````
 
 ```
 Time: 55.95
@@ -549,10 +486,6 @@ training_args = TrainingArguments(
     fp16=True,
     **default_args,
 )
-
-trainer = Trainer(model=model, args=training_args, train_dataset=ds, optimizers=(adam_bnb_optim, None))
-result = trainer.train()
-print_summary(result)
 ```
 
 ```
@@ -578,10 +511,6 @@ So far we have used the [`Trainer`] to run the experiments but a more flexible a
 training_args = TrainingArguments(
     per_device_train_batch_size=1,
     gradient_accumulation_steps=4,
-    gradient_checkpointing=True,
-    fp16=True,
-    **default_args,
-)
 ```
 
 The full example training loop with 🤗 Accelerate is only a handful of lines of code long:
@@ -603,10 +532,6 @@ model.train()
 for step, batch in enumerate(dataloader, start=1):
     loss = model(**batch).loss
     loss = loss / training_args.gradient_accumulation_steps
-    accelerator.backward(loss)
-    if step % training_args.gradient_accumulation_steps == 0:
-        optimizer.step()
-        optimizer.zero_grad()
 ```
 
 First we wrap the dataset in a [`DataLoader`](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader). Then we can enable gradient checkpointing by calling the model's [`~PreTrainedModel.gradient_checkpointing_enable`] method. When we initialize the [`Accelerator`](https://huggingface.co/docs/accelerate/package_reference/accelerator#accelerate.Accelerator) we can specifiy if we want to use mixed precision training and it will take care of it for us in the [`prepare`] call. During the [`prepare`](https://huggingface.co/docs/accelerate/package_reference/accelerator#accelerate.Accelerator.prepare) call the dataloader will also be distributed across workers should we use multiple GPUs. We use the same 8-bit optimizer from the earlier experiments.
@@ -614,10 +539,7 @@ First we wrap the dataset in a [`DataLoader`](https://pytorch.org/docs/stable/da
 Finally, we can write the main training loop. Note that the `backward` call is handled by 🤗 Accelerate. We can also see how gradient accumulation works: we normalize the loss so we get the average at the end of accumulation and once we have enough steps we run the optimization. Now the question is: does this use the same amount of memory as the previous steps? Let's check:
 
 
-```py
->>> print_gpu_utilization()
-GPU memory occupied: 5363 MB.
-```
+``````
 
 Indeed it does. Implementing these optimization techniques with 🤗 Accelerate only takes a handful of lines of code and comes with the benefit of more flexiblity in the training loop. For a full documentation of all features have a look at the [Accelerate documentation](https://huggingface.co/docs/accelerate/index).
 
@@ -644,9 +566,7 @@ Activation:
 - HF Trainer-based examples: see this [guide](main_classes/deepspeed#deployment-with-one-gpu).
 - Custom HF Trainer-based program: Same as above, but pass:
 
-    ```python
-    TrainingArguments(deepspeed="/path/to/ds_config.json")
-    ```
+    ```    ```
 - Deployment in Notebooks: see this [guide](main_classes/deepspeed#deployment-in-notebooks).
 
 - Custom training loop: This is somewhat complex but you can study how this is implemented in [HF Trainer](

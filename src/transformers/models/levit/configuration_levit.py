@@ -82,10 +82,6 @@ class LevitConfig(PretrainedConfig):
     >>> configuration = LevitConfig()
 
     >>> # Initializing a model from the levit-base-192 style configuration
-    >>> model = LevitModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "levit"
 

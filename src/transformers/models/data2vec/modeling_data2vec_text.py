@@ -966,10 +966,6 @@ class Data2VecTextForCausalLM(Data2VecTextPreTrainedModel):
         >>> config.is_decoder = True
         >>> model = Data2VecTextForCausalLM.from_pretrained("data2vec-base", config=config)
 
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:

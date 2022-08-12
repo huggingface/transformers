@@ -847,10 +847,6 @@ class TFSegformerForSemanticSegmentation(TFSegformerPreTrainedModel):
 
         >>> inputs = feature_extractor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs, training=False)
-        >>> # logits are of shape (batch_size, num_labels, height/4, width/4)
-        >>> logits = outputs.logits
-        >>> list(logits.shape)
-        [1, 150, 128, 128]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (

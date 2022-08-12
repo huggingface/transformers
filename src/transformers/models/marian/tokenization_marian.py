@@ -111,10 +111,6 @@ class MarianTokenizer(PreTrainedTokenizer):
     >>> tokenizer = MarianTokenizer.from_pretrained("Helsinki-NLP/opus-mt-en-de")
     >>> src_texts = ["I am a small frog.", "Tom asked his teacher for advice."]
     >>> tgt_texts = ["Ich bin ein kleiner Frosch.", "Tom bat seinen Lehrer um Rat."]  # optional
-    >>> inputs = tokenizer(src_texts, text_target=tgt_texts, return_tensors="pt", padding=True)
-    # keys  [input_ids, attention_mask, labels].
-
-    >>> outputs = model(**inputs)  # should work
     ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES

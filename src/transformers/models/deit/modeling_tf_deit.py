@@ -802,10 +802,6 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = tf.cast(tf.random.uniform((1, num_patches), minval=0, maxval=2, dtype=tf.int32), tf.bool)
 
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
-        >>> list(reconstructed_pixel_values.shape)
-        [1, 3, 224, 224]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -933,10 +929,6 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         >>> inputs = feature_extractor(images=image, return_tensors="tf")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = tf.math.argmax(logits, axis=-1)[0]
-        >>> print("Predicted class:", model.config.id2label[int(predicted_class_idx)])
-        Predicted class: ptarmigan
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

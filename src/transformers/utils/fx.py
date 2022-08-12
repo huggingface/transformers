@@ -1120,11 +1120,7 @@ def symbolic_trace(
 
     Example:
 
-        ```python
-        from transformers.utils.fx import symbolic_trace
-
-        traced_model = symbolic_trace(model, input_names=["input_ids", "attention_mask", "token_type_ids"])
-        ```
+        ```        ```
     """
     if input_names is None:
         input_names = model.dummy_inputs.keys()

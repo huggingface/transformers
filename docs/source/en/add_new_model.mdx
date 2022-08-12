@@ -83,10 +83,7 @@ configuration class, called `BrandNewBertConfig`. This configuration is always s
 [`PreTrainedModel`], and thus can be accessed via the `config` attribute for all classes
 inheriting from `BrandNewBertPreTrainedModel`:
 
-```python
-model = BrandNewBertModel.from_pretrained("brandy/brand_new_bert")
-model.config  # model has access to its config
-```
+``````
 
 Similar to the model, the configuration inherits basic serialization and deserialization functionalities from
 [`PretrainedConfig`]. Note that the configuration and the model are always serialized into two
@@ -284,11 +281,7 @@ For each code-base, a good first step is always to load a **small** pretrained c
 single forward pass using a dummy integer vector of input IDs as an input. Such a script could look like this (in
 pseudocode):
 
-```python
-model = BrandNewBertModel.load_pretrained_checkpoint("/path/to/checkpoint/")
-input_ids = [0, 4, 5, 2, 3, 7, 9]  # vector of input ids
-original_output = model.predict(input_ids)
-```
+``````
 
 Next, regarding the debugging strategy, there are generally a few from which to choose from:
 
@@ -489,11 +482,7 @@ improve/correct the code iteratively with the conversion script as described in 
 has to work at this point is that you can instantiate the 🤗 Transformers implementation of *brand_new_bert*, *i.e.* the
 following command should work:
 
-```python
-from transformers import BrandNewBertModel, BrandNewBertConfig
-
-model = BrandNewBertModel(BrandNewBertConfig())
-```
+``````
 
 The above command will create a model according to the default parameters as defined in `BrandNewBertConfig()` with
 random weights, thus making sure that the `init()` methods of all components works.
@@ -521,20 +510,12 @@ from torch import nn
 
 class SimpleModel(nn.Module):
     def __init__(self):
-        super().__init__()
-        self.dense = nn.Linear(10, 10)
-        self.intermediate = nn.Linear(10, 10)
-        self.layer_norm = nn.LayerNorm(10)
 ```
 
 Now we can create an instance of this model definition which will fill all weights: `dense`, `intermediate`,
 `layer_norm` with random weights. We can print the model to see its architecture
 
-```python
-model = SimpleModel()
-
-print(model)
-```
+``````
 
 This will print out the following:
 
@@ -549,9 +530,7 @@ SimpleModel(
 We can see that the layer names are defined by the name of the class attribute in PyTorch. You can print out the weight
 values of a specific layer:
 
-```python
-print(model.dense.weight.data)
-```
+``````
 
 to see that the weights were randomly initialized
 
@@ -586,27 +565,17 @@ corresponding layer in the checkpoint. *E.g.*
 # recursive algorithm
 layer_name = "dense"
 pretrained_weight = array_of_dense_layer
-
-model_pointer = getattr(model, "dense")
-
-model_pointer.weight.data = torch.from_numpy(pretrained_weight)
 ```
 
 While doing so, you must verify that each randomly initialized weight of your PyTorch model and its corresponding
 pretrained checkpoint weight exactly match in both **shape and name**. To do so, it is **necessary** to add assert
 statements for the shape and print out the names of the checkpoints weights. E.g. you should add statements like:
 
-```python
-assert (
-    model_pointer.weight.shape == pretrained_weight.shape
-), f"Pointer shape of random weight {model_pointer.shape} and array shape of checkpoint weight {pretrained_weight.shape} mismatched"
-```
+``````
 
 Besides, you should also print out the names of both weights to make sure they match, *e.g.*
 
-```python
-logger.info(f"Initialize PyTorch weight {layer_name} from {pretrained_weight.name}")
-```
+``````
 
 If either the shape or the name doesn't match, you probably assigned the wrong checkpoint weight to a randomly
 initialized layer of the 🤗 Transformers implementation.
@@ -627,9 +596,7 @@ Transformers model. Having correctly loaded the checkpoint into the 🤗 Transfo
 the model under a folder of your choice `/path/to/converted/checkpoint/folder` that should then contain both a
 `pytorch_model.bin` file and a `config.json` file:
 
-```python
-model.save_pretrained("/path/to/converted/checkpoint/folder")
-```
+``````
 
 **7. Implement the forward pass**
 
@@ -638,11 +605,7 @@ sure that the forward pass is correctly implemented. In [Get familiar with the o
 pass of the model using the original repository. Now you should write an analogous script using the 🤗 Transformers
 implementation instead of the original one. It should look as follows:
 
-```python
-model = BrandNewBertModel.from_pretrained("/path/to/converted/checkpoint/folder")
-input_ids = [0, 4, 4, 3, 2, 4, 1, 7, 19]
-output = model(input_ids).last_hidden_states
-```
+``````
 
 It is very likely that the 🤗 Transformers implementation and the original model implementation don't give the exact
 same output the very first time or that the forward pass throws an error. Don't be disappointed - it's expected! First,
@@ -729,11 +692,7 @@ Transformers' implementation of the tokenizer.
 To ensure that the tokenizer works correctly, it is recommended to first create a script in the original repository
 that inputs a string and returns the `input_ids``. It could look similar to this (in pseudo-code):
 
-```python
-input_str = "This is a long example input string containing special characters .$?-, numbers 2872 234 12 and words."
-model = BrandNewBertModel.load_pretrained_checkpoint("/path/to/checkpoint/")
-input_ids = model.tokenize(input_str)
-```
+``````
 
 You might have to take a deeper look again into the original repository to find the correct tokenizer function or you
 might even have to do changes to your clone of the original repository to only output the `input_ids`. Having written
@@ -744,10 +703,6 @@ created. It should look similar to this:
 from transformers import BrandNewBertTokenizer
 
 input_str = "This is a long example input string containing special characters .$?-, numbers 2872 234 12 and words."
-
-tokenizer = BrandNewBertTokenizer.from_pretrained("/path/to/tokenizer/folder/")
-
-input_ids = tokenizer(input_str).input_ids
 ```
 
 When both `input_ids` yield the same values, as a final step a tokenizer test file should also be added.
@@ -812,11 +767,7 @@ uploaded model checkpoint. You can get familiar with the hub functionalities by 
 checkpoint and to get the required access rights to be able to upload the model under the author's organization of
 *brand_new_bert*. The `push_to_hub` method, present in all models in `transformers`, is a quick and efficient way to push your checkpoint to the hub. A little snippet is pasted below:
 
-```python
-brand_new_bert.push_to_hub("brand_new_bert")
-# Uncomment the following line to push to an organization.
-# brand_new_bert.push_to_hub("<organization>/brand_new_bert")
-```
+``````
 
 It is worth spending some time to create fitting model cards for each checkpoint. The model cards should highlight the
 specific characteristics of this particular checkpoint, *e.g.* On which dataset was the checkpoint

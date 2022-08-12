@@ -108,9 +108,7 @@ class BigBirdPegasusConfig(PretrainedConfig):
 
     Example:
 
-    ```python
-
-    ```
+    ```    ```
 
         >>> from transformers import BigBirdPegasusModel, BigBirdPegasusConfig
 

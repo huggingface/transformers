@@ -612,10 +612,6 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         >>> # create random boolean mask of shape (batch_size, num_patches)
         >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
 
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
-        >>> list(reconstructed_pixel_values.shape)
-        [1, 3, 224, 224]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -723,10 +719,6 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> logits = outputs.logits
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_class_idx = logits.argmax(-1).item()
-        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
-        Predicted class: maillot
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -210,10 +210,6 @@ PARALLELIZE_DOCSTRING = r"""
     device_map = {
         0: [0, 1, 2],
         1: [3, 4, 5, 6, 7, 8, 9],
-        2: [10, 11, 12, 13, 14, 15, 16],
-        3: [17, 18, 19, 20, 21, 22, 23],
-    }
-    model.parallelize(device_map)
     ```
 """
 DEPARALLELIZE_DOCSTRING = r"""
@@ -228,10 +224,6 @@ DEPARALLELIZE_DOCSTRING = r"""
         0: [0, 1, 2],
         1: [3, 4, 5, 6, 7, 8, 9],
         2: [10, 11, 12, 13, 14, 15, 16],
-        3: [17, 18, 19, 20, 21, 22, 23],
-    }
-    model.parallelize(device_map)  # Splits the model across several devices
-    model.deparallelize()  # Put the model back on cpu and cleans memory by calling torch.cuda.empty_cache()
     ```
 """
 
@@ -1375,10 +1367,6 @@ class T5Model(T5PreTrainedModel):
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-
-        >>> # forward pass
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1580,10 +1568,6 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         >>> # inference
         >>> input_ids = tokenizer(
         ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
-        >>> outputs = model.generate(input_ids)
-        >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        >>> # studies have shown that owning a dog is good for you.
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1827,10 +1811,6 @@ class T5EncoderModel(T5PreTrainedModel):
         >>> tokenizer = T5Tokenizer.from_pretrained("t5-small")
         >>> model = T5EncoderModel.from_pretrained("t5-small")
         >>> input_ids = tokenizer(
-        ...     "Studies have been shown that owning a dog is good for you", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
-        >>> outputs = model(input_ids=input_ids)
-        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

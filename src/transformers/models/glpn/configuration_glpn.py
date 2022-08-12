@@ -85,10 +85,6 @@ class GLPNConfig(PretrainedConfig):
     >>> configuration = GLPNConfig()
 
     >>> # Initializing a model from the vinvino02/glpn-kitti style configuration
-    >>> model = GLPNModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "glpn"
 

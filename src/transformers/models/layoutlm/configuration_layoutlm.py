@@ -88,10 +88,6 @@ class LayoutLMConfig(BertConfig):
     >>> configuration = LayoutLMConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = LayoutLMModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "layoutlm"
 

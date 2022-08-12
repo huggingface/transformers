@@ -152,10 +152,6 @@ class ReformerConfig(PretrainedConfig):
     >>> configuration = ReformerConfig()
 
     >>> # Initializing a Reformer model
-    >>> model = ReformerModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```
 """
     model_type = "reformer"

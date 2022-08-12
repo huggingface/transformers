@@ -957,10 +957,6 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         >>> bbox = tf.convert_to_tensor([token_boxes])
 
         >>> outputs = model(
-        ...     input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids
-        ... )
-
-        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         outputs = self.layoutlm(
             input_ids=input_ids,
@@ -1087,10 +1083,6 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
         ...     bbox=bbox,
         ...     attention_mask=attention_mask,
         ...     token_type_ids=token_type_ids,
-        ...     labels=labels,
-        ... )
-
-        >>> loss = outputs.loss
         ```"""
         outputs = self.layoutlm(
             input_ids=input_ids,
@@ -1210,10 +1202,6 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
         ...     attention_mask=attention_mask,
         ...     token_type_ids=token_type_ids,
         ...     labels=sequence_label,
-        ... )
-
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
         ```"""
         outputs = self.layoutlm(
             input_ids=input_ids,
@@ -1338,10 +1326,6 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
         ...     attention_mask=attention_mask,
         ...     token_type_ids=token_type_ids,
         ...     labels=token_labels,
-        ... )
-
-        >>> loss = outputs.loss
-        >>> logits = outputs.logits
         ```"""
         outputs = self.layoutlm(
             input_ids=input_ids,

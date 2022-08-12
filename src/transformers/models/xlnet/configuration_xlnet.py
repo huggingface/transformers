@@ -132,10 +132,6 @@ class XLNetConfig(PretrainedConfig):
     >>> configuration = XLNetConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = XLNetModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
 
     model_type = "xlnet"

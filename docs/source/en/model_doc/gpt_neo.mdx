@@ -44,10 +44,6 @@ The `generate()` method can be used to generate text using GPT Neo model.
 >>> gen_tokens = model.generate(
 ...     input_ids,
 ...     do_sample=True,
-...     temperature=0.9,
-...     max_length=100,
-... )
->>> gen_text = tokenizer.batch_decode(gen_tokens)[0]
 ```
 
 ## GPTNeoConfig

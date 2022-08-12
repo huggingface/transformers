@@ -1396,10 +1396,6 @@ class TFSpeech2TextForConditionalGeneration(TFSpeech2TextPreTrainedModel, TFCaus
 
         >>> input_features = processor(
         ...     ds["speech"][0], sampling_rate=16000, return_tensors="tf"
-        ... ).input_features  # Batch size 1
-        >>> generated_ids = model.generate(input_features)
-
-        >>> transcription = processor.batch_decode(generated_ids)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

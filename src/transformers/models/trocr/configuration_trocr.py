@@ -88,10 +88,6 @@ class TrOCRConfig(PretrainedConfig):
     >>> configuration = TrOCRConfig()
 
     >>> # Initializing a model from the TrOCR-base style configuration
-    >>> model = TrOCRForCausalLM(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "trocr"
     keys_to_ignore_at_inference = ["past_key_values"]

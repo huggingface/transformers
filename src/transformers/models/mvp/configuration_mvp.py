@@ -99,10 +99,6 @@ class MvpConfig(PretrainedConfig):
     >>> configuration = MvpConfig()
 
     >>> # Initializing a model from the RUCAIBox/mvp style configuration
-    >>> model = MvpModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "mvp"
     keys_to_ignore_at_inference = ["past_key_values"]

@@ -489,10 +489,6 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         >>> # initialize a wav2vec2-2-bart from pretrained wav2vec2 and bart models. Note that the cross-attention layers will be randomly initialized
         >>> model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
         ...     "facebook/wav2vec2-large-lv60", "facebook/bart-large"
-        ... )
-
-        >>> inputs = jnp.ones((2, 5000), dtype=jnp.float32)
-        >>> encoder_outputs = model.encode(inputs)
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -569,10 +565,6 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         >>> encoder_outputs = model.encode(inputs)
 
         >>> decoder_start_token_id = model.config.decoder.bos_token_id
-        >>> decoder_input_ids = jnp.ones((inputs.shape[0], 1), dtype="i4") * decoder_start_token_id
-
-        >>> outputs = model.decode(decoder_input_ids, encoder_outputs)
-        >>> logits = outputs.logits
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -694,10 +686,6 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         >>> # use bart's special bos, pad and eos tokens
         >>> model.config.decoder_start_token_id = model.decoder.config.bos_token_id
         >>> model.config.pad_token_id = model.decoder.config.pad_token_id
-        >>> model.config.eos_token_id = model.decoder.config.eos_token_id
-
-        >>> outputs = model.generate(inputs)
-        # Assert something? More interesting input? dtype correct?
         ```
         """
 
@@ -834,10 +822,6 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         >>> model = FlaxSpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
         ...     "facebook/wav2vec2-large-lv60", "facebook/bart-large"
         ... )
-        >>> # saving model after fine-tuning
-        >>> model.save_pretrained("./wav2vec2-2-bart-large")
-        >>> # load fine-tuned model
-        >>> model = FlaxSpeechEncoderDecoderModel.from_pretrained("./wav2vec2-2-bart-large")
         ```"""
 
         kwargs_encoder = {

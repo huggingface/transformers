@@ -86,10 +86,6 @@ class DeiTConfig(PretrainedConfig):
     >>> configuration = DeiTConfig()
 
     >>> # Initializing a model from the deit-base-distilled-patch16-224 style configuration
-    >>> model = DeiTModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "deit"
 

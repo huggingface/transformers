@@ -90,10 +90,6 @@ class SegformerConfig(PretrainedConfig):
     >>> configuration = SegformerConfig()
 
     >>> # Initializing a model from the nvidia/segformer-b0-finetuned-ade-512-512 style configuration
-    >>> model = SegformerModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "segformer"
 

@@ -184,25 +184,15 @@ Un'altra opzione per utilizzare offline 🤗 Transformers è scaricare i file in
     1. Scarica i tuoi file in anticipo con [`PreTrainedModel.from_pretrained`]:
 
     ```py
-    >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-
-    >>> tokenizer = AutoTokenizer.from_pretrained("bigscience/T0_3B")
-    >>> model = AutoModelForSeq2SeqLM.from_pretrained("bigscience/T0_3B")
     ```
 
     2. Salva i tuoi file in una directory specificata con [`PreTrainedModel.save_pretrained`]:
 
-    ```py
-    >>> tokenizer.save_pretrained("./il/tuo/path/bigscience_t0")
-    >>> model.save_pretrained("./il/tuo/path/bigscience_t0")
-    ```
+    ```    ```
 
     3. Ora quando sei offline, carica i tuoi file con [`PreTrainedModel.from_pretrained`] dalla directory specificata:
 
-    ```py
-    >>> tokenizer = AutoTokenizer.from_pretrained("./il/tuo/path/bigscience_t0")
-    >>> model = AutoModel.from_pretrained("./il/tuo/path/bigscience_t0")
-    ```
+    ```    ```
 
 * Scarica in maniera programmatica i file con la libreria [huggingface_hub](https://github.com/huggingface/huggingface_hub/tree/main/src/huggingface_hub):
 
@@ -214,19 +204,11 @@ Un'altra opzione per utilizzare offline 🤗 Transformers è scaricare i file in
 
     2. Utilizza la funzione [`hf_hub_download`](https://huggingface.co/docs/hub/adding-a-library#download-files-from-the-hub) per scaricare un file in un path specifico. Per esempio, il seguente comando scarica il file `config.json` dal modello [T0](https://huggingface.co/bigscience/T0_3B) nel path che desideri:
 
-    ```py
-    >>> from huggingface_hub import hf_hub_download
-
-    >>> hf_hub_download(repo_id="bigscience/T0_3B", filename="config.json", cache_dir="./il/tuo/path/bigscience_t0")
-    ```
+    ```    ```
 
 Una volta che il tuo file è scaricato e salvato in cache localmente, specifica il suo path locale per caricarlo e utilizzarlo:
 
-```py
->>> from transformers import AutoConfig
-
->>> config = AutoConfig.from_pretrained("./il/tuo/path/bigscience_t0/config.json")
-```
+``````
 
 <Tip>
 

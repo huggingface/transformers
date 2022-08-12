@@ -60,10 +60,6 @@ class CustomTrainer(Trainer):
         # forward pass
         outputs = model(**inputs)
         logits = outputs.get("logits")
-        # compute custom loss (suppose one has 3 labels with different weights)
-        loss_fct = nn.CrossEntropyLoss(weight=torch.tensor([1.0, 2.0, 3.0]))
-        loss = loss_fct(logits.view(-1, self.model.config.num_labels), labels.view(-1))
-        return (loss, outputs) if return_outputs else loss
 ```
 
 Another way to customize the training loop behavior for the PyTorch [`Trainer`] is to use [callbacks](callback) that can inspect the training loop state (for progress reporting, logging on TensorBoard or other ML platforms...) and take decisions (like early stopping).
@@ -145,10 +141,6 @@ logging.basicConfig(
 # set the main code and the modules it uses to the same log-level according to the node
 log_level = training_args.get_process_log_level()
 logger.setLevel(log_level)
-datasets.utils.logging.set_verbosity(log_level)
-transformers.utils.logging.set_verbosity(log_level)
-
-trainer = Trainer(...)
 ```
 
 And then if you only want to see warnings on the main node and all other nodes to not print any most likely duplicated

@@ -72,10 +72,6 @@ class VanConfig(PretrainedConfig):
 
     >>> # Initializing a VAN van-base style configuration
     >>> configuration = VanConfig()
-    >>> # Initializing a model from the van-base style configuration
-    >>> model = VanModel(configuration)
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "van"
 

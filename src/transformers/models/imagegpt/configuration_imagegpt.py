@@ -85,10 +85,6 @@ class ImageGPTConfig(PretrainedConfig):
     >>> configuration = ImageGPTConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = ImageGPTModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
 
     model_type = "imagegpt"

@@ -506,10 +506,6 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
         ...     trajectories,
         ...     targets=targets,
         ...     use_cache=True,
-        ...     output_attentions=True,
-        ...     output_hidden_states=True,
-        ...     return_dict=True,
-        ... )
         ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

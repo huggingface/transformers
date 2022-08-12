@@ -562,10 +562,6 @@ MBART_GENERATION_EXAMPLE = r"""
     >>> example_english_phrase = "42 is the answer"
     >>> inputs = tokenizer(example_english_phrase, return_tensors="pt")
 
-    >>> # Translate
-    >>> generated_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
-    >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-    '42 este răspuns'
     ```
 
     Mask filling example:
@@ -584,10 +580,6 @@ MBART_GENERATION_EXAMPLE = r"""
 
     >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
     >>> probs = logits[0, masked_index].softmax(dim=0)
-    >>> values, predictions = probs.topk(5)
-
-    >>> tokenizer.decode(predictions).split()
-    ['nett', 'sehr', 'ganz', 'nicht', 'so']
     ```
 """
 
@@ -1827,10 +1819,6 @@ class MBartForCausalLM(MBartPreTrainedModel):
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> logits = outputs.logits
-        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
-        >>> list(logits.shape) == expected_shape
-        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

@@ -693,10 +693,6 @@ class TweetTokenizer:
     ['This', 'is', 'a', 'cooool', '#dummysmiley', ':', ':-)', ':-P', '<3', 'and', 'some', 'arrows', '<', '>', '->', '<--']
 
     >>> # Examples using *strip_handles* and *reduce_len parameters*:
-    >>> tknzr = TweetTokenizer(strip_handles=True, reduce_len=True)
-    >>> s1 = "@remy: This is waaaaayyyy too much for you!!!!!!"
-    >>> tknzr.tokenize(s1)
-    [':', 'This', 'is', 'waaayyy', 'too', 'much', 'for', 'you', '!', '!', '!']
     ```"""
 
     def __init__(self, preserve_case=True, reduce_len=False, strip_handles=False):

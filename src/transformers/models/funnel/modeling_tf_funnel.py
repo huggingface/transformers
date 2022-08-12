@@ -1225,10 +1225,6 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         >>> import torch
 
         >>> tokenizer = FunnelTokenizer.from_pretrained("funnel-transformer/small")
-        >>> model = TFFunnelForPreTraining.from_pretrained("funnel-transformer/small")
-
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
-        >>> logits = model(inputs).logits
         ```"""
         discriminator_hidden_states = self.funnel(
             input_ids,

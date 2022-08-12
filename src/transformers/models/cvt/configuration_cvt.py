@@ -91,10 +91,6 @@ class CvtConfig(PretrainedConfig):
     >>> configuration = CvtConfig()
 
     >>> # Initializing a model from the msft/cvt style configuration
-    >>> model = CvtModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "cvt"
 

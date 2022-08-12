@@ -118,10 +118,6 @@ class DetrConfig(PretrainedConfig):
     >>> configuration = DetrConfig()
 
     >>> # Initializing a model from the facebook/detr-resnet-50 style configuration
-    >>> model = DetrModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "detr"
     keys_to_ignore_at_inference = ["past_key_values"]

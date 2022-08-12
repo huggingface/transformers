@@ -47,10 +47,6 @@ class Conversation:
     # Steps usually performed by the model when generating a response:
     # 1. Mark the user input as processed (moved to the history)
     conversation.mark_processed()
-    # 2. Append a mode response
-    conversation.append_response("The Big lebowski.")
-
-    conversation.add_user_input("Is it good?")
     ```"""
 
     def __init__(
@@ -179,11 +175,6 @@ class ConversationalPipeline(Pipeline):
 
     conversation_1 = Conversation("Going to the movies tonight - any suggestions?")
     conversation_2 = Conversation("What's the last book you have read?")
-
-    conversational_pipeline([conversation_1, conversation_2])
-
-    conversation_1.add_user_input("Is it an action movie?")
-    conversation_2.add_user_input("What is the genre of this book?")
 
     conversational_pipeline([conversation_1, conversation_2])
     ```"""

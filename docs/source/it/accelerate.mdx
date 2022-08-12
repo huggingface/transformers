@@ -24,21 +24,13 @@ pip install accelerate
 
 Poi importa e crea un oggetto [`Accelerator`](https://huggingface.co/docs/accelerate/package_reference/accelerator#accelerate.Accelerator). `Accelerator` rileverà automaticamente il tuo setup distribuito e inizializzerà tutte le componenti necessarie per l'allenamento. Non dovrai allocare esplicitamente il tuo modello su un device.
 
-```py
->>> from accelerate import Accelerator
-
->>> accelerator = Accelerator()
-```
+``````
 
 ## Preparati ad accelerare
 
 Il prossimo passo è quello di passare tutti gli oggetti rilevanti per l'allenamento al metodo [`prepare`](https://huggingface.co/docs/accelerate/package_reference/accelerator#accelerate.Accelerator.prepare). Questo include i tuoi DataLoaders per l'allenamento e per la valutazione, un modello e un ottimizzatore:
 
-```py
->>> train_dataloader, eval_dataloader, model, optimizer = accelerator.prepare(
-...     train_dataloader, eval_dataloader, model, optimizer
-... )
-```
+``````
 
 ## Backward
 
@@ -51,10 +43,6 @@ Infine, sostituisci il tipico metodo `loss.backward()` nel tuo loop di allenamen
 ...         loss = outputs.loss
 ...         accelerator.backward(loss)
 
-...         optimizer.step()
-...         lr_scheduler.step()
-...         optimizer.zero_grad()
-...         progress_bar.update(1)
 ```
 
 Come puoi vedere nel seguente codice, hai solo bisogno di aggiungere quattro righe in più di codice al tuo training loop per abilitare l'allenamento distribuito!
@@ -123,10 +111,6 @@ accelerate launch train.py
 
 La libreria 🤗 Accelerate può anche essere utilizzata in un notebook se stai pianificando di utilizzare le TPU di Colaboratory. Inserisci tutto il codice legato all'allenamento in una funzione, e passala al `notebook_launcher`:
 
-```py
->>> from accelerate import notebook_launcher
-
->>> notebook_launcher(training_function)
-```
+``````
 
 Per maggiori informazioni relative a 🤗 Accelerate e le sue numerose funzionalità, fai riferimento alla [documentazione](https://huggingface.co/docs/accelerate).

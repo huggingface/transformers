@@ -42,20 +42,12 @@ The benchmark classes [`PyTorchBenchmark`] and [`TensorFlowBenchmark`] expect an
 <frameworkcontent>
 <pt>
 ```py
->>> from transformers import PyTorchBenchmark, PyTorchBenchmarkArguments
-
->>> args = PyTorchBenchmarkArguments(models=["bert-base-uncased"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512])
->>> benchmark = PyTorchBenchmark(args)
 ```
 </pt>
 <tf>
 ```py
 >>> from transformers import TensorFlowBenchmark, TensorFlowBenchmarkArguments
 
->>> args = TensorFlowBenchmarkArguments(
-...     models=["bert-base-uncased"], batch_sizes=[8], sequence_lengths=[8, 32, 128, 512]
-... )
->>> benchmark = TensorFlowBenchmark(args)
 ```
 </tf>
 </frameworkcontent>
@@ -120,10 +112,6 @@ bert-base-uncased          8              512            1539
 - use_gpu: True
 - num_gpus: 1
 - gpu: TITAN RTX
-- gpu_ram_mb: 24217
-- gpu_power_watts: 280.0
-- gpu_performance_state: 2
-- use_tpu: False
 ```
 </pt>
 <tf>
@@ -177,10 +165,6 @@ bert-base-uncased          8              512            1770
 - use_gpu: True
 - num_gpus: 1
 - gpu: TITAN RTX
-- gpu_ram_mb: 24217
-- gpu_power_watts: 280.0
-- gpu_performance_state: 2
-- use_tpu: False
 ```
 </tf>
 </frameworkcontent>
@@ -266,10 +250,6 @@ bert-6-lay                 8              512            1359
 - use_gpu: True
 - num_gpus: 1
 - gpu: TITAN RTX
-- gpu_ram_mb: 24217
-- gpu_power_watts: 280.0
-- gpu_performance_state: 2
-- use_tpu: False
 ```
 </pt>
 <tf>
@@ -340,10 +320,6 @@ bert-6-lay                 8              512            1540
 - use_gpu: True
 - num_gpus: 1
 - gpu: TITAN RTX
-- gpu_ram_mb: 24217
-- gpu_power_watts: 280.0
-- gpu_performance_state: 2
-- use_tpu: False
 ```
 </tf>
 </frameworkcontent>

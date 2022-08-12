@@ -1176,10 +1176,6 @@ class Speech2TextModel(Speech2TextPreTrainedModel):
          ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
          ... )
          >>> input_features = inputs.input_features
-         >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
-         >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
-         >>> list(last_hidden_state.shape)
-         [1, 2, 256]
          ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1333,10 +1329,6 @@ class Speech2TextForConditionalGeneration(Speech2TextPreTrainedModel):
         >>> input_features = inputs.input_features
 
         >>> generated_ids = model.generate(inputs=input_features)
-
-        >>> transcription = processor.batch_decode(generated_ids)[0]
-        >>> transcription
-        'mister quilter is the apostle of the middle classes and we are glad to welcome his gospel'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

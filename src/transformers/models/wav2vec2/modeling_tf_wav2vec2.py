@@ -1508,10 +1508,6 @@ class TFWav2Vec2Model(TFWav2Vec2PreTrainedModel):
 
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.map(map_to_array)
-
-        >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
-        >>> hidden_states = model(input_values).last_hidden_state
         ```"""
 
         inputs = input_values_processing(
@@ -1650,10 +1646,6 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         >>> # compute loss
         >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
 
-        >>> # Pass transcription as `text` to encode labels
-        >>> labels = processor(text=transcription, return_tensors="tf").input_ids
-
-        >>> loss = model(input_values, labels=labels).loss
         ```"""
         inputs = input_values_processing(
             func=self.call,

@@ -146,10 +146,6 @@ Runtime](https://onnxruntime.ai/) come segue:
 >>> from onnxruntime import InferenceSession
 
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
->>> session = InferenceSession("onnx/model.onnx")
->>> # ONNX Runtime expects NumPy arrays as input
->>> inputs = tokenizer("Using DistilBERT with ONNX Runtime!", return_tensors="np")
->>> outputs = session.run(output_names=["last_hidden_state"], input_feed=dict(inputs))
 ```
 
 I nomi di output richiesti (cioè `["last_hidden_state"]`) possono essere ottenuti
@@ -159,10 +155,6 @@ DistilBERT abbiamo:
 ```python
 >>> from transformers.models.distilbert import DistilBertConfig, DistilBertOnnxConfig
 
->>> config = DistilBertConfig()
->>> onnx_config = DistilBertOnnxConfig(config)
->>> print(list(onnx_config.outputs.keys()))
-["last_hidden_state"]
 ```
 
 Il processo è identico per i checkpoint TensorFlow sull'hub. Ad esempio, noi
@@ -184,10 +176,6 @@ checkpoint come segue:
 
 >>> # Load tokenizer and PyTorch weights form the Hub
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
->>> pt_model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
->>> # Save to disk
->>> tokenizer.save_pretrained("local-pt-checkpoint")
->>> pt_model.save_pretrained("local-pt-checkpoint")
 ```
 
 Una volta salvato il checkpoint, possiamo esportarlo su ONNX puntando l'argomento `--model`
@@ -203,10 +191,6 @@ python -m transformers.onnx --model=local-pt-checkpoint onnx/
 
 >>> # Load tokenizer and TensorFlow weights from the Hub
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
->>> tf_model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
->>> # Save to disk
->>> tokenizer.save_pretrained("local-tf-checkpoint")
->>> tf_model.save_pretrained("local-tf-checkpoint")
 ```
 
 Once the checkpoint is saved, we can export it to ONNX by pointing the `--model`
@@ -239,10 +223,6 @@ Per ciascuna configurazione, puoi trovare l'elenco delle funzionalità supportat
 
 ```python
 >>> from transformers.onnx.features import FeaturesManager
-
->>> distilbert_features = list(FeaturesManager.get_supported_features_for_model_type("distilbert").keys())
->>> print(distilbert_features)
-["default", "masked-lm", "causal-lm", "sequence-classification", "token-classification", "question-answering"]
 ```
 
 Puoi quindi passare una di queste funzionalità all'argomento `--feature` nel
@@ -321,10 +301,6 @@ Poiché DistilBERT è un modello basato su encoder, la sua configurazione eredit
 ...     def inputs(self) -> Mapping[str, Mapping[int, str]]:
 ...         return OrderedDict(
 ...             [
-...                 ("input_ids", {0: "batch", 1: "sequence"}),
-...                 ("attention_mask", {0: "batch", 1: "sequence"}),
-...             ]
-...         )
 ```
 
 Ogni oggetto di configurazione deve implementare la proprietà `inputs` e restituire una
@@ -348,26 +324,16 @@ Dopo aver implementato una configurazione ONNX, è possibile istanziarla
 fornendo alla configurazione del modello base come segue:
 
 ```python
->>> from transformers import AutoConfig
-
->>> config = AutoConfig.from_pretrained("distilbert-base-uncased")
->>> onnx_config = DistilBertOnnxConfig(config)
 ```
 
 L'oggetto risultante ha diverse proprietà utili. Ad esempio è possibile visualizzare il
 Set operatore ONNX che verrà utilizzato durante l'esportazione:
 
-```python
->>> print(onnx_config.default_onnx_opset)
-11
-```
+``````
 
 È inoltre possibile visualizzare gli output associati al modello come segue:
 
-```python
->>> print(onnx_config.outputs)
-OrderedDict([("last_hidden_state", {0: "batch", 1: "sequence"})])
-```
+``````
 
 Puoi notare che la proprietà degli output segue la stessa struttura degli input; esso
 restituisce un `OrderedDict` di output con nome e le loro forme. La struttura di output
@@ -382,10 +348,6 @@ usare:
 ```python
 >>> from transformers import AutoConfig
 
->>> config = AutoConfig.from_pretrained("distilbert-base-uncased")
->>> onnx_config_for_seq_clf = DistilBertOnnxConfig(config, task="sequence-classification")
->>> print(onnx_config_for_seq_clf.outputs)
-OrderedDict([('logits', {0: 'batch'})])
 ```
 
 <Tip>
@@ -410,10 +372,6 @@ con il modello base e il tokenizer e il percorso per salvare il file esportato:
 
 >>> onnx_path = Path("model.onnx")
 >>> model_ckpt = "distilbert-base-uncased"
->>> base_model = AutoModel.from_pretrained(model_ckpt)
->>> tokenizer = AutoTokenizer.from_pretrained(model_ckpt)
-
->>> onnx_inputs, onnx_outputs = export(tokenizer, base_model, onnx_config, onnx_config.default_onnx_opset, onnx_path)
 ```
 
 Gli `onnx_inputs` e `onnx_outputs` restituiti dalla funzione `export()` sono
@@ -422,10 +380,6 @@ configurazione. Una volta esportato il modello, puoi verificare che il modello s
 formato come segue:
 
 ```python
->>> import onnx
-
->>> onnx_model = onnx.load("model.onnx")
->>> onnx.checker.check_model(onnx_model)
 ```
 
 <Tip>
@@ -448,10 +402,6 @@ come segue:
 
 ```python
 >>> from transformers.onnx import validate_model_outputs
-
->>> validate_model_outputs(
-...     onnx_config, tokenizer, base_model, onnx_path, onnx_outputs, onnx_config.atol_for_validation
-... )
 ```
 
 Questa funzione usa il metodo `OnnxConfig.generate_dummy_inputs()` per generare
@@ -582,10 +532,6 @@ model.eval()
 
 # If you are instantiating the model with *from_pretrained* you can also easily set the TorchScript flag
 model = BertModel.from_pretrained("bert-base-uncased", torchscript=True)
-
-# Creating the trace
-traced_model = torch.jit.trace(model, [tokens_tensor, segments_tensors])
-torch.jit.save(traced_model, "traced_bert.pt")
 ```
 
 #### Caricare un modello
@@ -594,19 +540,13 @@ Questo frammento di codice mostra come caricare il `BertModel` che era stato pre
 Stiamo riutilizzando il `dummy_input` precedentemente inizializzato.
 
 ```python
-loaded_model = torch.jit.load("traced_bert.pt")
-loaded_model.eval()
-
-all_encoder_layers, pooled_output = loaded_model(*dummy_input)
 ```
 
 #### Utilizzare un modello tracciato per l'inferenza
 
 Usare il modello tracciato per l'inferenza è semplice come usare il suo metodo dunder `__call__`:
 
-```python
-traced_model(tokens_tensor, segments_tensors)
-```
+``````
 
 ###Implementare modelli HuggingFace TorchScript su AWS utilizzando Neuron SDK
 
@@ -648,24 +588,16 @@ Usando lo stesso script come in [Usando TorchScipt in Python](https://huggingfac
 per tracciare un "BertModel", importi l'estensione del framework `torch.neuron` per accedere
 i componenti di Neuron SDK tramite un'API Python.
 
-```python
-from transformers import BertModel, BertTokenizer, BertConfig
-import torch
-import torch.neuron
-```
+``````
 E modificare solo la riga di codice di traccia
 
 Da:
 
-```python
-torch.jit.trace(model, [tokens_tensor, segments_tensors])
-```
+``````
 
 A:
 
-```python
-torch.neuron.trace(model, [token_tensor, segments_tensors])
-```
+``````
 
 Questa modifica consente a Neuron SDK di tracciare il modello e ottimizzarlo per l'esecuzione nelle istanze Inf1.
 

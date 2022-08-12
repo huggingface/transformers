@@ -158,10 +158,6 @@ class Data2VecAudioConfig(PretrainedConfig):
     >>> configuration = Data2VecAudioConfig()
 
     >>> # Initializing a model from the facebook/data2vec-audio-base-960h style configuration
-    >>> model = Data2VecAudioModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "data2vec-audio"
 

@@ -567,10 +567,6 @@ BART_GENERATION_EXAMPLE = r"""
     ... )
     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="pt")
 
-    >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=2, min_length=0, max_length=20)
-    >>> tokenizer.batch_decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-    'PG&E scheduled the blackouts in response to forecasts for high winds amid dry conditions'
     ```
 
     Mask filling example:
@@ -587,10 +583,6 @@ BART_GENERATION_EXAMPLE = r"""
 
     >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
     >>> probs = logits[0, masked_index].softmax(dim=0)
-    >>> values, predictions = probs.topk(5)
-
-    >>> tokenizer.decode(predictions).split()
-    ['not', 'good', 'healthy', 'great', 'very']
     ```
 """
 
@@ -1829,10 +1821,6 @@ class BartForCausalLM(BartPretrainedModel):
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
 
-        >>> logits = outputs.logits
-        >>> expected_shape = [1, inputs.input_ids.shape[-1], model.config.vocab_size]
-        >>> list(logits.shape) == expected_shape
-        True
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

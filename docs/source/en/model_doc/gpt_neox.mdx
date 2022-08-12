@@ -27,9 +27,7 @@ generous the support of [CoreWeave](https://www.coreweave.com/).
 
 GPT-NeoX-20B was trained with fp16, thus it is recommended to initialize the model as follows:
 
-```python
-model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/gpt-neox-20b").half().cuda()
-```
+``````
 
 GPT-NeoX-20B also has a different tokenizer from the one used in GPT-J-6B and GPT-Neo. The new tokenizer allocates
 additional tokens to whitespace characters, making the model more suitable for certain tasks like code generation.
@@ -51,10 +49,6 @@ The `generate()` method can be used to generate text using GPT Neo model.
 >>> gen_tokens = model.generate(
 ...     input_ids,
 ...     do_sample=True,
-...     temperature=0.9,
-...     max_length=100,
-... )
->>> gen_text = tokenizer.batch_decode(gen_tokens)[0]
 ```
 
 ## GPTNeoXConfig

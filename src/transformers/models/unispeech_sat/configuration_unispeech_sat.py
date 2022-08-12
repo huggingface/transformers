@@ -180,10 +180,6 @@ class UniSpeechSatConfig(PretrainedConfig):
     >>> configuration = UniSpeechSatConfig()
 
     >>> # Initializing a model from the microsoft/unispeech-sat-base-100h-libri-ft style configuration
-    >>> model = UniSpeechSatModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "unispeech-sat"
 

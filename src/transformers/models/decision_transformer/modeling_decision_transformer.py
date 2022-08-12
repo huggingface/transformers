@@ -892,10 +892,6 @@ class DecisionTransformerModel(DecisionTransformerPreTrainedModel):
         ...         actions=actions,
         ...         rewards=rewards,
         ...         returns_to_go=target_return,
-        ...         timesteps=timesteps,
-        ...         attention_mask=attention_mask,
-        ...         return_dict=False,
-        ...     )
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions

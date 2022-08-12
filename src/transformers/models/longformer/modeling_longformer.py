@@ -734,10 +734,6 @@ class LongformerSelfAttention(nn.Module):
             0.1599,
             2.0514,
             -1.1600,
-            0.5372,
-            0.2629,
-        ]
-        window_overlap = num_rows = 4
         ```
 
                      (pad & diagonalize) => [ 0.4983, 2.6918, -0.0071, 1.0492, 0.0000, 0.0000, 0.0000
@@ -1654,10 +1650,6 @@ class LongformerModel(LongformerPreTrainedModel):
         >>> # Usually, set global attention based on the task. For example,
         >>> # classification: the <s> token
         >>> # QA: question tokens
-        >>> # LM: potentially on the beginning of sentences and paragraphs
-        >>> outputs = model(input_ids, attention_mask=attention_mask, global_attention_mask=global_attention_mask)
-        >>> sequence_output = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output
         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1778,10 +1770,6 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
         Mask filling example:
 
         ```python
-        >>> from transformers import LongformerTokenizer, LongformerForMaskedLM
-
-        >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
-        >>> model = LongformerForMaskedLM.from_pretrained("allenai/longformer-base-4096")
         ```
 
         Let's try a very long input.
@@ -1796,10 +1784,6 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
 
         >>> masked_index = (input_ids[0] == tokenizer.mask_token_id).nonzero().item()
         >>> probs = logits[0, masked_index].softmax(dim=0)
-        >>> values, predictions = probs.topk(5)
-
-        >>> tokenizer.decode(predictions).split()
-        ['healthy', 'skinny', 'thin', 'good', 'vegetarian']
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -2037,10 +2021,6 @@ class LongformerForQuestionAnswering(LongformerPreTrainedModel):
         >>> end_logits = outputs.end_logits
         >>> all_tokens = tokenizer.convert_ids_to_tokens(input_ids[0].tolist())
 
-        >>> answer_tokens = all_tokens[torch.argmax(start_logits) : torch.argmax(end_logits) + 1]
-        >>> answer = tokenizer.decode(
-        ...     tokenizer.convert_tokens_to_ids(answer_tokens)
-        ... )  # remove space prepending space token
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

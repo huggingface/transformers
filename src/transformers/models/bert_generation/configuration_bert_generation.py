@@ -73,10 +73,6 @@ class BertGenerationConfig(PretrainedConfig):
     >>> configuration = BertGenerationConfig()
 
     >>> # Initializing a model from the config
-    >>> model = BertGenerationEncoder(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "bert-generation"
 

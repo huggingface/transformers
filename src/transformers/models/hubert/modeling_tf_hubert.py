@@ -1475,10 +1475,6 @@ class TFHubertModel(TFHubertPreTrainedModel):
 
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> ds = ds.map(map_to_array)
-
-        >>> input_values = processor(ds["speech"][0], return_tensors="tf").input_values  # Batch size 1
-        >>> hidden_states = model(input_values).last_hidden_state
         ```"""
 
         inputs = input_values_processing(
@@ -1612,10 +1608,6 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
         >>> # compute loss
         >>> target_transcription = "A MAN SAID TO THE UNIVERSE SIR I EXIST"
 
-        >>> # Pass the transcription as text to encode labels
-        >>> labels = processor(text=transcription, return_tensors="tf").input_values
-
-        >>> loss = model(input_values, labels=labels).loss
         ```"""
         inputs = input_values_processing(
             func=self.call,

@@ -1102,11 +1102,6 @@ class GenerationMixin:
 
         >>> prompt = "Today I believe we can finally"
         >>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
-
-        >>> # generate up to 30 tokens
-        >>> outputs = model.generate(input_ids, do_sample=False, max_length=30)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today I believe we can finally get to the point where we can make a difference in the lives of the people of the United States of America.\n']
         ```
 
         Multinomial Sampling:
@@ -1122,10 +1117,6 @@ class GenerationMixin:
         >>> input_ids = tokenizer(prompt, return_tensors="pt").input_ids
 
         >>> # sample up to 30 tokens
-        >>> torch.manual_seed(0)  # doctest: +IGNORE_RESULT
-        >>> outputs = model.generate(input_ids, do_sample=True, max_length=30)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today I believe we can finally get rid of discrimination," said Rep. Mark Pocan (D-Wis.).\n\n"Just look at the']
         ```
 
         Beam-search decoding:
@@ -1138,10 +1129,6 @@ class GenerationMixin:
 
         >>> sentence = "Paris is one of the densest populated areas in Europe."
         >>> input_ids = tokenizer(sentence, return_tensors="pt").input_ids
-
-        >>> outputs = model.generate(input_ids)
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Paris ist eines der dichtesten besiedelten Gebiete Europas.']
         ```"""
         # 0. Validate model kwargs
         self._validate_model_kwargs(model_kwargs.copy())
@@ -1651,10 +1638,6 @@ class GenerationMixin:
 
         >>> outputs = model.greedy_search(
         ...     input_ids, logits_processor=logits_processor, stopping_criteria=stopping_criteria
-        ... )
-
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ["It might be possible to get a better understanding of the nature of the problem, but it's not"]
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -1902,10 +1885,6 @@ class GenerationMixin:
         ...     logits_processor=logits_processor,
         ...     logits_warper=logits_warper,
         ...     stopping_criteria=stopping_criteria,
-        ... )
-
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Today is a beautiful day, and a wonderful day.\n\nI was lucky enough to meet the']
         ```"""
 
         # init values
@@ -2157,11 +2136,6 @@ class GenerationMixin:
         ...         MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
         ...     ]
         ... )
-
-        >>> outputs = model.beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
-
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Wie alt bist du?']
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -2478,10 +2452,6 @@ class GenerationMixin:
 
         >>> outputs = model.beam_sample(
         ...     input_ids, beam_scorer, logits_processor=logits_processor, logits_warper=logits_warper, **model_kwargs
-        ... )
-
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Wie alt bist du?']
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -2788,10 +2758,6 @@ class GenerationMixin:
 
         >>> outputs = model.group_beam_search(
         ...     input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs
-        ... )
-
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Wie alt bist du?']
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -3156,10 +3122,6 @@ class GenerationMixin:
 
         >>> outputs = model.constrained_beam_search(
         ...     input_ids, beam_scorer, constraints=constraints, logits_processor=logits_processor, **model_kwargs
-        ... )
-
-        >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-        ['Wie alt sind Sie?']
         ```"""
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()

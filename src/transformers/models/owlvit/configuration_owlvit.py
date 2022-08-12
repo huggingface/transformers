@@ -80,10 +80,6 @@ class OwlViTTextConfig(PretrainedConfig):
     >>> configuration = OwlViTTextConfig()
 
     >>> # Initializing a OwlViTTextConfig from the google/owlvit-base-patch32 style configuration
-    >>> model = OwlViTTextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "owlvit_text_model"
 
@@ -185,10 +181,6 @@ class OwlViTVisionConfig(PretrainedConfig):
     >>> configuration = OwlViTVisionConfig()
 
     >>> # Initializing a OwlViTVisionModel model from the google/owlvit-base-patch32 style configuration
-    >>> model = OwlViTVisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
 
     model_type = "owlvit_vision_model"

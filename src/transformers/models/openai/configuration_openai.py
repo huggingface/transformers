@@ -106,10 +106,6 @@ class OpenAIGPTConfig(PretrainedConfig):
     >>> configuration = OpenAIGPTConfig()
 
     >>> # Initializing a model from the configuration
-    >>> model = OpenAIGPTModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
 
     model_type = "openai-gpt"

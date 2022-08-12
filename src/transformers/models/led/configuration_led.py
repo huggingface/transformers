@@ -92,10 +92,6 @@ class LEDConfig(PretrainedConfig):
     >>> configuration = LEDConfig()
 
     >>> # Initializing a model from the allenai/led-base-16384 style configuration
-    >>> model = LEDModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "led"
     attribute_map = {

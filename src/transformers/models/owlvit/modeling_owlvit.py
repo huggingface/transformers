@@ -745,10 +745,6 @@ class OwlViTTextModel(OwlViTPreTrainedModel):
         >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> inputs = processor(
         ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
-        ... )
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
 
         # Get embeddings for all text queries in all batch samples
@@ -856,10 +852,6 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> inputs = processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> last_hidden_state = outputs.last_hidden_state
-        >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
         return self.vision_model(
             pixel_values=pixel_values,
@@ -925,10 +917,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
         >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
-        >>> inputs = processor(
-        ...     text=[["a photo of a cat", "a photo of a dog"], ["photo of a astranaut"]], return_tensors="pt"
-        ... )
-        >>> text_features = model.get_text_features(**inputs)
         ```"""
         # Use OWL-ViT model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -972,10 +960,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
         >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> inputs = processor(images=image, return_tensors="pt")
-        >>> image_features = model.get_image_features(**inputs)
         ```"""
         # Use OWL-ViT model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1025,10 +1009,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
         >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
         # Use OWL-ViT model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1321,10 +1301,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> score_threshold = 0.1
         >>> for box, score, label in zip(boxes, scores, labels):
         ...     box = [round(i, 2) for i in box.tolist()]
-        ...     if score >= score_threshold:
-        ...         print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
-        Detected a photo of a cat with confidence 0.707 at location [324.97, 20.44, 640.58, 373.29]
-        Detected a photo of a cat with confidence 0.717 at location [1.46, 55.26, 315.55, 472.17]
         ```"""
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

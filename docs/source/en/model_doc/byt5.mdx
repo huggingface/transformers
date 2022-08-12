@@ -60,10 +60,6 @@ ByT5 works on raw UTF-8 bytes, so it can be used without a tokenizer:
 >>> input_ids = torch.tensor([list("Life is like a box of chocolates.".encode("utf-8"))]) + num_special_tokens
 
 >>> labels = torch.tensor([list("La vie est comme une boîte de chocolat.".encode("utf-8"))]) + num_special_tokens
-
->>> loss = model(input_ids, labels=labels).loss
->>> loss.item()
-2.66
 ```
 
 For batched inference and training it is however recommended to make use of the tokenizer:
@@ -81,10 +77,6 @@ For batched inference and training it is however recommended to make use of the 
 ...     ["La vie est comme une boîte de chocolat.", "Aujourd'hui c'est lundi."], padding="longest", return_tensors="pt"
 ... )
 >>> labels = labels_dict.input_ids
-
->>> loss = model(**model_inputs, labels=labels).loss
->>> loss.item()
-17.9
 ```
 
 Similar to [T5](t5), ByT5 was trained on the span-mask denoising task. However, 
@@ -133,10 +125,6 @@ tensor([[ 87, 107, 104,  35, 103, 114, 106,  35, 258,  35, 100,  35, 101, 100, 1
 ...     start_token = split_idx
 ...     sentinel_token -= 1
 
->>> output_ids_list.append(output_ids[start_token:])
->>> output_string = tokenizer.batch_decode(output_ids_list)
->>> output_string
-['<pad>', 'is the one who does', ' in the disco', 'in the park. The dog is the one who does a ball in', ' in the park.']
 ```
 
 

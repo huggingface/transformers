@@ -37,10 +37,6 @@ class KerasMetricCallback(Callback):
 
 
     def rouge_fn(predictions, labels):
-        decoded_predictions = tokenizer.batch_decode(predictions, skip_special_tokens=True)
-        decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
-        result = rouge_metric.compute(predictions=decoded_predictions, references=decoded_labels)
-        return {key: value.mid.fmeasure * 100 for key, value in result.items()}
     ```
 
     The above function will return a dict containing values which will be logged like any other Keras metric:
@@ -276,10 +272,6 @@ class PushToHubCallback(Callback):
     push_to_hub_callback = PushToHubCallback(
         output_dir="./model_save",
         tokenizer=tokenizer,
-        hub_model_id="gpt5-7xlarge",
-    )
-
-    model.fit(train_dataset, callbacks=[push_to_hub_callback])
     ```
 
     Args:

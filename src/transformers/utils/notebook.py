@@ -89,10 +89,6 @@ class NotebookProgressBar:
     import time
 
     pbar = NotebookProgressBar(100)
-    for val in range(100):
-        pbar.update(val)
-        time.sleep(0.07)
-    pbar.update(100)
     ```"""
 
     warmup = 5

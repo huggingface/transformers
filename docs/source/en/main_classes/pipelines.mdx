@@ -49,28 +49,16 @@ pipeline but can provide additional quality of life.
 
 Simple call on one item:
 
-```python
->>> pipe = pipeline("text-classification")
->>> pipe("This restaurant is awesome")
-[{'label': 'POSITIVE', 'score': 0.9998743534088135}]
-```
+``````
 
 If you want to use a specific model from the [hub](https://huggingface.co) you can ignore the task if the model on
 the hub already defines it:
 
-```python
->>> pipe = pipeline(model="roberta-large-mnli")
->>> pipe("This restaurant is awesome")
-[{'label': 'POSITIVE', 'score': 0.9998743534088135}]
-```
+``````
 
 To call a pipeline on many items, you can either call with a *list*.
 
 ```python
->>> pipe = pipeline("text-classification")
->>> pipe(["This restaurant is awesome", "This restaurant is aweful"])
-[{'label': 'POSITIVE', 'score': 0.9998743534088135},
- {'label': 'NEGATIVE', 'score': 0.9996669292449951}]
 ```
 
 To iterate of full datasets it is recommended to use a `dataset` directly. This means you don't need to allocate
@@ -89,10 +77,6 @@ dataset = datasets.load_dataset("superb", name="asr", split="test")
 # KeyDataset (only *pt*) will simply return the item in the dict returned by the dataset item
 # as we're not interested in the *target* part of the dataset.
 for out in tqdm(pipe(KeyDataset(dataset, "file"))):
-    print(out)
-    # {"text": "NUMBER TEN FRESH NELLY IS WAITING ON YOU GOOD NIGHT HUSBAND"}
-    # {"text": ....}
-    # ....
 ```
 
 For ease of use, a generator is also possible:
@@ -115,10 +99,6 @@ def data():
 
 
 for out in pipe(data()):
-    print(out)
-    # {"text": "NUMBER TEN FRESH NELLY IS WAITING ON YOU GOOD NIGHT HUSBAND"}
-    # {"text": ....}
-    # ....
 ```
 
 [[autodoc]] pipeline
@@ -136,10 +116,6 @@ import datasets
 dataset = datasets.load_dataset("imdb", name="plain_text", split="unsupervised")
 pipe = pipeline("text-classification", device=0)
 for out in pipe(KeyDataset(dataset, "text"), batch_size=8, truncation="only_first"):
-    print(out)
-    # [{'label': 'POSITIVE', 'score': 0.9998743534088135}]
-    # Exactly the same output as before, but the content are passed
-    # as batches to the model
 ```
 
 <Tip warning={true}>
@@ -170,10 +146,6 @@ class MyDataset(Dataset):
 dataset = MyDataset()
 
 for batch_size in [1, 8, 64, 256]:
-    print("-" * 30)
-    print(f"Streaming batch_size={batch_size}")
-    for out in tqdm(pipe(dataset, batch_size=batch_size), total=len(dataset)):
-        pass
 ```
 
 ```
@@ -202,10 +174,6 @@ class MyDataset(Dataset):
 
     def __getitem__(self, i):
         if i % 64 == 0:
-            n = 100
-        else:
-            n = 1
-        return "This is a test" * n
 ```
 
 This is a occasional very long sentence compared to the other. In that case, the **whole** batch will need to be 400
@@ -262,21 +230,13 @@ In order to circumvent this issue, both of these pipelines are a bit specific, t
 regular `Pipeline`. In short:
 
 
-```python
-preprocessed = pipe.preprocess(inputs)
-model_outputs = pipe.forward(preprocessed)
-outputs = pipe.postprocess(model_outputs)
-```
+``````
 
 Now becomes:
 
 
 ```python
 all_model_outputs = []
-for preprocessed in pipe.preprocess(inputs):
-    model_outputs = pipe.forward(preprocessed)
-    all_model_outputs.append(model_outputs)
-outputs = pipe.postprocess(all_model_outputs)
 ```
 
 This should be very transparent to your code because the pipelines are used in
@@ -305,10 +265,6 @@ class MyPipeline(TextClassificationPipeline):
         scores = scores * 100
         # And here
 
-
-my_pipeline = MyPipeline(model=model, tokenizer=tokenizer, ...)
-# or if you use *pipeline* function, then:
-my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 ```
 
 That should enable you to do all the custom code you want.

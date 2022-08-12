@@ -35,10 +35,7 @@ class Text2TextGenerationPipeline(Pipeline):
 
     Usage:
 
-    ```python
-    text2text_generator = pipeline("text2text-generation")
-    text2text_generator("question: What is 42 ? context: 42 is the answer to life, the universe and everything")
-    ```"""
+    ```    ```"""
 
     # Used in the return key of the pipeline.
     return_name = "generated"
@@ -199,10 +196,6 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
     # use bart in pytorch
     summarizer = pipeline("summarization")
     summarizer("An apple a day, keeps the doctor away", min_length=5, max_length=20)
-
-    # use t5 in tf
-    summarizer = pipeline("summarization", model="t5-base", tokenizer="t5-base", framework="tf")
-    summarizer("An apple a day, keeps the doctor away", min_length=5, max_length=20)
     ```"""
 
     # Used in the return key of the pipeline.
@@ -261,10 +254,7 @@ class TranslationPipeline(Text2TextGenerationPipeline):
 
     Usage:
 
-    ```python
-    en_fr_translator = pipeline("translation_en_to_fr")
-    en_fr_translator("How old are you?")
-    ```"""
+    ```    ```"""
 
     # Used in the return key of the pipeline.
     return_name = "translation"

@@ -88,10 +88,6 @@ class Data2VecTextConfig(PretrainedConfig):
     >>> configuration = Data2VecTextConfig()
 
     >>> # Initializing a model from the facebook/data2vec-text-base style configuration
-    >>> model = Data2VecTextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "data2vec-text"
 

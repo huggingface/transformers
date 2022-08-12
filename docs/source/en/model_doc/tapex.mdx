@@ -68,10 +68,6 @@ based on the configuration file of the checkpoint on the hub.
 >>> # let the model generate an answer autoregressively
 >>> outputs = model.generate(**encoding)
 
->>> # decode back to text
->>> predicted_answer = tokenizer.batch_decode(outputs, skip_special_tokens=True)[0]
->>> print(predicted_answer)
-53
 ```
 
 Note that [`TapexTokenizer`] also supports batched inference. Hence, one can provide a batch of different tables/questions, or a batch of a single table
@@ -90,10 +86,6 @@ and multiple questions, or a batch of a single query and multiple tables. Let's 
 
 >>> # let the model generate an answer autoregressively
 >>> outputs = model.generate(**encoding)
-
->>> # decode back to text
->>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-[' 53', ' george clooney', ' brad pitt']
 ```
 
 In case one wants to do table verification (i.e. the task of determining whether a given sentence is supported or refuted by the contents
@@ -116,10 +108,6 @@ benchmark for table fact checking (it achieves 84% accuracy). The code example b
 >>> # forward pass
 >>> outputs = model(**encoding)
 
->>> # print prediction
->>> predicted_class_idx = outputs.logits[0].argmax(dim=0).item()
->>> print(model.config.id2label[predicted_class_idx])
-Refused
 ```
 
 

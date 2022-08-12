@@ -49,10 +49,6 @@ For summarization, it is an example to use MVP and MVP with summarization-specif
 >>> generated_ids = model.generate(**inputs)
 >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ["Why You Shouldn't Quit Your Job"]
-
->>> generated_ids = model_with_prompt.generate(**inputs)
->>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-["Don't do it if these are your reasons"]
 ```
 
 For data-to-text generation, it is an example to use MVP and multi-task pre-trained variants.
@@ -70,10 +66,6 @@ For data-to-text generation, it is an example to use MVP and multi-task pre-trai
 >>> generated_ids = model.generate(**inputs)
 >>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ['Stan Lee created the character of Iron Man, a fictional superhero appearing in American comic']
-
->>> generated_ids = model_with_mtl.generate(**inputs)
->>> tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-['Iron Man is a fictional superhero appearing in American comic books published by Marvel Comics.']
 ```
 
 For lightweight tuning, *i.e.*, fixing the model and only tuning prompts, you can load MVP with randomly initialized prompts or with task-specific prompts. Our code also supports Prefix-tuning with BART following the [original paper](https://arxiv.org/abs/2101.00190).
@@ -94,10 +86,6 @@ For lightweight tuning, *i.e.*, fixing the model and only tuning prompts, you ca
 
 >>> # lightweight tuning with task-specific prompts
 >>> model = MvpForConditionalGeneration.from_pretrained("RUCAIBox/mtl-data-to-text")
->>> model.set_lightweight_tuning()
->>> # original lightweight Prefix-tuning
->>> model = MvpForConditionalGeneration.from_pretrained("facebook/bart-large", use_prompt=True)
->>> model.set_lightweight_tuning()
 ```
 
 ## MvpConfig

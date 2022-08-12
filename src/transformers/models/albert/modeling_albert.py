@@ -828,10 +828,6 @@ class AlbertForPreTraining(AlbertPreTrainedModel):
 
         >>> input_ids = torch.tensor(tokenizer.encode("Hello, my dog is cute", add_special_tokens=True)).unsqueeze(0)
         >>> # Batch size 1
-        >>> outputs = model(input_ids)
-
-        >>> prediction_logits = outputs.prediction_logits
-        >>> sop_logits = outputs.sop_logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -975,18 +971,10 @@ class AlbertForMaskedLM(AlbertPreTrainedModel):
         ...     logits = model(**inputs).logits
 
         >>> # retrieve index of [MASK]
-        >>> mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
-        >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
-        >>> tokenizer.decode(predicted_token_id)
-        'france'
         ```
 
         ```python
         >>> labels = tokenizer("The capital of France is Paris.", return_tensors="pt")["input_ids"]
-        >>> labels = torch.where(inputs.input_ids == tokenizer.mask_token_id, labels, -100)
-        >>> outputs = model(**inputs, labels=labels)
-        >>> round(outputs.loss.item(), 2)
-        0.81
         ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

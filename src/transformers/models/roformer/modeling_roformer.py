@@ -1131,10 +1131,6 @@ class RoFormerForCausalLM(RoFormerPreTrainedModel):
         >>> config.is_decoder = True
         >>> model = RoFormerForCausalLM.from_pretrained("junnyu/roformer_chinese_base", config=config)
 
-        >>> inputs = tokenizer("今天天气非常好。", return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

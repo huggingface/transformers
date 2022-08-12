@@ -384,10 +384,6 @@ def get_tokenizer_config(
 
     # Save a pretrained tokenizer locally and you can reload its config
     from transformers import AutoTokenizer
-
-    tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
-    tokenizer.save_pretrained("tokenizer-test")
-    tokenizer_config = get_tokenizer_config("tokenizer-test")
     ```"""
     commit_hash = kwargs.get("_commit_hash", None)
     resolved_config_file = cached_file(
@@ -501,10 +497,6 @@ class AutoTokenizer:
         >>> tokenizer = AutoTokenizer.from_pretrained("dbmdz/bert-base-german-cased")
 
         >>> # If vocabulary files are in a directory (e.g. tokenizer was saved using *save_pretrained('./test/saved_model/')*)
-        >>> tokenizer = AutoTokenizer.from_pretrained("./test/bert_saved_model/")
-
-        >>> # Download vocabulary from huggingface.co and define model-specific arguments
-        >>> tokenizer = AutoTokenizer.from_pretrained("roberta-base", add_prefix_space=True)
         ```"""
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True

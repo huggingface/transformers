@@ -80,10 +80,6 @@ Tips:
 def normalize_bbox(bbox, width, height):
     return [
         int(1000 * (bbox[0] / width)),
-        int(1000 * (bbox[1] / height)),
-        int(1000 * (bbox[2] / width)),
-        int(1000 * (bbox[3] / height)),
-    ]
 ```
 
 Here, `width` and `height` correspond to the width and height of the original document in which the token
@@ -94,10 +90,6 @@ follows:
 from PIL import Image
 
 image = Image.open(
-    "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
-)
-
-width, height = image.size
 ```
 
 However, this model includes a brand new [`~transformers.LayoutLMv2Processor`] which can be used to directly
@@ -132,10 +124,6 @@ modality.
 
 ```python
 from transformers import LayoutLMv2FeatureExtractor, LayoutLMv2TokenizerFast, LayoutLMv2Processor
-
-feature_extractor = LayoutLMv2FeatureExtractor()  # apply_ocr is set to True by default
-tokenizer = LayoutLMv2TokenizerFast.from_pretrained("microsoft/layoutlmv2-base-uncased")
-processor = LayoutLMv2Processor(feature_extractor, tokenizer)
 ```
 
 In short, one can provide a document image (and possibly additional data) to [`LayoutLMv2Processor`],
@@ -171,10 +159,6 @@ image = Image.open(
     "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
 ).convert("RGB")
 encoding = processor(
-    image, return_tensors="pt"
-)  # you can also add all tokenizer parameters here such as padding, truncation
-print(encoding.keys())
-# dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 ```
 
 **Use case 2: document image classification (training, inference) + token classification (inference), apply_ocr=False**
@@ -193,10 +177,6 @@ image = Image.open(
     "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
 ).convert("RGB")
 words = ["hello", "world"]
-boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
-encoding = processor(image, words, boxes=boxes, return_tensors="pt")
-print(encoding.keys())
-# dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 ```
 
 **Use case 3: token classification (training), apply_ocr=False**
@@ -218,10 +198,6 @@ image = Image.open(
 ).convert("RGB")
 words = ["hello", "world"]
 boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
-word_labels = [1, 2]
-encoding = processor(image, words, boxes=boxes, word_labels=word_labels, return_tensors="pt")
-print(encoding.keys())
-# dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'labels', 'image'])
 ```
 
 **Use case 4: visual question answering (inference), apply_ocr=True**
@@ -238,10 +214,6 @@ processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncas
 image = Image.open(
     "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
 ).convert("RGB")
-question = "What's his name?"
-encoding = processor(image, question, return_tensors="pt")
-print(encoding.keys())
-# dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 ```
 
 **Use case 5: visual question answering (inference), apply_ocr=False**
@@ -260,10 +232,6 @@ image = Image.open(
 ).convert("RGB")
 question = "What's his name?"
 words = ["hello", "world"]
-boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]  # make sure to normalize your bounding boxes
-encoding = processor(image, question, words, boxes=boxes, return_tensors="pt")
-print(encoding.keys())
-# dict_keys(['input_ids', 'token_type_ids', 'attention_mask', 'bbox', 'image'])
 ```
 
 ## LayoutLMv2Config

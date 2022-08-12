@@ -57,10 +57,6 @@ class FlaxMT5Model(FlaxT5Model):
     >>> summary = "Weiter Verhandlung in Syrien."
     >>> inputs = tokenizer(article, return_tensors="np")
 
-    >>> decoder_input_ids = tokenizer(text_target=summary, return_tensors="np").input_ids
-
-    >>> outputs = model(input_ids=inputs["input_ids"], decoder_input_ids=decoder_input_ids)
-    >>> hidden_states = outputs.last_hidden_state
     ```"""
     model_type = "mt5"
     config_class = MT5Config
@@ -83,10 +79,6 @@ class FlaxMT5EncoderModel(FlaxT5EncoderModel):
     >>> summary = "Weiter Verhandlung in Syrien."
     >>> inputs = tokenizer(article, return_tensors="np")
 
-    >>> decoder_input_ids = tokenizer(text_target=summary, return_tensors="np").input_ids
-
-    >>> outputs = model(input_ids=inputs["input_ids"])
-    >>> hidden_states = outputs.last_hidden_state
     ```"""
     model_type = "mt5"
     config_class = MT5Config
@@ -109,10 +101,6 @@ class FlaxMT5ForConditionalGeneration(FlaxT5ForConditionalGeneration):
     >>> summary = "Weiter Verhandlung in Syrien."
     >>> inputs = tokenizer(article, return_tensors="np")
 
-    >>> decoder_input_ids = tokenizer(text_target=summary, return_tensors="np").input_ids
-
-    >>> outputs = model(**inputs, decoder_input_ids=decoder_input_ids)
-    >>> logits = outputs.logits
     ```"""
 
     model_type = "mt5"

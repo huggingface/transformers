@@ -45,10 +45,6 @@ DistilBertConfig {
   "pad_token_id": 0,
   "qa_dropout": 0.1,
   "seq_classif_dropout": 0.2,
-  "sinusoidal_pos_embds": false,
-  "transformers_version": "4.16.2",
-  "vocab_size": 30522
-}
 ```
 
 [`DistilBertConfig`] mostra todos os atributos padrões usados para construir um [`DistilBertModel`] base. Todos atributos são customizáveis, o que cria espaço para experimentos. Por exemplo, você pode customizar um modelo padrão para:
@@ -73,29 +69,19 @@ DistilBertConfig {
   "pad_token_id": 0,
   "qa_dropout": 0.1,
   "seq_classif_dropout": 0.2,
-  "sinusoidal_pos_embds": false,
-  "transformers_version": "4.16.2",
-  "vocab_size": 30522
-}
 ```
 
 Atributos de um modelo pré-treinado podem ser modificados na função [`~PretrainedConfig.from_pretrained`]:
 
-```py
->>> my_config = DistilBertConfig.from_pretrained("distilbert-base-uncased", activation="relu", attention_dropout=0.4)
-```
+``````
 
 Uma vez que você está satisfeito com as configurações do seu modelo, você consegue salvar elas com [`~PretrainedConfig.save_pretrained`]. Seu arquivo de configurações está salvo como um arquivo JSON no diretório especificado:
 
-```py
->>> my_config.save_pretrained(save_directory="./your_model_save_path")
-```
+``````
 
 Para reusar o arquivo de configurações, carregue com [`~PretrainedConfig.from_pretrained`]:
 
-```py
->>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
-```
+``````
 
 <Tip>
 
@@ -112,49 +98,33 @@ O próximo passo é criar um [model](main_classes/models). O modelo - também va
 Carregar seus atributos de configuração customizados em um modelo:
 
 ```py
->>> from transformers import DistilBertModel
-
->>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
->>> model = DistilBertModel(my_config)
 ```
 
 Isso cria um modelo com valores aleatórios ao invés de pré-treinar os pesos. Você não irá conseguir usar usar esse modelo para nada útil ainda, até você treinar ele. Treino é um processo caro e demorado. Geralmente é melhor utilizar um modelo pré-treinado para obter melhores resultados mais rápido, enquanto usa apenas uma fração dos recursos necessários para treinar.
 
 Criar um modelo pré-treinado com [`~PreTrainedModel.from_pretrained`]:
 
-```py
->>> model = DistilBertModel.from_pretrained("distilbert-base-uncased")
-```
+``````
 
 Quando você carregar os pesos pré-treinados, a configuração padrão do modelo é automaticamente carregada se o modelo é provido pelo 🤗 Transformers. No entanto, você ainda consegue mudar - alguns ou todos - os atributos padrões de configuração do modelo com os seus próprio atributos, se você preferir: 
 
-```py
->>> model = DistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
-```
+``````
 </pt>
 <tf>
 Carregar os seus próprios atributos padrões de contiguração no modelo:
 
 ```py
->>> from transformers import TFDistilBertModel
-
->>> my_config = DistilBertConfig.from_pretrained("./your_model_save_path/my_config.json")
->>> tf_model = TFDistilBertModel(my_config)
 ```
 
 Isso cria um modelo com valores aleatórios ao invés de pré-treinar os pesos. Você não irá conseguir usar usar esse modelo para nada útil ainda, até você treinar ele. Treino é um processo caro e demorado. Geralmente é melhor utilizar um modelo pré-treinado para obter melhores resultados mais rápido, enquanto usa apenas uma fração dos recursos necessários para treinar.
 
 Criar um modelo pré-treinado com [`~TFPreTrainedModel.from_pretrained`]:
 
-```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased")
-```
+``````
 
 Quando você carregar os pesos pré-treinados, a configuração padrão do modelo é automaticamente carregada se o modelo é provido pelo 🤗 Transformers. No entanto, você ainda consegue mudar - alguns ou todos - os atributos padrões de configuração do modelo com os seus próprio atributos, se você preferir: 
 
-```py
->>> tf_model = TFDistilBertModel.from_pretrained("distilbert-base-uncased", config=my_config)
-```
+``````
 </tf>
 </frameworkcontent>
 
@@ -166,36 +136,20 @@ Neste ponto, você tem um modelo básico do DistilBERT que gera os *estados ocul
 <pt>
 Por exemplo, [`DistilBertForSequenceClassification`] é um modelo DistilBERT base com uma head de classificação de sequência. A head de calssificação de sequência é uma camada linear no topo das saídas agrupadas.
 
-```py
->>> from transformers import DistilBertForSequenceClassification
-
->>> model = DistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
-```
+``````
 
 Reutilize facilmente esse ponto de parada para outra tarefe mudando para uma head de modelo diferente. Para uma tarefe de responder questões, você usaria a head do modelo [`DistilBertForQuestionAnswering`]. A head de responder questões é similar com a de classificação de sequências exceto o fato de que ela é uma camada no topo dos estados das saídas ocultas.
 
-```py
->>> from transformers import DistilBertForQuestionAnswering
-
->>> model = DistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
-```
+``````
 </pt>
 <tf>
 Por exemplo, [`TFDistilBertForSequenceClassification`] é um modelo DistilBERT base com uma head de classificação de sequência. A head de calssificação de sequência é uma camada linear no topo das saídas agrupadas.
 
-```py
->>> from transformers import TFDistilBertForSequenceClassification
-
->>> tf_model = TFDistilBertForSequenceClassification.from_pretrained("distilbert-base-uncased")
-```
+``````
 
 Reutilize facilmente esse ponto de parada para outra tarefe mudando para uma head de modelo diferente. Para uma tarefe de responder questões, você usaria a head do modelo [`TFDistilBertForQuestionAnswering`]. A head de responder questões é similar com a de classificação de sequências exceto o fato de que ela é uma camada no topo dos estados das saídas ocultas.
 
-```py
->>> from transformers import TFDistilBertForQuestionAnswering
-
->>> tf_model = TFDistilBertForQuestionAnswering.from_pretrained("distilbert-base-uncased")
-```
+``````
 </tf>
 </frameworkcontent>
 
@@ -216,27 +170,15 @@ Nem todo modelo suporta um 'fast tokenizer'. De uma olhada aqui [table](index#su
 
 Se você treinou seu prórpio tokenizer, você pode criar um a partir do seu arquivo *vocabulary*:
 
-```py
->>> from transformers import DistilBertTokenizer
-
->>> my_tokenizer = DistilBertTokenizer(vocab_file="my_vocab_file.txt", do_lower_case=False, padding_side="left")
-```
+``````
 
 É importante lembrar que o vocabulário de um tokenizer customizado será diferente de um vocabulário gerado pelo tokenizer de um modelo pré treinado. Você precisa usar o vocabulário de um modelo pré treinado se você estiver usando um modelo pré treinado, caso contrário as entradas não farão sentido. Criando um tokenizer com um vocabulário de um modelo pré treinado com a classe [`DistilBertTokenizer`]:
 
-```py
->>> from transformers import DistilBertTokenizer
-
->>> slow_tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
-```
+``````
 
 Criando um 'fast tokenizer' com a classe [`DistilBertTokenizerFast`]:
 
-```py
->>> from transformers import DistilBertTokenizerFast
-
->>> fast_tokenizer = DistilBertTokenizerFast.from_pretrained("distilbert-base-uncased")
-```
+``````
 
 <Tip>
 
@@ -268,10 +210,6 @@ ViTFeatureExtractor {
     0.5,
     0.5,
     0.5
-  ],
-  "resample": 2,
-  "size": 224
-}
 ```
 
 <Tip>
@@ -300,10 +238,6 @@ ViTFeatureExtractor {
     0.5,
     0.5,
     0.5
-  ],
-  "resample": "PIL.Image.BOX",
-  "size": 224
-}
 ```
 
 Para entradas de áutio, você pode criar um [`Wav2Vec2FeatureExtractor`] e customizar os parâmetros de uma forma similar:
@@ -318,10 +252,6 @@ Wav2Vec2FeatureExtractor {
   "feature_extractor_type": "Wav2Vec2FeatureExtractor",
   "feature_size": 1,
   "padding_side": "right",
-  "padding_value": 0.0,
-  "return_attention_mask": false,
-  "sampling_rate": 16000
-}
 ```
 
 ## Processor
@@ -330,26 +260,14 @@ Para modelos que suportam tarefas multimodais, 🤗 Transformers oferece uma cla
 
 Crie um extrator de features para lidar com as entradas de áudio.
 
-```py
->>> from transformers import Wav2Vec2FeatureExtractor
-
->>> feature_extractor = Wav2Vec2FeatureExtractor(padding_value=1.0, do_normalize=True)
-```
+``````
 
 Crie um tokenizer para lidar com a entrada de textos:
 
-```py
->>> from transformers import Wav2Vec2CTCTokenizer
-
->>> tokenizer = Wav2Vec2CTCTokenizer(vocab_file="my_vocab_file.txt")
-```
+``````
 
 Combine o extrator de features e o tokenizer no [`Wav2Vec2Processor`]:
 
-```py
->>> from transformers import Wav2Vec2Processor
-
->>> processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
-```
+``````
 
 Com duas classes básicas - configuração e modelo - e um preprocessamento de classe adicional (tokenizer, extrator de features, ou processador), você pode criar qualquer modelo que suportado por 🤗 Transformers. Qualquer uma dessas classes base são configuráveis, te permitindo usar os atributos específicos que você queira. Você pode facilmente preparar um modelo para treinamento ou modificar um modelo pré-treinado com poucas mudanças.

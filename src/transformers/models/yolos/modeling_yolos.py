@@ -768,10 +768,6 @@ class YolosForObjectDetection(YolosPreTrainedModel):
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)
-
-        >>> # model predicts bounding boxes and corresponding COCO classes
-        >>> logits = outputs.logits
-        >>> bboxes = outputs.pred_boxes
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -84,10 +84,6 @@ class NystromformerConfig(PretrainedConfig):
     >>> configuration = NystromformerConfig()
 
     >>> # Initializing a model from the uw-madison/nystromformer-512 style configuration
-    >>> model = NystromformerModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "nystromformer"
 

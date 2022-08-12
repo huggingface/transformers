@@ -763,10 +763,6 @@ FLAX_ALBERT_FOR_PRETRAINING_DOCSTRING = """
     >>> model = FlaxAlbertForPreTraining.from_pretrained("albert-base-v2")
 
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="np")
-    >>> outputs = model(**inputs)
-
-    >>> prediction_logits = outputs.prediction_logits
-    >>> seq_relationship_logits = outputs.sop_logits
     ```
 """
 

@@ -292,10 +292,6 @@ class FeatureExtractionMixin(PushToHubMixin):
         )
         assert feature_extractor.return_attention_mask is False
         feature_extractor, unused_kwargs = Wav2Vec2FeatureExtractor.from_pretrained(
-            "facebook/wav2vec2-base-960h", return_attention_mask=False, foo=False, return_unused_kwargs=True
-        )
-        assert feature_extractor.return_attention_mask is False
-        assert unused_kwargs == {"foo": False}
         ```"""
         feature_extractor_dict, kwargs = cls.get_feature_extractor_dict(pretrained_model_name_or_path, **kwargs)
 

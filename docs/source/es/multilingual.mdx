@@ -38,40 +38,25 @@ En este ejemplo, carga el checkpoint `xlm-clm-enfr-1024` (Causal language modeli
 
 ```py
 >>> import torch
->>> from transformers import XLMTokenizer, XLMWithLMHeadModel
-
->>> tokenizer = XLMTokenizer.from_pretrained("xlm-clm-enfr-1024")
->>> model = XLMWithLMHeadModel.from_pretrained("xlm-clm-enfr-1024")
 ```
 
 El atributo `lang2id` del tokenizador muestra los idiomas de este modelo y sus ids:
 
-```py
->>> print(tokenizer.lang2id)
-{'en': 0, 'fr': 1}
-```
+``````
 
 A continuación, crea un input de ejemplo:
 
-```py
->>> input_ids = torch.tensor([tokenizer.encode("Wikipedia was used to")])  # batch size of 1
-```
+``````
 
 Establece el id del idioma, por ejemplo `"en"`, y utilízalo para definir el language embedding. El language embedding es un tensor lleno de `0` ya que es el id del idioma para inglés. Este tensor debe ser del mismo tamaño que `input_ids`. 
 
 ```py
 >>> language_id = tokenizer.lang2id["en"]  # 0
->>> langs = torch.tensor([language_id] * input_ids.shape[1])  # torch.tensor([0, 0, 0, ..., 0])
-
->>> # We reshape it to be of size (batch_size, sequence_length)
->>> langs = langs.view(1, -1)  # is now of shape [1, sequence_length] (we have a batch size of 1)
 ```
 
 Ahora puedes pasar los `input_ids` y el language embedding al modelo:
 
-```py
->>> outputs = model(input_ids, langs=langs)
-```
+``````
 
 El script [run_generation.py](https://github.com/huggingface/transformers/tree/master/examples/pytorch/text-generation/run_generation.py) puede generar texto con language embeddings utilizando los checkpoints `xlm-clm`.
 
@@ -116,25 +101,15 @@ En este ejemplo, carga el checkpoint `facebook/m2m100_418M` para traducir del ch
 >>> from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
 
 >>> en_text = "Do not meddle in the affairs of wizards, for they are subtle and quick to anger."
->>> chinese_text = "不要插手巫師的事務, 因為他們是微妙的, 很快就會發怒."
-
->>> tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M", src_lang="zh")
->>> model = M2M100ForConditionalGeneration.from_pretrained("facebook/m2m100_418M")
 ```
 
 Tokeniza el texto:
 
-```py
->>> encoded_zh = tokenizer(chinese_text, return_tensors="pt")
-```
+``````
 
 M2M100 fuerza el id del idioma de destino como el primer token generado para traducir al idioma de destino.. Establece el `forced_bos_token_id` a `en` en el método `generate` para traducir al inglés:
 
-```py
->>> generated_tokens = model.generate(**encoded_zh, forced_bos_token_id=tokenizer.get_lang_id("en"))
->>> tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-'Do not interfere with the matters of the witches, because they are delicate and will soon be angry.'
-```
+``````
 
 ## MBart
 
@@ -152,24 +127,14 @@ En este ejemplo, carga el checkpoint `facebook/mbart-large-50-many-to-many-mmt` 
 >>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
 
 >>> en_text = "Do not meddle in the affairs of wizards, for they are subtle and quick to anger."
->>> fi_text = "Älä sekaannu velhojen asioihin, sillä ne ovat hienovaraisia ja nopeasti vihaisia."
-
->>> tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-50-many-to-many-mmt", src_lang="fi_FI")
->>> model = AutoModelForSeq2SeqLM.from_pretrained("facebook/mbart-large-50-many-to-many-mmt")
 ```
 
 Tokeniza el texto:
 
-```py
->>> encoded_en = tokenizer(en_text, return_tensors="pt")
-```
+``````
 
 MBart fuerza el id del idioma de destino como el primer token generado para traducirlo. Establece el `forced_bos_token_id` a `en` en el método `generate` para traducir al inglés:
 
-```py
->>> generated_tokens = model.generate(**encoded_en, forced_bos_token_id=tokenizer.lang_code_to_id("en_XX"))
->>> tokenizer.batch_decode(generated_tokens, skip_special_tokens=True)
-"Don't interfere with the wizard's affairs, because they are subtle, will soon get angry."
-```
+``````
 
 Si estás usando el checkpoint `facebook/mbart-large-50-many-to-one-mmt` no necesitas forzar el id del idioma de destino como el primer token generado, de lo contrario el uso es el mismo.

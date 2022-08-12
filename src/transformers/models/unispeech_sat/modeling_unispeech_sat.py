@@ -1289,10 +1289,6 @@ class UniSpeechSatForPreTraining(UniSpeechSatPreTrainedModel):
         >>> import torch
         >>> from transformers import Wav2Vec2FeatureExtractor, UniSpeechSatForPreTraining
         >>> from transformers.models.unispeech_sat.modeling_unispeech_sat import _compute_mask_indices
-
-        >>> feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("microsoft/unispeech-sat-base")
-        >>> model = UniSpeechSatForPreTraining.from_pretrained("microsoft/unispeech-sat-base")
-        >>> # TODO: Add full pretraining example
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

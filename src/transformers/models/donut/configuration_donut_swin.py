@@ -82,10 +82,6 @@ class DonutSwinConfig(PretrainedConfig):
     >>> configuration = DonutSwinConfig()
 
     >>> # Randomly initializing a model from the naver-clova-ix/donut-base style configuration
-    >>> model = DonutSwinModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "donut-swin"
 

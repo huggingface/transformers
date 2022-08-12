@@ -89,10 +89,6 @@ class YosoConfig(PretrainedConfig):
     >>> configuration = YosoConfig()
 
     >>> # Initializing a model from the uw-madison/yoso-4096 style configuration
-    >>> model = YosoModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "yoso"
 

@@ -1807,10 +1807,6 @@ class LongT5Model(LongT5PreTrainedModel):
         ... ).input_ids  # Batch size 1
 
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="pt").input_ids  # Batch size 1
-
-        >>> # forward pass
-        >>> outputs = model(input_ids=input_ids, decoder_input_ids=decoder_input_ids)
-        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1969,10 +1965,6 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         >>> input_ids = tokenizer(
         ...     "summarize: " + 100 * "studies have shown that owning a dog is good for you ", return_tensors="pt"
         ... ).input_ids  # Batch size 1
-
-        >>> outputs = model.generate(input_ids)
-        >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        abstractthe aim of this article is to summarize the studies have shown that owning a dog
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -2173,10 +2165,6 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         >>> tokenizer = AutoTokenizer.from_pretrained("google/long-t5-local-base")
         >>> model = LongT5EncoderModel.from_pretrained("google/long-t5-local-base")
         >>> input_ids = tokenizer(
-        ...     100 * "Studies have been shown that owning a dog is good for you ", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
-        >>> outputs = model(input_ids=input_ids)
-        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

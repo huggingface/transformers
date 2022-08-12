@@ -61,10 +61,6 @@ Example:
 
 >>> # The default tensor quantizer is set to use Max calibration method
 >>> input_desc = QuantDescriptor(num_bits=8, calib_method="max")
->>> # The default tensor quantizer is set to be per-channel quantization for weights
->>> weight_desc = QuantDescriptor(num_bits=8, axis=((0,)))
->>> quant_nn.QuantLinear.set_default_quant_desc_input(input_desc)
->>> quant_nn.QuantLinear.set_default_quant_desc_weight(weight_desc)
 ```
 
 ### Calibration
@@ -90,10 +86,6 @@ tensors. After setting up the tensor quantizers, one can use the following examp
 ...         module.enable_quant()
 
 >>> # If running on GPU, it needs to call .cuda() again because new tensors will be created by calibration process
->>> model.cuda()
-
->>> # Keep running the quantized model
->>> # ...
 ```
 
 ### Export to ONNX
@@ -108,10 +100,6 @@ the instructions in [torch.onnx](https://pytorch.org/docs/stable/onnx.html). Exa
 
 >>> TensorQuantizer.use_fb_fake_quant = True
 
->>> # Load the calibrated model
->>> ...
->>> # ONNX export
->>> torch.onnx.export(...)
 ```
 
 ## QDQBertConfig

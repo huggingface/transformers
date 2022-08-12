@@ -765,10 +765,6 @@ class CaptureStd:
     assert "message" in cs.out
     # but best use the stream-specific subclasses
 
-    # to capture without auto-replay
-    with CaptureStd(replay=False) as cs:
-        print("Secret message")
-    assert "message" in cs.out
     ```"""
 
     def __init__(self, out=True, err=True, replay=True):
@@ -862,10 +858,6 @@ class CaptureLogger:
 
     >>> msg = "Testing 1, 2, 3"
     >>> logging.set_verbosity_info()
-    >>> logger = logging.get_logger("transformers.models.bart.tokenization_bart")
-    >>> with CaptureLogger(logger) as cl:
-    ...     logger.info(msg)
-    >>> assert cl.out, msg + "\n"
     ```
     """
 
@@ -895,10 +887,7 @@ def LoggingLevel(level):
 
     Example:
 
-    ```python
-    with LoggingLevel(logging.INFO):
-        AutoModel.from_pretrained("gpt2")  # calls logger.info() several times
-    ```
+    ```    ```
     """
     orig_level = transformers_logging.get_verbosity()
     try:
@@ -916,10 +905,7 @@ def ExtendSysPath(path: Union[str, os.PathLike]) -> Iterator[None]:
 
     Usage :
 
-    ```python
-    with ExtendSysPath("/path/to/dir"):
-        mymodule = importlib.import_module("mymodule")
-    ```
+    ```    ```
     """
 
     path = os.fspath(path)
@@ -962,10 +948,7 @@ class TestCasePlus(unittest.TestCase):
 
     1. Create a unique temporary dir:
 
-    ```python
-    def test_whatever(self):
-        tmp_dir = self.get_auto_remove_tmp_dir()
-    ```
+    ```    ```
 
     `tmp_dir` will contain the path to the created temporary dir. It will be automatically removed at the end of the
     test.
@@ -974,10 +957,7 @@ class TestCasePlus(unittest.TestCase):
     2. Create a temporary dir of my choice, ensure it's empty before the test starts and don't
     empty it after the test.
 
-    ```python
-    def test_whatever(self):
-        tmp_dir = self.get_auto_remove_tmp_dir("./xxx")
-    ```
+    ```    ```
 
     This is useful for debug when you want to monitor a specific directory and want to make sure the previous tests
     didn't leave any data in there.
@@ -1004,10 +984,7 @@ class TestCasePlus(unittest.TestCase):
     is useful for invoking external programs from the test suite - e.g. distributed training.
 
 
-    ```python
-    def test_whatever(self):
-        env = self.get_env()
-    ```"""
+    ```    ```"""
 
     def setUp(self):
         # get_auto_remove_tmp_dir feature:

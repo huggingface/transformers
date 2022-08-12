@@ -149,10 +149,6 @@ class HubertConfig(PretrainedConfig):
     >>> configuration = HubertConfig()
 
     >>> # Initializing a model from the facebook/hubert-base-ls960 style configuration
-    >>> model = HubertModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
     ```"""
     model_type = "hubert"
 

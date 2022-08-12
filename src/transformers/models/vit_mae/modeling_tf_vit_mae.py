@@ -825,10 +825,6 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
 
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-mae-base")
         >>> model = TFViTMAEModel.from_pretrained("facebook/vit-mae-base")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="tf")
-        >>> outputs = model(**inputs)
-        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         outputs = self.vit(
             pixel_values=pixel_values,
@@ -1117,10 +1113,6 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         >>> model = TFViTMAEForPreTraining.from_pretrained("facebook/vit-mae-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> outputs = model(**inputs)
-        >>> loss = outputs.loss
-        >>> mask = outputs.mask
-        >>> ids_restore = outputs.ids_restore
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
