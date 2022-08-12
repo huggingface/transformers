@@ -25,8 +25,8 @@ template<typename attention_scores_scalar>
 __global__ void forward_masked_softmax_kernel(
     const torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> attention_scores, // [B, N, D]
     const torch::PackedTensorAccessor32<bool, 3, torch::RestrictPtrTraits> mask, // [B, N, D]
-    torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> result // [B, N, D]
-    dim3 blockDim;
+    torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> result, // [B, N, D]
+    dim3 blockDim
 ) {
     const int batch_id = blockIdx.x;
     const int q_length_id = blockIdx.y;
