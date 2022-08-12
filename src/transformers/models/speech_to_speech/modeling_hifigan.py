@@ -201,14 +201,14 @@ class CodeHiFiGANModel(HiFiGANModel):
         signal = signal.view(batch_size, channels, max_frames)
         return signal
 
-    def forward(self, hidden_states, dur_prediction=False, f0=None, speaker=None):
+    def forward(self, hidden_states, duration_prediction=False, f0=None, speaker=None):
         hidden_states = self.dict(hidden_states).transpose(1, 2)
 
-        if self.duration_predictor and dur_prediction:
+        if self.duration_predictor and duration_prediction:
             assert hidden_states.size(0) == 1, "only support single sample"
             log_dur_pred = self.duration_predictor(hidden_states.transpose(1, 2))
             dur_out = torch.clamp(torch.round((torch.exp(log_dur_pred) - 1)).long(), min=1)
-            # hidden_states: (batch_size x channels x sequence_length)
+            # hidden_states: (batch_size, channels, sequence_length)
             hidden_states = torch.repeat_interleave(hidden_states, dur_out.view(-1), dim=2)
 
         if self.f0:
@@ -230,4 +230,4 @@ class CodeHiFiGANModel(HiFiGANModel):
             speaker = self._upsample(speaker, hidden_states.shape[-1])
             hidden_states = torch.cat([hidden_states, speaker], dim=1)
 
-        return super().forward(hidden_states).detach().squeeze()
+        return super().forward(hidden_states)
