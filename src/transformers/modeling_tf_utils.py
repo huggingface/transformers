@@ -962,6 +962,108 @@ def init_copy_embeddings(old_embeddings, new_num_tokens):
     return mask, current_weights
 
 
+class TFNestLayer(base_layer.Layer):
+    """
+    Custom keras layer that subclasses tf.keras.layers.Layer to enable access to all sublayers
+    in a model of nested layers. This is necessary for certain keras model behaviour such
+    as displaying all layers on a `model.summary(epxand_nested=True)` call.
+
+    For example:
+
+    # Cannot access sublayers
+    >>> class LayerX(tf.keras.layers.Layer):
+    >>>     def __init__(self, **kwargs):
+    >>>         super().__init__(**kwargs)
+    >>>         self.l1 = tf.keras.layers.Dense(3)
+    >>>         self.l2 = tf.keras.layers.Dense(4)
+
+    >>>     def call(self, inputs):
+    >>>         x = self.l1(inputs)
+    >>>         x = self.l2(x)
+    >>>         return x
+
+    >>> class LayerZ(tf.keras.layers.Layer):
+    >>>     def __init__(self, **kwargs):
+    >>>         super().__init__(**kwargs)
+    >>>         self.l1 = LayerX()
+    >>>         self.l2 = LayerX()
+
+    >>>     def call(self, inputs):
+    >>>         x = self.l1(inputs)
+    >>>         x = self.l2(x)
+    >>>         return x
+
+    >>> class Model(tf.keras.Model):
+    >>>     def __init__(self, **kwargs):
+    >>>         super().__init__(**kwargs)
+    >>>         self.l1 = LayerZ()
+    >>>         self.l2 = LayerZ()
+
+    >>>     def call(self, inputs):
+    >>>         x = self.l1(inputs)
+    >>>         x = self.l2(x)
+    >>>         return x
+
+    >>> prev_model = Model()
+    >>> prev_model.build(input_shape=(None, 10))
+    >>> prev_model.layers
+    [<__main__.LayerZ at 0x29a1ef1f0>, <__main__.LayerZ at 0x2c31052e0>]
+
+    >>> hasattr(prev_model.layers[0], 'layers')
+    False
+
+    # Can now access all sublayers
+    >>> class LayerX(NestLayer):
+    >>>     def __init__(self, **kwargs):
+    >>>         super().__init__(**kwargs)
+    >>>         self.l1 = tf.keras.layers.Dense(3)
+    >>>         self.l2 = tf.keras.layers.Dense(4)
+
+    >>>     def call(self, inputs):
+    >>>         x = self.l1(inputs)
+    >>>         x = self.l2(x)
+    >>>         return x
+
+
+    >>> class LayerZ(NestLayer):
+    >>>     def __init__(self, **kwargs):
+    >>>         super().__init__(**kwargs)
+    >>>         self.l1 = LayerX()
+    >>>         self.l2 = LayerX()
+
+    >>>     def call(self, inputs):
+    >>>         x = self.l1(inputs)
+    >>>         x = self.l2(x)
+    >>>         return x
+
+
+    >>> class NestLayerModel(tf.keras.Model):
+    >>>     def __init__(self, **kwargs):
+    >>>         super().__init__(**kwargs)
+    >>>         self.l1 = LayerZ()
+    >>>         self.l2 = LayerZ()
+
+    >>>     def call(self, inputs):
+    >>>         x = self.l1(inputs)
+    >>>         x = self.l2(x)
+    >>>         return x
+
+    >>> nest_layer_model = NestLayerModel()
+    >>> nest_layer_model.build(input_shape=(None, 10))
+    >>> nest_layer_model.layers
+    [<__main__.LayerZ at 0x2c116e100>, <__main__.LayerZ at 0x2c32188e0>]
+
+    >>> hasattr(nest_layer_model.layers[0], 'layers')
+    True
+
+    See related issue:
+    https://github.com/tensorflow/model-optimization/issues/638
+    """
+    @property
+    def layers(self):
+        return list(self._flatten_layers(include_self=False, recursive=False))
+
+
 class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, PushToHubMixin):
     r"""
     Base class for all TF models.
