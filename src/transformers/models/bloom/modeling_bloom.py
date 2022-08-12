@@ -41,7 +41,7 @@ logger = logging.get_logger(__name__)
 
 CUSTOM_KERNELS_ENABLED=False
 try:
-    from .custom_kernels import fused_bloom_attention
+    from .custom_kernels import fused_bloom_attention_cuda
     CUSTOM_KERNELS_ENABLED=True
 except ImportError:
     logger.warning("We're not using custom kernels.")
@@ -394,6 +394,7 @@ class BloomAttention(nn.Module):
                 use_cache=use_cache
             )
         else:
+            raise ValueError("Block this path while we figure out how to run C++ code")
             context_layer, present, attention_probs = self.compute_attention(
                 fused_qkv=fused_qkv,
                 layer_past=layer_past,
