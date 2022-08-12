@@ -34,9 +34,7 @@ __global__ void forward_masked_softmax_kernel(
     const int q_length_id = blockIdx.y;
     const int kv_length_id = threadIdx.x;
 
-    // Specialize BlockReduce
-    // 800 refers to CUDA_ARCH
-    __shared__ typename float temp_storage[1];
+    __shared__ float temp_storage[1];
 
     // Compute mask
     float elt;
