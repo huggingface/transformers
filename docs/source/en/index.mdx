@@ -12,18 +12,13 @@ specific language governing permissions and limitations under the License.
 
 # 🤗 Transformers
 
-State-of-the-art Machine Learning for PyTorch, TensorFlow and JAX.
+State-of-the-art Transformers models in PyTorch, TensorFlow, and JAX for research and production.
 
-🤗 Transformers provides APIs to easily download and train state-of-the-art pretrained models. Using pretrained models can reduce your compute costs, carbon footprint, and save you time from training a model from scratch. The models can be used across different modalities such as:
+🤗 Transformers is dedicated to providing inference, finetuning, and pretraining for Transformer-based models on text, computer vision, speech, and multimodal tasks. Each model is defined by three classes - a configuration, a model, and a preprocessor - which can be initialized from pretrained instances stored on the [Hugging Face Hub](https://huggingface.co/models). The library also offers convenient helper tools like a simple pipeline to use a model for inference on a given task and a feature-complete training loop optimized for 🤗 Transformers models.
 
-* 📝 Text: text classification, information extraction, question answering, summarization, translation, and text generation in over 100 languages.
-* 🖼️ Images: image classification, object detection, and segmentation.
-* 🗣️ Audio: speech recognition and audio classification.
-* 🐙 Multimodal: table question answering, optical character recognition, information extraction from scanned documents, video classification, and visual question answering.
+Models are available in PyTorch, TensorFlow, and JAX. This framework interoperability grants the flexibility to use a different framework at each stage of a model's lifetime. 🤗 Transformers also supports exporting a model to a format like ONNX and TorchScript for deployment in production environments.
 
-Our library supports seamless integration between three of the most popular deep learning libraries: [PyTorch](https://pytorch.org/), [TensorFlow](https://www.tensorflow.org/) and [JAX](https://jax.readthedocs.io/en/latest/). Train your model in three lines of code in one framework, and load it for inference with another.
-
-Each 🤗 Transformers architecture is defined in a standalone Python module so they can be easily customized for research and experiments.
+Join the growing community on the [Hub](https://huggingface.co/models), [forum](https://discuss.huggingface.co/), or [Discord](https://discord.com/invite/JfAtkvEtRb) today.
 
 ## If you are looking for custom support from the Hugging Face team
 
@@ -33,7 +28,7 @@ Each 🤗 Transformers architecture is defined in a standalone Python module so 
 
 ## Contents
 
-The documentation is organized in five parts:
+The documentation is organized into five sections:
 
 - **GET STARTED** contains a quick tour and installation instructions to get up and running with 🤗 Transformers.
 - **TUTORIALS** are a great place to begin if you are new to our library. This section will help you gain the basic skills you need to start using 🤗 Transformers.
@@ -41,11 +36,9 @@ The documentation is organized in five parts:
 - **CONCEPTUAL GUIDES** provides more discussion and explanation of the underlying concepts and ideas behind models, tasks, and the design philosophy of 🤗 Transformers.
 - **API** describes each class and function, grouped in:
 
-  - **MAIN CLASSES** for the main classes exposing the important APIs of the library.
-  - **MODELS** for the classes and functions related to each model implemented in the library.
-  - **INTERNAL HELPERS** for the classes and functions we use internally.
-
-The library currently contains JAX, PyTorch and TensorFlow implementations, pretrained model weights, usage scripts and conversion utilities for the following models.
+  - **MAIN CLASSES** details the most important classes like configuration, model, tokenizer, and pipeline.
+  - **MODELS** details the classes and functions related to each model implemented in the library.
+  - **INTERNAL HELPERS** details utility classes and functions used internally.
 
 ### Supported models
 
