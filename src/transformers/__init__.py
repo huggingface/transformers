@@ -2394,7 +2394,7 @@ else:
             "TFOPTPreTrainedModel",
         ]
     )
-    _import_structure["models.opt"].extend(
+    _import_structure["models.owlvit"].extend(
         [
             "TF_OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TFOwlViTForObjectDetection",
