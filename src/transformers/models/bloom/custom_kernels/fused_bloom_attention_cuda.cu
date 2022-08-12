@@ -81,7 +81,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
     const auto batch_size = fused_qkv.size(0);
     const auto q_length = fused_qkv.size(1);
     const auto three_times_hidden_size = fused_qkv.size(2);
-    const auto head_dim = three_times_hidden_size / num_heads;
+    const auto head_dim = three_times_hidden_size / (3 * num_heads);
     const auto batch_size_times_num_heads = batch_size * num_heads;
 
     // `split_heads`
