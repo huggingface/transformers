@@ -137,6 +137,7 @@ from . import (
     unispeech,
     unispeech_sat,
     van,
+    videomae,
     vilt,
     vision_encoder_decoder,
     vision_text_dual_encoder,

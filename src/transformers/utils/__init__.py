@@ -22,6 +22,7 @@
 from packaging import version
 
 from .. import __version__
+from .constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD
 from .doc import (
     add_code_sample_docstrings,
     add_end_docstrings,
@@ -59,24 +60,18 @@ from .hub import (
     PushToHubMixin,
     RepositoryNotFoundError,
     RevisionNotFoundError,
-    cached_path,
+    cached_file,
     default_cache_path,
     define_sagemaker_information,
-    filename_to_url,
+    extract_commit_hash,
     get_cached_models,
     get_file_from_repo,
-    get_from_cache,
     get_full_repo_name,
-    get_list_of_files,
     has_file,
-    hf_bucket_url,
-    http_get,
     http_user_agent,
-    is_local_clone,
     is_offline_mode,
-    is_remote_url,
+    move_cache,
     send_example_telemetry,
-    url_to_filename,
 )
 from .import_utils import (
     ENV_VARS_TRUE_AND_AUTO_VALUES,

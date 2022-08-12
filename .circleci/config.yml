@@ -83,7 +83,7 @@ jobs:
             - run: git lfs install
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
             - run: pip install tensorflow_probability
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
@@ -124,7 +124,7 @@ jobs:
             - run: git lfs install
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
             - run: pip install tensorflow_probability
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
@@ -159,7 +159,7 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
@@ -198,7 +198,7 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
@@ -231,7 +231,7 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
@@ -269,7 +269,7 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
@@ -439,7 +439,7 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                   key: v0.5-torch-{{ checksum "setup.py" }}
@@ -477,7 +477,7 @@ jobs:
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.11.0+cpu.html
+            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - save_cache:
                   key: v0.5-torch-{{ checksum "setup.py" }}
@@ -655,6 +655,71 @@ jobs:
                   TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee examples_output.txt
             - store_artifacts:
                   path: ~/transformers/examples_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_examples_tensorflow:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.7.12
+        environment:
+            OMP_NUM_THREADS: 1
+            TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.5-tensorflow_examples-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,tensorflow,sentencepiece,testing]
+            - run: pip install -r examples/tensorflow/_tests_requirements.txt
+            - save_cache:
+                  key: v0.5-tensorflow_examples-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python utils/tests_fetcher.py --filters examples tests | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_tensorflow ./examples/tensorflow/ | tee tests_output.txt
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/tensorflow_examples_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_examples_tensorflow_all:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.7.12
+        environment:
+            OMP_NUM_THREADS: 1
+            TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.5-tensorflow_examples-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[sklearn,tensorflow,sentencepiece,testing]
+            - run: pip install -r examples/tensorflow/_tests_requirements.txt
+            - save_cache:
+                  key: v0.5-tensorflow_examples-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: |
+                  TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_tensorflow ./examples/tensorflow/ | tee examples_output.txt
+            - store_artifacts:
+                  path: ~/transformers/tensorflow_examples_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
 
@@ -1000,6 +1065,7 @@ workflows:
             - check_code_quality
             - check_repository_consistency
             - run_examples_torch
+            - run_examples_tensorflow
             - run_examples_flax
             - run_tests_custom_tokenizers
             - run_tests_torch_and_tf
@@ -1022,6 +1088,7 @@ workflows:
                             - main
         jobs:
             - run_examples_torch_all
+            - run_examples_tensorflow_all
             - run_examples_flax_all
             - run_tests_torch_and_tf_all
             - run_tests_torch_and_flax_all
