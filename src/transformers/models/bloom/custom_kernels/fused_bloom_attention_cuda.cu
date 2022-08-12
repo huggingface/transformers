@@ -26,6 +26,7 @@ __global__ void forward_masked_softmax_kernel(
     const torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> attention_scores, // [B, N, D]
     const torch::PackedTensorAccessor32<bool, 3, torch::RestrictPtrTraits> mask, // [B, N, D]
     torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> result // [B, N, D]
+    dim3 blockDim;
 ) {
     const int batch_id = blockIdx.x;
     const int q_length_id = blockIdx.y;
@@ -152,7 +153,8 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             forward_masked_softmax_kernel<<<gridDim, blockDim, shared_mem_forward>>>(
                 attention_scores.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
                 attention_mask.packed_accessor32<bool, 3, torch::RestrictPtrTraits>(),
-                attention_probs.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>()
+                attention_probs.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
+                blockDim
             );
         });
     } else {
