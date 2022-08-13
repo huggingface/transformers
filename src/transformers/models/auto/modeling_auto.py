@@ -606,10 +606,11 @@ MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
-        ("layoutlm", "LayoutLMForQuestionAnswering"),
+        # TODO Uncomment after # 18407 lands
+        # ("layoutlm", "LayoutLMForQuestionAnswering"),
+        ("donut-swin", "DonutSwinModel"),
         ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
         ("layoutlmv3", "LayoutLMv3ForQuestionAnswering"),
-        ("donut-swin", "DonutSwinModel"),
     ]
 )
 
