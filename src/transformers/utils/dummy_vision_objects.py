@@ -52,6 +52,13 @@ class DetrFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class DonutFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class DPTFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 

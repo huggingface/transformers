@@ -185,6 +185,7 @@ PYTORCH_EXPORT_MODELS = {
     ("big-bird", "google/bigbird-roberta-base"),
     ("ibert", "kssteven/ibert-roberta-base"),
     ("camembert", "camembert-base"),
+    ("clip", "openai/clip-vit-base-patch32"),
     ("convbert", "YituTech/conv-bert-base"),
     ("codegen", "Salesforce/codegen-350M-multi"),
     ("deberta", "microsoft/deberta-base"),
@@ -214,7 +215,7 @@ PYTORCH_EXPORT_MODELS = {
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
-    ("bloom", "bigscience/bloom-350m"),
+    ("bloom", "bigscience/bloom-560m"),
     ("gpt2", "gpt2"),
     ("gpt-neo", "EleutherAI/gpt-neo-125M"),
 }

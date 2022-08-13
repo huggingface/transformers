@@ -422,6 +422,7 @@ def pipeline(
     revision: Optional[str] = None,
     use_fast: bool = True,
     use_auth_token: Optional[Union[str, bool]] = None,
+    device: Optional[Union[int, str, "torch.device"]] = None,
     device_map=None,
     torch_dtype=None,
     trust_remote_code: Optional[bool] = None,
@@ -508,6 +509,9 @@ def pipeline(
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
             when running `huggingface-cli login` (stored in `~/.huggingface`).
+        device (`int` or `str` or `torch.device`):
+            Defines the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank like `1`) on which this
+            pipeline will be allocated.
         device_map (`str` or `Dict[str, Union[int, str, torch.device]`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
             `device_map="auto"` to compute the most optimized `device_map` automatically. [More
@@ -557,7 +561,12 @@ def pipeline(
     # Make sure we only pass use_auth_token once as a kwarg (it used to be possible to pass it in model_kwargs,
     # this is to keep BC).
     use_auth_token = model_kwargs.pop("use_auth_token", use_auth_token)
-    hub_kwargs = {"revision": revision, "use_auth_token": use_auth_token, "trust_remote_code": trust_remote_code}
+    hub_kwargs = {
+        "revision": revision,
+        "use_auth_token": use_auth_token,
+        "trust_remote_code": trust_remote_code,
+        "_commit_hash": None,
+    }
 
     if task is None and model is None:
         raise RuntimeError(
@@ -583,8 +592,10 @@ def pipeline(
     # Instantiate config if needed
     if isinstance(config, str):
         config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        hub_kwargs["_commit_hash"] = config._commit_hash
     elif config is None and isinstance(model, str):
         config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        hub_kwargs["_commit_hash"] = config._commit_hash
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
@@ -639,6 +650,7 @@ def pipeline(
         )
         if config is None and isinstance(model, str):
             config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+            hub_kwargs["_commit_hash"] = config._commit_hash
 
     if device_map is not None:
         if "device_map" in model_kwargs:
@@ -672,6 +684,7 @@ def pipeline(
     )
 
     model_config = model.config
+    hub_kwargs["_commit_hash"] = model.config._commit_hash
 
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
@@ -801,5 +814,8 @@ def pipeline(
 
     if feature_extractor is not None:
         kwargs["feature_extractor"] = feature_extractor
+
+    if device is not None:
+        kwargs["device"] = device
 
     return pipeline_class(model=model, framework=framework, task=task, **kwargs)
