@@ -126,8 +126,14 @@ class LevitPatchEmbeddings(nn.Module):
         self.embedding_layer_4 = LevitConvEmbeddings(
             config.hidden_sizes[0] // 2, config.hidden_sizes[0], config.kernel_size, config.stride, config.padding
         )
+        self.num_channels = config.num_channels
 
     def forward(self, pixel_values):
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
         embeddings = self.embedding_layer_1(pixel_values)
         embeddings = self.activation_layer_1(embeddings)
         embeddings = self.embedding_layer_2(embeddings)

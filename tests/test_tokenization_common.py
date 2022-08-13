@@ -30,7 +30,8 @@ from itertools import takewhile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
-from huggingface_hub import Repository, delete_repo, login
+from huggingface_hub import HfFolder, delete_repo, set_access_token
+from parameterized import parameterized
 from requests.exceptions import HTTPError
 from transformers import (
     AlbertTokenizer,
@@ -49,7 +50,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
-    PASS,
+    TOKEN,
     USER,
     check_json_file_has_correct_format,
     get_tests_dir,
@@ -578,6 +579,25 @@ class TokenizerTesterMixin:
                 self.assertListEqual(getattr(tokenizer, "additional_special_tokens"), [token_to_test_setters])
                 self.assertListEqual(getattr(tokenizer, "additional_special_tokens_ids"), [token_id_to_test_setters])
 
+    @parameterized.expand([(True,), (False,)])
+    def test_tokenizers_special_tokens_properties_unset(self, verbose):
+        tokenizers = self.get_tokenizers(verbose=verbose)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                attributes_list = [
+                    "bos_token",
+                    "eos_token",
+                    "unk_token",
+                    "sep_token",
+                    "pad_token",
+                    "cls_token",
+                    "mask_token",
+                    "additional_special_tokens",
+                ]
+                for attr in attributes_list:
+                    setattr(tokenizer, attr, None)
+                    self.assertIsNone(getattr(tokenizer, attr))
+
     def test_save_and_load_tokenizer(self):
         # safety check on max_len default value so we are sure the test works
         tokenizers = self.get_tokenizers()
@@ -970,7 +990,9 @@ class TokenizerTesterMixin:
                 sequence = tokenizer.encode(seq_0, add_special_tokens=False)
                 total_length = len(sequence)
 
-                self.assertGreater(total_length, 4, "Issue with the testing sequence, please update it it's too short")
+                self.assertGreater(
+                    total_length, 4, "Issue with the testing sequence, please update it, it's too short"
+                )
 
                 # Test with max model input length
                 model_max_length = tokenizer.model_max_length
@@ -980,7 +1002,9 @@ class TokenizerTesterMixin:
                 sequence1 = tokenizer(seq_1, add_special_tokens=False)
                 total_length1 = len(sequence1["input_ids"])
                 self.assertGreater(
-                    total_length1, model_max_length, "Issue with the testing sequence, please update it it's too short"
+                    total_length1,
+                    model_max_length,
+                    "Issue with the testing sequence, please update it, it's too short",
                 )
 
                 # Simple
@@ -3805,14 +3829,14 @@ class TokenizerUtilTester(unittest.TestCase):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
         response_mock.status_code = 500
-        response_mock.headers = []
+        response_mock.headers = {}
         response_mock.raise_for_status.side_effect = HTTPError
 
         # Download this model to make sure it's in the cache.
         _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
+        with mock.patch("requests.request", return_value=response_mock) as mock_head:
             _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
@@ -3824,22 +3848,24 @@ class TokenizerPushToHubTester(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls._token = login(username=USER, password=PASS)
+        cls._token = TOKEN
+        set_access_token(TOKEN)
+        HfFolder.save_token(TOKEN)
 
     @classmethod
     def tearDownClass(cls):
         try:
-            delete_repo(token=cls._token, name="test-tokenizer")
+            delete_repo(token=cls._token, repo_id="test-tokenizer")
         except HTTPError:
             pass
 
         try:
-            delete_repo(token=cls._token, name="test-tokenizer-org", organization="valid_org")
+            delete_repo(token=cls._token, repo_id="valid_org/test-tokenizer-org")
         except HTTPError:
             pass
 
         try:
-            delete_repo(token=cls._token, name="test-dynamic-tokenizer")
+            delete_repo(token=cls._token, repo_id="test-dynamic-tokenizer")
         except HTTPError:
             pass
 
@@ -3849,12 +3875,20 @@ class TokenizerPushToHubTester(unittest.TestCase):
             with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
                 vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
             tokenizer = BertTokenizer(vocab_file)
-            tokenizer.save_pretrained(
-                os.path.join(tmp_dir, "test-tokenizer"), push_to_hub=True, use_auth_token=self._token
-            )
 
-            new_tokenizer = BertTokenizer.from_pretrained(f"{USER}/test-tokenizer")
-            self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+        tokenizer.push_to_hub("test-tokenizer", use_auth_token=self._token)
+        new_tokenizer = BertTokenizer.from_pretrained(f"{USER}/test-tokenizer")
+        self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="test-tokenizer")
+
+        # Push to hub via save_pretrained
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tokenizer.save_pretrained(tmp_dir, repo_id="test-tokenizer", push_to_hub=True, use_auth_token=self._token)
+
+        new_tokenizer = BertTokenizer.from_pretrained(f"{USER}/test-tokenizer")
+        self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
 
     def test_push_to_hub_in_organization(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -3862,15 +3896,22 @@ class TokenizerPushToHubTester(unittest.TestCase):
             with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
                 vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
             tokenizer = BertTokenizer(vocab_file)
+
+        tokenizer.push_to_hub("valid_org/test-tokenizer-org", use_auth_token=self._token)
+        new_tokenizer = BertTokenizer.from_pretrained("valid_org/test-tokenizer-org")
+        self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="valid_org/test-tokenizer-org")
+
+        # Push to hub via save_pretrained
+        with tempfile.TemporaryDirectory() as tmp_dir:
             tokenizer.save_pretrained(
-                os.path.join(tmp_dir, "test-tokenizer-org"),
-                push_to_hub=True,
-                use_auth_token=self._token,
-                organization="valid_org",
+                tmp_dir, repo_id="valid_org/test-tokenizer-org", push_to_hub=True, use_auth_token=self._token
             )
 
-            new_tokenizer = BertTokenizer.from_pretrained("valid_org/test-tokenizer-org")
-            self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
+        new_tokenizer = BertTokenizer.from_pretrained("valid_org/test-tokenizer-org")
+        self.assertDictEqual(new_tokenizer.vocab, tokenizer.vocab)
 
     @require_tokenizers
     def test_push_to_hub_dynamic_tokenizer(self):
@@ -3882,17 +3923,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
             tokenizer = CustomTokenizer(vocab_file)
 
         # No fast custom tokenizer
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-tokenizer", use_auth_token=self._token)
-            tokenizer.save_pretrained(tmp_dir)
-
-            with open(os.path.join(tmp_dir, "tokenizer_config.json")) as f:
-                tokenizer_config = json.load(f)
-            self.assertDictEqual(
-                tokenizer_config["auto_map"], {"AutoTokenizer": ["custom_tokenization.CustomTokenizer", None]}
-            )
-
-            repo.push_to_hub()
+        tokenizer.push_to_hub("test-dynamic-tokenizer", use_auth_token=self._token)
 
         tokenizer = AutoTokenizer.from_pretrained(f"{USER}/test-dynamic-tokenizer", trust_remote_code=True)
         # Can't make an isinstance check because the new_model.config is from the CustomTokenizer class of a dynamic module
@@ -3909,23 +3940,7 @@ class TokenizerPushToHubTester(unittest.TestCase):
             bert_tokenizer.save_pretrained(tmp_dir)
             tokenizer = CustomTokenizerFast.from_pretrained(tmp_dir)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-tokenizer", use_auth_token=self._token)
-            tokenizer.save_pretrained(tmp_dir)
-
-            with open(os.path.join(tmp_dir, "tokenizer_config.json")) as f:
-                tokenizer_config = json.load(f)
-            self.assertDictEqual(
-                tokenizer_config["auto_map"],
-                {
-                    "AutoTokenizer": [
-                        "custom_tokenization.CustomTokenizer",
-                        "custom_tokenization_fast.CustomTokenizerFast",
-                    ]
-                },
-            )
-
-            repo.push_to_hub()
+        tokenizer.push_to_hub("test-dynamic-tokenizer", use_auth_token=self._token)
 
         tokenizer = AutoTokenizer.from_pretrained(f"{USER}/test-dynamic-tokenizer", trust_remote_code=True)
         # Can't make an isinstance check because the new_model.config is from the FakeConfig class of a dynamic module

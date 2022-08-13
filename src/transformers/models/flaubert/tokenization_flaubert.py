@@ -17,8 +17,6 @@
 
 import unicodedata
 
-import six
-
 from ...utils import logging
 from ..xlm.tokenization_xlm import XLMTokenizer
 
@@ -76,16 +74,16 @@ def convert_to_unicode(text):
     """
     Converts `text` to Unicode (if it's not already), assuming UTF-8 input.
     """
-    # six_ensure_text is copied from https://github.com/benjaminp/six
-    def six_ensure_text(s, encoding="utf-8", errors="strict"):
-        if isinstance(s, six.binary_type):
+
+    def ensure_text(s, encoding="utf-8", errors="strict"):
+        if isinstance(s, bytes):
             return s.decode(encoding, errors)
-        elif isinstance(s, six.text_type):
+        elif isinstance(s, str):
             return s
         else:
             raise TypeError(f"not expecting type '{type(s)}'")
 
-    return six_ensure_text(text, encoding="utf-8", errors="ignore")
+    return ensure_text(text, encoding="utf-8", errors="ignore")
 
 
 class FlaubertTokenizer(XLMTokenizer):
@@ -132,7 +130,6 @@ class FlaubertTokenizer(XLMTokenizer):
             - Install with `pip install sacremoses`
 
         Args:
-
             - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False)
               (bool). If True, we only apply BPE.
 

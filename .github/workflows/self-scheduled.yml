@@ -56,13 +56,6 @@ jobs:
         run: |
           nvidia-smi
 
-      - name: GPU visibility
-        working-directory: /transformers
-        run: |
-          utils/print_env_pt.py
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('TF GPUs available:', bool(tf.config.list_physical_devices('GPU')))"
-          TF_CPP_MIN_LOG_LEVEL=3 python3 -c "import tensorflow as tf; print('Number of TF GPUs available:', len(tf.config.list_physical_devices('GPU')))"
-
   run_tests_single_gpu:
     name: Model tests
     strategy:
@@ -90,6 +83,15 @@ jobs:
       - name: Update clone
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
 
       - name: Run all tests on GPU
         working-directory: /transformers
@@ -135,6 +137,15 @@ jobs:
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
 
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
       - name: Run all tests on GPU
         working-directory: /transformers
         run: python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} tests/${{ matrix.folders }}
@@ -163,23 +174,32 @@ jobs:
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
 
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
       - name: Run examples tests on GPU
         working-directory: /transformers
         run: |
           pip install -r examples/pytorch/_tests_requirements.txt
-          python3 -m pytest -v --make-reports=examples_gpu examples/pytorch
+          python3 -m pytest -v --make-reports=single-gpu_examples_gpu examples/pytorch
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/examples_gpu/failures_short.txt
+        run: cat /transformers/reports/single-gpu_examples_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: run_examples_gpu
-          path: /transformers/reports/examples_gpu
+          name: single-gpu_run_examples_gpu
+          path: /transformers/reports/single-gpu_examples_gpu
 
   run_pipelines_torch_gpu:
     name: PyTorch pipelines
@@ -196,6 +216,15 @@ jobs:
       - name: Update clone
         working-directory: /transformers
         run: git fetch && git checkout ${{ github.sha }}
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
 
       - name: Run all pipeline tests on GPU
         working-directory: /transformers
@@ -233,6 +262,15 @@ jobs:
         run: |
           git fetch && git checkout ${{ github.sha }}
 
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
       - name: Run all pipeline tests on GPU
         working-directory: /transformers
         env:
@@ -268,13 +306,21 @@ jobs:
         working-directory: /workspace/transformers
         run: git fetch && git checkout ${{ github.sha }}
 
-      - name: Re-compile DeepSpeed
+      # To avoid unknown test failures
+      - name: Pre build DeepSpeed *again*
         working-directory: /workspace
         run: |
-          pip install deepspeed # installs the deps correctly
-          rm -rf DeepSpeed
-          git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build
-          DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install -e . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+          python3 -m pip uninstall -y deepspeed
+          DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /workspace/transformers
+        run: |
+          python utils/print_env.py
 
       - name: Run all tests on GPU
         working-directory: /workspace/transformers
@@ -292,7 +338,6 @@ jobs:
         with:
           name: ${{ matrix.machine_type }}_run_tests_torch_cuda_extensions_gpu_test_reports
           path: /workspace/transformers/reports/${{ matrix.machine_type }}_tests_torch_cuda_extensions_gpu
-
 
   send_results:
     name: Send results to webhook

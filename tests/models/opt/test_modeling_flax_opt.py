@@ -269,13 +269,14 @@ class FlaxOPTEmbeddingsTest(unittest.TestCase):
                 [6.4783, -1.9913, -10.7926, -2.3336, 1.5092, -0.9974, -6.8213, 1.3477, 1.3477],
             ]
         )
-        self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
+        self.assertTrue(jnp.allclose(logits, logits_meta, atol=4e-2))
 
         model = jax.jit(model)
         logits = model(inputs.input_ids, attention_mask=inputs.attention_mask)[0].mean(axis=-1)
-        self.assertTrue(jnp.allclose(logits, logits_meta, atol=1e-4))
+        self.assertTrue(jnp.allclose(logits, logits_meta, atol=4e-2))
 
 
+@require_flax
 @slow
 class FlaxOPTGenerationTest(unittest.TestCase):
     @property
@@ -291,10 +292,10 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         model_id = "facebook/opt-125m"
 
         EXPECTED_OUTPUTS = [
-            "Today is a beautiful day and I want everyone",
-            "In the city of Rome Canaver Canaver Canaver Canaver",
-            "Paris is the capital of France and Parisdylib",
-            "Computers and mobile phones have taken precedence over",
+            "Today is a beautiful day and I want to",
+            "In the city of New York, the city",
+            "Paris is the capital of France and the capital",
+            "Computers and mobile phones have taken over the",
         ]
 
         predicted_outputs = []

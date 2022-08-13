@@ -38,6 +38,13 @@ class BertTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class BertweetTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class BigBirdTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
@@ -59,6 +66,13 @@ class BlenderbotSmallTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class BloomTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class CamembertTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
@@ -67,6 +81,13 @@ class CamembertTokenizerFast(metaclass=DummyObject):
 
 
 class CLIPTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
+class CodeGenTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):
@@ -255,6 +276,20 @@ class MT5TokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class MvpTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
+class NllbTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class OpenAIGPTTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
@@ -263,6 +298,13 @@ class OpenAIGPTTokenizerFast(metaclass=DummyObject):
 
 
 class PegasusTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
+class PhobertTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 
     def __init__(self, *args, **kwargs):

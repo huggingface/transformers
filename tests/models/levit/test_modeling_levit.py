@@ -205,6 +205,10 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    @unittest.skip(reason="Levit does not output attentions")
+    def test_attention_outputs(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -418,6 +422,6 @@ class LevitModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([0.0096, -1.0084, -1.4318]).to(torch_device)
+        expected_slice = torch.tensor([1.0448, -0.3745, -1.8317]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
