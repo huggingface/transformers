@@ -53,6 +53,8 @@ class BartphoTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer_f = convert_slow_tokenizer.convert_slow_tokenizer(tokenizer)
         self.tokenizer_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES_F["tokenizer_file"])
         tokenizer_f.save(self.tokenizer_file)
+        
+        self._data = 'Chúng tôi là những nghiên cứu viên.'
 
     def get_tokenizer(self, **kwargs):
         kwargs.update(self.special_tokens_map)
