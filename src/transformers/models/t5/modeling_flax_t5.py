@@ -732,8 +732,13 @@ class FlaxT5Stack(nn.Module):
         return_dict: bool = True,
         deterministic: bool = True,
         init_cache: bool = False,
+        input_embeds=None
     ):
-        hidden_states = self.embed_tokens(input_ids)
+        if input_embeds is not None:
+            hidden_states = input_embeds
+        else:
+            hidden_states = self.embed_tokens(input_ids)
+        
         hidden_states = self.dropout(hidden_states, deterministic=deterministic)
 
         outputs = self.block(
@@ -1051,6 +1056,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         train: bool = False,
         params: dict = None,
         dropout_rng: PRNGKey = None,
+        input_embeds: Optional[jnp.ndarray] = None
     ):
         r"""
         Returns:
@@ -1074,7 +1080,11 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
         if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
+            if input_ids is None:
+                attention_mask = jnp.ones(input_embeds.shape[:-1])
+            else:
+                attention_mask = jnp.ones_like(input_ids)
+                input_ids = jnp.array(input_ids, dtype="i4")
 
         # Handle any PRNG if needed
         rngs = {}
@@ -1087,7 +1097,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
 
         return self.module.apply(
             {"params": params or self.params},
-            input_ids=jnp.array(input_ids, dtype="i4"),
+            input_ids=input_ids,
             attention_mask=jnp.array(attention_mask, dtype="i4"),
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1095,6 +1105,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
             deterministic=not train,
             rngs=rngs,
             method=_encoder_forward,
+            input_embeds=input_embeds
         )
 
     @add_start_docstrings(T5_DECODE_INPUTS_DOCSTRING)
@@ -1491,6 +1502,7 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         output_hidden_states=None,
         return_dict=None,
         deterministic: bool = True,
+        input_embeds=None,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1502,6 +1514,7 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             deterministic=deterministic,
+            input_embeds=input_embeds
         )
 
         hidden_states = encoder_outputs[0]

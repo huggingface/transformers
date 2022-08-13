@@ -279,7 +279,13 @@ class FlaxGenerationMixin:
             if model_kwargs.get("encoder_outputs") is None:
                 model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, params, model_kwargs)
             # prepare decoder_input_ids for generation
-            input_ids = jnp.ones((input_ids.shape[0], 1), dtype="i4") * decoder_start_token_id
+            input_embeds = model_kwargs.get('input_embeds',None)
+            if input_embeds is None:
+                batch_size = input_ids.shape[0]
+            else:
+                batch_size = input_embeds.shape[0]
+            # Note: input_ids in the following line should really be decoder_input_ids
+            input_ids = jnp.ones((batch_size, 1), dtype="i4") * decoder_start_token_id
 
         # Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
