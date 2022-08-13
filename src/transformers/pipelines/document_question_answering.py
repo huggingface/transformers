@@ -1,12 +1,12 @@
-from typing import List, Optional, Tuple, Union
 import re
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
+from ..models.vision_encoder_decoder import VisionEncoderDecoderModel
 from ..utils import add_end_docstrings, is_pytesseract_available, is_torch_available, is_vision_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 from .question_answering import select_starts_ends
-from ..models.vision_encoder_decoder import VisionEncoderDecoderModel
 
 
 if is_vision_available():
@@ -234,7 +234,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             if self.feature_extractor is not None:
                 image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
             elif isinstance(self.model, VisionEncoderDecoderModel):
-                raise ValueError("If you are using a VisionEncoder model, you must provide a feature extractor")
+                raise ValueError("If you are using a VisionEncoderDecoderModel, you must provide a feature extractor")
 
         words, boxes = None, None
         if not isinstance(self.model, VisionEncoderDecoderModel):
@@ -247,15 +247,15 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             elif image is not None:
                 if not TESSERACT_LOADED:
                     raise ValueError(
-                        "If you provide an image without word_boxes, then the pipeline will run OCR using Tesseract, but"
-                        " pytesseract is not available"
+                        "If you provide an image without word_boxes, then the pipeline will run OCR using Tesseract,"
+                        " but pytesseract is not available"
                     )
                 if TESSERACT_LOADED:
                     words, boxes = apply_tesseract(image, lang=lang, tesseract_config=tesseract_config)
             else:
                 raise ValueError(
-                    "You must provide an image or word_boxes. If you provide an image, the pipeline will automatically run"
-                    " OCR to derive words and boxes"
+                    "You must provide an image or word_boxes. If you provide an image, the pipeline will automatically"
+                    " run OCR to derive words and boxes"
                 )
 
         if self.tokenizer.padding_side != "right":
@@ -386,12 +386,14 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             "answer": "",
         }
 
-        answer = re.search(r'<s_answer>(.*)</s_answer>', sequence)
+        answer = re.search(r"<s_answer>(.*)</s_answer>", sequence)
         if answer is not None:
-            ret['answer'] = answer.group(1).strip()
+            ret["answer"] = answer.group(1).strip()
         return [ret]
 
-    def postprocess_extractive_qa(self, model_outputs, top_k=1, handle_impossible_answer=False, max_answer_len=15, **kwargs):
+    def postprocess_extractive_qa(
+        self, model_outputs, top_k=1, handle_impossible_answer=False, max_answer_len=15, **kwargs
+    ):
         min_null_score = 1000000  # large and positive
         answers = []
         words = model_outputs["words"]
