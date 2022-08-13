@@ -1,10 +1,12 @@
 from typing import List, Optional, Tuple, Union
+import re
 
 import numpy as np
 
 from ..utils import add_end_docstrings, is_pytesseract_available, is_torch_available, is_vision_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 from .question_answering import select_starts_ends
+from ..models.vision_encoder_decoder import VisionEncoderDecoderModel
 
 
 if is_vision_available():
@@ -231,26 +233,30 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             image = load_image(input["image"])
             if self.feature_extractor is not None:
                 image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
+            elif isinstance(self.model, VisionEncoderDecoderModel):
+                raise ValueError("If you are using a VisionEncoder model, you must provide a feature extractor")
 
         words, boxes = None, None
-        if "word_boxes" in input:
-            words = [x[0] for x in input["word_boxes"]]
-            boxes = [x[1] for x in input["word_boxes"]]
-        elif "words" in image_features and "boxes" in image_features:
-            words = image_features.pop("words")
-            boxes = image_features.pop("boxes")
-        elif image is not None:
-            if not TESSERACT_LOADED:
+        if not isinstance(self.model, VisionEncoderDecoderModel):
+            if "word_boxes" in input:
+                words = [x[0] for x in input["word_boxes"]]
+                boxes = [x[1] for x in input["word_boxes"]]
+            elif "words" in image_features and "boxes" in image_features:
+                words = image_features.pop("words")
+                boxes = image_features.pop("boxes")
+            elif image is not None:
+                if not TESSERACT_LOADED:
+                    raise ValueError(
+                        "If you provide an image without word_boxes, then the pipeline will run OCR using Tesseract, but"
+                        " pytesseract is not available"
+                    )
+                if TESSERACT_LOADED:
+                    words, boxes = apply_tesseract(image, lang=lang, tesseract_config=tesseract_config)
+            else:
                 raise ValueError(
-                    "If you provide an image without word_boxes, then the pipeline will run OCR using Tesseract, but"
-                    " pytesseract is not available"
+                    "You must provide an image or word_boxes. If you provide an image, the pipeline will automatically run"
+                    " OCR to derive words and boxes"
                 )
-            words, boxes = apply_tesseract(image, lang=lang, tesseract_config=tesseract_config)
-        else:
-            raise ValueError(
-                "You must provide an image or word_boxes. If you provide an image, the pipeline will automatically run"
-                " OCR to derive words and boxes"
-            )
 
         if self.tokenizer.padding_side != "right":
             raise ValueError(
@@ -258,64 +264,83 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
                 f" {self.tokenizer.padding_side}"
             )
 
-        encoding = self.tokenizer(
-            text=input["question"].split(),
-            text_pair=words,
-            padding=padding,
-            max_length=max_seq_len,
-            stride=doc_stride,
-            return_token_type_ids=True,
-            is_split_into_words=True,
-            return_tensors=self.framework,
-            # TODO: In a future PR, use these feature to handle sequences whose length is longer than
-            # the maximum allowed by the model. Currently, the tokenizer will produce a sequence that
-            # may be too long for the model to handle.
-            # truncation="only_second",
-            # return_overflowing_tokens=True,
-        )
-        encoding.update(image_features)
+        if isinstance(self.model, VisionEncoderDecoderModel):
+            task_prompt = f'<s_docvqa><s_question>{input["question"]}</s_question><s_answer>'
+            # Adapted from https://huggingface.co/spaces/nielsr/donut-docvqa/blob/main/app.py
+            encoding = {
+                "inputs": image_features["pixel_values"],
+                "decoder_input_ids": self.tokenizer(
+                    task_prompt, add_special_tokens=False, return_tensors=self.framework
+                ).input_ids,
+                "max_length": self.model.decoder.config.max_position_embeddings,
+                "early_stopping": True,
+                "pad_token_id": self.tokenizer.pad_token_id,
+                "eos_token_id": self.tokenizer.eos_token_id,
+                "use_cache": True,
+                "num_beams": 1,
+                "bad_words_ids": [[self.tokenizer.unk_token_id]],
+                "return_dict_in_generate": True,
+            }
+            p_mask = None
+            word_ids = None
+            words = None
+        else:
+            encoding = self.tokenizer(
+                text=input["question"].split(),
+                text_pair=words,
+                padding=padding,
+                max_length=max_seq_len,
+                stride=doc_stride,
+                return_token_type_ids=True,
+                is_split_into_words=True,
+                return_tensors=self.framework,
+                # TODO: In a future PR, use these feature to handle sequences whose length is longer than
+                # the maximum allowed by the model. Currently, the tokenizer will produce a sequence that
+                # may be too long for the model to handle.
+                # truncation="only_second",
+                # return_overflowing_tokens=True,
+            )
 
-        # TODO: For now, this should always be num_spans == 1 given the flags we've passed in above, but the
-        # code is written to naturally handle multiple spans at the right time.
-        num_spans = len(encoding["input_ids"])
+            encoding.update(image_features)
 
-        # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
-        # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
-        # This logic mirrors the logic in the question_answering pipeline
-        p_mask = [[tok != 1 for tok in encoding.sequence_ids(span_id)] for span_id in range(num_spans)]
-        for span_idx in range(num_spans):
-            input_ids_span_idx = encoding["input_ids"][span_idx]
-            # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
-            if self.tokenizer.cls_token_id is not None:
-                cls_indices = np.nonzero(np.array(input_ids_span_idx) == self.tokenizer.cls_token_id)[0]
-                for cls_index in cls_indices:
-                    p_mask[span_idx][cls_index] = 0
+            # TODO: For now, this should always be num_spans == 1 given the flags we've passed in above, but the
+            # code is written to naturally handle multiple spans at the right time.
+            num_spans = len(encoding["input_ids"])
 
-        # For each span, place a bounding box [0,0,0,0] for question and CLS tokens, [1000,1000,1000,1000]
-        # for SEP tokens, and the word's bounding box for words in the original document.
-        bbox = []
-        for batch_index in range(num_spans):
-            for i, s, w in zip(
-                encoding.input_ids[batch_index],
-                encoding.sequence_ids(batch_index),
-                encoding.word_ids(batch_index),
-            ):
-                if s == 1:
-                    bbox.append(boxes[w])
-                elif i == self.tokenizer.sep_token_id:
-                    bbox.append([1000] * 4)
-                else:
-                    bbox.append([0] * 4)
+            # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
+            # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
+            # This logic mirrors the logic in the question_answering pipeline
+            p_mask = [[tok != 1 for tok in encoding.sequence_ids(span_id)] for span_id in range(num_spans)]
+            for span_idx in range(num_spans):
+                input_ids_span_idx = encoding["input_ids"][span_idx]
+                # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
+                if self.tokenizer.cls_token_id is not None:
+                    cls_indices = np.nonzero(np.array(input_ids_span_idx) == self.tokenizer.cls_token_id)[0]
+                    for cls_index in cls_indices:
+                        p_mask[span_idx][cls_index] = 0
 
-        if self.framework == "tf":
-            raise ValueError("Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline")
-        elif self.framework == "pt":
-            encoding["bbox"] = torch.tensor([bbox])
+            # For each span, place a bounding box [0,0,0,0] for question and CLS tokens, [1000,1000,1000,1000]
+            # for SEP tokens, and the word's bounding box for words in the original document.
+            bbox = []
+            for batch_index in range(num_spans):
+                for i, s, w in zip(
+                    encoding.input_ids[batch_index],
+                    encoding.sequence_ids(batch_index),
+                    encoding.word_ids(batch_index),
+                ):
+                    if s == 1:
+                        bbox.append(boxes[w])
+                    elif i == self.tokenizer.sep_token_id:
+                        bbox.append([1000] * 4)
+                    else:
+                        bbox.append([0] * 4)
 
-        word_ids = [encoding.word_ids(i) for i in range(num_spans)]
+            if self.framework == "tf":
+                raise ValueError("Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline")
+            elif self.framework == "pt":
+                encoding["bbox"] = torch.tensor([bbox])
 
-        # TODO This will be necessary when we implement overflow support
-        # encoding.pop("overflow_to_sample_mapping", None)
+            word_ids = [encoding.word_ids(i) for i in range(num_spans)]
 
         return {
             **encoding,
@@ -329,15 +354,44 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         word_ids = model_inputs.pop("word_ids", None)
         words = model_inputs.pop("words", None)
 
-        model_outputs = self.model(**model_inputs)
+        if isinstance(self.model, VisionEncoderDecoderModel):
+            model_outputs = self.model.generate(**model_inputs)
+        else:
+            model_outputs = self.model(**model_inputs)
 
         model_outputs["p_mask"] = p_mask
         model_outputs["word_ids"] = word_ids
         model_outputs["words"] = words
-        model_outputs["attention_mask"] = model_inputs["attention_mask"]
+        model_outputs["attention_mask"] = model_inputs.get("attention_mask", None)
         return model_outputs
 
-    def postprocess(self, model_outputs, top_k=1, handle_impossible_answer=False, max_answer_len=15):
+    def postprocess(self, model_outputs, top_k=1, **kwargs):
+        if isinstance(self.model, VisionEncoderDecoderModel):
+            answers = self.postprocess_encoder_decoder(model_outputs)
+        else:
+            answers = self.postprocess_extractive_qa(model_outputs, top_k=top_k, **kwargs)
+
+        answers = sorted(answers, key=lambda x: x["score"], reverse=True)[:top_k]
+        if len(answers) == 1:
+            return answers[0]
+        return answers
+
+    def postprocess_encoder_decoder(self, model_outputs, **kwargs):
+        # postprocess
+        sequence = self.tokenizer.batch_decode(model_outputs.sequences)[0]
+        sequence = sequence.replace(self.tokenizer.eos_token, "").replace(self.tokenizer.pad_token, "")
+        sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
+        ret = {
+            "score": 0.5,  # TODO
+            "answer": "",
+        }
+
+        answer = re.search(r'<s_answer>(.*)</s_answer>', sequence)
+        if answer is not None:
+            ret['answer'] = answer.group(1).strip()
+        return [ret]
+
+    def postprocess_extractive_qa(self, model_outputs, top_k=1, handle_impossible_answer=False, max_answer_len=15, **kwargs):
         min_null_score = 1000000  # large and positive
         answers = []
         words = model_outputs["words"]
@@ -371,8 +425,3 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
 
         if handle_impossible_answer:
             answers.append({"score": min_null_score, "answer": "", "start": 0, "end": 0})
-
-        answers = sorted(answers, key=lambda x: x["score"], reverse=True)[:top_k]
-        if len(answers) == 1:
-            return answers[0]
-        return answers
