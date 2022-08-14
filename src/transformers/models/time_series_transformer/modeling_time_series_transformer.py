@@ -1387,72 +1387,73 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
 
             prediction_loss = weighted_average(loss, weights=loss_weights)
 
-            if not return_dict:
-                outputs = (params) + outputs[1:]
-                return ((prediction_loss,) + outputs) if prediction_loss is not None else outputs
+        if not return_dict:
+            outputs = (params) + outputs[1:]
+            return ((prediction_loss,) + outputs) if prediction_loss is not None else outputs
 
-            return Seq2SeqTSPredictionOutput(
-                loss=prediction_loss,
-                params=params,
-                past_key_values=outputs.past_key_values,
-                decoder_hidden_states=outputs.decoder_hidden_states,
-                decoder_attentions=outputs.decoder_attentions,
-                cross_attentions=outputs.cross_attentions,
-                encoder_last_hidden_state=outputs.encoder_last_hidden_state,
-                encoder_hidden_states=outputs.encoder_hidden_states,
-                encoder_attentions=outputs.encoder_attentions,
-                scale=outputs.scale,
-                static_features=outputs.static_features,
+        return Seq2SeqTSPredictionOutput(
+            loss=prediction_loss,
+            params=params,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+            scale=outputs.scale,
+            static_features=outputs.static_features,
+        )
+
+
+    @torch.no_grad()
+    def generate(self, past_target, future_time_feat, outputs) -> torch.Tensor:
+        decoder = self.model.get_decoder()
+
+        enc_last_hidden = outputs.encoder_last_hidden_state
+        scale = outputs.scale
+        static_feat = outputs.static_features
+
+        num_parallel_samples = self.config.num_parallel_samples
+        repeated_scale = scale.repeat_interleave(repeats=num_parallel_samples, dim=0)
+
+        repeated_past_target = past_target.repeat_interleave(repeats=num_parallel_samples, dim=0) / repeated_scale
+
+        expanded_static_feat = static_feat.unsqueeze(1).expand(-1, future_time_feat.shape[1], -1)
+        features = torch.cat((expanded_static_feat, future_time_feat), dim=-1)
+        repeated_features = features.repeat_interleave(repeats=num_parallel_samples, dim=0)
+
+        repeated_enc_last_hidden = enc_last_hidden.repeat_interleave(repeats=num_parallel_samples, dim=0)
+
+        future_samples = []
+
+        # greedy decoding
+        for k in range(self.config.prediction_length):
+            lagged_sequence = self.get_lagged_subsequences(
+                sequence=repeated_past_target,
+                subsequences_length=1 + k,
+                shift=1,
             )
 
-        else:
-            # prediction
-            decoder = self.model.get_decoder()
+            lags_shape = lagged_sequence.shape
+            reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
 
-            enc_last_hidden = outputs.encoder_last_hidden_state
-            scale = outputs.scale
-            static_feat = outputs.static_features
+            decoder_input = torch.cat((reshaped_lagged_sequence, repeated_features[:, : k + 1]), dim=-1)
 
-            num_parallel_samples = self.config.num_parallel_samples
-            repeated_scale = scale.repeat_interleave(repeats=num_parallel_samples, dim=0)
+            dec_output = decoder(inputs_embeds=decoder_input, encoder_hidden_states=repeated_enc_last_hidden)
+            dec_last_hidden = dec_output.last_hidden_state
 
-            repeated_past_target = past_target.repeat_interleave(repeats=num_parallel_samples, dim=0) / repeated_scale
+            params = self.param_proj(dec_last_hidden[:, -1:])
+            distr = self.output_distribution(params, scale=repeated_scale)
+            next_sample = distr.sample()
 
-            expanded_static_feat = static_feat.unsqueeze(1).expand(-1, future_time_feat.shape[1], -1)
-            features = torch.cat((expanded_static_feat, future_time_feat), dim=-1)
-            repeated_features = features.repeat_interleave(repeats=num_parallel_samples, dim=0)
+            repeated_past_target = torch.cat((repeated_past_target, next_sample / repeated_scale), dim=1)
+            future_samples.append(next_sample)
 
-            repeated_enc_last_hidden = enc_last_hidden.repeat_interleave(repeats=num_parallel_samples, dim=0)
-
-            future_samples = []
-
-            # greedy decoding
-            for k in range(self.config.prediction_length):
-                lagged_sequence = self.get_lagged_subsequences(
-                    sequence=repeated_past_target,
-                    subsequences_length=1 + k,
-                    shift=1,
-                )
-
-                lags_shape = lagged_sequence.shape
-                reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
-
-                decoder_input = torch.cat((reshaped_lagged_sequence, repeated_features[:, : k + 1]), dim=-1)
-
-                dec_output = decoder(inputs_embeds=decoder_input, encoder_hidden_states=repeated_enc_last_hidden)
-                dec_last_hidden = dec_output.last_hidden_state
-
-                params = self.param_proj(dec_last_hidden[:, -1:])
-                distr = self.output_distribution(params, scale=repeated_scale)
-                next_sample = distr.sample()
-
-                repeated_past_target = torch.cat((repeated_past_target, next_sample / repeated_scale), dim=1)
-                future_samples.append(next_sample)
-
-            concat_future_samples = torch.cat(future_samples, dim=1)
-            return concat_future_samples.reshape(
-                (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
-            )
+        concat_future_samples = torch.cat(future_samples, dim=1)
+        return concat_future_samples.reshape(
+            (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
+        )
 
 
 @add_start_docstrings(
