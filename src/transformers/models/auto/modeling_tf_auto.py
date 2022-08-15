@@ -267,7 +267,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("gpt2", "TFGPT2ForSequenceClassification"),
         ("gptj", "TFGPTJForSequenceClassification"),
         ("layoutlm", "TFLayoutLMForSequenceClassification"),
-        ("layoutlm3", "TFLayoutLMv3ForSequenceClassification"),
+        ("layoutlmv3", "TFLayoutLMv3ForSequenceClassification"),
         ("longformer", "TFLongformerForSequenceClassification"),
         ("mobilebert", "TFMobileBertForSequenceClassification"),
         ("mpnet", "TFMPNetForSequenceClassification"),
@@ -297,7 +297,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("flaubert", "TFFlaubertForQuestionAnsweringSimple"),
         ("funnel", "TFFunnelForQuestionAnswering"),
         ("gptj", "TFGPTJForQuestionAnswering"),
-        ("layoutlm3", "TFLayoutLMv3ForQuestionAnswering"),
+        ("layoutlmv3", "TFLayoutLMv3ForQuestionAnswering"),
         ("longformer", "TFLongformerForQuestionAnswering"),
         ("mobilebert", "TFMobileBertForQuestionAnswering"),
         ("mpnet", "TFMPNetForQuestionAnswering"),
@@ -309,6 +309,12 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("xlnet", "TFXLNetForQuestionAnsweringSimple"),
     ]
 )
+
+# print("------------------------------------------------------")
+# print("question answering mapping")
+# for x in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES:
+#     print(x)
+# print("------------------------------------------------------")
 
 TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
