@@ -6,3 +6,7 @@
   - local: installation
     title: Installation
   title: Erste Schritte
+- sections:
+  - local: pipeline_tutorial
+    title: Pipelines für Inferenzen
+  title: Tutorials
