@@ -30,6 +30,7 @@ from .generation_logits_process import (
     ExponentialDecayLengthPenalty,
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
+    HallucinationPenaltyLogitsProcessor,
     HammingDiversityLogitsProcessor,
     InfNanRemoveLogitsProcessor,
     LogitNormalization,
@@ -39,7 +40,6 @@ from .generation_logits_process import (
     NoRepeatNGramLogitsProcessor,
     PrefixConstrainedLogitsProcessor,
     RepetitionPenaltyLogitsProcessor,
-    HallucinationPenaltyLogitsProcessor,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
@@ -703,7 +703,9 @@ class GenerationMixin:
 
         # init warp parameters
         repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
-        hallucination_penalty = hallucination_penalty if hallucination_penalty is not None else self.config.hallucination_penalty
+        hallucination_penalty = (
+            hallucination_penalty if hallucination_penalty is not None else self.config.hallucination_penalty
+        )
         no_repeat_ngram_size = (
             no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
         )
@@ -742,7 +744,9 @@ class GenerationMixin:
         if repetition_penalty is not None and repetition_penalty != 1.0:
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=repetition_penalty))
         if hallucination_penalty is not None and hallucination_penalty != 1.0:
-            processors.append(HallucinationPenaltyLogitsProcessor(penalty=hallucination_penalty, encoder_input_ids = encoder_input_ids))
+            processors.append(
+                HallucinationPenaltyLogitsProcessor(penalty=hallucination_penalty, encoder_input_ids=encoder_input_ids)
+            )
         if no_repeat_ngram_size is not None and no_repeat_ngram_size > 0:
             processors.append(NoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
         if encoder_no_repeat_ngram_size is not None and encoder_no_repeat_ngram_size > 0:

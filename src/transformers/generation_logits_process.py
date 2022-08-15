@@ -166,13 +166,14 @@ class RepetitionPenaltyLogitsProcessor(LogitsProcessor):
         scores.scatter_(1, input_ids, score)
         return scores
 
+
 class HallucinationPenaltyLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] enforcing an exponential penalty on sequences that are not in the original input.
 
     Args:
         hallucination_penalty (`float`):
-            The parameter for hallucination penalty. 1.0 means no penalty. 
+            The parameter for hallucination penalty. 1.0 means no penalty.
     """
 
     def __init__(self, penalty: float, encoder_input_ids: torch.LongTensor):
