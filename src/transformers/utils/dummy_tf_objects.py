@@ -1308,6 +1308,7 @@ class TFHubertPreTrainedModel(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["tf"])
 
+
 TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
