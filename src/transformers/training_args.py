@@ -1398,6 +1398,7 @@ class TrainingArguments:
                             " https://github.com/pytorch/pytorch/issues/82707 for more details."
                         )
                     device = torch.device("mps")
+                    self._n_gpu = 1
 
             else:
                 # if n_gpu is > 1 we'll use nn.DataParallel.
