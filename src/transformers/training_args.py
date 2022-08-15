@@ -480,8 +480,8 @@ class TrainingArguments:
             are also available. See the [Ray documentation](
             https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial) for
             more options.
-        use_mps_devices (`bool`, *optional*, defaults to `False`):
-            Whether to use Apple Silicon M1 chip based `mps` device.
+        use_mps_device (`bool`, *optional*, defaults to `False`):
+            Whether to use Apple Silicon chip based `mps` device.
     """
 
     output_dir: str = field(
@@ -635,7 +635,7 @@ class TrainingArguments:
     )
     no_cuda: bool = field(default=False, metadata={"help": "Do not use CUDA even when it is available"})
     use_mps_device: bool = field(
-        default=False, metadata={"help": "Whether to use Apple Silicon M1 chip based `mps` device."}
+        default=False, metadata={"help": "Whether to use Apple Silicon chip based `mps` device."}
     )
     seed: int = field(default=42, metadata={"help": "Random seed that will be set at the beginning of training."})
     data_seed: Optional[int] = field(default=None, metadata={"help": "Random seed to be used with data samplers."})
