@@ -739,9 +739,9 @@ class JukeboxLayerNorm(FusedLayerNorm):
 
     def forward(self, input):
         if input.numel() > self.max_numel:
-            return F.layer_norm(input.float(), self.normalized_shape, self.weight, self.bias, self.eps).type_as(input)
+            return F.layer_norm(input, self.normalized_shape, self.weight, self.bias, self.eps).type_as(input)
         else:
-            return super(JukeboxLayerNorm, self).forward(input.float()).type_as(input)
+            return super(JukeboxLayerNorm, self).forward(input).type_as(input)
 
 
 def repeat(hidden_states, n_repeat, dim):
@@ -1814,6 +1814,8 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 )  # Transformer
                 if self.add_cond_after_transformer:
                     hidden_states = hidden_states + cond
+                if fp16:
+                    hidden_states = hidden_states.half()
                 hidden_states = self.fc_proj_out(hidden_states)  # Predictions
                 if get_preds:
                     preds.append(hidden_states)
@@ -2221,8 +2223,6 @@ class JukeboxPrior(nn.Module):
                     stride_t=config.cond_strides_t[_level],
                     **audio_conditioning_kwargs,
                 )
-
-            # if dist.get_rank() == 0: print(f"Conditioning on 1 above level(s)")
             self.conditioner_blocks.append(conditioner_block(self.cond_level))
 
         # metadata conditioning : contioning on timing, genres, and artist
@@ -2690,11 +2690,11 @@ def get_starts(total_length, n_ctx, hop_length):
 
 
 # FIXME, consumes too much RAM so should probably be removed
-def get_alignment(music_tokens, labels, prior, level, fp16, config):
+def get_alignment(music_tokens, labels, prior, fp16, config):
     """
     Should compute the lyric to music token alignment, but for now it cannot be used.
     """
-    level = level - 1  # Top level used
+    level = prior.levels - 1  # Top level used
     n_ctx = prior.n_ctx
     tokens = music_tokens[level]
     batch_size, total_length = tokens.shape[0], tokens.shape[1]
@@ -2714,7 +2714,7 @@ def get_alignment(music_tokens, labels, prior, level, fp16, config):
     indices_hops = {}
     prior.to(tokens.device)
     empty_cache()
-    for start in get_starts(total_length, n_ctx, hop_length):
+    for start in get_range(get_starts(total_length, n_ctx, hop_length)):
         end = start + n_ctx
 
         # set metadata offset, sample_length and lyrics tokens
@@ -2785,10 +2785,12 @@ def load_audio(file, sampling_rate, offset, duration, mono=False):
     return raw_audio
 
 
-def load_prompts(audio_files, duration, hps):
+def load_prompts(audio_files,hps, sample_length_in_seconds=70, offset_in_seconds=10 ):
+    duration = sample_length_in_seconds * hps.sampling_rate
+    offset  = offset_in_seconds * hps.sampling_rate
     raw_audio_list = []
     for audio_file in audio_files:
-        raw_audio = load_audio(audio_file, sampling_rate=hps.sampling_rate, duration=duration, offset=0.0, mono=True)
+        raw_audio = load_audio(audio_file, sampling_rate=hps.sampling_rate, duration=duration, offset=offset, mono=True)
         raw_audio = raw_audio.T  # CT -> TC
         raw_audio_list.append(raw_audio)
     while len(raw_audio_list) < hps.n_samples:
@@ -2923,6 +2925,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         offset=0,
         save_results=True,
         sample_length=None,
+        fp16 = False
     ):
         top_prior = self.priors[-1]
         total_length = (
@@ -2934,21 +2937,21 @@ class JukeboxModel(JukeboxPreTrainedModel):
         sampling_kwargs = [
             dict(
                 temp=0.99,
-                fp16=False,
+                fp16=fp16,
                 max_batch_size=lower_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
             ),
             dict(
                 temp=0.99,
-                fp16=False,
+                fp16=fp16,
                 max_batch_size=lower_batch_size,
                 chunk_size=chunk_size,
-                sample_tokens=sample_tokens,
+                sample_tokens=sample_tokens
             ),
             dict(
                 temp=sampling_temperature,
-                fp16=False,
+                fp16=fp16,
                 max_batch_size=max_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
@@ -2984,14 +2987,13 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 logdir = f"{self.start_time}/level_{level}"
                 if not os.path.exists(logdir):
                     os.makedirs(logdir)
-                save_wav(logdir, level, metas=metas, aud=raw_audio, sampling_rate=self.config.sampling_rate)
+                save_wav(logdir, level, metas=metas, aud=raw_audio.float(), sampling_rate=self.config.sampling_rate)
                 if alignments is None and self.priors[-1] is not None and self.priors[-1].nb_relevant_lyric_tokens > 0:
                     empty_cache()
                     alignments = get_alignment(
                         music_tokens,
                         labels[-1],
                         self.priors[-1],
-                        level,
                         sampling_kwargs[-1]["fp16"],
                         self.config,
                     )
@@ -3025,8 +3027,28 @@ class JukeboxModel(JukeboxPreTrainedModel):
         self.vqvae.to(raw_audio.device)
         with torch.no_grad():
             music_tokens = self.vqvae.encode(
-                raw_audio, start_level=0, end_level=len(self.priors), bs_chunks=raw_audio.shape[0]
+                raw_audio, start_level=0, end_level=len(self.priors), bs_chunks=raw_audio.sha@@pe[0]
             )
-        self.vqvae.to("cpu")
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
+
+# torch.utils.checkpoint.checkpoint
+
+# def create_custom_forward(module):
+#     def custom_forward(*inputs):
+#         return module(*inputs, past_key_value, output_attentions)
+
+#     return custom_forward
+
+# layer_outputs = torch.utils.checkpoint.checkpoint(
+#     create_custom_forward(layer_module),
+#     hidden_states,
+#     attention_mask,
+#     layer_head_mask,
+#     encoder_hidden_states,
+#     encoder_attention_mask,
+#     band_mask,
+#     from_mask,
+#     to_mask,
+#     blocked_encoder_mask,
+# )
