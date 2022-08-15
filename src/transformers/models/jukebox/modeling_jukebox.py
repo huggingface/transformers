@@ -738,9 +738,11 @@ class JukeboxLayerNorm(FusedLayerNorm):
 
     def forward(self, input):
         if input.numel() > self.max_numel:
-            return F.layer_norm(input.float(), self.normalized_shape, self.weight, self.bias, self.eps).type_as(input)
+            # return F.layer_norm(input.float(), self.normalized_shape, self.weight, self.bias, self.eps).type_as(input)
+            return F.layer_norm(input, self.normalized_shape, self.weight, self.bias, self.eps).type_as(input)
         else:
-            return super(JukeboxLayerNorm, self).forward(input.float()).type_as(input)
+            # return super(JukeboxLayerNorm, self).forward(input.float()).type_as(input)
+            return super(JukeboxLayerNorm, self).forward(input).type_as(input)
 
 
 def repeat(hidden_states, n_repeat, dim):
@@ -1586,8 +1588,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
         metadata_conditioning=None,
         lyric_encoder_states=None,
         fp16=False,
-        loss_full=False,
-        encode=False,
         get_preds=False,
         get_acts=False,
         get_sep_loss=False,
@@ -1811,7 +1811,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 )
                 self.transformer.check_cache(n_samples, sample_t, fp16)
                 hidden_states = self.transformer(
-                    hidden_states, lyric_encoder_states=lyric_encoder_states, sample=True, fp16=fp16
+                    hidden_states, lyric_encoder_states=lyric_encoder_states, sample=True, fp16=fp16, fp16_out = fp16
                 )  # Transformer
                 if self.add_cond_after_transformer:
                     hidden_states = hidden_states + cond
@@ -2534,6 +2534,8 @@ class JukeboxPrior(nn.Module):
                 self.lyric_encoder = self.lyric_encoder.to(lyric_tokens.device)
             lyric_acts = self.lyric_encoder(lyric_tokens, None, None, None, fp16=fp16)
             lyric_acts = self.lyric_encoder.proj_in(lyric_acts)
+            if fp16:
+                lyric_acts = lyric_acts.half()
             lyric_encoder_states = self.lyric_encoder.final_layer_norm(lyric_acts)
             if sample:
                 self.lyric_encoder.cpu()
@@ -2690,11 +2692,11 @@ def get_starts(total_length, n_ctx, hop_length):
 
 
 # FIXME, consumes too much RAM so should probably be removed
-def get_alignment(music_tokens, labels, prior, level, fp16, config):
+def get_alignment(music_tokens, labels, prior, fp16, config):
     """
     Should compute the lyric to music token alignment, but for now it cannot be used.
     """
-    level = level - 1  # Top level used
+    level = prior.levels - 1  # Top level used
     n_ctx = prior.n_ctx
     tokens = music_tokens[level]
     batch_size, total_length = tokens.shape[0], tokens.shape[1]
@@ -2714,7 +2716,7 @@ def get_alignment(music_tokens, labels, prior, level, fp16, config):
     indices_hops = {}
     prior.to(tokens.device)
     empty_cache()
-    for start in get_starts(total_length, n_ctx, hop_length):
+    for start in get_range(get_starts(total_length, n_ctx, hop_length)):
         end = start + n_ctx
 
         # set metadata offset, sample_length and lyrics tokens
@@ -2866,7 +2868,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         # if there are no levels above should return None!
 
         # set metadata offset, sample_length and lyrics tokens
-        metadata = prior.get_metadata(labels, start, self.config.sample_length, offset)
+        metadata = prior.get_metadata(labels, start, self.total_length, offset)
 
         empty_cache()
         max_batch_size = sampling_kwargs["max_batch_size"]
@@ -2926,6 +2928,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         offset=0,
         save_results=True,
         sample_length=None,
+        fp16 = False
     ):
         top_prior = self.priors[-1]
         total_length = (
@@ -2937,21 +2940,21 @@ class JukeboxModel(JukeboxPreTrainedModel):
         sampling_kwargs = [
             dict(
                 temp=0.99,
-                fp16=False,
+                fp16=fp16,
                 max_batch_size=lower_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
             ),
             dict(
                 temp=0.99,
-                fp16=False,
+                fp16=fp16,
                 max_batch_size=lower_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
             ),
             dict(
                 temp=sampling_temperature,
-                fp16=False,
+                fp16=fp16,
                 max_batch_size=max_batch_size,
                 chunk_size=chunk_size,
                 sample_tokens=sample_tokens,
@@ -2960,17 +2963,21 @@ class JukeboxModel(JukeboxPreTrainedModel):
         self.start_time = time.strftime("%Y-%m-%d-%Hh%M")
         if sample_levels is None:
             sample_levels = range(len(self.priors))
+
+        self.total_length = total_length # total length of the signal, might be bit different
         for level in reversed(sample_levels):
-            self.config.sample_length = total_length  # total length of the signal, might be bit different
+             
+
             # from the actual generated length
             self.priors[level].to(music_tokens[level].device).eval()
             empty_cache()
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
-            total_length = self.config.sample_length // self.priors[level].raw_to_tokens
+            # self.priors[level].total_length = total_length // self.priors[level].raw_to_tokens
+            total_token_to_sample = total_length // self.priors[level].raw_to_tokens
             hop_length = int(self.config.hop_fraction[-level - 1] * self.priors[level].n_ctx)
 
             music_tokens = self.sample_level(
-                music_tokens, labels[level], offset, sampling_kwargs[level], level, total_length, hop_length
+                music_tokens, labels[level], offset, sampling_kwargs[level], level, total_token_to_sample, hop_length
             )
 
             self.priors[level].to("cpu")
@@ -3012,20 +3019,20 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
     # Continue ancestral sampling from previously saved codes
     def continue_sample(self, music_tokens, labels, **sampling_kwargs):
-        sample_levels = list(range(len(self.priors)))
+        sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
 
     # Upsample given already generated upper-level codes
     def upsample(self, music_tokens, labels, **sampling_kwargs):
-        sample_levels = list(range(len(self.priors) - 1))
+        sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors)-1)))
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
 
     # Prompt the model with raw audio input (dimension: NTC) and generate continuations
     def primed_sample(self, raw_audio, labels, **sampling_kwargs):
-        sample_levels = list(range(len(self.priors)))
-        self.vqvae.to(raw_audio.device)
+        sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
+        self.vqvae.to(raw_audio.device).float()
         with torch.no_grad():
             music_tokens = self.vqvae.encode(
                 raw_audio, start_level=0, end_level=len(self.priors), bs_chunks=raw_audio.shape[0]
@@ -3033,3 +3040,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
         self.vqvae.to("cpu")
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
+
+# TODO add tied embeddings for the lyric encoder lm head as well as the proj_out when they are not seperated.
+# TODO should support cehckpointing attention as it is faster 
