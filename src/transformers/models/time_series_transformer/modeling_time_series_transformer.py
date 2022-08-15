@@ -1405,9 +1405,33 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             static_features=outputs.static_features,
         )
 
-
     @torch.no_grad()
-    def generate(self, past_target, future_time_feat, outputs) -> torch.Tensor:
+    def generate(
+        self,
+        feat_static_cat: torch.Tensor,
+        feat_static_real: torch.Tensor,
+        past_time_feat: torch.Tensor,
+        past_target: torch.Tensor,
+        past_observed_values: torch.Tensor,
+        future_time_feat: Optional[torch.Tensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+    ) -> torch.Tensor:
+        outputs = self(
+            feat_static_cat=feat_static_cat,
+            feat_static_real=feat_static_real,
+            past_time_feat=past_time_feat,
+            past_target=past_target,
+            past_observed_values=past_observed_values,
+            future_time_feat=future_time_feat,
+            future_target=None,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=False,
+            use_cache=use_cache,
+        )
+
         decoder = self.model.get_decoder()
 
         enc_last_hidden = outputs.encoder_last_hidden_state
