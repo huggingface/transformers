@@ -1387,7 +1387,7 @@ def get_user_field(
         is_valid_answer (`Callable`, *optional*):
             If set, the question will be asked until this function returns `True` on the provided answer.
         convert_to (`Callable`, *optional*):
-            If set, the answer will be passed to this function. If this function raises an error on the procided
+            If set, the answer will be passed to this function. If this function raises an error on the provided
             answer, the question will be asked again.
         fallback_message (`str`, *optional*):
             A message that will be displayed each time the question is asked again to the user.
