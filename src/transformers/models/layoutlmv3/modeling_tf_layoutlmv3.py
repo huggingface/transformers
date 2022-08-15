@@ -1,35 +1,29 @@
 import collections
 import math
-from typing import Dict
-from typing import Optional
-from typing import Tuple
-from typing import Union
+from typing import Dict, Optional, Tuple, Union
 
 import tensorflow as tf
 
+from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import (
     TFBaseModelOutput,
+    TFQuestionAnsweringModelOutput,
     TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
-    TFQuestionAnsweringModelOutput,
 )
 from ...modeling_tf_utils import (
     TFPreTrainedModel,
+    TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
-    TFQuestionAnsweringLoss,
     get_initializer,
     keras_serializable,
     unpack_inputs,
 )
-from ...activations_tf import get_tf_activation
 from ...tf_utils import shape_list
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .configuration_layoutlmv3 import LayoutLMv3Config
+
 
 _CONFIG_FOR_DOC = "LayoutLMv3Config"
 
