@@ -1312,6 +1312,13 @@ class TFHubertPreTrainedModel(metaclass=DummyObject):
 TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class TFLayoutLMv3ForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFLayoutLMv3ForSequenceClassification(metaclass=DummyObject):
     _backends = ["tf"]
 
@@ -1320,13 +1327,6 @@ class TFLayoutLMv3ForSequenceClassification(metaclass=DummyObject):
 
 
 class TFLayoutLMv3ForTokenClassification(metaclass=DummyObject):
-    _backends = ["tf"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["tf"])
-
-
-class TFLayoutLMv3ForQuestionAnswering(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):
