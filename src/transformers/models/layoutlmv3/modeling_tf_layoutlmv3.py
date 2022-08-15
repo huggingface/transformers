@@ -345,7 +345,7 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaSelfOutput
+# Copied from models.roberta.modeling_tf_roberta.TFRobertaSelfOutput
 class TFLayoutLMv3SelfOutput(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(**kwargs)
@@ -394,7 +394,7 @@ class TFLayoutLMv3Attention(tf.keras.layers.Layer):
         return outputs
 
 
-# Copied from transformers.models.roberta.modeling_tf_bert.TFRobertaIntermediate
+# Copied from models.roberta.modeling_tf_bert.TFRobertaIntermediate
 class TFLayoutLMv3Intermediate(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(**kwargs)
@@ -415,7 +415,7 @@ class TFLayoutLMv3Intermediate(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_tf_bert.TFRobertaOutput
+# Copied from models.roberta.modeling_tf_bert.TFRobertaOutput
 class TFLayoutLMv3Output(tf.keras.layers.Layer):
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(**kwargs)
