@@ -2787,7 +2787,7 @@ def load_audio(file, sampling_rate, offset, duration, mono=False):
     return raw_audio
 
 
-def load_prompts(audio_files,hps, sample_length_in_seconds=70, offset_in_seconds=10 ):
+def load_prompts(audio_files,hps, sample_length_in_seconds=70, offset_in_seconds=10):
     duration = sample_length_in_seconds * hps.sampling_rate
     offset  = offset_in_seconds * hps.sampling_rate
     raw_audio_list = []
@@ -2797,9 +2797,9 @@ def load_prompts(audio_files,hps, sample_length_in_seconds=70, offset_in_seconds
         )
         raw_audio = raw_audio.T  # CT -> TC
         raw_audio_list.append(raw_audio)
-    while len(raw_audio_list) < n_samples:
+    while len(raw_audio_list) < len(audio_files):
         raw_audio_list.extend(raw_audio_list)
-    raw_audio_list = raw_audio_list[:n_samples]
+    raw_audio_list = raw_audio_list[:len(audio_files)]
     raw_audio = torch.stack([torch.from_numpy(raw_audio) for raw_audio in raw_audio_list])
     return raw_audio
 
@@ -2998,13 +2998,13 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 save_wav(logdir, level, metas=metas, aud=raw_audio.float(), sampling_rate=self.config.sampling_rate)
                 if alignments is None and self.priors[-1] is not None and self.priors[-1].nb_relevant_lyric_tokens > 0:
                     empty_cache()
-                    alignments = get_alignment(
-                        music_tokens,
-                        labels[-1],
-                        self.priors[-1],
-                        sampling_kwargs[-1]["fp16"],
-                        self.config,
-                    )
+                    # alignments = get_alignment(
+                    #     music_tokens,
+                    #     labels[-1],
+                    #     self.priors[-1],
+                    #     sampling_kwargs[-1]["fp16"],
+                    #     self.config,
+                    # )
                     pass  # consumes too much ram
         return music_tokens
 
@@ -3035,7 +3035,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         self.vqvae.to(raw_audio.device).float()
         with torch.no_grad():
             music_tokens = self.vqvae.encode(
-                raw_audio, start_level=0, end_level=len(self.priors), bs_chunks=raw_audio.sha@@pe[0]
+                raw_audio, start_level=0, end_level=len(self.priors), bs_chunks=raw_audio.shape[0]
             )
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
