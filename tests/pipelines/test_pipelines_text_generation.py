@@ -151,10 +151,19 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         prompt = """Hello I believe in"""
         text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-bart")
         output = text_generator(prompt)
-        self.assertEqual(output, [{'generated_text': 'Hello I believe in in in number number number number number number number number number'}])
-        
+        self.assertEqual(
+            output,
+            [
+                {
+                    "generated_text": (
+                        "Hello I believe in in in number number number number number number number number number"
+                    )
+                }
+            ],
+        )
+
         output = text_generator(prompt, stop_sequence=" number")
-        self.assertEqual(output, [{'generated_text': 'Hello I believe in in in number'}])
+        self.assertEqual(output, [{"generated_text": "Hello I believe in in in number"}])
 
     def run_pipeline_test(self, text_generator, _):
         model = text_generator.model
