@@ -1,6 +1,5 @@
 # coding=utf-8
 # Copyright 2022 The OpenAI Team Authors and HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -739,8 +738,10 @@ class JukeboxLayerNorm(FusedLayerNorm):
 
     def forward(self, input):
         if input.numel() > self.max_numel:
+            # return F.layer_norm(input.float(), self.normalized_shape, self.weight, self.bias, self.eps).type_as(input)
             return F.layer_norm(input, self.normalized_shape, self.weight, self.bias, self.eps).type_as(input)
         else:
+            # return super(JukeboxLayerNorm, self).forward(input.float()).type_as(input)
             return super(JukeboxLayerNorm, self).forward(input).type_as(input)
 
 
@@ -1549,6 +1550,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         # TODO rename prime_len
         self.only_encode = only_encode
         self.prime_len = prime_len
+        # TODO rename fc_pro_out to LM head an probably use HF's linking trick
         if merged_decoder:
             # Merged piped model uses this setup
             self.add_cond_after_transformer = False
@@ -1558,6 +1560,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
             self.share_embed_tokens_fc_proj_out = True
 
         if not only_encode:
+            # TODO rename fc_pro_out to LM head an probably use HF's linking trick
             self.fc_proj_out = nn.Linear(width, embed_dim, bias=False)
             if self.share_embed_tokens_fc_proj_out:
                 self.fc_proj_out.weight = self.embed_tokens.weight
@@ -1585,8 +1588,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
         metadata_conditioning=None,
         lyric_encoder_states=None,
         fp16=False,
-        loss_full=False,
-        encode=False,
         get_preds=False,
         get_acts=False,
         get_sep_loss=False,
@@ -1810,7 +1811,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 )
                 self.transformer.check_cache(n_samples, sample_t, fp16)
                 hidden_states = self.transformer(
-                    hidden_states, lyric_encoder_states=lyric_encoder_states, sample=True, fp16=fp16
+                    hidden_states, lyric_encoder_states=lyric_encoder_states, sample=True, fp16=fp16, fp16_out = fp16
                 )  # Transformer
                 if self.add_cond_after_transformer:
                     hidden_states = hidden_states + cond
@@ -2232,7 +2233,6 @@ class JukeboxPrior(nn.Module):
                 n_time=self.n_time, include_time_signal=not self.audio_conditioning, **metadata_conditioning_kwargs
             )
 
-        # TODO as the prior type can change, can't rename to decoder or enc_dec
         if config.single_enc_dec[-level - 1]:
             # Single encoder-decoder transformer
             self.prior_shapes = [(self.nb_relevant_lyric_tokens,), prior_kwargs.pop("input_shape")]
@@ -2534,6 +2534,8 @@ class JukeboxPrior(nn.Module):
                 self.lyric_encoder = self.lyric_encoder.to(lyric_tokens.device)
             lyric_acts = self.lyric_encoder(lyric_tokens, None, None, None, fp16=fp16)
             lyric_acts = self.lyric_encoder.proj_in(lyric_acts)
+            if fp16:
+                lyric_acts = lyric_acts.half()
             lyric_encoder_states = self.lyric_encoder.final_layer_norm(lyric_acts)
             if sample:
                 self.lyric_encoder.cpu()
@@ -2549,7 +2551,7 @@ class JukeboxPrior(nn.Module):
         """
         if self.lyric_conditioning:
             lyric_encoder_states = lyric_encoder_states.float()
-            lyric_encoder_states = self.lyric_encoder.proj_out(lyric_encoder_states)
+            lyric_encoder_states = self.lyric_encoder.lm_head(lyric_encoder_states)
             lyric_enc_loss = nn.functional.cross_entropy(
                 lyric_encoder_states.view(-1, self.lyric_enc_dim), target_lyrics.view(-1)
             ) / np.log(2.0)
@@ -2790,12 +2792,14 @@ def load_prompts(audio_files,hps, sample_length_in_seconds=70, offset_in_seconds
     offset  = offset_in_seconds * hps.sampling_rate
     raw_audio_list = []
     for audio_file in audio_files:
-        raw_audio = load_audio(audio_file, sampling_rate=hps.sampling_rate, duration=duration, offset=offset, mono=True)
+        raw_audio = load_audio(
+            audio_file, sampling_rate=hps.sampling_rate, duration=duration, offset=offset, mono=True
+        )
         raw_audio = raw_audio.T  # CT -> TC
         raw_audio_list.append(raw_audio)
-    while len(raw_audio_list) < hps.n_samples:
+    while len(raw_audio_list) < n_samples:
         raw_audio_list.extend(raw_audio_list)
-    raw_audio_list = raw_audio_list[: hps.n_samples]
+    raw_audio_list = raw_audio_list[:n_samples]
     raw_audio = torch.stack([torch.from_numpy(raw_audio) for raw_audio in raw_audio_list])
     return raw_audio
 
@@ -2865,7 +2869,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         # if there are no levels above should return None!
 
         # set metadata offset, sample_length and lyrics tokens
-        metadata = prior.get_metadata(labels, start, self.config.sample_length, offset)
+        metadata = prior.get_metadata(labels, start, self.total_length, offset)
 
         empty_cache()
         max_batch_size = sampling_kwargs["max_batch_size"]
@@ -2960,17 +2964,21 @@ class JukeboxModel(JukeboxPreTrainedModel):
         self.start_time = time.strftime("%Y-%m-%d-%Hh%M")
         if sample_levels is None:
             sample_levels = range(len(self.priors))
+
+        self.total_length = total_length # total length of the signal, might be bit different
         for level in reversed(sample_levels):
-            self.config.sample_length = total_length  # total length of the signal, might be bit different
+             
+
             # from the actual generated length
             self.priors[level].to(music_tokens[level].device).eval()
             empty_cache()
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
-            total_length = self.config.sample_length // self.priors[level].raw_to_tokens
+            # self.priors[level].total_length = total_length // self.priors[level].raw_to_tokens
+            total_token_to_sample = total_length // self.priors[level].raw_to_tokens
             hop_length = int(self.config.hop_fraction[-level - 1] * self.priors[level].n_ctx)
 
             music_tokens = self.sample_level(
-                music_tokens, labels[level], offset, sampling_kwargs[level], level, total_length, hop_length
+                music_tokens, labels[level], offset, sampling_kwargs[level], level, total_token_to_sample, hop_length
             )
 
             self.priors[level].to("cpu")
@@ -3011,20 +3019,20 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
     # Continue ancestral sampling from previously saved codes
     def continue_sample(self, music_tokens, labels, **sampling_kwargs):
-        sample_levels = list(range(len(self.priors)))
+        sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
 
     # Upsample given already generated upper-level codes
     def upsample(self, music_tokens, labels, **sampling_kwargs):
-        sample_levels = list(range(len(self.priors) - 1))
+        sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors)-1)))
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
 
     # Prompt the model with raw audio input (dimension: NTC) and generate continuations
     def primed_sample(self, raw_audio, labels, **sampling_kwargs):
-        sample_levels = list(range(len(self.priors)))
-        self.vqvae.to(raw_audio.device)
+        sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
+        self.vqvae.to(raw_audio.device).float()
         with torch.no_grad():
             music_tokens = self.vqvae.encode(
                 raw_audio, start_level=0, end_level=len(self.priors), bs_chunks=raw_audio.sha@@pe[0]

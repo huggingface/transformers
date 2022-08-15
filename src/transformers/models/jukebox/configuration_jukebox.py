@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The OpenAI Team Authors and HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2022 The OpenAI Team Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -61,7 +60,6 @@ class JukeboxConfig(PretrainedConfig):
     """
 
     model_type = "jukebox"
-    keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "hidden_size": "n_embd",
         "max_position_embeddings": "n_positions",
@@ -132,7 +130,6 @@ class JukeboxConfig(PretrainedConfig):
         prior_attn_dropout=0,
         prior_resid_dropout=0,
         prior_emb_dropout=0,
-        # TODO rename to vqvae
         vqvae_levels=3,
         vqvae_downs_t=(3, 2, 2),
         vqvae_strides_t=(2, 2, 2),

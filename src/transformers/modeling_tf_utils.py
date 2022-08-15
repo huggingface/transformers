@@ -2161,6 +2161,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
         subfolder = kwargs.pop("subfolder", "")
+        commit_hash = kwargs.pop("_commit_hash", None)
 
         if trust_remote_code is True:
             logger.warning(
@@ -2191,10 +2192,14 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 revision=revision,
                 _from_auto=from_auto_class,
                 _from_pipeline=from_pipeline,
+                _commit_hash=commit_hash,
                 **kwargs,
             )
         else:
             model_kwargs = kwargs
+
+        if commit_hash is None:
+            commit_hash = getattr(config, "_commit_hash", None)
 
         # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
         # index of the files.
@@ -2253,6 +2258,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         revision=revision,
                         subfolder=subfolder,
                         _raise_exceptions_for_missing_entries=False,
+                        _commit_hash=commit_hash,
                     )
                     resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
@@ -2320,6 +2326,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 use_auth_token=use_auth_token,
                 user_agent=user_agent,
                 revision=revision,
+                _commit_hash=commit_hash,
             )
 
         config.name_or_path = pretrained_model_name_or_path
