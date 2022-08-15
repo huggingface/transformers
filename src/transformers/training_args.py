@@ -37,6 +37,7 @@ from .utils import (
     ccl_version,
     get_full_repo_name,
     is_accelerate_available,
+    is_psutil_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_torch_available,
@@ -1335,7 +1336,11 @@ class TrainingArguments:
                             "Looks like distributed multinode run but MASTER_ADDR env not set, "
                             "please try exporting rank 0's hostname as MASTER_ADDR"
                         )
-                if torch.get_num_threads() == 1 and get_int_from_env(["OMP_NUM_THREADS", "MKL_NUM_THREADS"], 0) == 0:
+                if (
+                    torch.get_num_threads() == 1
+                    and get_int_from_env(["OMP_NUM_THREADS", "MKL_NUM_THREADS"], 0) == 0
+                    and is_psutil_available()
+                ):
                     import psutil
 
                     num_cpu_threads_per_process = int(psutil.cpu_count(logical=False) / local_size)
