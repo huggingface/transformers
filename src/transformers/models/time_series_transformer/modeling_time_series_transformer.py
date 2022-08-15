@@ -1413,8 +1413,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
         past_time_feat: torch.Tensor,
         past_target: torch.Tensor,
         past_observed_values: torch.Tensor,
-        future_time_feat: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
+        future_time_feat: Optional[torch.Tensor],
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> torch.Tensor:
@@ -1429,11 +1428,10 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=False,
-            use_cache=use_cache,
+            use_cache=True,
         )
 
         decoder = self.model.get_decoder()
-
         enc_last_hidden = outputs.encoder_last_hidden_state
         scale = outputs.scale
         static_feat = outputs.static_features
