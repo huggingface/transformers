@@ -1069,7 +1069,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
         logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
-        logits_per_image = logits_per_text.T
+        logits_per_image = logits_per_text.t()
 
         loss = None
         if return_loss:
