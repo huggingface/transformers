@@ -271,21 +271,21 @@ class TFCvtSelfAttention(tf.keras.layers.Layer):
         )
 
         self.projection_query = tf.keras.layers.Dense(
-            units=self.embed_dim,
+            units=embed_dim,
             kernel_initializer=get_initializer(config.initializer_range),
             use_bias=True,
             bias_initializer="zeros",
             name="projection_query",
         )
         self.projection_key = tf.keras.layers.Dense(
-            units=self.embed_dim,
+            units=embed_dim,
             kernel_initializer=get_initializer(config.initializer_range),
             use_bias=True,
             bias_initializer="zeros",
             name="projection_key",
         )
         self.projection_value = tf.keras.layers.Dense(
-            units=self.embed_dim,
+            units=embed_dim,
             kernel_initializer=get_initializer(config.initializer_range),
             use_bias=True,
             bias_initializer="zeros",

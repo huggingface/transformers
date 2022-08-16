@@ -28,6 +28,13 @@ if is_vision_available():
     from transformers import AutoFeatureExtractor
 
 
+class TFCvtConfigTester(ConfigTester):
+    def create_and_test_config_common_properties(self):
+        config = self.config_class(**self.inputs_dict)
+        self.parent.assertTrue(hasattr(config, "embed_dim"))
+        self.parent.assertTrue(hasattr(config, "num_heads"))
+
+
 class TFCvtModelTester:
     def __init__(
         self,
@@ -136,19 +143,16 @@ class TFCvtModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TFCvtModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=CvtConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = TFCvtConfigTester(self, config_class=CvtConfig, has_text_modality=False, hidden_size=37)
 
     def test_config(self):
-        self.create_and_test_config_common_properties()
+        self.config_tester.create_and_test_config_common_properties()
         self.config_tester.create_and_test_config_to_json_string()
         self.config_tester.create_and_test_config_to_json_file()
         self.config_tester.create_and_test_config_from_and_save_pretrained()
         self.config_tester.create_and_test_config_with_num_labels()
         self.config_tester.check_config_can_be_init_without_params()
         self.config_tester.check_config_arguments_init()
-
-    def create_and_test_config_common_properties(self):
-        return
 
     @unittest.skip(reason="Cvt does not output attentions")
     def test_attention_outputs(self):
