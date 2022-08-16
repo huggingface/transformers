@@ -176,7 +176,7 @@ from transformers import AutoTokenizer
 tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 tokenized_data = tokenizer(dataset["text"], return_tensors="np", padding=True)
 
-labels = np.array(dataset["label"]) # Label is already an array of 0 and 1
+labels = np.array(dataset["label"])  # Label is already an array of 0 and 1
 ```
 
 Finally, we load, compile and fit our model:
@@ -223,6 +223,7 @@ def tokenize_dataset(data):
     # Keys of the returned dictionary will be added to the dataset as columns
     return tokenizer(data["text"])
 
+
 dataset = dataset.map(tokenize_dataset)
 ```
 
@@ -232,12 +233,7 @@ reduces the number of padding tokens compared to padding the entire dataset.
 
 
 ```py
->>> tf_dataset = model.prepare_tf_dataset(
-...    dataset,
-...    batch_size=16,
-...    shuffle=True,
-...    tokenizer=tokenizer
-... )
+>>> tf_dataset = model.prepare_tf_dataset(dataset, batch_size=16, shuffle=True, tokenizer=tokenizer)
 ```
 
 <Tip>
@@ -260,8 +256,6 @@ model.compile(optimizer=Adam(3e-5))
 model.fit(tf_dataset)
 ```
 
-
-```
 </tf>
 </frameworkcontent>
 
