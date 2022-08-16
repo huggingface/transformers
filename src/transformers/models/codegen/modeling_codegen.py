@@ -444,6 +444,8 @@ class CodeGenModel(CodeGenPreTrainedModel):
         # Model parallelism
         self.model_parallel = False
         self.device_map = None
+        self.first_device = None
+        self.last_device = None
 
     def parallelize(self, device_map=None):
         if device_map is None:
@@ -671,6 +673,8 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel):
         # Model parallelism
         self.model_parallel = False
         self.device_map = None
+        self.first_device = None
+        self.last_device = None
 
     def parallelize(self, device_map=None):
         if device_map is None:
