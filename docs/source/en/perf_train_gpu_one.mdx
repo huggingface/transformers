@@ -736,18 +736,18 @@ This feature involves 3 different libraries. To install them, please follow the 
 
 ## `bitsandbytes` integration for Int8 mixed-precision matrix decomposition
 
-From the paper `LLM.int8() : 8-bit Matrix Multiplication for Transformers at Scale`, we suport HuggingFace 🤗  integration for all models in the Hub with few lines of code. 
-For models trained in  half-precision (aka, either `float16` or `bfloat16`) or full precision. This method aims to reduce `nn.Linear` size by 2 (if trained in half precision) or by 4 if trained in full precision, without affecting too much quality by operating on the outliers in half-precision.
-This technique is useful and works well for billion scale models (>1B parameters) therefore we advice you to use it only for models of that scale. This method has been tested for 2-billion to 176-billion scale models and supports only PyTorch models. 
+From the paper `LLM.int8() : 8-bit Matrix Multiplication for Transformers at Scale`, we support HuggingFace integration for all models in the Hub with a few lines of code. 
+The method reduce `nn.Linear` size by 2 `float16` or `bfloat16` weights for and by 4 for `float32` weights, with close to no impact to impact to the quality by operating on the outliers in half-precision.
+To benefit from this technique you'd want to use it only for models that are larger than 2 Billion parameters. This method has been validated to work well from 2 to 176-billion parameter models. Only PyTorch models are supported. 
 
 ![HFxbitsandbytes.png](https://s3.amazonaws.com/moonup/production/uploads/1659861207959-62441d1d9fdefb55a0b7d12c.png)
 
-Int8 mixed-precision matrix decomposition works by separating a matrix multiplication into two streams: (1) and systematic feature outlier stream matrix multiplied in fp16 (0.01%), (2) a regular stream of int8 matrix multiplication (99.9%). With this method, int8 inference with no predictive degradation is possible for very large models (>=176B parameters).
+Int8 mixed-precision matrix decomposition works by separating a matrix multiplication into two streams: (1) a systematic feature outlier stream matrix multiplied in fp16 (0.01%), (2) a regular stream of int8 matrix multiplication (99.9%). With this method, int8 inference with no predictive degradation is possible for very large models (>=6B parameters).
 For more details regarding the method, check out the [paper](https://huggingface.co/blog/hf-bitsandbytes-integration) or our [blogpost about the integration](https://huggingface.co/blog/hf-bitsandbytes-integration).
 
 ![MixedInt8.gif](https://s3.amazonaws.com/moonup/production/uploads/1660567469965-62441d1d9fdefb55a0b7d12c.gif)
 
-Note that you would require a GPU to run mixed-8bit models as the kernels has been compiled for GPUs only. Make sure that you have enough GPU RAM to store the quarter (or half if your model is natively in half precision) of the model before using this feature. 
+Note, that you would require a GPU to run mixed-8bit models as the kernels have been compiled for GPUs only. Make sure that you have enough GPU memory to store the quarter (or half if your model weights are in half precision) of the model before using this feature. 
 Below are some notes to help you use this module, or follow the demos on [Google colab](#colab-demos).
 
 ### Requirements
@@ -765,8 +765,8 @@ After carefully installing the required libraries, the way to load your mixed 8-
 model_name = "bigscience/bloom-2b5"
 model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
 ```
-The implementation supports multi-GPU setup thanks to `accelerate` as backend. If you want to control the GPU memory you want to allocate for each GPU, you can use the `max_memory` argument as follows:
-(If allocating `1GB` into GPU-0 and `2GB` into GPU-1, you can use `max_memory={0:"1GB", 1:"2GB"}`)
+The current implementation supports a multi-GPU setup when using `accelerate`. If you want to control the GPU memory you want to allocate for each GPU, you can use the `max_memory` argument as follows:
+
 ```py
 max_memory_mapping = {0: "1GB", 1: "2GB"}
 model_name = "bigscience/bloom-3b"
@@ -775,10 +775,12 @@ model_8bit = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
+In this example, the first GPU will use 1GB of memory and the second 2GB.
+
 ### Colab demos
 
 With this method you can infer on models that were not possible to infer on a Google Colab before. 
-Checkout the demo for running T5-11b (42GB in fp16)! Using 8-bit modules on Google Colab:
+Check out the demo for running T5-11b (42GB in fp16)! Using 8-bit quantization on Google Colab:
 
 [![Open In Colab: T5-11b demo](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1YORPWx4okIHXnjW7MSAidXN29mPVNT7F?usp=sharing)
 

@@ -6,12 +6,12 @@ Hi there, this is a recipe on how to effectively debug `bitsandbytes` integratio
 
 ## Library requirements
 
-+ `transformers==4.22.0.dev`
-+ `accelerate==0.12.0` 
++ `transformers>=4.22.0`
++ `accelerate>=0.12.0` 
 + `0.31.8>=bitsandbytes>=0.31.5`.
 ## Hardware requirements
 
-I am using a setup of 2 GPUs that are NVIDIA-Tesla T4 15GB - `younes-testing-multi-gpu` on GCP. To run successfully `bitsandbytes` you would need a 8-bit core tensor supported GPU. Note that Ampere architectures should be supported. Here is an exhaustive list of the supported GPU types at the time of writing:
+I am using a setup of 2 GPUs that are NVIDIA-Tesla T4 15GB - `younes-testing-multi-gpu` on GCP. To run successfully `bitsandbytes` you would need a 8-bit core tensor supported GPU. Note that Ampere architectures should be supported. Here is an exhaustive list of the supported GPU types at the time of this writing:
 
 - RTX 20s & RTX 30s
 - A40-A100
@@ -63,6 +63,7 @@ Same comment as above
 ### `RuntimeError: CUDA error: an illegal memory access was encountered ... consider passing CUDA_LAUNCH_BLOCKING=1`
 
 Run your script by pre-pending `CUDA_LAUNCH_BLOCKING=1` and you should observe an error as below:
+
 ### `CUDA illegal memory error: an illegal memory access at line...`:
 
 Check the CUDA verisons with:
@@ -77,7 +78,7 @@ or
 ```
 ls -l $LD_LIBRARY_PATH
 ```
-And check if `libcudart.so` has a correct simlink that is set. Sometimes `nvcc` detects the correct CUDA version but `bitsandbytes` doesn't. You have to make sure that the simlink that is set for the file `libcudart.so` is redirected to the correct CUDA file. 
+And check if `libcudart.so` has a correct symlink that is set. Sometimes `nvcc` detects the correct CUDA version but `bitsandbytes` doesn't. You have to make sure that the symlink that is set for the file `libcudart.so` is redirected to the correct CUDA file. 
 
 Here is an example of a badly configured CUDA installation:
 
@@ -100,6 +101,7 @@ And you can see that:
 ![Screenshot 2022-08-15 at 15.12.33.png](https://s3.amazonaws.com/moonup/production/uploads/1660569176504-62441d1d9fdefb55a0b7d12c.png)
 
 If you see that the file is linked to the wrong CUDA version (here 10.2), find the correct location for `libcudart.so` (`find --name ...`) and replace the environment variable `LD_LIBRARY_PATH` with the one containing the correct `libcudart.so` file.
+
 ### If `bitsandbytes` installation breaks everything:
 
 It happened in a previous version that after installing `bitsandbytes` and running this script:
