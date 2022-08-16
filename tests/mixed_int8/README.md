@@ -20,8 +20,8 @@ I am using a setup of 2 GPUs that are NVIDIA-Tesla T4 15GB - `younes-testing-mul
 ## Virutal envs
 
 ```conda create --name int8-testing python==3.8```
-```pip install bitsandbytes```
-```pip install accelerate```
+```pip install bitsandbytes>=0.31.5```
+```pip install accelerate>=0.12.0```
 ```pip install git+https://github.com/huggingface/transformers.git```
 
 ## Trobleshooting
