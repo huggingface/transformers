@@ -43,7 +43,7 @@ import torch
 vec = torch.randn(1, 2, 3).to(0)
 ```
 
-Works without any error. If not install torch using `conda` like:
+Works without any error. If not, install torch using `conda` like:
 
 ```bash
 conda create --name int8-testing python==3.8
@@ -53,7 +53,7 @@ pip install git+https://github.com/huggingface/transformers.git
 pip install accelerate
 ```
 
-And the snippet above should work
+and the snippet above should work.
 
 ### ` `bitsandbytes` operations are not supported under CPU!`
 
@@ -65,7 +65,7 @@ Use the latest version of `accelerate` with a command such as: `pip install --fo
 
 ### `Parameter has no attribue .CB` 
 
-Same comment as above
+Same comment as above.
 
 ### `RuntimeError: CUDA error: an illegal memory access was encountered ... consider passing CUDA_LAUNCH_BLOCKING=1`
 
@@ -77,7 +77,7 @@ Check the CUDA verisons with:
 ```
 nvcc --version
 ```
-And confirm it is the same version than the one detected by `bitsandbytes`. If not, run:
+and confirm it is the same version as the one detected by `bitsandbytes`. If not, run:
 ```
 ls -l $CONDA_PREFIX/lib/libcudart.so
 ```
@@ -93,7 +93,7 @@ Here is an example of a badly configured CUDA installation:
 
 ![Screenshot 2022-08-15 at 15.12.23.png](https://s3.amazonaws.com/moonup/production/uploads/1660569220888-62441d1d9fdefb55a0b7d12c.png)
 
-Which means that the detected CUDA version is 11.3 but `bitsandbytes` outputs:
+which means that the detected CUDA version is 11.3 but `bitsandbytes` outputs:
 
 ![image.png](https://s3.amazonaws.com/moonup/production/uploads/1660569284243-62441d1d9fdefb55a0b7d12c.png)
 
@@ -103,7 +103,7 @@ Therefore check:
 ls -l /opt/conda/envs/py37/lib/libcudart.so
 ```
 
-And you can see that:
+and you can see
 
 ![Screenshot 2022-08-15 at 15.12.33.png](https://s3.amazonaws.com/moonup/production/uploads/1660569176504-62441d1d9fdefb55a0b7d12c.png)
 
@@ -117,7 +117,7 @@ It happened in a previous version that after installing `bitsandbytes` and runni
 import bitsandbytes as bnb
 ```
 
-You get an error:
+we got an error:
 
 ```
 major, minor, revision = ...
