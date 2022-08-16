@@ -35,7 +35,12 @@ __global__ void forward_masked_softmax_kernel(
     const int q_length_id = blockIdx.y;
     const int kv_length_id = threadIdx.x;
 
-    __shared__ float temp_storage[1];
+    // We need 2 float storage, one for max computation, the other for normalizing exponential
+    __shared__ float temp_storage[2];
+    if (kv_length_id == 0) {
+        temp_storage[0] == -std::numeric_limits<float>::infinity();
+        temp_storage[1] == 0;
+    }
 
     // Compute mask
     float elt;
@@ -44,11 +49,11 @@ __global__ void forward_masked_softmax_kernel(
         elt = -std::numeric_limits<float>::infinity();
     } else {
         elt = attention_scores[batch_id][q_length_id][kv_length_id];
+        gpuAtomicMax(&temp_storage[0], elt);
     }
 
     // Compute max
     // TODO @thomasw21 get a MUCH faster sum mechanism in parallel?
-    gpuAtomicMax(&temp_storage[0], elt);
     __syncthreads();
 
     // Compute exp(elt - max) masked
@@ -57,14 +62,14 @@ __global__ void forward_masked_softmax_kernel(
         exponential = 0;
     } else {
         exponential = std::exp(elt - temp_storage[0]);
+        gpuAtomicAdd(&temp_storage[1], exponential);
     }
 
     // Compute sum of exponential
-    gpuAtomicAdd(&temp_storage[0], exponential);
     __syncthreads();
 
     // Compute softmax
-    result[batch_id][q_length_id][kv_length_id] = static_cast<attention_scores_scalar>(exponential / temp_storage[0]);
+    result[batch_id][q_length_id][kv_length_id] = static_cast<attention_scores_scalar>(exponential / temp_storage[1]);
 }
 
 std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forward(
