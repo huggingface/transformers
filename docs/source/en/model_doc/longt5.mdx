@@ -37,7 +37,7 @@ Tips:
 - [`LongT5ForConditionalGeneration`] is an extension of [`T5ForConditionalGeneration`] exchanging the traditional
 encoder *self-attention* layer with efficient either *local* attention or *transient-global* (*tglobal*) attention.
 - Unlike the T5 model, LongT5 does not use a task prefix. Furthermore, it uses a different pre-training objective
-inspired by the pre-training of `[PegasusForConditionalGeneration]`.
+inspired by the pre-training of [`PegasusForConditionalGeneration`].
 - LongT5 model is designed to work efficiently and very well on long-range *sequence-to-sequence* tasks where the
 input sequence exceeds commonly used 512 tokens. It is capable of handling input sequences of a length up to 16,384 tokens.
 - For *Local Attention*, the sparse sliding-window local attention operation allows a given token to attend only `r`
