@@ -52,7 +52,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("gptj", "TFGPTJModel"),
         ("hubert", "TFHubertModel"),
         ("layoutlm", "TFLayoutLMModel"),
-        ("layoutlmv3", "TFLayoutLMV3Model"),
+        ("layoutlmv3", "TFLayoutLMv3Model"),
         ("led", "TFLEDModel"),
         ("longformer", "TFLongformerModel"),
         ("lxmert", "TFLxmertModel"),
