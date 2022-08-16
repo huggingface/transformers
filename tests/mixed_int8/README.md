@@ -11,10 +11,11 @@ Hi there, this is a recipe on how to effectively debug `bitsandbytes` integratio
 + `0.31.8>=bitsandbytes>=0.31.5`.
 ## Hardware requirements
 
-I am using a setup of 2 GPUs that are NVIDIA-Tesla T4 15GB - `younes-testing-multi-gpu` on GCP. To run successfully `bitsandbytes` you would need a 8-bit core tensor supported GPU. Note that Ampere architectures should be supported. Here is an exhaustive list of the supported GPU types at the time of this writing:
+I am using a setup of 2 GPUs that are NVIDIA-Tesla T4 15GB - `younes-testing-multi-gpu` on GCP. To run successfully `bitsandbytes` you would need a 8-bit core tensor supported GPU. Note that Ampere and Turing architectures should be supported. Here is an example list of the supported GPU types at the time of this writing:
 
 - RTX 20s & RTX 30s
 - A40-A100
+- A6000
 - T4 + (e.g. Google Colab GPUs) 
 
 ## Virutal envs
