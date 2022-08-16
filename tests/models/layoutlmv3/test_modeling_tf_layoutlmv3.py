@@ -129,13 +129,13 @@ class TFLayoutLMv3ModelTester:
                     tmp_coordinate = bbox[i, j, 2]
                     bbox[i, j, 2] = bbox[i, j, 0]
                     bbox[i, j, 0] = tmp_coordinate
-        bbox = tf.constant(bbox, dtype=tf.int64)
+        bbox = tf.constant(bbox)
 
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.text_seq_length], dtype=tf.int64)
+            input_mask = random_attention_mask([self.batch_size, self.text_seq_length])
 
         token_type_ids = None
         if self.use_token_type_ids:
