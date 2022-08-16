@@ -26,7 +26,7 @@ if `transformers>=4.23.0` is not released yet, then use:
 pip install git+https://github.com/huggingface/transformers.git
 ```
 
-## Trobleshooting
+## Troubleshooting
 
 A list of common errors:
 
