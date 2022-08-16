@@ -8,7 +8,7 @@ The following is the recipe on how to effectively debug `bitsandbytes` integrati
 
 + `transformers>=4.22.0`
 + `accelerate>=0.12.0` 
-+ `0.31.8>=bitsandbytes>=0.31.5`.
++ `bitsandbytes>=0.31.5`.
 ## Hardware requirements
 
 The following instructions are tested with 2 NVIDIA-Tesla T4 GPUs. To run successfully `bitsandbytes` you would need a 8-bit core tensor supported GPU. Note that Ampere architectures should be supported. Here is an exhaustive list of the supported GPU types at the time of this writing:
