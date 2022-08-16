@@ -191,7 +191,7 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
         """
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_token_index + 1.
         """
-        mask = tf.cast(tf.not_equal(input_ids, self.padding_token_index), tf.int32)
+        mask = tf.cast(tf.not_equal(input_ids, self.padding_token_index), input_ids.dtype)
         position_ids = tf.cumsum(mask, axis=1) * mask
         position_ids = position_ids + self.padding_token_index
         return position_ids
@@ -220,7 +220,7 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
             input_shape = tf.shape(inputs_embeds)[:-1]
 
         if token_type_ids is None:
-            token_type_ids = tf.zeros(input_shape, dtype=tf.int32)
+            token_type_ids = tf.zeros(input_shape, dtype=position_ids.dtype)
 
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
@@ -524,10 +524,10 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
             buckets_log_ratio / distance_log_ratio * (num_buckets - max_exact_buckets)
         )  # scale is [0, num_buckets - max_exact_buckets]
         buckets_big = max_exact_buckets + buckets_big_offset  # scale is [max_exact_buckets, num_buckets]
-        buckets_big = tf.cast(buckets_big, tf.int64)
+        buckets_big = tf.cast(buckets_big, buckets.dtype)
         buckets_big = tf.minimum(buckets_big, num_buckets - 1)
 
-        return (tf.cast(relative_positions > 0, tf.int64) * num_buckets) + tf.where(is_small, buckets, buckets_big)
+        return (tf.cast(relative_positions > 0, buckets.dtype) * num_buckets) + tf.where(is_small, buckets, buckets_big)
 
     def _cal_pos_emb(
         self,
@@ -682,11 +682,11 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         # would have been to pass on max_len=config.max_2d_position_embeddings - 1.
         width, height = image_size
 
-        visual_bbox_x = tf.cast(tf.range(0, max_len * (width + 1), max_len) / width, tf.int64)
+        visual_bbox_x = tf.cast(tf.range(0, max_len * (width + 1), max_len) / width, tf.int32)
         visual_bbox_x = tf.expand_dims(visual_bbox_x, axis=0)
         visual_bbox_x = tf.tile(visual_bbox_x, [width, 1])  # (width, width + 1)
 
-        visual_bbox_y = tf.cast(tf.range(0, max_len * (height + 1), max_len) / height, tf.int64)
+        visual_bbox_y = tf.cast(tf.range(0, max_len * (height + 1), max_len) / height, tf.int32)
         visual_bbox_y = tf.expand_dims(visual_bbox_y, axis=1)
         visual_bbox_y = tf.tile(visual_bbox_y, [1, height])  # (height + 1, height)
 
@@ -701,12 +701,13 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         )
         visual_bbox = tf.reshape(visual_bbox, [-1, 4])
 
-        cls_token_box = tf.constant([[1, 1, max_len - 1, max_len - 1]], dtype=tf.int64)
+        cls_token_box = tf.constant([[1, 1, max_len - 1, max_len - 1]], dtype=tf.int32)
         self.visual_bbox = tf.concat([cls_token_box, visual_bbox], axis=0)
 
-    def calculate_visual_bbox(self, batch_size: int):
+    def calculate_visual_bbox(self, batch_size: int, dtype: tf.DType):
         visual_bbox = tf.expand_dims(self.visual_bbox, axis=0)
         visual_bbox = tf.tile(visual_bbox, [batch_size, 1, 1])
+        visual_bbox = tf.cast(visual_bbox, dtype=dtype)
         return visual_bbox
 
     def embed_image(self, pixel_values: tf.Tensor):
@@ -774,6 +775,24 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
             head_mask = tf.cast(head_mask, self.compute_dtype)
             return head_mask
 
+    def get_int_dtype(
+        self,
+        input_ids: Optional[tf.Tensor],
+        bbox: Optional[tf.Tensor],
+        attention_mask: Optional[tf.Tensor],
+        token_type_ids: Optional[tf.Tensor],
+    ):
+        if input_ids is not None:
+            return input_ids.dtype
+        elif bbox is not None:
+            return bbox.dtype
+        elif attention_mask is not None:
+            return attention_mask.dtype
+        elif token_type_ids is not None:
+            return token_type_ids.dtype
+        else:
+            return tf.int32
+
     @unpack_inputs
     def call(
         self,
@@ -815,13 +834,15 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds or pixel_values")
 
+        int_dtype = self.get_int_dtype(input_ids, attention_mask, token_type_ids, bbox)
+
         if input_ids is not None or inputs_embeds is not None:
             if attention_mask is None:
-                attention_mask = tf.ones((batch_size, seq_length), dtype=tf.int64)
+                attention_mask = tf.ones((batch_size, seq_length), dtype=int_dtype)
             if token_type_ids is None:
-                token_type_ids = tf.zeros((batch_size, seq_length), dtype=tf.int64)
+                token_type_ids = tf.zeros((batch_size, seq_length), dtype=int_dtype)
             if bbox is None:
-                bbox = tf.zeros((batch_size, seq_length, 4), dtype=tf.int64)
+                bbox = tf.zeros((batch_size, seq_length, 4), dtype=int_dtype)
 
             embedding_output = self.embeddings(
                 input_ids=input_ids,
@@ -839,7 +860,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
             visual_embeddings = self.embed_image(pixel_values)
 
             # calculate attention mask
-            visual_attention_mask = tf.ones((batch_size, tf.shape(visual_embeddings)[1]), dtype=tf.int64)
+            visual_attention_mask = tf.ones((batch_size, tf.shape(visual_embeddings)[1]), dtype=int_dtype)
             if attention_mask is None:
                 attention_mask = visual_attention_mask
             else:
@@ -847,7 +868,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
 
             # calculate bounding boxes
             if self.config.has_spatial_attention_bias:
-                visual_bbox = self.calculate_visual_bbox(batch_size)
+                visual_bbox = self.calculate_visual_bbox(batch_size, int_dtype)
                 if bbox is None:
                     final_bbox = visual_bbox
                 else:
@@ -855,12 +876,12 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
 
             # calculate position IDs
             if self.config.has_relative_attention_bias or self.config.has_spatial_attention_bias:
-                visual_position_ids = tf.range(0, tf.shape(visual_embeddings)[1], dtype=tf.int64)
+                visual_position_ids = tf.range(0, tf.shape(visual_embeddings)[1], dtype=int_dtype)
                 visual_position_ids = tf.expand_dims(visual_position_ids, axis=0)
                 visual_position_ids = tf.tile(visual_position_ids, [batch_size, 1])
 
                 if input_ids is not None or inputs_embeds is not None:
-                    position_ids = tf.expand_dims(tf.range(0, seq_length, dtype=tf.int64), axis=0)
+                    position_ids = tf.expand_dims(tf.range(0, seq_length, dtype=int_dtype), axis=0)
                     position_ids = tf.tile(position_ids, [batch_size, 1])
                     final_position_ids = tf.concat([position_ids, visual_position_ids], axis=1)
                 else:
@@ -876,7 +897,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
 
         elif self.config.has_relative_attention_bias or self.config.has_spatial_attention_bias:
             if self.config.has_relative_attention_bias:
-                position_ids = tf.expand_dims(tf.range(0, seq_length, dtype=tf.int64), axis=0)
+                position_ids = tf.expand_dims(tf.range(0, seq_length, dtype=int_dtype), axis=0)
                 position_ids = tf.tile(position_ids, [batch_size, 1])
                 final_position_ids = position_ids
 
@@ -930,8 +951,8 @@ class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
         image_shape = (2, self.config.num_channels, size, size)
         pixel_values = tf.random.uniform(shape=image_shape, minval=-1, maxval=1)
         return {
-            "input_ids": tf.constant(_DUMMY_INPUT_IDS, dtype=tf.int64),
-            "bbox": tf.constant(_DUMMY_BBOX, dtype=tf.int64),
+            "input_ids": tf.constant(_DUMMY_INPUT_IDS, dtype=tf.int32),
+            "bbox": tf.constant(_DUMMY_BBOX, dtype=tf.int32),
             "pixel_values": pixel_values,
         }
 
@@ -1095,6 +1116,7 @@ class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
         >>> outputs = model(**encoding)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
+
         outputs = self.layoutlmv3(
             input_ids=input_ids,
             bbox=bbox,
