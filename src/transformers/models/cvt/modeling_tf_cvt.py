@@ -7,7 +7,6 @@ from typing import Dict, Optional, Tuple, Union
 
 import tensorflow as tf
 
-from ...modeling_outputs import ModelOutput
 from ...modeling_tf_outputs import TFImageClassifierOutputWithNoAttention
 from ...modeling_tf_utils import (
     TFModelInputType,
@@ -18,7 +17,13 @@ from ...modeling_tf_utils import (
     unpack_inputs,
 )
 from ...tf_utils import shape_list, stable_softmax
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    ModelOutput,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_cvt import CvtConfig
 
 
