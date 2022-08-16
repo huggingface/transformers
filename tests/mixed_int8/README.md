@@ -55,7 +55,7 @@ pip install accelerate
 
 and the snippet above should work.
 
-### ` `bitsandbytes` operations are not supported under CPU!`
+### ` bitsandbytes operations are not supported under CPU!`
 
 This happens when some Linear weights are set to the CPU when using `accelerate`. Please check carefully `model.hf_device_map` and make sure that there is no `Linear` module that is assigned to CPU. It is fine to have the last module (usually the Lm_head) set on CPU.
 
@@ -69,7 +69,7 @@ Same comment as above.
 
 ### `RuntimeError: CUDA error: an illegal memory access was encountered ... consider passing CUDA_LAUNCH_BLOCKING=1`
 
-Run your script by pre-pending `CUDA_LAUNCH_BLOCKING=1` and you should observe an error as below:
+Run your script by pre-pending `CUDA_LAUNCH_BLOCKING=1` and you should observe an error as described in the next section.
 
 ### `CUDA illegal memory error: an illegal memory access at line...`:
 
@@ -85,7 +85,7 @@ or
 ```
 ls -l $LD_LIBRARY_PATH
 ```
-And check if `libcudart.so` has a correct symlink that is set. Sometimes `nvcc` detects the correct CUDA version but `bitsandbytes` doesn't. You have to make sure that the symlink that is set for the file `libcudart.so` is redirected to the correct CUDA file. 
+Check if `libcudart.so` has a correct symlink that is set. Sometimes `nvcc` detects the correct CUDA version but `bitsandbytes` doesn't. You have to make sure that the symlink that is set for the file `libcudart.so` is redirected to the correct CUDA file. 
 
 Here is an example of a badly configured CUDA installation:
 
@@ -107,7 +107,7 @@ and you can see
 
 ![Screenshot 2022-08-15 at 15.12.33.png](https://s3.amazonaws.com/moonup/production/uploads/1660569176504-62441d1d9fdefb55a0b7d12c.png)
 
-If you see that the file is linked to the wrong CUDA version (here 10.2), find the correct location for `libcudart.so` (`find --name ...`) and replace the environment variable `LD_LIBRARY_PATH` with the one containing the correct `libcudart.so` file.
+If you see that the file is linked to the wrong CUDA version (here 10.2), find the correct location for `libcudart.so` (`find --name libcudart.so`) and replace the environment variable `LD_LIBRARY_PATH` with the one containing the correct `libcudart.so` file.
 
 ### If `bitsandbytes` installation breaks everything:
 
