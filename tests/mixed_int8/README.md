@@ -23,6 +23,8 @@ I am using a setup of 2 GPUs that are NVIDIA-Tesla T4 15GB - `younes-testing-mul
 ```pip install bitsandbytes>=0.31.5```
 ```pip install accelerate>=0.12.0```
 ```pip install git+https://github.com/huggingface/transformers.git```
+if `transformers>=4.22.0` is not released yet, otherwise
+```pip install transformers```
 
 ## Trobleshooting
 
