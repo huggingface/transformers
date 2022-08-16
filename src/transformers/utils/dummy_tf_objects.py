@@ -786,6 +786,9 @@ class TFCTRLPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
 class TFCvtForImageClassification(metaclass=DummyObject):
     _backends = ["tf"]
 

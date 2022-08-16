@@ -42,6 +42,7 @@ TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all Cvt models at https://huggingface.co/models?filter=cvt
 ]
 
+
 @dataclass
 class TFBaseModelOutputWithCLSToken(ModelOutput):
     """

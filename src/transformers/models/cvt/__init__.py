@@ -43,6 +43,7 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_tf_cvt"] = [
+        "TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFCvtForImageClassification",
         "TFCvtModel",
         "TFCvtPreTrainedModel",
