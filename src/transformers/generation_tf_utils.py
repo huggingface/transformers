@@ -609,7 +609,7 @@ class TFGenerationMixin:
                 return_dict_in_generate=return_dict_in_generate,
                 forced_bos_token_id=forced_bos_token_id,
                 forced_eos_token_id=forced_eos_token_id,
-                model_kwargs=model_kwargs,
+                **model_kwargs,
             )
 
         # We cannot generate if the model does not have a LM head
