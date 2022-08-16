@@ -46,6 +46,7 @@ from flax.jax_utils import pad_shard_unpad
 from flax.training import train_state
 from flax.training.common_utils import get_metrics, onehot, shard
 from huggingface_hub import Repository
+from losses import cross_entropy_with_logits
 from transformers import (
     CONFIG_MAPPING,
     FLAX_MODEL_FOR_MASKED_LM_MAPPING,
@@ -94,6 +95,7 @@ class TrainingArguments:
     adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
     adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
+    z_loss: float = field(default=0.0, metadata={"help": "Coefficient for auxiliary z-loss term."})
     num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
     warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
     logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
@@ -520,6 +522,12 @@ def main():
             "Use --overwrite_output_dir to overcome."
         )
 
+    if model_args.dtype == "bfloat16" and training_args.z_loss == 0:
+        raise ValueError(
+            f"Training with dtype={model_args.dtype} and z_loss={training_args.z_loss} is not recommended."
+            "Please set z_loss to a non-zero value like 1e-4."
+        )
+
     # Setup logging
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
@@ -832,9 +840,9 @@ def main():
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
 
             # compute loss
-            loss = optax.softmax_cross_entropy(logits, onehot(labels, logits.shape[-1])).mean()
-
-            return loss
+            soft_targets = onehot(labels, logits.shape[-1])
+            loss, total_z_loss = cross_entropy_with_logits(logits, soft_targets, training_args.z_loss)
+            return loss.mean()
 
         grad_fn = jax.value_and_grad(loss_fn)
         loss, grad = grad_fn(state.params)

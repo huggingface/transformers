@@ -338,6 +338,8 @@ of 2.36 and 57.0 respectively after 3 epochs on a single TPUv3-8.
 This should take around 4.5 hours.
 Training statistics can be accessed on directly on the 🤗 [hub](https://huggingface.co/patrickvonplaten/t5-base-norwegian/tensorboard)
 
+If you want to pre-train using `--dtype="bfloat16"`, make sure to set `--z_loss="1e-4"` to ensure stable gradients.
+
 ## BART: Denoising language modeling
 
 In the following, we demonstrate how to train a BART model 
