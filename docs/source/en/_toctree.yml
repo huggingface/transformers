@@ -48,6 +48,8 @@
       title: Automatic speech recognition
     - local: tasks/image_classification
       title: Image classification
+    - local: tasks/semantic_segmentation
+      title: Semantic segmentation
     title: Fine-tune for downstream tasks
   - local: run_scripts
     title: Train with a script
