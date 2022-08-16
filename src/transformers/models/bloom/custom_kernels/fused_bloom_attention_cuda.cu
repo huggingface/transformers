@@ -38,9 +38,10 @@ __global__ void forward_masked_softmax_kernel(
     // We need 2 float storage, one for max computation, the other for normalizing exponential
     __shared__ float temp_storage[2];
     if (kv_length_id == 0) {
-        temp_storage[0] == -std::numeric_limits<float>::infinity();
-        temp_storage[1] == 0;
+        temp_storage[0] = -std::numeric_limits<float>::infinity();
+        temp_storage[1] = 0;
     }
+    __syncthreads();
 
     // Compute mask
     float elt;
@@ -144,7 +145,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             dim3 gridDim(batch_size_times_num_heads, q_length); // Number of blocks that run
             dim3 blockDim(kv_length); // Number of threads that run per block
             // TODO @thomasw21: Figure out how much I need
-            const int shared_mem_forward = kv_length * sizeof(float);
+            const int shared_mem_forward = 2 * sizeof(float);
 
             // 192 * 2 ** 10
             const auto MAX_L1_MEMORY = 196608;
