@@ -95,10 +95,22 @@ which means that the detected CUDA version is 11.3 but `bitsandbytes` outputs:
 
 ![image.png](https://s3.amazonaws.com/moonup/production/uploads/1660569284243-62441d1d9fdefb55a0b7d12c.png)
 
-Therefore check:
+First check:
 
+```bash
+echo $LD_LIBRARY_PATH
 ```
-ls -l /opt/conda/envs/py37/lib/libcudart.so
+
+If this contains multiple paths separated by `:`. Then you have to make sure that the correct CUDA version is set. By doing:
+
+```bash
+ls -l $path/libcudart.so
+```
+
+On each path (`$path`) separated by `:`.
+If not, simply run
+```bash
+ls -l $LD_LIBRARY_PATH/libcudart.so
 ```
 
 and you can see
