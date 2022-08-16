@@ -11,12 +11,7 @@ The following is the recipe on how to effectively debug `bitsandbytes` integrati
 + `bitsandbytes>=0.31.5`.
 ## Hardware requirements
 
-The following instructions are tested with 2 NVIDIA-Tesla T4 GPUs. To run successfully `bitsandbytes` you would need a 8-bit core tensor supported GPU. Note that Ampere architectures should be supported. Here is an exhaustive list of the supported GPU types at the time of this writing:
-
-- RTX 20s & RTX 30s
-- A40-A100
-- A6000
-- T4 + (e.g. Google Colab GPUs) 
+The following instructions are tested with 2 NVIDIA-Tesla T4 GPUs. To run successfully `bitsandbytes` you would need a 8-bit core tensor supported GPU. Note that Turing, Ampere or newer architectures - e.g. T4, RTX20s RTX30s, A40-A100 should be supported. 
 
 ## Virutal envs
 
