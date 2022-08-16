@@ -754,8 +754,8 @@ Below are some notes to help you use this module, or follow the demos on [Google
 
 - Make sure you run that on a NVIDIA GPU that supports 8-bit tensor cores (Turing or Ampere GPUs - e.g. T4, RTX20s RTX30s, A40-A100). Note that previous generations of NVIDIA GPUs do not support 8-bit tensor cores.
 - Install the correct version of `bitsandbytes` by running:
-`pip install bitsandbytes`
-- Install `accelerate`:
+`pip install bitsandbytes>=0.31.5`
+- Install `accelerate>=0.12.0`:
 `pip install accelerate`
 
 ### Running mixed-int8 models
