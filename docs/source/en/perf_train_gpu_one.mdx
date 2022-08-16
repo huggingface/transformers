@@ -736,7 +736,7 @@ This feature involves 3 different libraries. To install them, please follow the 
 
 ## `bitsandbytes` integration for Int8 mixed-precision matrix decomposition
 
-From the paper `LLM.int8() : 8-bit Matrix Multiplication for Transformers at Scale`, we support HuggingFace integration for all models in the Hub with a few lines of code. 
+From the paper [`LLM.int8() : 8-bit Matrix Multiplication for Transformers at Scale`](https://arxiv.org/abs/2208.07339), we support HuggingFace integration for all models in the Hub with a few lines of code. 
 The method reduce `nn.Linear` size by 2 `float16` or `bfloat16` weights for and by 4 for `float32` weights, with close to no impact to impact to the quality by operating on the outliers in half-precision.
 To benefit from this technique you'd want to use it only for models that are larger than 2 Billion parameters. This method has been validated to work well from 2 to 176-billion parameter models. Only PyTorch models are supported. 
 
