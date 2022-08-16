@@ -153,63 +153,114 @@ Then fine-tune your model by calling [`~transformers.Trainer.train`]:
 
 🤗 Transformers models also supports training in TensorFlow with the Keras API.
 
-### Convert dataset to TensorFlow format
+### Loading data for Keras
 
-The [`DefaultDataCollator`] assembles tensors into a batch for the model to train on. Make sure you specify `return_tensors` to return TensorFlow tensors:
+When you want to train a 🤗 Transformers model with the Keras API, you need to convert your dataset to a format that
+Keras understands. There are two approaches you can take here - if your dataset is small, you can just convert the whole
+thing to Numpy arrays and pass everything to Keras.
+
+First we load our data:
 
 ```py
->>> from transformers import DefaultDataCollator
+from datasets import load_dataset
 
->>> data_collator = DefaultDataCollator(return_tensors="tf")
+dataset = load_dataset("glue", "cola")  # Simple text classification dataset
+dataset = dataset["train"]  # Just take the training split for now
+```
+
+Next we load our tokenizer and tokenize the data as Numpy arrays:
+
+```py
+from transformers import AutoTokenizer
+
+tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
+tokenized_data = tokenizer(dataset["text"], return_tensors="np", padding=True)
+
+labels = np.array(dataset["label"]) # Label is already an array of 0 and 1
+```
+
+Finally, we load, compile and fit our model:
+
+```py
+from transformers import TFAutoModelForSequenceClassification
+from tensorflow.keras.optimizers import Adam
+
+# Load and compile our model
+model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased")
+# Lower learning rates are often better for fine-tuning transformers
+model.compile(optimizer=Adam(3e-5))
+
+model.fit(tokenized_data, labels)
 ```
 
 <Tip>
 
-[`Trainer`] uses [`DataCollatorWithPadding`] by default so you don't need to explicitly specify a data collator.
+Note that we don't pass a loss argument to our models when we `compile()` them! Hugging Face models will automatically
+choose a loss that is appropriate for their task and model architecture if this argument is left blank. You can always
+override this by specifying a loss yourself if you want to!
 
 </Tip>
 
-Next, convert the tokenized datasets to TensorFlow datasets with the [`~datasets.Dataset.to_tf_dataset`] method. Specify your inputs in `columns`, and your label in `label_cols`:
+This approach is great when it works, but for larger datasets you might find it starting to become a problem. Why?
+Because the tokenized array and labels would have to be fully loaded into memory, and because Numpy doesn’t handle
+“jagged” arrays, so every tokenized sample would have to be padded to the length of the longest sample in the whole
+dataset. That’s going to make your array even bigger, and all those padding tokens will slow down training too!
+
+### Loading data as a tf.data.Dataset
+
+If you want to avoid this, you can load your data as a `tf.data.Dataset` instead. Although you can write your own
+`tf.data` pipeline if you want, we have two convenience methods for doing this - [`~datasets.Dataset.to_tf_dataset`]
+and [`TFPreTrainedModel.prepare_tf_dataset`]. We recommend `prepare_tf_dataset()` in most cases because it is simpler
+and can automatically infer which columns from the dataset to load by comparing them against the input names for the
+model. The `to_tf_dataset()` method is more low-level, and is useful when you want to exactly control how your
+dataset is created.
+
+Before you can use this method, you will need to add the tokenizer outputs to your dataset as columns, as in
+the following code sample:
 
 ```py
->>> tf_train_dataset = small_train_dataset.to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "token_type_ids"],
-...     label_cols=["labels"],
-...     shuffle=True,
-...     collate_fn=data_collator,
-...     batch_size=8,
-... )
+def tokenize_dataset(data):
+    # Keys of the returned dictionary will be added to the dataset as columns
+    return tokenizer(data["text"])
 
->>> tf_validation_dataset = small_eval_dataset.to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "token_type_ids"],
-...     label_cols=["labels"],
-...     shuffle=False,
-...     collate_fn=data_collator,
-...     batch_size=8,
+dataset = dataset.map(tokenize_dataset)
+```
+
+Remember that Hugging Face datasets are stored on disk by default, so this will not inflate your memory usage! Once the
+columns have been added, we can now stream batches from the dataset and add padding on the fly, which greatly
+reduces the number of padding tokens compared to padding the entire dataset.
+
+
+```py
+>>> tf_dataset = model.prepare_tf_dataset(
+...    dataset,
+...    batch_size=16,
+...    shuffle=True,
+...    tokenizer=tokenizer
 ... )
 ```
 
-### Compile and fit
+<Tip>
 
-Load a TensorFlow model with the expected number of labels:
+The reason we pass the tokenizer to `prepare_tf_dataset` is so that it can correctly pad batches as they're loaded.
+If all the samples in your dataset are the same length and no padding is necessary, you can skip this argument.
+If you need to do something more complex than just padding samples (e.g. corrupting tokens for masked language
+modelling), you can use the `collate_fn` argument instead to pass a function that will be called to transform the
+list of samples into a batch and apply any preprocessing you want. See our
+[examples](https://github.com/huggingface/transformers/tree/main/examples) or
+[notebooks](https://huggingface.co/docs/transformers/notebooks) to see this approach in action.
+
+</Tip>
+
+Once we've created a `tf.data.Dataset` we can simply compile and fit our model as before:
 
 ```py
->>> import tensorflow as tf
->>> from transformers import TFAutoModelForSequenceClassification
+model.compile(optimizer=Adam(3e-5))
 
->>> model = TFAutoModelForSequenceClassification.from_pretrained("bert-base-cased", num_labels=5)
+model.fit(tf_dataset)
 ```
 
-Then compile and fine-tune your model with [`fit`](https://keras.io/api/models/model_training_apis/) as you would with any other Keras model:
 
-```py
->>> model.compile(
-...     optimizer=tf.keras.optimizers.Adam(learning_rate=5e-5),
-...     loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-...     metrics=tf.metrics.SparseCategoricalAccuracy(),
-... )
-
->>> model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3)
 ```
 </tf>
 </frameworkcontent>
