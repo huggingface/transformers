@@ -306,11 +306,11 @@ def main():
     model.config.id2label = {i: label for i, label in enumerate(class_names)}
     model.config.label2id = {label: i for i, label in enumerate(class_names)}
 
-    def tokenize(example : dict):
+    def tokenize(example: dict):
         return tokenizer(example["text"])
 
     # 4. train student on teacher predictions
-    dataset = dataset.map(tokenizer)
+    dataset = dataset.map(tokenize)
     dataset.set_format("torch")
 
     def compute_metrics(p, return_outputs=False):
