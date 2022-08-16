@@ -2142,8 +2142,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
 
             # We never convert lm_head or any last modules for numerical stability reasons
-            modules_to_not_convert = get_key_to_not_convert(model)
-            model = replace_8bit_linear(model, threshold=int8_threshold, modules_to_not_convert=modules_to_not_convert)
+            module_to_not_convert = get_key_to_not_convert(model)
+            model = replace_8bit_linear(model, threshold=int8_threshold, module_to_not_convert=module_to_not_convert)
 
         if isinstance(device_map, str):
             if model._no_split_modules is None:
@@ -2176,7 +2176,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if load_in_8bit:
                 # The LM head can stay on disk / CPU
                 device_map_without_lm_head = {
-                    key: device_map[key] for key in device_map.keys() if key != modules_to_not_convert
+                    key: device_map[key] for key in device_map.keys() if key != module_to_not_convert
                 }
                 if "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
                     raise ValueError("8-bit operations on `bitsandbytes` are not supported under CPU!")
