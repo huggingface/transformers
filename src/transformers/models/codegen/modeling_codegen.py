@@ -25,6 +25,7 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_codegen import CodeGenConfig
 
 
@@ -440,6 +441,35 @@ class CodeGenModel(CodeGenPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+        # Model parallelism
+        self.model_parallel = False
+        self.device_map = None
+
+    def parallelize(self, device_map=None):
+        if device_map is None:
+            self.device_map = get_device_map(len(self.h), range(torch.cuda.device_count()))
+        else:
+            self.device_map = device_map
+        assert_device_map(self.device_map, len(self.h))
+        self.model_parallel = True
+        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
+        self.last_device = "cuda:" + str(max(self.device_map.keys()))
+
+        for k, v in self.device_map.items():
+            for layer in v:
+                cuda_device = "cuda:" + str(k)
+                self.h[layer] = self.h[layer].to(cuda_device)
+        self.wte = self.wte.to(self.first_device)
+        self.ln_f = self.ln_f.to(self.last_device)
+
+    def deparallelize(self):
+        self.model_parallel = False
+        self.device_map = None
+        self.first_device = "cpu"
+        self.last_device = "cpu"
+        for i in range(len(self.h)):
+            self.h[i] = self.h[i].to("cpu")
+
     def get_input_embeddings(self):
         return self.wte
 
@@ -547,6 +577,13 @@ class CodeGenModel(CodeGenPreTrainedModel):
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
+            if self.model_parallel:
+                if layer_past is not None:
+                    layer_past = tuple([layer_past[j].to(hidden_states.device) for j in range(len(layer_past))])
+                if attention_mask is not None:
+                    attention_mask = attention_mask.to(hidden_states.device)
+                if head_mask[i] is not None:
+                    head_mask[i] = head_mask[i].to(hidden_states.device)
 
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -591,6 +628,11 @@ class CodeGenModel(CodeGenPreTrainedModel):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (outputs[2 if use_cache else 1],)
 
+            if self.model_parallel:
+                for k, v in self.device_map.items():
+                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
+                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
+
         hidden_states = self.ln_f(hidden_states)
 
         hidden_states = hidden_states.view(output_shape)
@@ -625,6 +667,32 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+        # Model parallelism
+        self.model_parallel = False
+        self.device_map = None
+
+    def parallelize(self, device_map=None):
+        if device_map is None:
+            self.device_map = get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
+        else:
+            self.device_map = device_map
+        assert_device_map(self.device_map, len(self.transformer.h))
+        self.transformer.parallelize(self.device_map)
+        self.first_device = self.transformer.first_device
+        self.last_device = self.transformer.last_device
+        self.lm_head = self.lm_head.to(self.first_device)
+        self.model_parallel = True
+
+    def deparallelize(self):
+        self.transformer.deparallelize()
+        self.transformer = self.transformer.to("cpu")
+        self.lm_head = self.lm_head.to("cpu")
+        self.model_parallel = False
+        self.first_device = None
+        self.last_device = None
+        self.device_map = None
+        torch.cuda.empty_cache()
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -703,7 +771,7 @@ class CodeGenForCausalLM(CodeGenPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        hidden_states = transformer_outputs[0]
+        hidden_states = transformer_outputs[0].to(self.first_device)
 
         # make sure sampling in fp16 works correctly and
         # compute loss in fp32 to match with mesh-tf version
