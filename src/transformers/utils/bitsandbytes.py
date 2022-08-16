@@ -1,7 +1,5 @@
 from copy import deepcopy
 
-import torch
-
 from transformers.utils import is_accelerate_available, is_bitsandbytes_available
 
 
@@ -131,8 +129,9 @@ def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head"):
 def get_keys_to_not_convert(model):
     r"""
     An utility function to get the key of the module to keep in full precision if any For example for CausalLM modules
-    we may want to keep the lm_head in full precision for numerical stability reasons. For other architectures, we want to keep 
-    the tied weights of the model. The function will return a list of the keys of the modules to not convert in int8.
+    we may want to keep the lm_head in full precision for numerical stability reasons. For other architectures, we want
+    to keep the tied weights of the model. The function will return a list of the keys of the modules to not convert in
+    int8.
 
     Parameters:
     model (`torch.nn.Module`):

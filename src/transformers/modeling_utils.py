@@ -2181,10 +2181,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 if "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
                     raise ValueError(
                         """
-                        Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the quantized model. 
-                        If you have set a value for `max_memory` you should increase that. To have an idea of the modules that are set on the CPU or RAM
-                        you can print model.hf_device_map.
-                    """
+                        Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit
+                        the quantized model. If you have set a value for `max_memory` you should increase that. To have
+                        an idea of the modules that are set on the CPU or RAM you can print model.hf_device_map.
+                        """
                     )
                 del device_map_without_lm_head
 
