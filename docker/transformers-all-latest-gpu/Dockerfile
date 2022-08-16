@@ -46,7 +46,7 @@ RUN python3 -m pip install -U "itsdangerous<2.1.0"
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
 # Add bitsandbytes for mixed int8 testing
-RUN python3 -m pip install -i https://test.pypi.org/simple/ bitsandbytes==0.31.5
+RUN python3 -m pip install --no-cache-dir bitsandbytes
 
 RUN python3 -m pip install --no-cache-dir decord
 
