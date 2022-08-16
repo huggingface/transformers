@@ -2,7 +2,7 @@
 
 ![HFxbitsandbytes.png](https://s3.amazonaws.com/moonup/production/uploads/1660567705337-62441d1d9fdefb55a0b7d12c.png)
 
-Hi there, this is a recipe on how to effectively debug `bitsandbytes` integration on HuggingFace `transformers`.
+The following is the recipe on how to effectively debug `bitsandbytes` integration on Hugging Face `transformers`.
 
 ## Library requirements
 
@@ -24,10 +24,12 @@ The following instructions are tested with 2 NVIDIA-Tesla T4 GPUs. To run succes
 conda create --name int8-testing python==3.8
 pip install bitsandbytes>=0.31.5
 pip install accelerate>=0.12.0
+pip install transformers>=4.23.0
+```
+if `transformers>=4.23.0` is not released yet, then use:
+```
 pip install git+https://github.com/huggingface/transformers.git
 ```
-if `transformers>=4.23.0` is not released yet, otherwise
-```pip install transformers```
 
 ## Trobleshooting
 
@@ -47,11 +49,12 @@ Works without any error. If not, install torch using `conda` like:
 
 ```bash
 conda create --name int8-testing python==3.8
-pip install bitsandbytes
-conda install pytorch torchvision torchaudio -c pytorch
-pip install git+https://github.com/huggingface/transformers.git
-pip install accelerate
+conda install pytorch torchvision torchaudio cudatoolkit=11.6 -c pytorch -c conda-forge
+pip install bitsandbytes>=0.31.5
+pip install accelerate>=0.12.0
+pip install transformers>=4.23.0
 ```
+For the latest pytorch instructions please see [this](https://pytorch.org/get-started/locally/)
 
 and the snippet above should work.
 
@@ -65,7 +68,7 @@ Use the latest version of `accelerate` with a command such as: `pip install --fo
 
 ### `Parameter has no attribue .CB` 
 
-Same comment as above.
+Same solution as above.
 
 ### `RuntimeError: CUDA error: an illegal memory access was encountered ... consider passing CUDA_LAUNCH_BLOCKING=1`
 
