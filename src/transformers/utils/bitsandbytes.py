@@ -1,5 +1,7 @@
 from copy import deepcopy
 
+import torch
+
 from transformers.utils import is_accelerate_available, is_bitsandbytes_available
 
 
@@ -85,7 +87,7 @@ def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
             module._parameters[tensor_name] = new_value
 
 
-def replace_8bit_linear(model, threshold=6.0, module_to_not_convert="lm_head"):
+def replace_8bit_linear(model, threshold=6.0, modules_to_not_convert="lm_head"):
     """
     A helper function to replace all `torch.nn.Linear` modules by `bnb.nn.Linear8bit` modules from the `bitsandbytes`
     library. This will enable running your models using mixed int8 precision as described by the paper `GPT3.int8():
@@ -112,9 +114,9 @@ def replace_8bit_linear(model, threshold=6.0, module_to_not_convert="lm_head"):
     """
     for name, module in model.named_children():
         if len(list(module.children())) > 0:
-            replace_8bit_linear(module, threshold, module_to_not_convert)
+            replace_8bit_linear(module, threshold, modules_to_not_convert)
 
-        if isinstance(module, nn.Linear) and name != module_to_not_convert:
+        if isinstance(module, nn.Linear) and name not in modules_to_not_convert:
             with init_empty_weights():
                 model._modules[name] = bnb.nn.Linear8bitLt(
                     module.in_features,
@@ -126,10 +128,11 @@ def replace_8bit_linear(model, threshold=6.0, module_to_not_convert="lm_head"):
     return model
 
 
-def get_key_to_not_convert(model):
+def get_keys_to_not_convert(model):
     r"""
     An utility function to get the key of the module to keep in full precision if any For example for CausalLM modules
-    we may want to keep the lm_head in full precision for numerical stability reasons.
+    we may want to keep the lm_head in full precision for numerical stability reasons. For other architectures, we want to keep 
+    the tied weights of the model. The function will return a list of the keys of the modules to not convert in int8.
 
     Parameters:
     model (`torch.nn.Module`):
@@ -139,7 +142,9 @@ def get_key_to_not_convert(model):
     # check if it contains tied weights
     tied_model = deepcopy(model)  # this has 0 cost since it is done inside `init_empty_weights` context manager`
     tied_model.tie_weights()
-    has_tied_params = len(find_tied_parameters(tied_model)) > 0
+
+    tied_keys = list(find_tied_parameters(tied_model).values())
+    has_tied_params = len(tied_keys) > 0
 
     # Check if it is a base model
     is_base_model = not hasattr(model, model.base_model_prefix)
@@ -150,5 +155,10 @@ def get_key_to_not_convert(model):
 
     # otherwise they have an attached head
     list_modules = list(model.named_parameters())
-    last_name = list_modules[-1][0]
-    return last_name.split(".")[0]
+    list_last_module = [list_modules[-1][0]]
+
+    # add last module together with tied weights
+    intersection = set(list_last_module) - set(tied_keys)
+    list_untouched = tied_keys + list(intersection)
+
+    return [module_name.split(".")[0] for module_name in list_untouched]

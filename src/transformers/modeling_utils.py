@@ -85,7 +85,7 @@ if is_accelerate_available():
         get_balanced_memory = None
 
 if is_bitsandbytes_available():
-    from .utils.bitsandbytes import get_key_to_not_convert, replace_8bit_linear, set_module_8bit_tensor_to_device
+    from .utils.bitsandbytes import get_keys_to_not_convert, replace_8bit_linear, set_module_8bit_tensor_to_device
 
 logger = logging.get_logger(__name__)
 
@@ -2142,8 +2142,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
 
             # We never convert lm_head or any last modules for numerical stability reasons
-            module_to_not_convert = get_key_to_not_convert(model)
-            model = replace_8bit_linear(model, threshold=int8_threshold, module_to_not_convert=module_to_not_convert)
+            modules_to_not_convert = get_keys_to_not_convert(model)
+            model = replace_8bit_linear(model, threshold=int8_threshold, modules_to_not_convert=modules_to_not_convert)
 
         if isinstance(device_map, str):
             if model._no_split_modules is None:
@@ -2174,12 +2174,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
             if load_in_8bit:
-                # The LM head can stay on disk / CPU
+                # The LM head / tied weights or any last module can stay on disk / CPU
                 device_map_without_lm_head = {
-                    key: device_map[key] for key in device_map.keys() if key != module_to_not_convert
+                    key: device_map[key] for key in device_map.keys() if key not in modules_to_not_convert
                 }
                 if "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
-                    raise ValueError("8-bit operations on `bitsandbytes` are not supported under CPU!")
+                    raise ValueError(
+                        """
+                        Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit the quantized model. 
+                        If you have set a value for `max_memory` you should increase that. To have an idea of the modules that are set on the CPU or RAM
+                        you can print model.hf_device_map.
+                    """
+                    )
                 del device_map_without_lm_head
 
         if from_tf:
