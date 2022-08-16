@@ -95,7 +95,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
         const auto past_key = (*layer_past).at(0);
         const auto past_value = (*layer_past).at(1);
         key_layer = at::cat({past_key, key_layer}, 2);
-        key_layer = at::cat({past_value, value_layer}, 1);
+        value_layer = at::cat({past_value, value_layer}, 1);
     }
 
     std::optional<std::vector<at::Tensor>> present;
@@ -146,7 +146,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             const auto MAX_SMs = 108;
             const auto MAX_THREADS_PER_SM = 2048;
             TORCH_CHECK(batch_size_times_num_heads * q_length < MAX_L1_MEMORY, "Shared memory exceeds 192KB limitation.");
-            TORCH_CHECK(gridDim.x * gridDim.y * gridDim.z < MAX_SMs, "A100s only have 108 SMs. Raising as require blocks is bigger.");
+            // TORCH_CHECK(gridDim.x * gridDim.y * gridDim.z < MAX_SMs, "A100s only have 108 SMs. Raising as require blocks is bigger.");
             TORCH_CHECK(blockDim.x * blockDim.y * blockDim.z < MAX_THREADS_PER_SM, "A100s only have 2048 threads per block. Raising as require requested threads is higher.");
 
             forward_masked_softmax_kernel<<<gridDim, blockDim, shared_mem_forward>>>(
