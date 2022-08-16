@@ -253,6 +253,7 @@ _import_structure = {
     "models.m2m_100": ["M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP", "M2M100Config"],
     "models.marian": ["MarianConfig"],
     "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig"],
+    "models.mask2former": ["MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "Mask2FormerConfig"],
     "models.mbart": ["MBartConfig"],
     "models.mbart50": [],
     "models.mctct": ["MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP", "MCTCTConfig", "MCTCTProcessor"],
@@ -649,6 +650,7 @@ else:
     _import_structure["models.layoutlmv3"].append("LayoutLMv3FeatureExtractor")
     _import_structure["models.levit"].append("LevitFeatureExtractor")
     _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
+    _import_structure["models.mask2former"].append("Mask2FormerFeatureExtractor")
     _import_structure["models.mobilevit"].append("MobileViTFeatureExtractor")
     _import_structure["models.owlvit"].append("OwlViTFeatureExtractor")
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
@@ -1402,6 +1404,14 @@ else:
             "MaskFormerForInstanceSegmentation",
             "MaskFormerModel",
             "MaskFormerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mask2former"].extend(
+        [
+            "MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Mask2FormerForInstanceSegmentation",
+            "Mask2FormerModel",
+            "Mask2FormerPreTrainedModel",
         ]
     )
     _import_structure["models.mbart"].extend(
@@ -3046,6 +3056,7 @@ if TYPE_CHECKING:
     from .models.m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config
     from .models.marian import MarianConfig
     from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig
+    from .models.mask2former import MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, Mask2FormerConfig
     from .models.mbart import MBartConfig
     from .models.mctct import MCTCT_PRETRAINED_CONFIG_ARCHIVE_MAP, MCTCTConfig, MCTCTProcessor
     from .models.megatron_bert import MEGATRON_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, MegatronBertConfig
@@ -3382,6 +3393,7 @@ if TYPE_CHECKING:
         from .models.layoutlmv3 import LayoutLMv3FeatureExtractor
         from .models.levit import LevitFeatureExtractor
         from .models.maskformer import MaskFormerFeatureExtractor
+        from .models.mask2former import Mask2FormerFeatureExtractor
         from .models.mobilevit import MobileViTFeatureExtractor
         from .models.owlvit import OwlViTFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
@@ -4002,6 +4014,12 @@ if TYPE_CHECKING:
             MaskFormerForInstanceSegmentation,
             MaskFormerModel,
             MaskFormerPreTrainedModel,
+        )
+        from .models.mask2former import (
+            MASK2FORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Mask2FormerForInstanceSegmentation,
+            Mask2FormerModel,
+            Mask2FormerPreTrainedModel,
         )
         from .models.mbart import (
             MBartForCausalLM,
