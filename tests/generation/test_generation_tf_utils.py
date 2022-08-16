@@ -125,7 +125,6 @@ class UtilsFunctionsTest(unittest.TestCase):
 
 @require_tf
 class TFGenerationIntegrationTests(unittest.TestCase):
-
     @slow
     def test_generate_tf_function_export(self):
         test_model = TFAutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
