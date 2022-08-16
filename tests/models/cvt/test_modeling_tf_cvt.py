@@ -19,7 +19,7 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import TFCvtForImageClassification, TFCvtModel
-    from transformers.models.cvt.modeling_cvt import CVT_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.cvt.modeling_tf_cvt import TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -227,7 +227,7 @@ class TFCvtModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in CVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFCvtModel.from_pretrained(model_name, from_pt=True)
             self.assertIsNotNone(model)
 
@@ -243,11 +243,11 @@ def prepare_img():
 class TFCvtModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return AutoFeatureExtractor.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0], from_pt=True)
+        return AutoFeatureExtractor.from_pretrained(TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0], from_pt=True)
 
     @slow
     def test_inference_image_classification_head(self):
-        model = TFCvtForImageClassification.from_pretrained(CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0], from_pt=True)
+        model = TFCvtForImageClassification.from_pretrained(TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0], from_pt=True)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

@@ -70,7 +70,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_tf_cvt import TFCvtForImageClassification, TFCvtModel, TFCvtPreTrainedModel
+        from .modeling_tf_cvt import (
+            TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFCvtForImageClassification,
+            TFCvtModel,
+            TFCvtPreTrainedModel,
+        )
 
 
 else:
