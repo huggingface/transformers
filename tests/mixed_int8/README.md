@@ -64,7 +64,7 @@ This happens when some Linear weights are set to the CPU when using `accelerate`
 
 ### `To use the type as a Parameter, please correct the detach() semantics defined by __torch_dispatch__() implementation.`
 
-Use the latest version of `accelerate` with a command such as: `pip install --force accelerate` and the problem should be solved.
+Use the latest version of `accelerate` with a command such as: `pip install -U accelerate` and the problem should be solved.
 
 ### `Parameter has no attribue .CB` 
 
