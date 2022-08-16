@@ -1323,8 +1323,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     if score >= score_threshold:
         ...         print(f"Detected {text[label]} with confidence {round(score.item(), 3)} at location {box}")
-        Detected a photo of a cat with confidence 0.243 at location [1.42, 50.69, 308.58, 370.48]
-        Detected a photo of a cat with confidence 0.298 at location [348.06, 20.56, 642.33, 372.61]
+        Detected a photo of a cat with confidence 0.707 at location [324.97, 20.44, 640.58, 373.29]
+        Detected a photo of a cat with confidence 0.717 at location [1.46, 55.26, 315.55, 472.17]
         ```"""
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

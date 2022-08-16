@@ -40,6 +40,7 @@ from .modeling_flax_pytorch_utils import load_pytorch_checkpoint_in_flax_state_d
 from .utils import (
     FLAX_WEIGHTS_INDEX_NAME,
     FLAX_WEIGHTS_NAME,
+    WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     PushToHubMixin,
     add_code_sample_docstrings,
@@ -650,6 +651,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 if from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
                     # Load from a PyTorch checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
+                elif from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)):
+                    # Load from a sharded pytorch checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)
+                    is_sharded = True
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)):
                     # Load from a Flax checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_NAME)
@@ -700,6 +705,13 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         )
                         if resolved_archive_file is not None:
                             is_sharded = True
+                    # Maybe the checkpoint is pytorch sharded, we try to grab the pytorch index name in this case.
+                    elif resolved_archive_file is None and from_pt:
+                        resolved_archive_file = cached_file(
+                            pretrained_model_name_or_path, WEIGHTS_INDEX_NAME, **cached_file_kwargs
+                        )
+                        if resolved_archive_file is not None:
+                            is_sharded = True
                     if resolved_archive_file is None:
                         # Otherwise, maybe there is a TF or Flax model file.  We try those to give a helpful error
                         # message.
@@ -713,6 +725,12 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                                 f"{pretrained_model_name_or_path} does not appear to have a file named"
                                 f" {FLAX_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to"
                                 " load this model from those weights."
+                            )
+                        elif has_file(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME, **has_file_kwargs):
+                            raise EnvironmentError(
+                                f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                f" {FLAX_WEIGHTS_INDEX_NAME} but there is a sharded file for PyTorch weights. Use"
+                                " `from_pt=True` to load this model from those weights."
                             )
                         else:
                             raise EnvironmentError(
@@ -761,7 +779,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         model = cls(config, *model_args, _do_init=_do_init, **model_kwargs)
 
         if from_pt:
-            state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file)
+            state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file, is_sharded)
         else:
 
             if is_sharded:

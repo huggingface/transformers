@@ -56,6 +56,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("deit", "DeiTConfig"),
         ("detr", "DetrConfig"),
         ("distilbert", "DistilBertConfig"),
+        ("donut-swin", "DonutSwinConfig"),
         ("dpr", "DPRConfig"),
         ("dpt", "DPTConfig"),
         ("electra", "ElectraConfig"),
@@ -181,6 +182,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("deit", "DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("detr", "DETR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("distilbert", "DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("donut-swin", "DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("dpr", "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("dpt", "DPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("electra", "ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -304,6 +306,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("dialogpt", "DialoGPT"),
         ("distilbert", "DistilBERT"),
         ("dit", "DiT"),
+        ("donut", "Donut"),
+        ("donut-swin", "DonutSwin"),
         ("dpr", "DPR"),
         ("dpt", "DPT"),
         ("electra", "ELECTRA"),
@@ -420,6 +424,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("data2vec-audio", "data2vec"),
         ("data2vec-text", "data2vec"),
         ("data2vec-vision", "data2vec"),
+        ("donut-swin", "donut"),
     ]
 )
 
