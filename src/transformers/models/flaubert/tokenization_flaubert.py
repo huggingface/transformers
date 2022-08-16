@@ -130,7 +130,6 @@ class FlaubertTokenizer(XLMTokenizer):
             - Install with `pip install sacremoses`
 
         Args:
-
             - bypass_tokenizer: Allow users to preprocess and tokenize the sentences externally (default = False)
               (bool). If True, we only apply BPE.
 
