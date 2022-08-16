@@ -285,9 +285,8 @@ class OnnxExportTestCaseV2(TestCase):
         config = AutoConfig.from_pretrained(model_name)
         model = model_class.from_config(config)
 
-        # It seems yolo-like models have problems on ONNX exporting on CUDA.
+        # Dynamic axes aren't supported for YOLO-like models. This means they cannot be exported to ONNX on CUDA devices.
         # See: https://github.com/ultralytics/yolov5/pull/8378
-        # (Not sure which op causing issue though)
         if model.__class__.__name__.startswith("Yolos") and device != "cpu":
             return
 
