@@ -26,7 +26,7 @@ See the image segmentation [task page](https://huggingface.co/tasks/image-segmen
 
 Before you begin, make sure you have all the necessary libraries installed:
 
-```py
+```bash
 pip install -q datasets transformers evaluate
 ```
 
@@ -94,17 +94,17 @@ Now create a preprocessing function that'll apply the `jitter` transform and ret
 
 ```py
 >>> def train_transforms(example_batch):
-...    images = [jitter(x) for x in example_batch['image']]
-...    labels = [x for x in example_batch['annotation']]
-...    inputs = feature_extractor(images, labels)
-...    return inputs
+...     images = [jitter(x) for x in example_batch["image"]]
+...     labels = [x for x in example_batch["annotation"]]
+...     inputs = feature_extractor(images, labels)
+...     return inputs
 
 
 >>> def val_transforms(example_batch):
-...    images = [x for x in example_batch['image']]
-...    labels = [x for x in example_batch['annotation']]
-...    inputs = feature_extractor(images, labels)
-...    return inputs
+...     images = [x for x in example_batch["image"]]
+...     labels = [x for x in example_batch["annotation"]]
+...     inputs = feature_extractor(images, labels)
+...     return inputs
 ```
 
 To apply the `jitter` over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.set_transform`] function. The transform is applied on-the-fly which is faster and consumes less disk space.
@@ -123,12 +123,9 @@ Load SegFormer with [`AutoModelForSemanticSegmentation`], specify the number of 
 ```py
 >>> from transformers import AutoModelForSemanticSegmentation
 
->>> pretrained_model_name = "nvidia/mit-b0" 
+>>> pretrained_model_name = "nvidia/mit-b0"
 >>> model = AutoModelForSemanticSegmentation.from_pretrained(
-...     pretrained_model_name,
-...     num_labels=num_labels,
-...     id2label=id2label,
-...     label2id=label2id
+...     pretrained_model_name, num_labels=num_labels, id2label=id2label, label2id=label2id
 ... )
 ```
 
@@ -172,25 +169,28 @@ Then create a function to [`~evaluate.EvaluationModule.compute`] the metrics. Yo
 
 ```py
 >>> def compute_metrics(eval_pred):
-...   with torch.no_grad():
-...     logits, labels = eval_pred
-...     logits_tensor = torch.from_numpy(logits)
-...     logits_tensor = nn.functional.interpolate(
-...         logits_tensor,
-...         size=labels.shape[-2:],
-...         mode="bilinear",
-...         align_corners=False,
-...     ).argmax(dim=1)
-... 
-...     pred_labels = logits_tensor.detach().cpu().numpy()
-...     metrics = metric.compute(predictions=pred_labels, references=labels, 
-...                                    num_labels=num_labels,
-...                                    ignore_index=0,
-...                                    reduce_labels=feature_extractor.reduce_labels)
-...     for key, value in metrics.items():
-...       if type(value) is np.ndarray:
-...         metrics[key] = value.tolist()
-...     return metrics
+...     with torch.no_grad():
+...         logits, labels = eval_pred
+...         logits_tensor = torch.from_numpy(logits)
+...         logits_tensor = nn.functional.interpolate(
+...             logits_tensor,
+...             size=labels.shape[-2:],
+...             mode="bilinear",
+...             align_corners=False,
+...         ).argmax(dim=1)
+
+...         pred_labels = logits_tensor.detach().cpu().numpy()
+...         metrics = metric.compute(
+...             predictions=pred_labels,
+...             references=labels,
+...             num_labels=num_labels,
+...             ignore_index=0,
+...             reduce_labels=feature_extractor.reduce_labels,
+...         )
+...         for key, value in metrics.items():
+...             if type(value) is np.ndarray:
+...                 metrics[key] = value.tolist()
+...         return metrics
 ```
 
 Now pass your model, training arguments, datasets, and metrics function to the [`Trainer`]:
