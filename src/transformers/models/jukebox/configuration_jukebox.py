@@ -41,8 +41,6 @@ class JukeboxConfig(PretrainedConfig):
     to get the second level codes. This is mostly true for training the top level prior and the upsamplers.
 
     Args:
-
-
     Example:
 
     ```python
@@ -90,7 +88,6 @@ class JukeboxConfig(PretrainedConfig):
         cond_width=[128, 1024, 1024],
         cond_dilation_growth_rate=[1, 3, 3],
         cond_dilation_cycle=[None, 8, 8],
-        cond_c_res=[0, 1, 1],
         cond_res_scale=[None, True, False],
         cond_m_conv=1,
         cond_downs_t=(3, 2, 2),
@@ -180,7 +177,6 @@ class JukeboxConfig(PretrainedConfig):
         self.cond_width = cond_width
         self.cond_dilation_growth_rate = cond_dilation_growth_rate
         self.cond_dilation_cycle = cond_dilation_cycle
-        self.cond_c_res = cond_c_res
         self.cond_zero_out = cond_zero_out
         self.cond_m_conv = cond_m_conv
         self.cond_res_scale = cond_res_scale
