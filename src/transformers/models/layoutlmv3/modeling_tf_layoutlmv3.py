@@ -175,7 +175,8 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
 
     def create_position_ids_from_inputs_embeds(self, inputs_embds):
         """
-        We are provided embeddings directly. We cannot infer which are padded, so just generate sequential position ids.
+        We are provided embeddings directly. We cannot infer which are padded, so just generate sequential position
+        ids.
         """
         input_shape = tf.shape(inputs_embds)
         sequence_length = input_shape[1]
@@ -288,10 +289,10 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
     def cogview_attention(self, attention_scores: tf.Tensor, alpha: Union[float, int] = 32):
         """
         https://arxiv.org/abs/2105.13290 Section 2.4 Stabilization of training: Precision Bottleneck Relaxation
-        (PB-Relax). A replacement of the original tf.keras.layers.Softmax(axis=-1)(attention_scores). Seems the
-        new attention_probs will result in a slower speed and a little bias. Can use
-        tf.debugging.assert_near(standard_attention_probs, cogview_attention_probs, atol=1e-08) for comparison.
-        The smaller atol (e.g., 1e-08), the better.
+        (PB-Relax). A replacement of the original tf.keras.layers.Softmax(axis=-1)(attention_scores). Seems the new
+        attention_probs will result in a slower speed and a little bias. Can use
+        tf.debugging.assert_near(standard_attention_probs, cogview_attention_probs, atol=1e-08) for comparison. The
+        smaller atol (e.g., 1e-08), the better.
         """
         scaled_attention_scores = attention_scores / alpha
         max_value = tf.expand_dims(tf.reduce_max(scaled_attention_scores, axis=-1), axis=-1)
@@ -527,7 +528,9 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
         buckets_big = tf.cast(buckets_big, buckets.dtype)
         buckets_big = tf.minimum(buckets_big, num_buckets - 1)
 
-        return (tf.cast(relative_positions > 0, buckets.dtype) * num_buckets) + tf.where(is_small, buckets, buckets_big)
+        return (tf.cast(relative_positions > 0, buckets.dtype) * num_buckets) + tf.where(
+            is_small, buckets, buckets_big
+        )
 
     def _cal_pos_emb(
         self,
