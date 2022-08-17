@@ -402,9 +402,10 @@ class FlaxGPTNeoPreTrainedModel(FlaxPreTrainedModel):
     @add_start_docstrings_to_model_forward(GPT_NEO_INPUTS_DOCSTRING)
     def __call__(
         self,
-        input_ids,
+        input_ids=None,
         attention_mask=None,
         position_ids=None,
+        inputs_embeds=None,
         params: dict = None,
         past_key_values: dict = None,
         dropout_rng: jax.random.PRNGKey = None,
@@ -419,7 +420,11 @@ class FlaxGPTNeoPreTrainedModel(FlaxPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        batch_size, sequence_length = input_ids.shape
+        if input_ids is not None:
+            batch_size, sequence_length = input_ids.shape
+        else:
+            batch_size, sequence_length = inputs_embeds.shape[:2]
+
 
         if position_ids is None:
             if past_key_values is not None:
@@ -446,9 +451,10 @@ class FlaxGPTNeoPreTrainedModel(FlaxPreTrainedModel):
 
         outputs = self.module.apply(
             inputs,
-            jnp.array(input_ids, dtype="i4"),
+            None if input_ids is None else jnp.array(input_ids, dtype="i4"),
             jnp.array(attention_mask, dtype="i4"),
             jnp.array(position_ids, dtype="i4"),
+            inputs_embeds,
             not train,
             False,
             output_attentions,
@@ -538,16 +544,20 @@ class FlaxGPTNeoModule(nn.Module):
 
     def __call__(
         self,
-        input_ids,
-        attention_mask,
-        position_ids,
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        inputs_embeds=None,
         deterministic=True,
         init_cache: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        input_embeds = self.wte(input_ids.astype("i4"))
+        if input_ids is not None:
+            input_embeds = self.wte(input_ids.astype("i4"))
+        else:
+            input_embeds = inputs_embeds
         position_embeds = self.wpe(position_ids.astype("i4"))
 
         hidden_states = input_embeds + position_embeds
@@ -613,9 +623,10 @@ class FlaxGPTNeoForCausalLMModule(nn.Module):
 
     def __call__(
         self,
-        input_ids,
-        attention_mask,
-        position_ids,
+        input_ids = None,
+        attention_mask = None,
+        position_ids = None,
+        inputs_embeds = None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
@@ -626,6 +637,7 @@ class FlaxGPTNeoForCausalLMModule(nn.Module):
             input_ids,
             attention_mask,
             position_ids,
+            inputs_embeds,
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
