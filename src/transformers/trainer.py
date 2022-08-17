@@ -477,7 +477,7 @@ class Trainer:
                 raise ValueError(
                     "The model and the optimizer parameters are not on the same device, which probably means you"
                     " created an optimizer around your model **before** putting on the device and passing it to the"
-                    " `Trainer`. Make sure the lines `import torch_xlka.core.xla_model as xm` and"
+                    " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
                     " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
                 )
         if ((self.sharded_ddp is not None) or args.deepspeed or (self.fsdp is not None)) and (
