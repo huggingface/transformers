@@ -21,7 +21,6 @@ import numpy as np
 
 from transformers import is_tf_available, is_vision_available
 from transformers.models.auto import get_values
-from transformers.models.layoutlmv3.modeling_tf_layoutlmv3 import TFLayoutLMv3ForSequenceClassification
 from transformers.testing_utils import require_tf, slow
 from transformers.utils import cached_property
 
