@@ -1122,16 +1122,18 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         super().__init__(config)
 
         self.deberta = DebertaV2Model(config)
-        self.cls = DebertaV2OnlyMLMHead(config)
+        self.lm_predictions = DebertaV2OnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
-        return self.cls.predictions.decoder
+        # TODO: implement
+        pass
 
     def set_output_embeddings(self, new_embeddings):
-        self.cls.predictions.decoder = new_embeddings
+        # TODO: implement
+        pass
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1173,7 +1175,7 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        prediction_scores = self.lm_predictions(sequence_output, self.get_input_embeddings())
 
         masked_lm_loss = None
         if labels is not None:
@@ -1192,42 +1194,27 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         )
 
 
-# copied from transformers.models.bert.BertPredictionHeadTransform with bert -> deberta
-class DebertaV2PredictionHeadTransform(nn.Module):
+class DebertaV2LMPredictionHead(nn.Module):
+    """https://github.com/microsoft/DeBERTa/blob/master/DeBERTa/deberta/bert.py#L270"""
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+
         if isinstance(config.hidden_act, str):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        return hidden_states
-
-
-# copied from transformers.models.bert.BertLMPredictionHead with bert -> deberta
-class DebertaV2LMPredictionHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.transform = DebertaV2PredictionHeadTransform(config)
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, elementwise_affine=True)
 
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def forward(self, hidden_states):
-        hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states)
+    # note that the input embeddings must be passed as an argument
+    def forward(self, hidden_states, embeddings):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = self.LayerNorm(hidden_states) # original used MaskedLayerNorm, but passed no mask. This is equivalent.
+        hidden_states = torch.matmul(hidden_states, embeddings.weight.t()) + self.bias
         return hidden_states
 
 
@@ -1235,10 +1222,11 @@ class DebertaV2LMPredictionHead(nn.Module):
 class DebertaV2OnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.predictions = DebertaV2LMPredictionHead(config)
+        self.lm_head = DebertaV2LMPredictionHead(config)
 
-    def forward(self, sequence_output):
-        prediction_scores = self.predictions(sequence_output)
+    # note that the input embeddings must be passed as an argument
+    def forward(self, sequence_output, embeddings):
+        prediction_scores = self.lm_head(sequence_output, embeddings)
         return prediction_scores
 
 
@@ -1641,3 +1629,5 @@ class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
