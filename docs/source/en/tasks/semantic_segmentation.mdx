@@ -14,9 +14,9 @@ specific language governing permissions and limitations under the License.
 
 <Youtube id="dKE8SIt9C-w"/>
 
-Semantic segmentation assigns a label or class to each individual pixel of an image to a specific class. There are several types of segmentation tasks, and in the case of semantic segmentation, it doesn't differentiate between unique instances of the same object. Both objects are given the same label. Common real-world applications of semantic segmentation include training self-driving cars to identify pedestrians and important traffic information, identifying cells and abnormalities in medical imagery, and monitoring environmental changes from satellite imagery.
+Semantic segmentation assigns a label or class to each individual pixel of an image. There are several types of segmentation tasks, and in the case of semantic segmentation, it doesn't differentiate between unique instances of the same object. Both objects are given the same label. Common real-world applications of semantic segmentation include training self-driving cars to identify pedestrians and important traffic information, identifying cells and abnormalities in medical imagery, and monitoring environmental changes from satellite imagery.
 
-This guide will show you how to finetune [SegFormer](https://huggingface.co/nvidia/mit-b0) on the [SceneParse150](https://huggingface.co/datasets/scene_parse_150) dataset.
+This guide will show you how to finetune [SegFormer](https://huggingface.co/docs/transformers/main/en/model_doc/segformer#segformer) on the [SceneParse150](https://huggingface.co/datasets/scene_parse_150) dataset.
 
 <Tip>
 
@@ -57,9 +57,9 @@ Then take a look at an example:
  'scene_category': 368}
 ```
 
-The `image` field contains a PIL image and the `annotation` field contains a PIL image of the segmentation map. There is also a `scene_category` field which describes the scene of the image like airport terminal, street or kitchen.
+There is an `image`, an `annotation` (this is the segmentation map or label), and a `scene_category` field that describes the image scene like kitchen or office. Both `image` and `annotation` are PIL images.
 
-You'll also want to create a dictionary that maps a label id to a label class, which will be useful when you set up the model later. Download the mappings from the Hub and create the `id2label` and `label2id` dictionaries:
+You'll also want to create a dictionary that maps a label id to a label class which will be useful when you set up the model later. Download the mappings from the Hub and create the `id2label` and `label2id` dictionaries:
 
 ```py
 >>> import json
@@ -74,7 +74,7 @@ You'll also want to create a dictionary that maps a label id to a label class, w
 
 ## Preprocess
 
-Load a SegFormer feature extractor to process the image into an array of tensors. Some datasets, like this one, uses the zero-index as the background class. However, the background class isn't included in the 150 classes, so you'll need to set `reduce_labels=True` to subtract one from all the labels. The zero-index is replaced by `255` so it is ignored by SegFormer's loss function. 
+Next, load a SegFormer feature extractor to process the image into an array of tensors. Some datasets, like this one, uses the zero-index as the background class. However, the background class isn't included in the 150 classes, so you'll need to set `reduce_labels=True` to subtract one from all the labels. The zero-index is replaced by `255` so it's ignored by SegFormer's loss function:
 
 ```py
 >>> from transformers import AutoFeatureExtractor
@@ -82,7 +82,7 @@ Load a SegFormer feature extractor to process the image into an array of tensors
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("nvidia/mit-b0", reduce_labels=True)
 ```
 
-It is common to apply some data augmentations to an image dataset to make a model more robust against overfitting. Here, you'll use the [`ColorJitter`](https://pytorch.org/vision/stable/generated/torchvision.transforms.ColorJitter.html) function from [torchvision](https://pytorch.org/vision/stable/index.html) to randomly change the color properties of an image.
+It is common to apply some data augmentations to an image dataset to make a model more robust against overfitting. In this guide, you'll use the [`ColorJitter`](https://pytorch.org/vision/stable/generated/torchvision.transforms.ColorJitter.html) function from [torchvision](https://pytorch.org/vision/stable/index.html) to randomly change the color properties of an image:
 
 ```py
 >>> from torchvision.transforms import ColorJitter
@@ -107,7 +107,7 @@ Now create a preprocessing function that'll apply the `jitter` transform and ret
 ...     return inputs
 ```
 
-To apply the `jitter` over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.set_transform`] function. The transform is applied on the fly which is faster and consumes less disk space.
+To apply the `jitter` over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.set_transform`] function. The transform is applied on the fly which is faster and consumes less disk space:
 
 ```py
 >>> train_ds.set_transform(train_transforms)
@@ -157,7 +157,7 @@ Define your training hyperparameters in [`TrainingArguments`]. It is important y
 ... )
 ```
 
-To evaluate model performance during training, you'll need to create a function to compute and report metrics. For semantic segmentation, you'll typically compute the [mean intersection over union](https://huggingface.co/spaces/evaluate-metric/mean_iou) (IoU) metric. The mean IoU metric measures the overlapping area between the predicted and ground truth segmentation maps. 
+To evaluate model performance during training, you'll need to create a function to compute and report metrics. For semantic segmentation, you'll typically compute the [mean intersection over union](https://huggingface.co/spaces/evaluate-metric/mean_iou) (IoU). The mean IoU measures the overlapping area between the predicted and ground truth segmentation maps. 
 
 Load the mean IoU from the 🤗 Evaluate library:
 
@@ -167,7 +167,7 @@ Load the mean IoU from the 🤗 Evaluate library:
 >>> metric = evaluate.load("mean_iou")
 ```
 
-Then create a function to [`~evaluate.EvaluationModule.compute`] the metrics. Your predictions need to be converted to logits before you can call [`~evaluate.EvaluationModule.compute`]:
+Then create a function to [`~evaluate.EvaluationModule.compute`] the metrics. Your predictions need to be converted to logits first, and then reshaped to match the size of the labels before you can call [`~evaluate.EvaluationModule.compute`]:
 
 ```py
 >>> def compute_metrics(eval_pred):
@@ -195,7 +195,7 @@ Then create a function to [`~evaluate.EvaluationModule.compute`] the metrics. Yo
 ...         return metrics
 ```
 
-Now pass your model, training arguments, datasets, and metrics function to the [`Trainer`]:
+Pass your model, training arguments, datasets, and metrics function to the [`Trainer`]:
 
 ```py
 >>> from transformers import Trainer
@@ -224,12 +224,15 @@ Great, now that you've finetuned a model, you can use it for inference!
 Load an image for inference:
 
 ```py
->>> ds = load_dataset("scene_parse_150", split="train[:50]")
 >>> image = ds[0]["image"]
 >>> image
 ```
 
-Process the image with the feature extractor and place the `pixel_values` on a GPU:
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/semantic-seg-image.png" alt="Image of bedroom"/>
+</div>
+
+Process the image with a feature extractor and place the `pixel_values` on a GPU:
 
 ```py
 >>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")  # use GPU if available, otherwise use a CPU
@@ -244,7 +247,7 @@ Pass your input to the model and return the `logits`:
 >>> logits = outputs.logits.cpu()
 ```
 
-Rescale the logits to the original image size:
+Next, rescale the logits to the original image size:
 
 ```py
 >>> upsampled_logits = nn.functional.interpolate(
@@ -257,7 +260,7 @@ Rescale the logits to the original image size:
 >>> pred_seg = upsampled_logits.argmax(dim=1)[0]
 ```
 
-To visualize the results, load the dataset color palette that maps each class to their RGB values. Then you can combine and plot your image and the predicted segmentation map:
+To visualize the results, load the [dataset color palette](https://github.com/tensorflow/models/blob/3f1ca33afe3c1631b733ea7e40c294273b9e406d/research/deeplab/utils/get_dataset_colormap.py#L51) that maps each class to their RGB values. Then you can combine and plot your image and the predicted segmentation map:
 
 ```py
 >>> import matplotlib.pyplot as plt
@@ -275,3 +278,7 @@ To visualize the results, load the dataset color palette that maps each class to
 >>> plt.imshow(img)
 >>> plt.show()
 ```
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/semantic-seg-preds.png" alt="Image of bedroom overlayed with segmentation map"/>
+</div>
