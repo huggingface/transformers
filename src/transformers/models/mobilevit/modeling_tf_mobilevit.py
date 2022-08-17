@@ -734,7 +734,7 @@ class TFMobileViTPreTrainedModel(TFPreTrainedModel):
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
             shape=(
-                3,
+                1, # TODO: change to 3 later (sayakpaul).
                 self.config.num_channels,
                 self.config.image_size,
                 self.config.image_size,
@@ -908,3 +908,248 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
+
+
+class TFMobileViTASPPPooling(tf.keras.layers.Layer):
+    def __init__(self, config: MobileViTConfig, in_channels: int, out_channels: int, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+        self.global_pool = tf.keras.layers.GlobalAveragePooling2D(keepdims=True, name="global_pool")
+
+        self.conv_1x1 = TFMobileViTConvLayer(
+            config,
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=1,
+            stride=1,
+            use_normalization=True,
+            use_activation="relu",
+            name="conv_1x1",
+        )
+
+    def call(self, features: tf.Tensor) -> tf.Tensor:
+        spatial_size = shape_list(features)[1:-1]
+        features = self.global_pool(features)
+        features = self.conv_1x1(features)
+        features = tf.image.resize(features, size=spatial_size, method="bilinear")
+        return features
+
+
+class TFMobileViTASPP(tf.keras.layers.Layer):
+    """
+    ASPP module defined in DeepLab papers: https://arxiv.org/abs/1606.00915, https://arxiv.org/abs/1706.05587
+    """
+
+    def __init__(self, config: MobileViTConfig, **kwargs) -> None:
+        super().__init__(**kwargs)
+
+        in_channels = config.neck_hidden_sizes[-2]
+        out_channels = config.aspp_out_channels
+
+        if len(config.atrous_rates) != 3:
+            raise ValueError("Expected 3 values for atrous_rates")
+
+        self.convs = []
+
+        in_projection = TFMobileViTConvLayer(
+            config,
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=1,
+            use_activation="relu",
+            name="convs.0",
+        )
+        self.convs.append(in_projection)
+
+        self.convs.extend(
+            [
+                TFMobileViTConvLayer(
+                    config,
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=3,
+                    dilation=rate,
+                    use_activation="relu",
+                    name=f"convs.{i + 1}",
+                )
+                for i, rate in enumerate(config.atrous_rates)
+            ]
+        )
+
+        pool_layer = TFMobileViTASPPPooling(
+            config, in_channels, out_channels, name=f"convs.{len(config.atrous_rates) + 1}"
+        )
+        self.convs.append(pool_layer)
+
+        self.project = TFMobileViTConvLayer(
+            config,
+            in_channels=5 * out_channels,
+            out_channels=out_channels,
+            kernel_size=1,
+            use_activation="relu",
+            name="project",
+        )
+
+        self.dropout = tf.keras.layers.Dropout(config.aspp_dropout_prob)
+
+    def call(self, features: tf.Tensor) -> tf.Tensor:
+        # since the hidden states were transposed to have `(batch_size, channels, height, width)` 
+        # layout.
+        features = tf.transpose(features, perm=[0, 2, 3, 1])
+        pyramid = []
+        for conv in self.convs:
+            # print(f"From TFMobileViTASPP: {conv(features).shape}")
+            pyramid.append(conv(features))
+        pyramid = tf.concat(pyramid, axis=-1)
+
+        # print(f"From TFMobileViTASPP first convolution: {self.convs[0].convolution.kernel.shape}")
+
+        pooled_features = self.project(pyramid)
+        pooled_features = self.dropout(pooled_features)
+        return pooled_features
+
+
+class TFMobileViTDeepLabV3(tf.keras.layers.Layer):
+    """
+    DeepLabv3 architecture: https://arxiv.org/abs/1706.05587
+    """
+
+    def __init__(self, config: MobileViTConfig, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.aspp = TFMobileViTASPP(config, name="aspp")
+
+        self.dropout = tf.keras.layers.Dropout(config.classifier_dropout_prob)
+
+        self.classifier = TFMobileViTConvLayer(
+            config,
+            in_channels=config.aspp_out_channels,
+            out_channels=config.num_labels,
+            kernel_size=1,
+            use_normalization=False,
+            use_activation=False,
+            bias=True,
+            name="classifier",
+        )
+
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
+        features = self.aspp(hidden_states[-1])
+        # print(f"From MobileViTDeepLabV3: {features.shape}")
+        features = self.dropout(features)
+        features = self.classifier(features)
+        return features
+
+
+@add_start_docstrings(
+    """
+    MobileViT model with a semantic segmentation head on top, e.g. for Pascal VOC.
+    """,
+    MOBILEVIT_START_DOCSTRING,
+)
+class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
+    def __init__(self, config: MobileViTConfig, **kwargs) -> None:
+        super().__init__(config, **kwargs)
+
+        self.num_labels = config.num_labels
+        self.mobilevit = TFMobileViTMainLayer(config, expand_output=False, name="mobilevit")
+        self.segmentation_head = TFMobileViTDeepLabV3(config, name="segmentation_head")
+
+    def hf_compute_loss(self, logits, labels):
+        # upsample logits to the images' original size
+        # `labels` is of shape (batch_size, height, width)
+        label_interp_shape = shape_list(labels)[1:]
+
+        upsampled_logits = tf.image.resize(logits, size=label_interp_shape, method="bilinear")
+        # compute weighted loss
+        loss_fct = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True, reduction="none")
+
+        def masked_loss(real, pred):
+            unmasked_loss = loss_fct(real, pred)
+            mask = tf.cast(real != self.config.semantic_loss_ignore_index, dtype=unmasked_loss.dtype)
+            masked_loss = unmasked_loss * mask
+            # Reduction strategy in the similar spirit with
+            # https://github.com/huggingface/transformers/blob/main/src/transformers/modeling_tf_utils.py#L210
+            reduced_masked_loss = tf.reduce_sum(masked_loss) / tf.reduce_sum(mask)
+            return tf.reshape(reduced_masked_loss, (1,))
+
+        return masked_loss(labels, upsampled_logits)
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=TFSemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
+    def call(
+        self,
+        pixel_values: Optional[tf.Tensor] = None,
+        labels: Optional[tf.Tensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, TFSemanticSegmenterOutput]:
+        r"""
+        labels (`tf.Tensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import MobileViTFeatureExtractor, TFMobileViTForSemanticSegmentation
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = MobileViTFeatureExtractor.from_pretrained("apple/deeplabv3-mobilevit-small")
+        >>> model = TFMobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-small")
+
+        >>> inputs = feature_extractor(images=image, return_tensors="tf")
+
+        >>> outputs = model(**inputs)
+
+        >>> # logits are of shape (batch_size, num_labels, height, width)
+        >>> logits = outputs.logits
+        ```"""
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.mobilevit(
+            pixel_values,
+            output_hidden_states=True,  # we need the intermediate hidden states
+            return_dict=return_dict,
+        )
+
+        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+
+        logits = self.segmentation_head(encoder_hidden_states)
+
+        loss = None
+        if labels is not None:
+            if not self.config.num_labels > 1:
+                raise ValueError("The number of labels should be greater than one")
+            else:
+                loss = self.hf_compute_loss(logits=logits, labels=labels)
+
+        # make logits of shape (batch_size, num_labels, height, width) to
+        # keep them consistent across APIs
+        logits = tf.transpose(logits, perm=[0, 3, 1, 2])
+
+        if not return_dict:
+            if output_hidden_states:
+                output = (logits,) + outputs[1:]
+            else:
+                output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFSemanticSegmenterOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=None,
+        )
+
+    def serving_output(self, output: TFSemanticSegmenterOutput) -> TFSemanticSegmenterOutput:
+        # hidden_states and attention not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        return TFSemanticSegmenterOutput(logits=output.logits, hidden_states=output.hidden_states, attentions=None)
