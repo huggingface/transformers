@@ -425,7 +425,6 @@ class FlaxGPTNeoPreTrainedModel(FlaxPreTrainedModel):
         else:
             batch_size, sequence_length = inputs_embeds.shape[:2]
 
-
         if position_ids is None:
             if past_key_values is not None:
                 raise ValueError("Make sure to provide `position_ids` when passing `past_key_values`.")
@@ -623,10 +622,10 @@ class FlaxGPTNeoForCausalLMModule(nn.Module):
 
     def __call__(
         self,
-        input_ids = None,
-        attention_mask = None,
-        position_ids = None,
-        inputs_embeds = None,
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        inputs_embeds=None,
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
