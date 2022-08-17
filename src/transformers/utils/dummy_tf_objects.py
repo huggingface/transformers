@@ -362,6 +362,13 @@ class TFAutoModelForQuestionAnswering(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFAutoModelForSemanticSegmentation(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFAutoModelForSeq2SeqLM(metaclass=DummyObject):
     _backends = ["tf"]
 

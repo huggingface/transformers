@@ -206,6 +206,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("data2vec-text", "data2vec"),
         ("data2vec-audio", "data2vec"),
         ("data2vec-vision", "data2vec"),
+        ("donut-swin", "donut"),
     ]
 )
 

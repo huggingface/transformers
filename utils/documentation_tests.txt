@@ -8,6 +8,7 @@ docs/source/en/model_doc/t5.mdx
 docs/source/en/model_doc/t5v1.1.mdx
 docs/source/en/model_doc/byt5.mdx
 docs/source/en/model_doc/tapex.mdx
+docs/source/en/model_doc/donut.mdx
 docs/source/en/model_doc/encoder-decoder.mdx
 src/transformers/generation_utils.py
 src/transformers/models/albert/modeling_albert.py
