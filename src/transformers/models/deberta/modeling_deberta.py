@@ -271,6 +271,36 @@ class DebertaLayerNorm(nn.Module):
         return y
 
 
+def MaskedLayerNorm(layerNorm, input, mask=None):
+    """
+    https://github.com/microsoft/DeBERTa/blob/master/DeBERTa/deberta/ops.py#L182
+
+    Masked LayerNorm which will apply mask over the output of LayerNorm to avoid inaccurate updatings to the LayerNorm module.
+
+    Args:
+      layernorm (:obj:`~DeBERTa.deberta.LayerNorm`): LayerNorm module or function
+      input (:obj:`torch.tensor`): The input tensor
+      mask (:obj:`torch.IntTensor`): The mask to applied on the output of LayerNorm where `0` indicate the output of that element will be ignored, i.e. set to `0`
+    Example::
+      # Create a tensor b x n x d
+      x = torch.randn([1,10,100])
+      m = torch.tensor([[1,1,1,0,0,0,0,0,0,0]], dtype=torch.int)
+      LayerNorm = DeBERTa.deberta.LayerNorm(100)
+      y = MaskedLayerNorm(LayerNorm, x, m)
+    """
+    output = layerNorm(input).to(input)
+
+    if mask is None:
+        return output
+    if mask.dim() != input.dim():
+        if mask.dim() == 4:
+            mask = mask.squeeze(1).squeeze(1)
+        mask = mask.unsqueeze(2)
+    mask = mask.to(output.dtype)
+
+    return output * mask
+
+
 class DebertaSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1018,16 +1048,16 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         super().__init__(config)
 
         self.deberta = DebertaModel(config)
-        self.cls = DebertaOnlyMLMHead(config)
+        self.lm_predictions = DebertaOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_output_embeddings(self):
-        return self.cls.predictions.decoder
+        return self.lm_predictions.lm_head.decoder
 
     def set_output_embeddings(self, new_embeddings):
-        self.cls.predictions.decoder = new_embeddings
+        self.lm_predictions.lm_head.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1069,7 +1099,7 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
+        prediction_scores = self.lm_predictions(sequence_output, self.get_input_embeddings())
 
         masked_lm_loss = None
         if labels is not None:
@@ -1088,53 +1118,38 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         )
 
 
-# copied from transformers.models.bert.BertPredictionHeadTransform with bert -> deberta
-class DebertaPredictionHeadTransform(nn.Module):
+class DebertaLMPredictionHead(nn.Module):
+    """https://github.com/microsoft/DeBERTa/blob/master/DeBERTa/deberta/bert.py#L270"""
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+
         if isinstance(config.hidden_act, str):
             self.transform_act_fn = ACT2FN[config.hidden_act]
         else:
             self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        return hidden_states
-
-
-# copied from transformers.models.bert.BertLMPredictionHead with bert -> deberta
-class DebertaLMPredictionHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.transform = DebertaPredictionHeadTransform(config)
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, elementwise_affine=True)
 
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def forward(self, hidden_states):
-        hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states)
+    # note that the input embeddings must be passed as an argument
+    def forward(self, hidden_states, embeddings):
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.transform_act_fn(hidden_states)
+        hidden_states = MaskedLayerNorm(self.LayerNorm, hidden_states)
+        hidden_states = torch.matmul(hidden_states, embeddings.weight.t()) + self.bias
         return hidden_states
 
 
-# copied from transformers.models.bert.BertOnlyMLMHead with bert -> deberta
 class DebertaOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.predictions = DebertaLMPredictionHead(config)
+        self.lm_head = DebertaLMPredictionHead(config)
 
-    def forward(self, sequence_output):
-        prediction_scores = self.predictions(sequence_output)
+    # note that the input embeddings must be passed as an argument
+    def forward(self, sequence_output, embeddings):
+        prediction_scores = self.lm_head(sequence_output, embeddings)
         return prediction_scores
 
 
