@@ -1772,6 +1772,8 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 )  # Transformer
                 if self.add_cond_after_transformer:
                     hidden_states = hidden_states + cond
+                if fp16:
+                    hidden_states = hidden_states.half()
                 hidden_states = self.fc_proj_out(hidden_states)  # Predictions
                 if get_preds:
                     preds.append(hidden_states)
@@ -2159,8 +2161,6 @@ class JukeboxPrior(nn.Module):
                     stride_t=config.cond_strides_t[_level],
                     **audio_conditioning_kwargs,
                 )
-
-            # if dist.get_rank() == 0: print(f"Conditioning on 1 above level(s)")
             self.conditioner_blocks.append(conditioner_block(self.cond_level))
 
         # metadata conditioning : contioning on timing, genres, and artist
@@ -2718,8 +2718,9 @@ def load_audio(file, sampling_rate, offset, duration, mono=False):
     return raw_audio
 
 
-def load_prompts(audio_files, duration, offset, hps):
-    n_samples = len(audio_files)
+def load_prompts(audio_files,hps, sample_length_in_seconds=70, offset_in_seconds=10):
+    duration = sample_length_in_seconds * hps.sampling_rate
+    offset  = offset_in_seconds * hps.sampling_rate
     raw_audio_list = []
     for audio_file in audio_files:
         raw_audio = load_audio(
@@ -2727,9 +2728,9 @@ def load_prompts(audio_files, duration, offset, hps):
         )
         raw_audio = raw_audio.T  # CT -> TC
         raw_audio_list.append(raw_audio)
-    while len(raw_audio_list) < n_samples:
+    while len(raw_audio_list) < len(audio_files):
         raw_audio_list.extend(raw_audio_list)
-    raw_audio_list = raw_audio_list[:n_samples]
+    raw_audio_list = raw_audio_list[:len(audio_files)]
     raw_audio = torch.stack([torch.from_numpy(raw_audio) for raw_audio in raw_audio_list])
     return raw_audio
 
@@ -2893,7 +2894,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 fp16=fp16,
                 max_batch_size=lower_batch_size,
                 chunk_size=chunk_size,
-                sample_tokens=sample_tokens,
+                sample_tokens=sample_tokens
             ),
             dict(
                 temp=sampling_temperature,
@@ -2938,7 +2939,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 logdir = f"{self.start_time}/level_{level}"
                 if not os.path.exists(logdir):
                     os.makedirs(logdir)
-                save_wav(logdir, level, metas=metas, aud=raw_audio, sampling_rate=self.config.sampling_rate)
+                save_wav(logdir, level, metas=metas, aud=raw_audio.float(), sampling_rate=self.config.sampling_rate)
                 if alignments is None and self.priors[-1] is not None and self.priors[-1].nb_relevant_lyric_tokens > 0:
                     gc.collect()
                     torch.cuda.empty_cache()
@@ -2984,7 +2985,6 @@ class JukeboxModel(JukeboxPreTrainedModel):
             music_tokens = self.vqvae.encode(
                 raw_audio, start_level=0, end_level=len(self.priors), bs_chunks=raw_audio.shape[0]
             )
-        self.vqvae.to("cpu")
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
 
