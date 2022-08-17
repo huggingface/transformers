@@ -160,7 +160,7 @@ Then fine-tune your model by calling [`~transformers.Trainer.train`]:
 When you want to train a 🤗 Transformers model with the Keras API, you need to convert your dataset to a format that
 Keras understands. If your dataset is small, you can just convert the whole thing to NumPy arrays and pass it to Keras.
 
-First we load our data:
+First, load a dataset:
 
 ```py
 from datasets import load_dataset
