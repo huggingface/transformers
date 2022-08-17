@@ -16,7 +16,6 @@
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
 """ TensorFlow 2.0 MobileViT model."""
 
-import math
 from typing import Dict, Optional, Tuple, Union
 
 import tensorflow as tf
@@ -734,7 +733,7 @@ class TFMobileViTPreTrainedModel(TFPreTrainedModel):
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
             shape=(
-                1, # TODO: change to 3 later (sayakpaul).
+                1,  # TODO: change to 3 later (sayakpaul).
                 self.config.num_channels,
                 self.config.image_size,
                 self.config.image_size,
@@ -993,7 +992,7 @@ class TFMobileViTASPP(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.aspp_dropout_prob)
 
     def call(self, features: tf.Tensor) -> tf.Tensor:
-        # since the hidden states were transposed to have `(batch_size, channels, height, width)` 
+        # since the hidden states were transposed to have `(batch_size, channels, height, width)`
         # layout.
         features = tf.transpose(features, perm=[0, 2, 3, 1])
         pyramid = []
