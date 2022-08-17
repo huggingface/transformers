@@ -33,6 +33,7 @@ __global__ void forward_masked_softmax_kernel(
 ) {
     const int batch_id = blockIdx.x;
     const int q_length_id = blockIdx.y;
+    const int batch_time_q_length_block_size = thread.y;
     const int kv_length_id = threadIdx.x;
 
     // We need 2 float storage, one for max computation, the other for normalizing exponential
@@ -43,7 +44,7 @@ __global__ void forward_masked_softmax_kernel(
     }
     __syncthreads();
 
-    // Compute mask
+    // Compute mask and max
     float elt;
     const auto mask_elt = mask[batch_id][q_length_id][kv_length_id];
     if (mask_elt == 1) {
@@ -54,7 +55,6 @@ __global__ void forward_masked_softmax_kernel(
         gpuAtomicMax(&temp_storage[0], elt);
     }
 
-    // Compute max
     __syncthreads();
 
     // Compute exp(elt - max) masked
@@ -141,19 +141,29 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             */
 
             /*
-            * We should split [batch_size_times_num_heads, q_length] in seperate blocks and [kv_length] a single block
+            * We should split [batch_size_times_num_heads_block, q_length] in seperate blocks and [batch_size_times_num_heads_block_size, kv_length] a single block
             * with multiple threads as we need to `sync_threads` to run exponential sum.
+            * We maximise the usage of threads within a single block
             */
-            // TODO @thomasw21: Figure out how much I need exactly
-            dim3 gridDim(batch_size_times_num_heads, q_length); // Number of blocks that run
-            dim3 blockDim(kv_length); // Number of threads that run per block
+            // TODO @thomasw21 figure out everything warp related:
+            //  - why do they have to be power of 2
+            const auto MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD = 1;
+            const auto MAX_THREADS_PER_SM = 1024; // TODO @thomas21 check why everyone is setting 1024 when officially it's 1024
+            const auto ROWS_PER_BLOCK = (MAX_THREADS_PER_SM * MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD) / kv_length;
+            // TODO @thomasw21 compute `ceil`.
+            const auto NUM_BLOCKS = (batch_size_times_num_heads * q_length - 1) / ROWS_PER_BLOCK + 1;
+
+            dim3 gridDim(NUM_BLOCKS); // Number of blocks that run
+            // TODO @thomas21: Maybe this needs to be converted to `MAX_THREADS_PER_SM` and let padding run nowhere.
+            dim3 blockDim(ROWS_PER_BLOCK, kv_length); // Number of threads that run per block
             // TODO @thomasw21: Figure out how much I need
-            const int shared_mem_forward = 2 * sizeof(float);
+            //  - each thread requires `MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD` in memory for each row
+            //  - threads has `ROWS_PER_BLOCK` rows.
+            const int shared_mem_forward = ROWS_PER_BLOCK * MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD * 2 * sizeof(float);
 
             // 192 * 2 ** 10
             const auto MAX_L1_MEMORY = 196608;
             const auto MAX_SMs = 108;
-            const auto MAX_THREADS_PER_SM = 2048;
             TORCH_CHECK(batch_size_times_num_heads * q_length < MAX_L1_MEMORY, "Shared memory exceeds 192KB limitation.");
             // TORCH_CHECK(gridDim.x * gridDim.y * gridDim.z < MAX_SMs, "A100s only have 108 SMs. Raising as require blocks is bigger.");
             TORCH_CHECK(blockDim.x * blockDim.y * blockDim.z < MAX_THREADS_PER_SM, "A100s only have 2048 threads per block. Raising as require requested threads is higher.");
@@ -161,7 +171,9 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             forward_masked_softmax_kernel<<<gridDim, blockDim, shared_mem_forward>>>(
                 attention_scores.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
                 attention_mask.packed_accessor32<bool, 3, torch::RestrictPtrTraits>(),
-                attention_probs.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>()
+                attention_probs.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
+                MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD, // number of values to run
+
             );
         });
     } else {
