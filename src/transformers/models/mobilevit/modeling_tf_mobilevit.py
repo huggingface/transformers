@@ -733,7 +733,7 @@ class TFMobileViTPreTrainedModel(TFPreTrainedModel):
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
             shape=(
-                1,  # TODO: change to 3 later (sayakpaul).
+                3,  
                 self.config.num_channels,
                 self.config.image_size,
                 self.config.image_size,

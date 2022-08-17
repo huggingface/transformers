@@ -1017,6 +1017,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
+        print(f"From modeling_tf_utils: {config}.")
+        print(f"From modeling_tf_utils: is it PretrainedConfig instance: {isinstance(config, PretrainedConfig)}")
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
                 f"Parameter config in `{self.__class__.__name__}(config)` should be an instance of class "
