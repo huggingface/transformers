@@ -60,6 +60,8 @@ from transformers import (
 from transformers.testing_utils import CaptureLogger
 from transformers.utils import get_full_repo_name, send_example_telemetry
 
+num_of_hosts = jax.process_count()
+current_host_idx = jax.process_index()
 
 logger = logging.getLogger(__name__)
 
@@ -746,7 +748,11 @@ def main():
         # train
         for step in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
             batch = next(train_loader)
-            batch = shard(batch)
+            
+            # if there are N workers, each local_batch only contains 1/N batch data 
+            local_batch = {key: np.split(value, num_of_hosts, axis=0)[current_host_idx] for key, value in batch.items()}
+            batch = shard(local_batch)
+            
             state, train_metric = p_train_step(state, batch)
             train_metrics.append(train_metric)
 
