@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import os
-from typing import List, Tuple, Union
+from typing import TYPE_CHECKING, List, Tuple, Union
 
 import numpy as np
 
@@ -35,9 +35,14 @@ if is_vision_available():
     import PIL.ImageOps
 
 
+if TYPE_CHECKING:
+    if is_torch_available():
+        import torch
+
+
 ImageInput = Union[
-    "PIL.Image.Image", np.ndarray, "torch.Tensor", List["PIL.Image.Image"], List[np.ndarray], List["torch.Tensor"]  # noqa
-]
+    "PIL.Image.Image", np.ndarray, "torch.Tensor", List["PIL.Image.Image"], List[np.ndarray], List["torch.Tensor"]
+]  # noqa
 
 
 class ChannelDimension(ExplicitEnum):

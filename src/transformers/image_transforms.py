@@ -19,6 +19,7 @@ import numpy as np
 
 from transformers.utils.import_utils import is_tf_available, is_torch_available, is_vision_available
 
+
 if is_vision_available():
     import PIL
 
