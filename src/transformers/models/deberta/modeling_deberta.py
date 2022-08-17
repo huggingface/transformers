@@ -296,6 +296,7 @@ def MaskedLayerNorm(layerNorm, input, mask=None):
         if mask.dim() == 4:
             mask = mask.squeeze(1).squeeze(1)
         mask = mask.unsqueeze(2)
+
     mask = mask.to(output.dtype)
 
     return output * mask
@@ -1054,10 +1055,10 @@ class DebertaForMaskedLM(DebertaPreTrainedModel):
         self.post_init()
 
     def get_output_embeddings(self):
-        return self.lm_predictions.lm_head.decoder
+        pass 
 
     def set_output_embeddings(self, new_embeddings):
-        self.lm_predictions.lm_head.decoder = new_embeddings
+        pass
 
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
