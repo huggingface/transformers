@@ -202,7 +202,7 @@ override this by specifying a loss yourself if you want to!
 
 </Tip>
 
-This approach is great when it works, but for larger datasets you might find it starting to become a problem. Why?
+This approach works great for smaller datasets, but for larger datasets, you might find it starts to become a problem. Why?
 Because the tokenized array and labels would have to be fully loaded into memory, and because Numpy doesn’t handle
 “jagged” arrays, so every tokenized sample would have to be padded to the length of the longest sample in the whole
 dataset. That’s going to make your array even bigger, and all those padding tokens will slow down training too!
