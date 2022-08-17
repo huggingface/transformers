@@ -18,6 +18,7 @@ import copy
 import unittest
 
 import numpy as np
+
 from transformers import is_tf_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.models.layoutlmv3.modeling_tf_layoutlmv3 import TFLayoutLMv3ForSequenceClassification
@@ -32,12 +33,12 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
-        LayoutLMv3Config,
+        TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
         TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING,
         TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-        TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
+        LayoutLMv3Config,
         TFLayoutLMv3ForQuestionAnswering,
         TFLayoutLMv3ForSequenceClassification,
         TFLayoutLMv3ForTokenClassification,
@@ -174,18 +175,29 @@ class TFLayoutLMv3ModelTester:
 
         # text + image
         result = model(input_ids, pixel_values=pixel_values, training=False)
-        result = model(input_ids, bbox=bbox, pixel_values=pixel_values, attention_mask=input_mask, token_type_ids=token_type_ids, training=False)
+        result = model(
+            input_ids,
+            bbox=bbox,
+            pixel_values=pixel_values,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            training=False,
+        )
         result = model(input_ids, bbox=bbox, pixel_values=pixel_values, training=False)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
         # text only
         result = model(input_ids, training=False)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.text_seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.text_seq_length, self.hidden_size)
+        )
 
         # image only
         result = model({"pixel_values": pixel_values}, training=False)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.image_seq_length, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, self.image_seq_length, self.hidden_size)
+        )
 
     def create_and_check_for_sequence_classification(
         self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels
@@ -240,7 +252,13 @@ class TFLayoutLMv3ModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (config, input_ids, bbox, pixel_values, token_type_ids, input_mask, _, _) = config_and_inputs
-        inputs_dict = {'input_ids': input_ids, 'bbox': bbox, 'pixel_values': pixel_values, 'token_type_ids': token_type_ids, 'attention_mask': input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "bbox": bbox,
+            "pixel_values": pixel_values,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 
@@ -295,35 +313,88 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="""
+    @unittest.skip(
+        reason="""
     We disable this test from TFModelTesterMixin because it assumes
     that the model only accepts input_ids or pixel_values, but not both.
     That assumption sometimes causes the test to break, although the model works fine.
-    """)
+    """
+    )
     def test_loss_computation(self):
         pass
 
     def test_model(self):
-        config, input_ids, bbox, pixel_values, token_type_ids, input_mask, _, _ = self.model_tester.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            bbox,
+            pixel_values,
+            token_type_ids,
+            input_mask,
+            _,
+            _,
+        ) = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(config, input_ids, bbox, pixel_values, token_type_ids, input_mask)
 
     def test_model_various_embeddings(self):
-        config, input_ids, bbox, pixel_values, token_type_ids, input_mask, _, _ = self.model_tester.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            bbox,
+            pixel_values,
+            token_type_ids,
+            input_mask,
+            _,
+            _,
+        ) = self.model_tester.prepare_config_and_inputs()
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config.position_embedding_type = type
             self.model_tester.create_and_check_model(config, input_ids, bbox, pixel_values, token_type_ids, input_mask)
 
     def test_for_sequence_classification(self):
-        config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, _ = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_sequence_classification(config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels)
+        (
+            config,
+            input_ids,
+            bbox,
+            pixel_values,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            _,
+        ) = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_sequence_classification(
+            config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels
+        )
 
     def test_for_token_classification(self):
-        config, input_ids, bbox, pixel_values, token_type_ids, input_mask, _, token_labels = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_token_classification(config, input_ids, bbox, pixel_values, token_type_ids, input_mask, token_labels)
+        (
+            config,
+            input_ids,
+            bbox,
+            pixel_values,
+            token_type_ids,
+            input_mask,
+            _,
+            token_labels,
+        ) = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_token_classification(
+            config, input_ids, bbox, pixel_values, token_type_ids, input_mask, token_labels
+        )
 
     def test_for_question_answering(self):
-        config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, _ = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_question_answering(config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels)
+        (
+            config,
+            input_ids,
+            bbox,
+            pixel_values,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            _,
+        ) = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_question_answering(
+            config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels
+        )
 
     @slow
     def test_model_from_pretrained(self):
