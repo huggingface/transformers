@@ -1747,6 +1747,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 quantization works well for values of magnitude ~5, but beyond that, there is a significant performance
                 penalty. A good default threshold is 6, but a lower threshold might be needed for more unstable models
                 (small models, fine-tuning).
+            no_load_in_8bit_modules (`List[str]`, *optional*, defaults to `None`):
+                An explicit list of the modules that we do not want to convert in 8-bit. This is useful for models such as
+                Jukebox that has several heads in different places and not necessarly at the last position.
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
@@ -1839,6 +1842,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_state_dict = kwargs.pop("offload_state_dict", False)
         load_in_8bit = kwargs.pop("load_in_8bit", False)
         int8_threshold = kwargs.pop("int8_threshold", 6.0)
+        no_load_in_8bit_modules = kwargs.pop("no_load_in_8bit_modules", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
 
@@ -2142,7 +2146,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
 
             # We never convert lm_head or any last modules for numerical stability reasons
-            modules_to_not_convert = get_keys_to_not_convert(model)
+            if no_load_in_8bit_modules is None:
+                modules_to_not_convert = get_keys_to_not_convert(model)
+            else:
+                modules_to_not_convert = no_load_in_8bit_modules
             model = replace_8bit_linear(model, threshold=int8_threshold, modules_to_not_convert=modules_to_not_convert)
 
         if isinstance(device_map, str):
