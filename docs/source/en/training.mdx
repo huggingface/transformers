@@ -216,7 +216,7 @@ and can automatically infer which columns from the dataset to load by comparing 
 model. The `to_tf_dataset()` method is more low-level, and is useful when you want to exactly control how your
 dataset is created.
 
-Before you can use this method, you will need to add the tokenizer outputs to your dataset as columns, as in
+Before you can use [`~TFPreTrainedModel.prepare_tf_dataset`], you will need to add the tokenizer outputs to your dataset as columns:
 the following code sample:
 
 ```py
