@@ -13,7 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from .feature_extraction_utils import FeatureExtractionMixin, BatchFeature as BaseBatchFeature
+from .feature_extraction_utils import BatchFeature as BaseBatchFeature
+from .feature_extraction_utils import FeatureExtractionMixin
 from .utils import logging
 
 
