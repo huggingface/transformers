@@ -1971,7 +1971,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
 
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        abstractthe aim of this article is to summarize the studies have shown that owning a dog
+        abstractthe aim of this article is to provide an overview of the literature on the role of dog
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
