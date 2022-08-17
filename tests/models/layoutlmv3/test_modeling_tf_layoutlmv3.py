@@ -182,8 +182,58 @@ class TFLayoutLMv3ModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.text_seq_length, self.hidden_size))
 
         # image only
-        result = model(pixel_values=pixel_values, training=False)
+        result = model({"pixel_values": pixel_values}, training=False)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.image_seq_length, self.hidden_size))
+
+    def create_and_check_for_sequence_classification(
+        self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels
+    ):
+        config.num_labels = self.num_labels
+        model = TFLayoutLMv3ForSequenceClassification(config=config)
+        result = model(
+            input_ids,
+            bbox=bbox,
+            pixel_values=pixel_values,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=sequence_labels,
+            training=False,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def create_and_check_for_token_classification(
+        self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, token_labels
+    ):
+        config.num_labels = self.num_labels
+        model = TFLayoutLMv3ForTokenClassification(config=config)
+        result = model(
+            input_ids,
+            bbox=bbox,
+            pixel_values=pixel_values,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+            training=False,
+        )
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.text_seq_length, self.num_labels))
+
+    def create_and_check_for_question_answering(
+        self, config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels
+    ):
+        config.num_labels = 2
+        model = TFLayoutLMv3ForQuestionAnswering(config=config)
+        result = model(
+            input_ids,
+            bbox=bbox,
+            pixel_values=pixel_values,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            start_positions=sequence_labels,
+            end_positions=sequence_labels,
+            training=False,
+        )
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -243,8 +293,38 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    @unittest.skip(reason="""
+    We disable this test from TFModelTesterMixin because it assumes
+    that the model only accepts input_ids or pixel_values, but not both.
+    That assumption sometimes causes the test to break, although the model works fine.
+    """)
     def test_loss_computation(self):
-        # We disable this test from TFModelTesterMixin because it assumes
-        # that the model only accepts input_ids or pixel_values, but not both.
-        # That assumption sometimes causes the test to break, although the model works fine.
         pass
+
+    def test_model(self):
+        config, input_ids, bbox, pixel_values, token_type_ids, input_mask, _, _ = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(config, input_ids, bbox, pixel_values, token_type_ids, input_mask)
+
+    def test_model_various_embeddings(self):
+        config, input_ids, bbox, pixel_values, token_type_ids, input_mask, _, _ = self.model_tester.prepare_config_and_inputs()
+        for type in ["absolute", "relative_key", "relative_key_query"]:
+            config.position_embedding_type = type
+            self.model_tester.create_and_check_model(config, input_ids, bbox, pixel_values, token_type_ids, input_mask)
+
+    def test_for_sequence_classification(self):
+        config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, _ = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_sequence_classification(config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels)
+
+    def test_for_token_classification(self):
+        config, input_ids, bbox, pixel_values, token_type_ids, input_mask, _, token_labels = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_token_classification(config, input_ids, bbox, pixel_values, token_type_ids, input_mask, token_labels)
+
+    def test_for_question_answering(self):
+        config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels, _ = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_question_answering(config, input_ids, bbox, pixel_values, token_type_ids, input_mask, sequence_labels)
+
+    @slow
+    def test_model_from_pretrained(self):
+        for model_name in TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = TFLayoutLMv3Model.from_pretrained(model_name, from_pt=True)
+            self.assertIsNotNone(model)
