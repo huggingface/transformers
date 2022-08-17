@@ -502,19 +502,17 @@ class TFOwlViTModelTester:
         self.text_model_tester = TFOwlViTTextModelTester(parent)
         self.vision_model_tester = TFOwlViTVisionModelTester(parent)
         self.is_training = is_training
-
+        self.text_config = self.text_model_tester.get_config().to_dict()
+        self.vision_config = self.vision_model_tester.get_config().to_dict()
+        
     def prepare_config_and_inputs(self):
         text_config, input_ids, attention_mask = self.text_model_tester.prepare_config_and_inputs()
         vision_config, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
-
         config = self.get_config()
-
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return OwlViTConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
-        )
+        return OwlViTConfig.from_text_vision_configs(self.text_config, self.vision_config, projection_dim=64)
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
         model = TFOwlViTModel(config)
@@ -533,7 +531,7 @@ class TFOwlViTModelTester:
             "input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
-            "return_loss": True,
+            "return_loss": False,
         }
         return config, inputs_dict
 
