@@ -239,7 +239,7 @@ reduces the number of padding tokens compared to padding the entire dataset.
 
 <Tip>
 
-The reason we pass the tokenizer to `prepare_tf_dataset` is so that it can correctly pad batches as they're loaded.
+You need to pass the tokenizer to `prepare_tf_dataset` so it can correctly pad batches as they're loaded.
 If all the samples in your dataset are the same length and no padding is necessary, you can skip this argument.
 If you need to do something more complex than just padding samples (e.g. corrupting tokens for masked language
 modelling), you can use the `collate_fn` argument instead to pass a function that will be called to transform the
