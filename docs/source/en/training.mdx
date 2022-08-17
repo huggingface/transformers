@@ -209,7 +209,7 @@ dataset. That’s going to make your array even bigger, and all those padding to
 
 ### Loading data as a tf.data.Dataset
 
-If you want to avoid this, you can load your data as a `tf.data.Dataset` instead. Although you can write your own
+If you want to avoid slowing down training, you can load your data as a `tf.data.Dataset` instead. Although you can write your own
 `tf.data` pipeline if you want, we have two convenience methods for doing this - [`~datasets.Dataset.to_tf_dataset`]
 and [`~TFPreTrainedModel.prepare_tf_dataset`]. We recommend `prepare_tf_dataset()` in most cases because it is simpler
 and can automatically infer which columns from the dataset to load by comparing them against the input names for the
