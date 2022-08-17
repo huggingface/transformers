@@ -229,7 +229,7 @@ dataset = dataset.map(tokenize_dataset)
 ```
 
 Remember that Hugging Face datasets are stored on disk by default, so this will not inflate your memory usage! Once the
-columns have been added, we can now stream batches from the dataset and add padding on the fly, which greatly
+columns have been added, you can stream batches from the dataset and add padding on the fly, which greatly
 reduces the number of padding tokens compared to padding the entire dataset.
 
 
