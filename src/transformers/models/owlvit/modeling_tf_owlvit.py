@@ -1621,7 +1621,7 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
     @unpack_inputs
     @add_start_docstrings_to_model_forward(OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFOwlViTObjectDetectionOutput, config_class=OwlViTConfig)
-    def forward(
+    def call(
         self,
         input_ids: tf.Tensor,
         pixel_values: tf.Tensor,
