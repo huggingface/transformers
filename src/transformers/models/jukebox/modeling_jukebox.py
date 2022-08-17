@@ -2131,8 +2131,8 @@ class JukeboxPrior(nn.Module):
         metadata_conditioning_kwargs = dict(
             out_width=config.prior_width[-level - 1],
             init_scale=config.prior_init_scale[-level - 1],
-            metadata_dims=config.metadata_dims[-level - 1],  
-            timing_dims=config.timing_dims,   
+            metadata_dims=config.metadata_dims[-level - 1],
+            timing_dims=config.timing_dims,
             sampling_rate=config.sampling_rate,
             min_duration=config.min_duration,
             max_duration=config.max_duration,
@@ -2732,6 +2732,7 @@ def load_prompts(audio_files, hps, sample_length_in_seconds=70, offset_in_second
     raw_audio_list = raw_audio_list[: len(audio_files)]
     raw_audio = torch.stack([torch.from_numpy(raw_audio) for raw_audio in raw_audio_list])
     return raw_audio
+
 
 @add_start_docstrings(
     "The bare JUKEBOX Model from which you can sample",
