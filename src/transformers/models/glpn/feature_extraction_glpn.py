@@ -14,8 +14,8 @@
 # limitations under the License.
 """Feature extractor class for GLPN."""
 
-from .image_processing_glpn import GLPNImageProcessor
 from ...utils import logging
+from .image_processing_glpn import GLPNImageProcessor
 
 
 logger = logging.get_logger(__name__)
