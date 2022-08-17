@@ -17,10 +17,12 @@
 import copy
 import unittest
 
+import numpy as np
 from transformers import is_tf_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.models.layoutlmv3.modeling_tf_layoutlmv3 import TFLayoutLMv3ForSequenceClassification
 from transformers.testing_utils import require_tf, slow
+from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
@@ -326,5 +328,47 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = TFLayoutLMv3Model.from_pretrained(model_name, from_pt=True)
+            model = TFLayoutLMv3Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+
+# We will verify our results on an image of cute cats
+def prepare_img():
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    return image
+
+
+@require_tf
+class TFLayoutLMv3ModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_feature_extractor(self):
+        return LayoutLMv3FeatureExtractor(apply_ocr=False) if is_vision_available() else None
+
+    @slow
+    def test_inference_no_head(self):
+        model = TFLayoutLMv3Model.from_pretrained("microsoft/layoutlmv3-base")
+
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        pixel_values = feature_extractor(images=image, return_tensors="tf").pixel_values
+
+        input_ids = tf.constant([[1, 2]])
+        bbox = tf.expand_dims(tf.constant([[1, 2, 3, 4], [5, 6, 7, 8]]), axis=0)
+
+        # forward pass
+        outputs = model(
+            input_ids=input_ids,
+            bbox=bbox,
+            pixel_values=pixel_values,
+            training=False,
+        )
+
+        # verify the logits
+        expected_shape = (1, 199, 768)
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+        expected_slice = tf.constant(
+            [[-0.0529, 0.3618, 0.1632], [-0.1587, -0.1667, -0.0400], [-0.1557, -0.1671, -0.0505]]
+        )
+
+        self.assertTrue(np.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
