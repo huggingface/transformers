@@ -377,7 +377,6 @@ class DistributedTensorGatherer:
     For some reason, that's not going to roll their boat. This class is there to solve that problem.
 
     Args:
-
         world_size (`int`):
             The number of processes used in the distributed training.
         num_samples (`int`):
@@ -835,7 +834,7 @@ def _get_learning_rate(self):
         last_lr = (
             # backward compatibility for pytorch schedulers
             self.lr_scheduler.get_last_lr()[0]
-            if version.parse(torch.__version__) >= version.parse("1.4")
+            if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.4")
             else self.lr_scheduler.get_lr()[0]
         )
     return last_lr
@@ -1031,6 +1030,26 @@ def get_parameter_names(model, forbidden_layer_types):
     # Add model specific parameters (defined with nn.Parameter) since they are not in any child.
     result += list(model._parameters.keys())
     return result
+
+
+def get_module_class_from_name(module, name):
+    """
+    Gets a class from a module by its name.
+
+    Args:
+        module (`torch.nn.Module`): The module to get the class from.
+        name (`str`): The name of the class.
+    """
+    modules_children = list(module.children())
+    if module.__class__.__name__ == name:
+        return module.__class__
+    elif len(modules_children) == 0:
+        return
+    else:
+        for child_module in modules_children:
+            module_class = get_module_class_from_name(child_module, name)
+            if module_class is not None:
+                return module_class
 
 
 if is_sagemaker_mp_enabled():

@@ -630,13 +630,13 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
             warnings.warn(DEPRECATION_WARNING, FutureWarning)
             loss = self.hf_compute_loss(labels, logits)
 
-        past_key_values = None
-        if decoder_inputs["use_cache"]:
-            past_key_values = decoder_outputs[1]
-        # The starting index of the remaining elements in `decoder_outputs`
-        start_index = sum([1 if x is not None else 0 for x in (loss, logits, past_key_values)])
+        if not return_dict:
+            past_key_values = None
+            if use_cache:
+                past_key_values = decoder_outputs[1]
+            # The starting index of the remaining elements in `decoder_outputs`
+            start_index = sum([1 if x is not None else 0 for x in (loss, logits, past_key_values)])
 
-        if not decoder_inputs["return_dict"]:
             if not isinstance(encoder_outputs, tuple):
                 encoder_outputs = encoder_outputs.to_tuple()
             output = (loss, logits, past_key_values) + decoder_outputs[start_index:] + encoder_outputs
@@ -646,7 +646,7 @@ class TFEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLoss):
         return TFSeq2SeqLMOutput(
             loss=loss,
             logits=decoder_outputs.logits,
-            past_key_values=past_key_values,
+            past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,

@@ -609,7 +609,7 @@ for step, batch in enumerate(dataloader, start=1):
         optimizer.zero_grad()
 ```
 
-First we wrap the dataset in a [`DataLoader`](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader). Then we can enable gradient checkpointing by calling the model's [`~PreTrainedModel.gradient_checkpointing_enable`] method. When we initialize the [`Accelerator`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator) we can specifiy if we want to use mixed precision training and it will take care of it for us in the [`prepare`] call. During the [`prepare`](https://huggingface.co/docs/accelerate/accelerator.html#accelerate.Accelerator.prepare) call the dataloader will also be distributed across workers should we use multiple GPUs. We use the same 8-bit optimizer from the earlier experiments.
+First we wrap the dataset in a [`DataLoader`](https://pytorch.org/docs/stable/data.html#torch.utils.data.DataLoader). Then we can enable gradient checkpointing by calling the model's [`~PreTrainedModel.gradient_checkpointing_enable`] method. When we initialize the [`Accelerator`](https://huggingface.co/docs/accelerate/package_reference/accelerator#accelerate.Accelerator) we can specifiy if we want to use mixed precision training and it will take care of it for us in the [`prepare`] call. During the [`prepare`](https://huggingface.co/docs/accelerate/package_reference/accelerator#accelerate.Accelerator.prepare) call the dataloader will also be distributed across workers should we use multiple GPUs. We use the same 8-bit optimizer from the earlier experiments.
 
 Finally, we can write the main training loop. Note that the `backward` call is handled by 🤗 Accelerate. We can also see how gradient accumulation works: we normalize the loss so we get the average at the end of accumulation and once we have enough steps we run the optimization. Now the question is: does this use the same amount of memory as the previous steps? Let's check:
 
@@ -719,14 +719,70 @@ For some applications, such as pretraining large language models, applying all t
 Another use case for training on many GPUs is if the model does not fit on a single GPU with all the mentioned tricks. There are still more methods we can apply although life starts to get a bit more complicated. This usually involves some form of pipeline or tensor parallelism where the model itself is distributed across several GPUs. One can also make use of DeepSpeed which implements some of these parallelism strategies along with some more optimization to reduce the memory footprint such as partitioning the optimizer states. You can read more about this in the ["Multi-GPU training" section](perf_train_gpu_many).
 
 ## Inference with torchdynamo
+
 TorchDynamo is a new tracer that uses Python’s frame evaluation API to automatically create FX traces from existing PyTorch programs. After capturing the FX graph, different backends can be deployed to lower the graph to an optimized engine. One solution is using the [TensorRT](https://developer.nvidia.com/tensorrt) or NVFuser as backend. You can choose one option below for performance boost.
+
 ```
 TrainingArguments(torchdynamo="eager")      #enable eager model GPU. No performance boost
 TrainingArguments(torchdynamo="nvfuser")    #enable nvfuser
 TrainingArguments(torchdynamo="fx2trt")     #enable tensorRT fp32
 TrainingArguments(torchdynamo="fx2trt-f16") #enable tensorRT fp16
 ```
+
 This feature involves 3 different libraries. To install them, please follow the instructions below:  
 - [Torchdynamo installation](https://github.com/pytorch/torchdynamo#requirements-and-setup)  
 - [Functorch installation](https://github.com/pytorch/functorch#install)  
 - [Torch-TensorRT(FX) installation](https://github.com/pytorch/TensorRT/blob/master/docsrc/tutorials/getting_started_with_fx_path.rst#installation)  
+
+## `bitsandbytes` integration for Int8 mixed-precision matrix decomposition
+
+From the paper [`LLM.int8() : 8-bit Matrix Multiplication for Transformers at Scale`](https://arxiv.org/abs/2208.07339), we support HuggingFace integration for all models in the Hub with a few lines of code. 
+The method reduce `nn.Linear` size by 2 for `float16` and `bfloat16` weights and by 4 for `float32` weights, with close to no impact to the quality by operating on the outliers in half-precision.
+
+![HFxbitsandbytes.png](https://s3.amazonaws.com/moonup/production/uploads/1659861207959-62441d1d9fdefb55a0b7d12c.png)
+
+Int8 mixed-precision matrix decomposition works by separating a matrix multiplication into two streams: (1) a systematic feature outlier stream matrix multiplied in fp16 (0.01%), (2) a regular stream of int8 matrix multiplication (99.9%). With this method, int8 inference with no predictive degradation is possible for very large models.
+For more details regarding the method, check out the [paper](https://arxiv.org/abs/2208.07339) or our [blogpost about the integration](https://huggingface.co/blog/hf-bitsandbytes-integration).
+
+![MixedInt8.gif](https://s3.amazonaws.com/moonup/production/uploads/1660567469965-62441d1d9fdefb55a0b7d12c.gif)
+
+Note, that you would require a GPU to run mixed-8bit models as the kernels have been compiled for GPUs only. Make sure that you have enough GPU memory to store the quarter (or half if your model weights are in half precision) of the model before using this feature. 
+Below are some notes to help you use this module, or follow the demos on [Google colab](#colab-demos).
+
+### Requirements
+
+- Make sure you run that on NVIDIA GPUs that support 8-bit tensor cores (Turing, Ampere or newer architectures - e.g. T4, RTX20s RTX30s, A40-A100).
+- Install the correct version of `bitsandbytes` by running:
+`pip install bitsandbytes>=0.31.5`
+- Install `accelerate`
+`pip install accelerate>=0.12.0`
+
+### Running mixed-int8 models
+
+After installing the required libraries, the way to load your mixed 8-bit model is as follows:
+```py
+model_name = "bigscience/bloom-2b5"
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
+```
+The current implementation supports a multi-GPU setup when using `accelerate`. If you want to control the GPU memory you want to allocate for each GPU use the `max_memory` argument as follows:
+
+```py
+max_memory_mapping = {0: "1GB", 1: "2GB"}
+model_name = "bigscience/bloom-3b"
+model_8bit = AutoModelForCausalLM.from_pretrained(
+    model_name, device_map="auto", load_in_8bit=True, max_memory=max_memory_mapping
+)
+```
+
+In this example, the first GPU will use 1GB of memory and the second 2GB.
+
+### Colab demos
+
+With this method you can infer on models that were not possible to infer on a Google Colab before. 
+Check out the demo for running T5-11b (42GB in fp32)! Using 8-bit quantization on Google Colab:
+
+[![Open In Colab: T5-11b demo](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1YORPWx4okIHXnjW7MSAidXN29mPVNT7F?usp=sharing)
+
+Or this demo for BLOOM-3B:
+
+[![Open In Colab: BLOOM-3b demo](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1qOjXfQIAULfKvZqwCen8-MoWKGdSatZ4?usp=sharing)

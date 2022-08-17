@@ -23,13 +23,14 @@ import PIL.ImageOps
 import requests
 
 from .utils import is_torch_available
+from .utils.constants import (  # noqa: F401
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+)
 from .utils.generic import _is_torch
 
-
-IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]
-IMAGENET_DEFAULT_STD = [0.229, 0.224, 0.225]
-IMAGENET_STANDARD_MEAN = [0.5, 0.5, 0.5]
-IMAGENET_STANDARD_STD = [0.5, 0.5, 0.5]
 
 ImageInput = Union[
     PIL.Image.Image, np.ndarray, "torch.Tensor", List[PIL.Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
@@ -375,3 +376,25 @@ class ImageFeatureExtractionMixin:
             image = self.to_numpy_array(image)
 
         return image[::-1, :, :]
+
+    def rotate(self, image, angle, resample=PIL.Image.NEAREST, expand=0, center=None, translate=None, fillcolor=None):
+        """
+        Returns a rotated copy of `image`. This method returns a copy of `image`, rotated the given number of degrees
+        counter clockwise around its centre.
+
+        Args:
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
+                The image to rotate. If `np.ndarray` or `torch.Tensor`, will be converted to `PIL.Image.Image` before
+                rotating.
+
+        Returns:
+            image: A rotated `PIL.Image.Image`.
+        """
+        self._ensure_format_supported(image)
+
+        if not isinstance(image, PIL.Image.Image):
+            image = self.to_pil_image(image)
+
+        return image.rotate(
+            angle, resample=resample, expand=expand, center=center, translate=translate, fillcolor=fillcolor
+        )

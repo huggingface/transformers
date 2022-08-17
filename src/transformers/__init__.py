@@ -22,7 +22,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.21.0.dev0"
+__version__ = "4.22.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -190,6 +190,7 @@ _import_structure = {
     "models.dialogpt": [],
     "models.distilbert": ["DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DistilBertConfig", "DistilBertTokenizer"],
     "models.dit": [],
+    "models.donut": ["DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "DonutProcessor", "DonutSwinConfig"],
     "models.dpr": [
         "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DPRConfig",
@@ -273,6 +274,13 @@ _import_structure = {
     ],
     "models.openai": ["OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "OpenAIGPTConfig", "OpenAIGPTTokenizer"],
     "models.opt": ["OPTConfig"],
+    "models.owlvit": [
+        "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "OwlViTConfig",
+        "OwlViTProcessor",
+        "OwlViTTextConfig",
+        "OwlViTVisionConfig",
+    ],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
@@ -306,6 +314,7 @@ _import_structure = {
     "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
+    "models.swinv2": ["SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swinv2Config"],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
     "models.tapex": ["TapexTokenizer"],
@@ -333,6 +342,7 @@ _import_structure = {
         "UniSpeechSatConfig",
     ],
     "models.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
+    "models.videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
     "models.vilt": ["VILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViltConfig", "ViltFeatureExtractor", "ViltProcessor"],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
@@ -432,7 +442,6 @@ _import_structure = {
         "TensorType",
         "add_end_docstrings",
         "add_start_docstrings",
-        "cached_path",
         "is_apex_available",
         "is_datasets_available",
         "is_faiss_available",
@@ -454,6 +463,7 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
+    "utils.bitsandbytes": [],
 }
 
 # sentencepiece-backed objects
@@ -632,6 +642,7 @@ else:
     _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
+    _import_structure["models.donut"].append("DonutFeatureExtractor")
     _import_structure["models.dpt"].append("DPTFeatureExtractor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor"])
     _import_structure["models.glpn"].append("GLPNFeatureExtractor")
@@ -641,9 +652,11 @@ else:
     _import_structure["models.levit"].append("LevitFeatureExtractor")
     _import_structure["models.maskformer"].append("MaskFormerFeatureExtractor")
     _import_structure["models.mobilevit"].append("MobileViTFeatureExtractor")
+    _import_structure["models.owlvit"].append("OwlViTFeatureExtractor")
     _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
     _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
     _import_structure["models.segformer"].append("SegformerFeatureExtractor")
+    _import_structure["models.videomae"].append("VideoMAEFeatureExtractor")
     _import_structure["models.vilt"].append("ViltFeatureExtractor")
     _import_structure["models.vilt"].append("ViltProcessor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
@@ -790,6 +803,7 @@ else:
             "MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
             "MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING",
             "MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING",
+            "MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING",
             "MODEL_FOR_VISION_2_SEQ_MAPPING",
             "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
             "MODEL_MAPPING",
@@ -816,6 +830,7 @@ else:
             "AutoModelForSpeechSeq2Seq",
             "AutoModelForTableQuestionAnswering",
             "AutoModelForTokenClassification",
+            "AutoModelForVideoClassification",
             "AutoModelForVision2Seq",
             "AutoModelForVisualQuestionAnswering",
             "AutoModelWithLMHead",
@@ -1086,6 +1101,13 @@ else:
             "DistilBertPreTrainedModel",
         ]
     )
+    _import_structure["models.donut"].extend(
+        [
+            "DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DonutSwinModel",
+            "DonutSwinPreTrainedModel",
+        ]
+    )
     _import_structure["models.dpr"].extend(
         [
             "DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1354,6 +1376,10 @@ else:
             "LukeForEntityClassification",
             "LukeForEntityPairClassification",
             "LukeForEntitySpanClassification",
+            "LukeForMultipleChoice",
+            "LukeForQuestionAnswering",
+            "LukeForSequenceClassification",
+            "LukeForTokenClassification",
             "LukeForMaskedLM",
             "LukeModel",
             "LukePreTrainedModel",
@@ -1504,6 +1530,17 @@ else:
             "OPTForCausalLM",
             "OPTModel",
             "OPTPreTrainedModel",
+            "OPTForSequenceClassification",
+        ]
+    )
+    _import_structure["models.owlvit"].extend(
+        [
+            "OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "OwlViTModel",
+            "OwlViTPreTrainedModel",
+            "OwlViTTextModel",
+            "OwlViTVisionModel",
+            "OwlViTForObjectDetection",
         ]
     )
     _import_structure["models.pegasus"].extend(
@@ -1731,6 +1768,15 @@ else:
             "SwinPreTrainedModel",
         ]
     )
+    _import_structure["models.swinv2"].extend(
+        [
+            "SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Swinv2ForImageClassification",
+            "Swinv2ForMaskedImageModeling",
+            "Swinv2Model",
+            "Swinv2PreTrainedModel",
+        ]
+    )
     _import_structure["models.t5"].extend(
         [
             "T5_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -1797,6 +1843,7 @@ else:
             "VILT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ViltForImageAndTextRetrieval",
             "ViltForImagesAndTextClassification",
+            "ViltForTokenClassification",
             "ViltForMaskedLM",
             "ViltForQuestionAnswering",
             "ViltLayer",
@@ -1835,6 +1882,15 @@ else:
             "ViTMAELayer",
             "ViTMAEModel",
             "ViTMAEPreTrainedModel",
+        ]
+    )
+    _import_structure["models.videomae"].extend(
+        [
+            "VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VideoMAEForPreTraining",
+            "VideoMAEModel",
+            "VideoMAEPreTrainedModel",
+            "VideoMAEForVideoClassification",
         ]
     )
     _import_structure["models.wav2vec2"].extend(
@@ -2041,6 +2097,7 @@ else:
             "TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
             "TF_MODEL_FOR_PRETRAINING_MAPPING",
             "TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+            "TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING",
             "TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
             "TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING",
@@ -2057,6 +2114,7 @@ else:
             "TFAutoModelForNextSentencePrediction",
             "TFAutoModelForPreTraining",
             "TFAutoModelForQuestionAnswering",
+            "TFAutoModelForSemanticSegmentation",
             "TFAutoModelForSeq2SeqLM",
             "TFAutoModelForSequenceClassification",
             "TFAutoModelForSpeechSeq2Seq",
@@ -2427,6 +2485,16 @@ else:
             "TFRoFormerLayer",
             "TFRoFormerModel",
             "TFRoFormerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.segformer"].extend(
+        [
+            "TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFSegformerDecodeHead",
+            "TFSegformerForImageClassification",
+            "TFSegformerForSemanticSegmentation",
+            "TFSegformerModel",
+            "TFSegformerPreTrainedModel",
         ]
     )
     _import_structure["models.speech_to_text"].extend(
@@ -2925,6 +2993,7 @@ if TYPE_CHECKING:
     from .models.deit import DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP, DeiTConfig
     from .models.detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
     from .models.distilbert import DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, DistilBertConfig, DistilBertTokenizer
+    from .models.donut import DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, DonutProcessor, DonutSwinConfig
     from .models.dpr import (
         DPR_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DPRConfig,
@@ -3001,6 +3070,13 @@ if TYPE_CHECKING:
     from .models.nystromformer import NYSTROMFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, NystromformerConfig
     from .models.openai import OPENAI_GPT_PRETRAINED_CONFIG_ARCHIVE_MAP, OpenAIGPTConfig, OpenAIGPTTokenizer
     from .models.opt import OPTConfig
+    from .models.owlvit import (
+        OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        OwlViTConfig,
+        OwlViTProcessor,
+        OwlViTTextConfig,
+        OwlViTVisionConfig,
+    )
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
@@ -3031,6 +3107,7 @@ if TYPE_CHECKING:
     from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
+    from .models.swinv2 import SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Swinv2Config
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
     from .models.tapex import TapexTokenizer
@@ -3048,6 +3125,7 @@ if TYPE_CHECKING:
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
+    from .models.videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
     from .models.vilt import VILT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViltConfig, ViltFeatureExtractor, ViltProcessor
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
@@ -3147,7 +3225,6 @@ if TYPE_CHECKING:
         TensorType,
         add_end_docstrings,
         add_start_docstrings,
-        cached_path,
         is_apex_available,
         is_datasets_available,
         is_faiss_available,
@@ -3308,6 +3385,7 @@ if TYPE_CHECKING:
         from .models.convnext import ConvNextFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
+        from .models.donut import DonutFeatureExtractor
         from .models.dpt import DPTFeatureExtractor
         from .models.flava import FlavaFeatureExtractor, FlavaProcessor
         from .models.glpn import GLPNFeatureExtractor
@@ -3317,9 +3395,11 @@ if TYPE_CHECKING:
         from .models.levit import LevitFeatureExtractor
         from .models.maskformer import MaskFormerFeatureExtractor
         from .models.mobilevit import MobileViTFeatureExtractor
+        from .models.owlvit import OwlViTFeatureExtractor
         from .models.perceiver import PerceiverFeatureExtractor
         from .models.poolformer import PoolFormerFeatureExtractor
         from .models.segformer import SegformerFeatureExtractor
+        from .models.videomae import VideoMAEFeatureExtractor
         from .models.vilt import ViltFeatureExtractor, ViltProcessor
         from .models.vit import ViTFeatureExtractor
         from .models.yolos import YolosFeatureExtractor
@@ -3444,6 +3524,7 @@ if TYPE_CHECKING:
             MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
             MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+            MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
             MODEL_FOR_VISION_2_SEQ_MAPPING,
             MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
             MODEL_MAPPING,
@@ -3470,6 +3551,7 @@ if TYPE_CHECKING:
             AutoModelForSpeechSeq2Seq,
             AutoModelForTableQuestionAnswering,
             AutoModelForTokenClassification,
+            AutoModelForVideoClassification,
             AutoModelForVision2Seq,
             AutoModelForVisualQuestionAnswering,
             AutoModelWithLMHead,
@@ -3690,6 +3772,7 @@ if TYPE_CHECKING:
             DistilBertModel,
             DistilBertPreTrainedModel,
         )
+        from .models.donut import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST, DonutSwinModel, DonutSwinPreTrainedModel
         from .models.dpr import (
             DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
             DPR_QUESTION_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -3904,6 +3987,10 @@ if TYPE_CHECKING:
             LukeForEntityPairClassification,
             LukeForEntitySpanClassification,
             LukeForMaskedLM,
+            LukeForMultipleChoice,
+            LukeForQuestionAnswering,
+            LukeForSequenceClassification,
+            LukeForTokenClassification,
             LukeModel,
             LukePreTrainedModel,
         )
@@ -4026,7 +4113,21 @@ if TYPE_CHECKING:
             OpenAIGPTPreTrainedModel,
             load_tf_weights_in_openai_gpt,
         )
-        from .models.opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPreTrainedModel
+        from .models.opt import (
+            OPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            OPTForCausalLM,
+            OPTForSequenceClassification,
+            OPTModel,
+            OPTPreTrainedModel,
+        )
+        from .models.owlvit import (
+            OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            OwlViTForObjectDetection,
+            OwlViTModel,
+            OwlViTPreTrainedModel,
+            OwlViTTextModel,
+            OwlViTVisionModel,
+        )
         from .models.pegasus import (
             PegasusForCausalLM,
             PegasusForConditionalGeneration,
@@ -4213,6 +4314,13 @@ if TYPE_CHECKING:
             SwinModel,
             SwinPreTrainedModel,
         )
+        from .models.swinv2 import (
+            SWINV2_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Swinv2ForImageClassification,
+            Swinv2ForMaskedImageModeling,
+            Swinv2Model,
+            Swinv2PreTrainedModel,
+        )
         from .models.t5 import (
             T5_PRETRAINED_MODEL_ARCHIVE_LIST,
             T5EncoderModel,
@@ -4260,12 +4368,20 @@ if TYPE_CHECKING:
             VanModel,
             VanPreTrainedModel,
         )
+        from .models.videomae import (
+            VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            VideoMAEForPreTraining,
+            VideoMAEForVideoClassification,
+            VideoMAEModel,
+            VideoMAEPreTrainedModel,
+        )
         from .models.vilt import (
             VILT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViltForImageAndTextRetrieval,
             ViltForImagesAndTextClassification,
             ViltForMaskedLM,
             ViltForQuestionAnswering,
+            ViltForTokenClassification,
             ViltLayer,
             ViltModel,
             ViltPreTrainedModel,
@@ -4479,6 +4595,7 @@ if TYPE_CHECKING:
             TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING,
             TF_MODEL_FOR_PRETRAINING_MAPPING,
             TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
             TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
@@ -4495,6 +4612,7 @@ if TYPE_CHECKING:
             TFAutoModelForNextSentencePrediction,
             TFAutoModelForPreTraining,
             TFAutoModelForQuestionAnswering,
+            TFAutoModelForSemanticSegmentation,
             TFAutoModelForSeq2SeqLM,
             TFAutoModelForSequenceClassification,
             TFAutoModelForSpeechSeq2Seq,
@@ -4781,6 +4899,14 @@ if TYPE_CHECKING:
             TFRoFormerLayer,
             TFRoFormerModel,
             TFRoFormerPreTrainedModel,
+        )
+        from .models.segformer import (
+            TF_SEGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFSegformerDecodeHead,
+            TFSegformerForImageClassification,
+            TFSegformerForSemanticSegmentation,
+            TFSegformerModel,
+            TFSegformerPreTrainedModel,
         )
         from .models.speech_to_text import (
             TF_SPEECH_TO_TEXT_PRETRAINED_MODEL_ARCHIVE_LIST,

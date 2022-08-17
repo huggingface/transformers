@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from unittest import TestCase
@@ -25,6 +26,11 @@ from transformers.testing_utils import require_onnx, require_rjieba, require_tf,
 
 if is_torch_available() or is_tf_available():
     from transformers.onnx.features import FeaturesManager
+
+if is_torch_available():
+    import torch
+
+    from transformers.models.deberta import modeling_deberta
 
 
 @require_onnx
@@ -179,6 +185,7 @@ PYTORCH_EXPORT_MODELS = {
     ("big-bird", "google/bigbird-roberta-base"),
     ("ibert", "kssteven/ibert-roberta-base"),
     ("camembert", "camembert-base"),
+    ("clip", "openai/clip-vit-base-patch32"),
     ("convbert", "YituTech/conv-bert-base"),
     ("codegen", "Salesforce/codegen-350M-multi"),
     ("deberta", "microsoft/deberta-base"),
@@ -201,13 +208,14 @@ PYTORCH_EXPORT_MODELS = {
     ("deit", "facebook/deit-small-patch16-224"),
     ("beit", "microsoft/beit-base-patch16-224"),
     ("data2vec-text", "facebook/data2vec-text-base"),
+    ("data2vec-vision", "facebook/data2vec-vision-base"),
     ("perceiver", "deepmind/language-perceiver", ("masked-lm", "sequence-classification")),
     ("perceiver", "deepmind/vision-perceiver-conv", ("image-classification",)),
     ("yolos", "hustvl/yolos-tiny"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
-    ("bloom", "bigscience/bloom-350m"),
+    ("bloom", "bigscience/bloom-560m"),
     ("gpt2", "gpt2"),
     ("gpt-neo", "EleutherAI/gpt-neo-125M"),
 }
@@ -217,12 +225,15 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("mbart", "sshleifer/tiny-mbart"),
     ("t5", "t5-small"),
     ("marian", "Helsinki-NLP/opus-mt-en-de"),
+    ("mt5", "google/mt5-base"),
     ("m2m-100", "facebook/m2m100_418M"),
     ("blenderbot-small", "facebook/blenderbot_small-90M"),
     ("blenderbot", "facebook/blenderbot-400M-distill"),
     ("bigbird-pegasus", "google/bigbird-pegasus-large-arxiv"),
     ("longt5", "google/long-t5-local-base"),
-    ("longt5", "google/long-t5-tglobal-base"),
+    # Disable for now as it causes fatal error `Floating point exception (core dumped)` and the subsequential tests are
+    # not run.
+    # ("longt5", "google/long-t5-tglobal-base"),
 }
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_MODELS` once TensorFlow has parity with the PyTorch model implementations.
@@ -273,6 +284,12 @@ class OnnxExportTestCaseV2(TestCase):
         model_class = FeaturesManager.get_model_class_for_feature(feature)
         config = AutoConfig.from_pretrained(model_name)
         model = model_class.from_config(config)
+
+        # Dynamic axes aren't supported for YOLO-like models. This means they cannot be exported to ONNX on CUDA devices.
+        # See: https://github.com/ultralytics/yolov5/pull/8378
+        if model.__class__.__name__.startswith("Yolos") and device != "cpu":
+            return
+
         onnx_config = onnx_config_class_constructor(model.config)
 
         if is_torch_available():
@@ -356,3 +373,40 @@ class OnnxExportTestCaseV2(TestCase):
         self, test_name, name, model_name, feature, onnx_config_class_constructor
     ):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+
+
+class StableDropoutTestCase(TestCase):
+    """Tests export of StableDropout module."""
+
+    @require_torch
+    @pytest.mark.filterwarnings("ignore:.*Dropout.*:UserWarning:torch.onnx.*")  # torch.onnx is spammy.
+    def test_training(self):
+        """Tests export of StableDropout in training mode."""
+        devnull = open(os.devnull, "wb")
+        # drop_prob must be > 0 for the test to be meaningful
+        sd = modeling_deberta.StableDropout(0.1)
+        # Avoid warnings in training mode
+        do_constant_folding = False
+        # Dropout is a no-op in inference mode
+        training = torch.onnx.TrainingMode.PRESERVE
+        input = (torch.randn(2, 2),)
+
+        torch.onnx.export(
+            sd,
+            input,
+            devnull,
+            opset_version=12,  # Minimum supported
+            do_constant_folding=do_constant_folding,
+            training=training,
+        )
+
+        # Expected to fail with opset_version < 12
+        with self.assertRaises(Exception):
+            torch.onnx.export(
+                sd,
+                input,
+                devnull,
+                opset_version=11,
+                do_constant_folding=do_constant_folding,
+                training=training,
+            )
