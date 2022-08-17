@@ -516,7 +516,7 @@ def main():
 
         inputs, targets = [], []
         for i in range(len(examples[text_column])):
-            if examples[text_column][i] and examples[summary_column][i]:
+            if examples[text_column][i] is not None and examples[summary_column][i] is not None:
                 inputs.append(examples[text_column][i])
                 targets.append(examples[summary_column][i])
 
