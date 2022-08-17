@@ -189,6 +189,11 @@ class Seq2SeqTSPredictionOutput(ModelOutput):
     static_features: Optional[torch.FloatTensor] = None
 
 
+@dataclass
+class SampleTSPredictionOutput(ModelOutput):
+    sequences: torch.FloatTensor = None
+
+
 class TimeSeriesTransformerAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -1473,8 +1478,11 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             future_samples.append(next_sample)
 
         concat_future_samples = torch.cat(future_samples, dim=1)
-        return concat_future_samples.reshape(
-            (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
+
+        return SampleTSPredictionOutput(
+            sequences=concat_future_samples.reshape(
+                (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
+            )
         )
 
 
