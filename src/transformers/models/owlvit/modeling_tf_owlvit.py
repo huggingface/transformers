@@ -1500,7 +1500,9 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
         self.owlvit = TFOwlViTMainLayer(config, name="owlvit")
         self.class_head = TFOwlViTClassPredictionHead(config, name="class_head")
         self.box_head = TFOwlViTBoxPredictionHead(config, name="box_head")
-        self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layernorm")
+        self.layer_norm = tf.keras.layers.LayerNormalization(
+            epsilon=config.vision_config.layer_norm_eps, name="layernorm"
+        )
 
     def normalize_grid_corner_coordinates(self, feature_map: tf.Tensor):
         # Computes normalized xy corner coordinates from feature_map.
@@ -1714,4 +1716,15 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
             class_embeds=class_embeds,
             text_model_last_hidden_states=text_model_last_hidden_states,
             vision_model_last_hidden_states=vision_model_last_hidden_states,
+        )
+
+    def serving_output(self, output: TFOwlViTObjectDetectionOutput) -> TFOwlViTObjectDetectionOutput:
+        return TFOwlViTObjectDetectionOutput(
+            image_embeds=output.feature_map,
+            text_embeds=output.query_embeds,
+            pred_boxes=output.pred_boxes,
+            logits=output.pred_logits,
+            class_embeds=output.class_embeds,
+            text_model_last_hidden_states=output.text_model_last_hidden_states,
+            vision_model_last_hidden_states=output.vision_model_last_hidden_states,
         )
