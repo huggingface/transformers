@@ -1175,7 +1175,7 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         )
 
         sequence_output = outputs[0]
-        prediction_scores = self.lm_predictions(sequence_output, self.get_input_embeddings())
+        prediction_scores = self.lm_predictions(sequence_output, self.deberta.embeddings.word_embeddings)
 
         masked_lm_loss = None
         if labels is not None:
@@ -1210,11 +1210,11 @@ class DebertaV2LMPredictionHead(nn.Module):
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
 
     # note that the input embeddings must be passed as an argument
-    def forward(self, hidden_states, embeddings):
+    def forward(self, hidden_states, word_embeddings):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
         hidden_states = self.LayerNorm(hidden_states) # original used MaskedLayerNorm, but passed no mask. This is equivalent.
-        hidden_states = torch.matmul(hidden_states, embeddings.weight.t()) + self.bias
+        hidden_states = torch.matmul(hidden_states, word_embeddings.t()) + self.bias
         return hidden_states
 
 
@@ -1225,8 +1225,8 @@ class DebertaV2OnlyMLMHead(nn.Module):
         self.lm_head = DebertaV2LMPredictionHead(config)
 
     # note that the input embeddings must be passed as an argument
-    def forward(self, sequence_output, embeddings):
-        prediction_scores = self.lm_head(sequence_output, embeddings)
+    def forward(self, sequence_output, word_embeddings):
+        prediction_scores = self.lm_head(sequence_output, word_embeddings)
         return prediction_scores
 
 
