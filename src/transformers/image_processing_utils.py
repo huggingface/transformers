@@ -48,8 +48,8 @@ class BaseImageProcessor(ImageProcessorMixin):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def __call__(self, *args, **kwargs):
-        return self.preprocess(*args, **kwargs)
+    def __call__(self, images, **kwargs) -> BatchFeature:
+        return self.preprocess(images, **kwargs)
 
-    def preprocess(self, *args, **kwargs):
+    def preprocess(self, images, **kwargs) -> BatchFeature:
         raise NotImplementedError("Each image processor must implement its own preprocess method")

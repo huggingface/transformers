@@ -64,8 +64,35 @@ def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDim
     raise ValueError("Unsupported channel dimension format: {}".format(channel_dim))
 
 
+def rescale(
+    image: np.ndarray, scale: Union[float, int] = 255, data_format: Optional[ChannelDimension] = None, dtype=np.float32
+) -> np.ndarray:
+    """
+    Rescales `image` by `scale`.
+
+    Args:
+        image (`np.ndarray`):
+            The image to rescale.
+        scale (`float` or `int`, *optional*, defaults to 255):
+            The scale to use for rescaling the image.
+        data_format (`ChannelDimension`, *optional*):
+            The channel dimension format of the image. If not provided, it will be the same as the input image.
+        dtype (`np.dtype`, *optional*, defaults to `np.float32`):
+            The dtype of the output image. Defaults to `np.float32`. Used for backwards compatibility with feature
+            extractors.
+
+    Returns:
+        image: A rescaled np.ndarray image.
+    """
+    rescaled_image = image * scale
+    if data_format is not None:
+        rescaled_image = to_channel_dimension_format(rescaled_image, data_format)
+    rescaled_image = rescaled_image.astype(dtype)
+    return rescaled_image
+
+
 def to_pil_image(
-    image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor"], rescale=None
+    image: Union[np.ndarray, PIL.Image.Image, "torch.Tensor", "tf.Tensor", "jnp.Tensor"], do_rescale=None
 ) -> PIL.Image.Image:
     """
     Converts `image` to a PIL Image. Optionally rescales it and puts the channel dimension back as the last axis if
@@ -93,9 +120,9 @@ def to_pil_image(
     image = to_channel_dimension_format(image, ChannelDimension.LAST)
 
     # PIL.Image can only store uint8 values, so we rescale the image to be between 0 and 255 if needed.
-    rescale = isinstance(image.flat[0], float) if rescale is None else rescale
-    if rescale:
-        rescale = image * 255
+    do_rescale = isinstance(image.flat[0], float) if do_rescale is None else do_rescale
+    if do_rescale:
+        image = rescale(image, 255)
     image = image.astype(np.uint8)
     return PIL.Image.fromarray(image)
 

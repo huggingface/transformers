@@ -29,12 +29,17 @@ from .utils.constants import (  # noqa: F401
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
 )
-from .utils.generic import ExplicitEnum, _is_jax, _is_tensorflow, _is_torch
+from .utils.generic import ExplicitEnum, _is_jax, _is_tensorflow, _is_torch, to_numpy
 
 
 ImageInput = Union[
     PIL.Image.Image, np.ndarray, "torch.Tensor", List[PIL.Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
 ]
+
+
+class ChannelDimension(ExplicitEnum):
+    FIRST = "channels_first"
+    LAST = "channels_last"
 
 
 def is_torch_tensor(obj):
@@ -49,9 +54,29 @@ def is_jax_tensor(obj):
     return _is_jax(obj) if is_flax_available() else False
 
 
-class ChannelDimension(ExplicitEnum):
-    FIRST = "channels_first"
-    LAST = "channels_last"
+def is_valid_image(img):
+    return (
+        isinstance(img, (PIL.Image.Image, np.ndarray))
+        or is_torch_tensor(img)
+        or is_tf_tensor(img)
+        or is_jax_tensor(img)
+    )
+
+
+def valid_images(imgs):
+    return all(is_valid_image(img) for img in imgs)
+
+
+def is_batched(img):
+    if isinstance(img, (list, tuple)):
+        return is_valid_image(img[0])
+    return False
+
+
+def to_numpy_array(img) -> np.ndarray:
+    if isinstance(img, PIL.Image.Image):
+        return np.array(img)
+    return to_numpy(img)
 
 
 def infer_channel_dimension_format(image: np.ndarray) -> ChannelDimension:
