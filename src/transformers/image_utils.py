@@ -315,7 +315,7 @@ class ImageFeatureExtractionMixin:
         else:
             return (image - mean) / std
 
-    def resize(self, image, size, resample=PIL.Image.BILINEAR, default_to_square=True, max_size=None):
+    def resize(self, image, size, resample=None, default_to_square=True, max_size=None):
         """
         Resizes `image`. Enforces conversion of input to PIL.Image.
 
@@ -345,6 +345,8 @@ class ImageFeatureExtractionMixin:
         Returns:
             image: A resized `PIL.Image.Image`.
         """
+        resample = resample if resample is not None else PIL.Image.BILINEAR
+
         self._ensure_format_supported(image)
 
         if not isinstance(image, PIL.Image.Image):
@@ -472,7 +474,7 @@ class ImageFeatureExtractionMixin:
 
         return image[::-1, :, :]
 
-    def rotate(self, image, angle, resample=PIL.Image.NEAREST, expand=0, center=None, translate=None, fillcolor=None):
+    def rotate(self, image, angle, resample=None, expand=0, center=None, translate=None, fillcolor=None):
         """
         Returns a rotated copy of `image`. This method returns a copy of `image`, rotated the given number of degrees
         counter clockwise around its centre.
@@ -485,6 +487,8 @@ class ImageFeatureExtractionMixin:
         Returns:
             image: A rotated `PIL.Image.Image`.
         """
+        resample = resample if resample is not None else PIL.Image.NEAREST
+
         self._ensure_format_supported(image)
 
         if not isinstance(image, PIL.Image.Image):
