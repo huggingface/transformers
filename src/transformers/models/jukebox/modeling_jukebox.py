@@ -1411,7 +1411,6 @@ class JukeboxPositionalEmbedding(nn.Module):
         return pos_emb
 
 
-# Most important renaming has to happen here
 class JukeboxConditionalAutoregressive(nn.Module):
     def __init__(
         self,
@@ -1806,7 +1805,6 @@ def filter_logits(logits, top_k=0, top_p=0.0, filter_value=-float("Inf")):
         top_k >0: keep only top key tokens with highest probability (top-k filtering).
         top_p >0.0: keep the top tokens with cumulative probability >= top_p (nucleus filtering).
     """
-    # assert logits.dim() == 2  # batch size 1 for now - could be updated for more but the code would be less clear
     logits = logits.clone()
     top_k = min(top_k, logits.size(-1))  # Safety check
     assert (top_k == 0) or (top_p == 0.0)
@@ -2133,8 +2131,8 @@ class JukeboxPrior(nn.Module):
         metadata_conditioning_kwargs = dict(
             out_width=config.prior_width[-level - 1],
             init_scale=config.prior_init_scale[-level - 1],
-            metadata_dims=config.metadata_dims[-level - 1],  # rename to metadata_dims
-            timing_dims=config.timing_dims,  # rename to timing_dims or timing_intervals
+            metadata_dims=config.metadata_dims[-level - 1],  
+            timing_dims=config.timing_dims,   
             sampling_rate=config.sampling_rate,
             min_duration=config.min_duration,
             max_duration=config.max_duration,
@@ -2161,6 +2159,7 @@ class JukeboxPrior(nn.Module):
                     stride_t=config.cond_strides_t[_level],
                     **audio_conditioning_kwargs,
                 )
+
             self.conditioner_blocks.append(conditioner_block(self.cond_level))
 
         # metadata conditioning : contioning on timing, genres, and artist
@@ -2718,9 +2717,9 @@ def load_audio(file, sampling_rate, offset, duration, mono=False):
     return raw_audio
 
 
-def load_prompts(audio_files,hps, sample_length_in_seconds=70, offset_in_seconds=10):
+def load_prompts(audio_files, hps, sample_length_in_seconds=70, offset_in_seconds=10):
     duration = sample_length_in_seconds * hps.sampling_rate
-    offset  = offset_in_seconds * hps.sampling_rate
+    offset = offset_in_seconds * hps.sampling_rate
     raw_audio_list = []
     for audio_file in audio_files:
         raw_audio = load_audio(
@@ -2730,12 +2729,10 @@ def load_prompts(audio_files,hps, sample_length_in_seconds=70, offset_in_seconds
         raw_audio_list.append(raw_audio)
     while len(raw_audio_list) < len(audio_files):
         raw_audio_list.extend(raw_audio_list)
-    raw_audio_list = raw_audio_list[:len(audio_files)]
+    raw_audio_list = raw_audio_list[: len(audio_files)]
     raw_audio = torch.stack([torch.from_numpy(raw_audio) for raw_audio in raw_audio_list])
     return raw_audio
 
-
-# a little bit of renaming to do here, especially regarind "z"
 @add_start_docstrings(
     "The bare JUKEBOX Model from which you can sample",
     JUKEBOX_START_DOCSTRING,
@@ -2894,7 +2891,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 fp16=fp16,
                 max_batch_size=lower_batch_size,
                 chunk_size=chunk_size,
-                sample_tokens=sample_tokens
+                sample_tokens=sample_tokens,
             ),
             dict(
                 temp=sampling_temperature,
