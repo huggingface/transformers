@@ -17,7 +17,6 @@
 import copy
 import inspect
 import os
-import pickle
 import tempfile
 import unittest
 
@@ -31,7 +30,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_fx_available
+from transformers.utils import cached_property
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -43,9 +42,6 @@ if is_torch_available():
 
     from transformers import Speech2TextForConditionalGeneration, Speech2TextModel, Speech2TextProcessor
     from transformers.models.speech_to_text.modeling_speech_to_text import Speech2TextDecoder, Speech2TextEncoder
-
-if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
 
 
 def prepare_speech_to_text_inputs_dict(

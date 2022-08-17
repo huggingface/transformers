@@ -16,14 +16,11 @@
 
 import collections
 import inspect
-import os
-import pickle
-import tempfile
 import unittest
 
 from transformers import SwinConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_torch_fx_available, is_vision_available
+from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -40,9 +37,6 @@ if is_vision_available():
     from PIL import Image
 
     from transformers import AutoFeatureExtractor
-
-if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
 
 
 class SwinModelTester:

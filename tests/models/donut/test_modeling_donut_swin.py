@@ -16,14 +16,11 @@
 
 import collections
 import inspect
-import os
-import pickle
-import tempfile
 import unittest
 
 from transformers import DonutSwinConfig
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import is_torch_available, is_torch_fx_available
+from transformers.utils import is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
@@ -35,9 +32,6 @@ if is_torch_available():
 
     from transformers import DonutSwinModel
     from transformers.models.donut.modeling_donut_swin import DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST
-
-if is_torch_fx_available():
-    from transformers.utils.fx import symbolic_trace
 
 
 class DonutSwinModelTester:
