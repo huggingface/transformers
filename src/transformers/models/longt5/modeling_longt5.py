@@ -1966,9 +1966,8 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         ... )
 
         >>> # Let's try a very long input.
-        >>> input_ids = tokenizer(
-        ...     "summarize: " + 100 * "studies have shown that owning a dog is good for you ", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> inputs = tokenizer(100 * "studies have shown that owning a dog is good for you ", return_tensors="pt")
+        >>> input_ids = inputs.input_ids
 
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
