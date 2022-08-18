@@ -2056,10 +2056,6 @@ class JukeboxPrior(nn.Module):
         self.nb_relevant_lyric_tokens = config.nb_relevant_lyric_tokens[-level - 1]
         self.lyric_enc_loss_fraction = config.lyric_enc_loss_fraction[-level - 1]
 
-        self.copy_input = config.copy_input
-        if self.copy_input:
-            config.bins = config.prior_latent_dim
-
         self.music_tokens_shapes = music_tokens_shapes
         self.levels = len(self.music_tokens_shapes)
 
@@ -2505,8 +2501,6 @@ class JukeboxPrior(nn.Module):
         if get_attn_weights:
             self.prior.transformer.set_record_attn(get_attn_weights)
         audio_conditioning, metadata_conditioning, lyric_tokens = self.get_cond(music_tokens_conds, metadata)
-        if self.copy_input:
-            lyric_tokens = music_tokens[:, : self.nb_relevant_lyric_tokens]
 
         if self.single_enc_dec:  # the preprocess returns the full tokens, shifted
             tokens, audio_conditioning = self.prior_preprocess(

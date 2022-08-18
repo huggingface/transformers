@@ -41,6 +41,160 @@ class JukeboxConfig(PretrainedConfig):
     to get the second level codes. This is mostly true for training the top level prior and the upsamplers.
 
     Args:
+        sampling_rate (`int`, *optional*, defaults to 44100):
+            Sampling rate of the raw audio.
+        metadata_dims (`list`, *optional*, defaults to [(604, 7898), (120, 4111), (120, 4111)]):
+            List containing the number of genres and the number of artists that were used to train the 
+            embedding layers of each of the prior models. 
+        nb_priors (`int`, *optional*, defaults to 3):
+            Number of prior models that will sequentialy sample tokens. Each prior is conditional auto regressive (decoder) model, 
+            apart from the top prior, which can include a lyric encoder. The available models were trained using a top prior and 
+            2 upsampler priors.
+        timing_dims (`int`, *optional*, defaults to 64):
+            Dimensions of the JukeboxRangeEmbedding layer which is equivalent to traditional positional embedding layer. 
+            #TODO the timing embedding layer converts the absolute and relative position in the currently sampled audio
+            to a tensor of lenght `timing_dims` that will be added to the music tokens. 
+        single_enc_dec (`list`, *optional*, defaults to [True, False, False]):
+            Whether or not to use a single encoder-decoder architecture or split both modules and have 
+            a seperate `lyric_encoder` for each of the priors.  
+        metadata_conditioning (`bool`, *optional*, defaults to True):
+            Whether or not to use metadata conditioning, corresponding to the artist, the genre and the min/maximum duration. 
+        merged_decoder (`list`, *optional*, defaults to [True, False, False]):
+            # FIXME is that the same as single_enc_dec ?? 
+        lyric_conditioning (`list`, *optional*, defaults to [True, False, False]):
+            Whether or not to use the lyrics as conditioning. 
+        nb_relevant_lyric_tokens (`list`, *optional*, defaults to [384, 0, 0]):
+            Number of tokens that are used when sampling a single window of length `prior_n_ctx`
+        min_duration (`float`, *optional*, defaults to 17.84):
+            Minimum duration of the audios to generate
+        max_duration (`float`, *optional*, defaults to 600.0):
+            Maximum duration of the audios to generate
+        max_nb_genres (`int`, *optional*, defaults to 5):
+            Maximum number of genres that can be used to condition a single sample. 
+        init_std (`float`, *optional*, defaults to 0.2):
+            Standard deviation used to inital the model.
+        hop_fraction (`list`, *optional*, defaults to [0.125, 0.5, 0.5]):
+            # TODO detail this 
+        cond_zero_out (`bool`, *optional*, defaults to False):
+
+        cond_depth (`list`, *optional*, defaults to [3, 16, 16]):
+
+        cond_width (`list`, *optional*, defaults to [128, 1024, 1024]):
+
+        cond_dilation_growth_rate (`list`, *optional*, defaults to [1, 3, 3]):
+
+        cond_dilation_cycle (`list`, *optional*, defaults to [None, 8, 8]):
+
+        cond_res_scale (`list`, *optional*, defaults to [None, True, False]):
+
+        cond_m_conv (`int`, *optional*, defaults to 1):
+
+        cond_downs_t (`tuple`, *optional*, defaults to (3, 2, 2)):
+
+        cond_strides_t (`tuple`, *optional*, defaults to (2, 2, 2)):
+
+        lyric_enc_spread (`bool`, *optional*, defaults to False):
+
+        lyric_enc_width (`list`, *optional*, defaults to [128, 128, 128]):
+
+        lyric_enc_depth (`list`, *optional*, defaults to [18, 3, 3]):
+
+        lyric_enc_heads (`int`, *optional*, defaults to 4):
+
+        lyric_enc_m_attn (`float`, *optional*, defaults to 0.25):
+
+        lyric_enc_m_mlp (`float`, *optional*, defaults to 1.0):
+
+        lyric_enc_blocks (`int`, *optional*, defaults to 32):
+
+        lyric_enc_init_scale (`list`, *optional*, defaults to [0.1, 0.4, 0.4]):
+
+        lyric_enc_loss_fraction (`list`, *optional*, defaults to [0.4, 0.0, 0.0]):
+
+        lyric_enc_attn_order (`list`, *optional*, defaults to [2, 0, 0]):
+
+        lyric_enc_attn_dropout (`float`, *optional*, defaults to 0.0):
+
+        lyric_enc_resid_dropout (`float`, *optional*, defaults to 0.0):
+
+        lyric_enc_emb_dropout (`float`, *optional*, defaults to 0.0):
+
+        lyric_enc_zero_out (`bool`, *optional*, defaults to False):
+
+        lyric_enc_res_scale (`bool`, *optional*, defaults to False):
+
+        lyric_enc_pos_init (`bool`, *optional*, defaults to False):
+
+        lyric_enc_n_vocab (`int`, *optional*, defaults to 79):
+
+        prior_init_scale (`list`, *optional*, defaults to [0.2, 1, 1]):
+
+        prior_spread (`bool`, *optional*, defaults to False):
+
+        prior_zero_out (`bool`, *optional*, defaults to False):
+
+        prior_res_scale (`bool`, *optional*, defaults to False):
+
+        prior_pos_init (`bool`, *optional*, defaults to False):
+
+        prior_n_ctx (`tuple`, *optional*, defaults to (6144, 8192, 8192)):
+
+        prior_latent_dim (`int`, *optional*, defaults to 2048):
+
+        prior_width (`list`, *optional*, defaults to [2048, 1920, 1920]):
+
+        prior_depth (`list`, *optional*, defaults to [72, 72, 72]):
+
+        prior_n_heads (`list`, *optional*, defaults to [2, 1, 1]):
+
+        prior_attn_order (`list`, *optional*, defaults to [12, 2, 2]):
+
+        prior_blocks (`int`, *optional*, defaults to 64):
+
+        prior_alignment_layer (`list`, *optional*, defaults to [68, None, None]):
+
+        prior_alignment_head (`list`, *optional*, defaults to [2, None, None]):
+
+        prior_m_attn (`float`, *optional*, defaults to 0.25):
+
+        prior_attn_dropout (`int`, *optional*, defaults to 0):
+
+        prior_resid_dropout (`int`, *optional*, defaults to 0):
+
+        prior_emb_dropout (`int`, *optional*, defaults to 0):
+
+        vqvae_levels (`int`, *optional*, defaults to 3):
+
+        vqvae_downs_t (`tuple`, *optional*, defaults to (3, 2, 2)):
+
+        vqvae_strides_t (`tuple`, *optional*, defaults to (2, 2, 2)):
+
+        vqvae_emmbedding_width (`int`, *optional*, defaults to 64):
+
+        vqvae_codebook_dimension (`int`, *optional*, defaults to 2048):
+
+        vqvae_width (`int`, *optional*, defaults to 32):
+
+        vqvae_depth (`int`, *optional*, defaults to 4):
+
+        vqvae_m_conv (`int`, *optional*, defaults to 1):
+
+        vqvae_dilation_growth_rate (`int`, *optional*, defaults to 3):
+
+        vqvae_dilation_cycle (`bool`, *optional*, defaults to False):
+
+        vqvae_multipliers (`tuple`, *optional*, defaults to (2, 1, 1)):
+
+        vqvae_lmu (`float`, *optional*, defaults to 0.99):
+
+        vqvae_commit (`float`, *optional*, defaults to 0.02):
+
+        vqvae_conv_block_depth (`int`, *optional*, defaults to 4):
+
+        vqvae_conv_block_width (`int`, *optional*, defaults to 32):
+
+        vqvae_reverse_decoder_dilation (`int`, *optional*, defaults to 1):
+
     Example:
 
     ```python
@@ -69,7 +223,6 @@ class JukeboxConfig(PretrainedConfig):
         self,
         sampling_rate=44100,
         metadata_dims=[(604, 7898), (120, 4111), (120, 4111)],
-        copy_input=False,
         nb_priors=3,
         timing_dims=64,
         single_enc_dec=[True, False, False],
@@ -144,9 +297,7 @@ class JukeboxConfig(PretrainedConfig):
         vqvae_reverse_decoder_dilation=1,
         **kwargs,
     ):
-
         self.init_std = init_std
-        self.copy_input = copy_input
         self.nb_priors = nb_priors
         self.hop_fraction = hop_fraction
 
