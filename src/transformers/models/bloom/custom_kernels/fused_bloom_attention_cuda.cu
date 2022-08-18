@@ -40,8 +40,9 @@ __global__ void forward_masked_softmax_kernel(
     const auto row_id = threadIdx.x / effective_kv_length;
     const auto effective_kv_length_id = threadIdx.x % effective_kv_length;
     const auto kv_length_start = effective_kv_length_id * min_kv_length_shard_size_per_thread;
-    auto kv_length_end = (effective_kv_length_id + 1) * min_kv_length_shard_size_per_thread;
-    kv_length_end = (kv_length_end > kv_length) ? kv_length : kv_length_end;
+    auto kv_length_end_ = (effective_kv_length_id + 1) * min_kv_length_shard_size_per_thread;
+    kv_length_end_ = (kv_length_end > kv_length) ? kv_length : kv_length_end;
+    const auto kv_length_end = kv_length_end_;
 
     // TODO @thomasw21 extract batch and q_length ids from row_id;
     const auto batch_id = blockIdx.x * rows_per_block + row_id;
@@ -60,7 +61,7 @@ __global__ void forward_masked_softmax_kernel(
         float thread_max = -std::numeric_limits<float>::infinity();
         for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
             if (mask[batch_id][kv_length_id] == 0) {
-                const auto candidate = attention_scores[batch_id][kv_length_id];
+                const float candidate = attention_scores[batch_id][kv_length_id];
                 thread_max = (thread_max < candidate) ? candidate : thread_max;
             }
         }
@@ -76,7 +77,7 @@ __global__ void forward_masked_softmax_kernel(
         float thread_add = 0;
         for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
             if (mask[batch_id][kv_length_id] == 0) {
-                exponential[kv_length_id - kv_length_start] = std::exp(attention_scores[batch_id][kv_length_id] - temp_storage[row_id_mem_offset]);
+                exponential[kv_length_id - kv_length_start] = std::exp(static_cast<float>(attention_scores[batch_id][kv_length_id]) - temp_storage[row_id_mem_offset]);
                 thread_add = thread_add + exponential[kv_length_id - kv_length_start];
             } else {
                 exponential[kv_length_id - kv_length_start] = 0.;
@@ -186,8 +187,8 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             const auto rows_per_block = MAX_THREADS_PER_SM / effective_kv_length;
             const auto num_blocks = (batch_size_times_num_heads * q_length - 1) / rows_per_block + 1;
 
-            dim3 gridDim(num_blocks); // Number of blocks that run
-            dim3 blockDim(MAX_THREADS_PER_SM); // Number of threads that run per block
+            const dim3 gridDim(num_blocks); // Number of blocks that run
+            const dim3 blockDim(MAX_THREADS_PER_SM); // Number of threads that run per block
             // TODO @thomasw21: Figure out how much I need
             //  - each thread requires `MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD` in memory for each row
             //  - threads has `ROWS_PER_BLOCK` rows.
