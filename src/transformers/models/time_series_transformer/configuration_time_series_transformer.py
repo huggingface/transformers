@@ -115,8 +115,10 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         num_feat_static_real: int = 0,
         cardinality: Optional[List[int]] = None,
         embedding_dimension: Optional[List[int]] = None,
-        ffn_dim: int = 32,
-        num_attention_heads: int = 2,
+        encoder_ffn_dim: int = 32,
+        decoder_ffn_dim: int = 32,
+        decoder_attention_heads: int = 2,
+        encoder_attention_heads: int = 2,
         encoder_layers: int = 2,
         decoder_layers: int = 2,
         is_encoder_decoder: bool = True,
@@ -147,14 +149,12 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture parameters
-        self.encoder_attention_heads = num_attention_heads
-        self.decoder_attention_heads = num_attention_heads
-
+        self.encoder_attention_heads = encoder_attention_heads
+        self.decoder_attention_heads = decoder_attention_heads
+        self.encoder_ffn_dim = encoder_ffn_dim
+        self.decoder_ffn_dim = decoder_ffn_dim
         self.encoder_layers = encoder_layers
         self.decoder_layers = decoder_layers
-        self.ffn_dim = ffn_dim
-        self.encoder_ffn_dim = ffn_dim
-        self.decoder_ffn_dim = ffn_dim
 
         self.dropout = dropout
         self.attention_dropout = dropout
