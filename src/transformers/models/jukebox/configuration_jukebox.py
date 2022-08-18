@@ -44,25 +44,26 @@ class JukeboxConfig(PretrainedConfig):
         sampling_rate (`int`, *optional*, defaults to 44100):
             Sampling rate of the raw audio.
         metadata_dims (`list`, *optional*, defaults to [(604, 7898), (120, 4111), (120, 4111)]):
-            List containing the number of genres and the number of artists that were used to train the 
-            embedding layers of each of the prior models. 
+            List containing the number of genres and the number of artists that were used to train the embedding layers
+            of each of the prior models.
         nb_priors (`int`, *optional*, defaults to 3):
-            Number of prior models that will sequentialy sample tokens. Each prior is conditional auto regressive (decoder) model, 
-            apart from the top prior, which can include a lyric encoder. The available models were trained using a top prior and 
-            2 upsampler priors.
+            Number of prior models that will sequentialy sample tokens. Each prior is conditional auto regressive
+            (decoder) model, apart from the top prior, which can include a lyric encoder. The available models were
+            trained using a top prior and 2 upsampler priors.
         timing_dims (`int`, *optional*, defaults to 64):
-            Dimensions of the JukeboxRangeEmbedding layer which is equivalent to traditional positional embedding layer. 
-            #TODO the timing embedding layer converts the absolute and relative position in the currently sampled audio
-            to a tensor of lenght `timing_dims` that will be added to the music tokens. 
+            Dimensions of the JukeboxRangeEmbedding layer which is equivalent to traditional positional embedding
+            layer. #TODO the timing embedding layer converts the absolute and relative position in the currently
+            sampled audio to a tensor of lenght `timing_dims` that will be added to the music tokens.
         single_enc_dec (`list`, *optional*, defaults to [True, False, False]):
-            Whether or not to use a single encoder-decoder architecture or split both modules and have 
-            a seperate `lyric_encoder` for each of the priors.  
+            Whether or not to use a single encoder-decoder architecture or split both modules and have a seperate
+            `lyric_encoder` for each of the priors.
         metadata_conditioning (`bool`, *optional*, defaults to True):
-            Whether or not to use metadata conditioning, corresponding to the artist, the genre and the min/maximum duration. 
+            Whether or not to use metadata conditioning, corresponding to the artist, the genre and the min/maximum
+            duration.
         merged_decoder (`list`, *optional*, defaults to [True, False, False]):
-            # FIXME is that the same as single_enc_dec ?? 
+            # FIXME is that the same as single_enc_dec ??
         lyric_conditioning (`list`, *optional*, defaults to [True, False, False]):
-            Whether or not to use the lyrics as conditioning. 
+            Whether or not to use the lyrics as conditioning.
         nb_relevant_lyric_tokens (`list`, *optional*, defaults to [384, 0, 0]):
             Number of tokens that are used when sampling a single window of length `prior_n_ctx`
         min_duration (`float`, *optional*, defaults to 17.84):
@@ -70,11 +71,11 @@ class JukeboxConfig(PretrainedConfig):
         max_duration (`float`, *optional*, defaults to 600.0):
             Maximum duration of the audios to generate
         max_nb_genres (`int`, *optional*, defaults to 5):
-            Maximum number of genres that can be used to condition a single sample. 
+            Maximum number of genres that can be used to condition a single sample.
         init_std (`float`, *optional*, defaults to 0.2):
             Standard deviation used to inital the model.
         hop_fraction (`list`, *optional*, defaults to [0.125, 0.5, 0.5]):
-            # TODO detail this 
+            # TODO detail this
         cond_zero_out (`bool`, *optional*, defaults to False):
 
         cond_depth (`list`, *optional*, defaults to [3, 16, 16]):
