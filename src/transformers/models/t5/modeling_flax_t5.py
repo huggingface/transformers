@@ -1211,7 +1211,10 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
 
         return outputs
 
+    def get_shared_layer(self):
+        return nn.Embed(self.config.vocab_size,self.config.d_model)
 
+        
 T5_START_DOCSTRING = r"""
     The T5 model was proposed in [Exploring the Limits of Transfer Learning with a Unified Text-to-Text
     Transformer](https://arxiv.org/abs/1910.10683) by Colin Raffel, Noam Shazeer, Adam Roberts, Katherine Lee, Sharan
