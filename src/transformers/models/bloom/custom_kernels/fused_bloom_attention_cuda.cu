@@ -144,7 +144,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
     auto attention_scores = alibi.baddbmm(query_layer, key_layer, beta, inv_norm_factor);
 
     // Computing `optionally_cast_fp16_to_fp32 + masked_fill + softmax + cast_to_intial_dtype`
-    torch::Tensor attention_probs;
+    at::Tensor attention_probs;
     if (true) {
         const auto kv_length = key_layer.size(2);
 

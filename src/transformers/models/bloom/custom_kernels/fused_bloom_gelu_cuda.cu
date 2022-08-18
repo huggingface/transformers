@@ -1,10 +1,5 @@
 #include <ATen/Dispatch.h>
-#include <THC/THCAtomics.cuh>
 #include <ATen/ATen.h>
-#include <torch/torch.h>
-#include <vector>
-
-#include <optional>
 
 /**
 * Friendly reminder of how multithreading works in CUDA: https://developer.nvidia.com/blog/even-easier-introduction-cuda
