@@ -211,6 +211,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
                 batch_size_times_num_heads * q_length
             );
         });
+        attention_probs = attention_probs.view({batch_size_times_num_heads, q_length, kv_length});
     } else {
         // Pytorch C++ API
         auto input_dtype = attention_scores.scalar_type();
