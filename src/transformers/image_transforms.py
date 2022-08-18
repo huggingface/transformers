@@ -69,7 +69,7 @@ def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDim
     raise ValueError("Unsupported channel dimension format: {}".format(channel_dim))
 
 
-def rescale(
+def rescale_image(
     image: np.ndarray, scale: Union[float, int] = 255, data_format: Optional[ChannelDimension] = None, dtype=np.float32
 ) -> np.ndarray:
     """
@@ -127,7 +127,7 @@ def to_pil_image(
     # PIL.Image can only store uint8 values, so we rescale the image to be between 0 and 255 if needed.
     do_rescale = isinstance(image.flat[0], float) if do_rescale is None else do_rescale
     if do_rescale:
-        image = rescale(image, 255)
+        image = rescale_image(image, 255)
     image = image.astype(np.uint8)
     return PIL.Image.fromarray(image)
 

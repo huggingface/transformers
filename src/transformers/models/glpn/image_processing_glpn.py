@@ -22,7 +22,7 @@ import PIL.Image
 from transformers.utils.generic import TensorType
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import rescale, resize, to_channel_dimension_format
+from ...image_transforms import rescale_image, resize, to_channel_dimension_format
 from ...image_utils import ChannelDimension, get_image_size, is_batched, to_numpy_array, valid_images
 from ...utils import logging
 
@@ -93,7 +93,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         image = resize(image, (new_h, new_w), resample=resample, data_format=data_format, **kwargs)
         return image
 
-    def rescale(
+    def rescale_image(
         self, image: np.ndarray, scale: Union[int, float], data_format: Optional[ChannelDimension] = None, **kwargs
     ) -> np.ndarray:
         """
@@ -110,7 +110,7 @@ class GLPNImageProcessor(BaseImageProcessor):
                 - `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `ChannelDimension.LAST`: image in (height, width, num_channels) format.
         """
-        return rescale(image=image, scale=scale, data_format=data_format, **kwargs)
+        return rescale_image(image=image, scale=scale, data_format=data_format, **kwargs)
 
     def preprocess(
         self,
@@ -172,7 +172,7 @@ class GLPNImageProcessor(BaseImageProcessor):
             images = [self.resize(image, size_divisor=size_divisor, resample=resample) for image in images]
 
         if do_rescale:
-            images = [self.rescale(image, scale=1 / 255) for image in images]
+            images = [self.rescale_image(image, scale=1 / 255) for image in images]
 
         images = [to_channel_dimension_format(image, data_format) for image in images]
 
