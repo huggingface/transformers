@@ -244,9 +244,6 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_torchscript = False
 
-    # Use `logits` as the deterministic key by default. Otherwise retrieve the key from this dictionary
-    determisitic_keys = {"ViltModel": "pooler_output"}
-
     # ViltForMaskedLM, ViltForQuestionAnswering and ViltForImagesAndTextClassification require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -543,12 +540,9 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
-            base_output = model(**inputs_dict)
 
-            if model.__class__.__name__ in self.determisitic_keys.keys():
-                base_output = base_output[self.determisitic_keys[model.__class__.__name__]]
-            else:
-                base_output = base_output.logits
+            torch.manual_seed(42)
+            base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
             # We test several splits of sizes to make sure it works.
@@ -563,14 +557,11 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, "cpu"})
 
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+
+                    torch.manual_seed(42)
                     new_output = new_model(**inputs_dict)
 
-                    if new_model.__class__.__name__ in self.determisitic_keys.keys():
-                        new_output = new_output[self.determisitic_keys[new_model.__class__.__name__]]
-                    else:
-                        new_output = new_output.logits
-
-                    self.assertTrue(torch.allclose(base_output, new_output, atol=1e-3))
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
     @require_accelerate
     @require_torch_gpu
@@ -590,12 +581,9 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
-            base_output = model(**inputs_dict)
 
-            if model.__class__.__name__ in self.determisitic_keys.keys():
-                base_output = base_output[self.determisitic_keys[model.__class__.__name__]]
-            else:
-                base_output = base_output.logits
+            torch.manual_seed(42)
+            base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
             max_size = int(self.model_split_percents[0] * model_size)
@@ -612,14 +600,11 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
                 )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+
+                torch.manual_seed(42)
                 new_output = new_model(**inputs_dict)
 
-                if new_model.__class__.__name__ in self.determisitic_keys.keys():
-                    new_output = new_output[self.determisitic_keys[new_model.__class__.__name__]]
-                else:
-                    new_output = new_output.logits
-
-                self.assertTrue(torch.allclose(base_output, new_output, atol=1e-3))
+                self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
     @require_accelerate
     @require_torch_multi_gpu
@@ -639,12 +624,9 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
-            base_output = model(**inputs_dict)
 
-            if model.__class__.__name__ in self.determisitic_keys.keys():
-                base_output = base_output[self.determisitic_keys[model.__class__.__name__]]
-            else:
-                base_output = base_output.logits
+            torch.manual_seed(42)
+            base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
             # We test several splits of sizes to make sure it works.
@@ -659,14 +641,11 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
 
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+
+                    torch.manual_seed(42)
                     new_output = new_model(**inputs_dict)
 
-                    if new_model.__class__.__name__ in self.determisitic_keys.keys():
-                        new_output = new_output[self.determisitic_keys[new_model.__class__.__name__]]
-                    else:
-                        new_output = new_output.logits
-
-                    self.assertTrue(torch.allclose(base_output, new_output, atol=1e-3))
+                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
 
 @require_torch
