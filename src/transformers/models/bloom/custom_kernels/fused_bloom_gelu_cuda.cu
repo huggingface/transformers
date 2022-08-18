@@ -1,6 +1,6 @@
 #include <ATen/Dispatch.h>
 #include <ATen/ATen.h>
-#incluse <torch/extension.h>
+#include <torch/extension.h>
 
 /**
 * Friendly reminder of how multithreading works in CUDA: https://developer.nvidia.com/blog/even-easier-introduction-cuda
