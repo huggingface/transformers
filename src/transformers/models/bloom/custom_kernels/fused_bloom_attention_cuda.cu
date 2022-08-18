@@ -27,15 +27,15 @@
 **/
 template<typename attention_scores_scalar>
 __global__ void forward_masked_softmax_kernel(
-    const torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> attention_scores, // [B, KV]
-    const torch::PackedTensorAccessor32<bool, 3, torch::RestrictPtrTraits> mask, // [B, KV]
-    torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> result, // [B, KV]
-    int64_t effective_kv_length,
-    dim3 blockDim,
-    int64_t min_kv_length_shard_size_per_thread,
-    int64_t rows_per_block,
-    int64_t kv_length,
-    int64_t batch_size
+    const torch::PackedTensorAccessor32<attention_scores_scalar, 2, torch::RestrictPtrTraits> attention_scores, // [B, KV]
+    const torch::PackedTensorAccessor32<bool, 2, torch::RestrictPtrTraits> mask, // [B, KV]
+    torch::PackedTensorAccessor32<attention_scores_scalar, 2, torch::RestrictPtrTraits> result, // [B, KV]
+    const int64_t effective_kv_length,
+    const dim3 blockDim,
+    const int64_t min_kv_length_shard_size_per_thread,
+    const int64_t rows_per_block,
+    const int64_t kv_length,
+    const int64_t batch_size
 ) {
     const auto row_id = threadIdx.x / effective_kv_length;
     const auto effective_kv_length_id = threadIdx.x % effective_kv_length;
@@ -146,15 +146,15 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
         const auto kv_length = key_layer.size(2);
 
         // TODO @thomasw21: it's easier to think of attention_scores as 2D tensors
-        attention_scores = attention_scores.view({batch_size_times_num_heads * q_length, kv_length});
-        attention_mask = attention_mask.view({batch_size_times_num_heads * q_length, kv_length});
+        const auto attention_scores_2d = attention_scores.view({batch_size_times_num_heads * q_length, kv_length});
+        const auto attention_mask_2d = attention_mask.view({batch_size_times_num_heads * q_length, kv_length});
 
         // Custom kernel
-        attention_probs = at::empty_like(attention_scores);
+        attention_probs = at::empty_like(attention_scores_2d);
 
         // Check that inputs and contiguous + cuda tensors
-        CHECK_INPUT(attention_scores);
-        CHECK_INPUT(attention_mask);
+        CHECK_INPUT(attention_scores_2d);
+        CHECK_INPUT(attention_mask_2d);
 
         // TODO @thomas21: change by to this as it's cleaner when pytorch 1.13 comes out
         // DISPATCH_CASE_FLOATING_TYPES(attention_scores.scalar_type(), "masked_softmax", [&] {
@@ -201,8 +201,8 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             TORCH_CHECK(blockDim.x * blockDim.y * blockDim.z <= MAX_THREADS_PER_SM, "A100s only have 2048 threads per block. Raising as require requested threads is higher.");
 
             forward_masked_softmax_kernel<<<gridDim, blockDim, shared_mem_forward>>>(
-                attention_scores.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
-                attention_mask.packed_accessor32<bool, 2, torch::RestrictPtrTraits>(),
+                attention_scores_2d.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                attention_mask_2d.packed_accessor32<bool, 2, torch::RestrictPtrTraits>(),
                 attention_probs.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
                 effective_kv_length,
                 blockDim,
@@ -212,10 +212,6 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
                 batch_size_times_num_heads * q_length
             );
         });
-
-        // TODO @thomasw21: it's easier to think of attention_scores as 2D tensors
-        attention_scores = attention_scores.view({batch_size_times_num_heads, q_length, kv_length});
-        attention_mask = attention_mask.view({batch_size_times_num_heads, q_length, kv_length});
     } else {
         // Pytorch C++ API
         auto input_dtype = attention_scores.scalar_type();
