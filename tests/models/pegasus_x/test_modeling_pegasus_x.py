@@ -227,7 +227,6 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
-    # PegasusXForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -392,7 +391,7 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         )
 
     def _check_encoder_hidden_states_for_generate(self, hidden_states, batch_size, config, seq_length):
-        encoder_expected_shape = (batch_size, round_up(seq_length, config.block_size), config.hidden_size)
+        encoder_expected_shape = (batch_size, self.round_up(seq_length, config.block_size), config.hidden_size)
         self.assertIsInstance(hidden_states, tuple)
         # Only the last layer will have the hidden states truncated back to token level
         self.assertListEqual(
@@ -430,7 +429,7 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
-                [round_up(seq_length, config.block_size), self.model_tester.hidden_size],
+                [self.round_up(seq_length, config.block_size), self.model_tester.hidden_size],
             )
 
             if config.is_encoder_decoder:
@@ -519,6 +518,10 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             if self.has_attentions:
                 self.assertIsNotNone(attentions.grad)
 
+    @classmethod
+    def round_up(cls, n, k):
+        return math.ceil(n / k) * k
+
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
@@ -589,13 +592,10 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
 
     def test_seq_to_seq_generation(self):
         hf = PegasusXForConditionalGeneration.from_pretrained("zphang/pegasus-x-base").to(torch_device)
-        tok = PegasusTokenizer.from_pretrained("google/pegasus-base")
+        tok = PegasusTokenizer.from_pretrained("google/pegasus-large")
 
         batch_input = [
-            # string 1,
-            # string 2,
-            # string 3,
-            # string 4,
+            "While large pretrained Transformer models have proven highly capable at tackling natural language tasks, handling long sequence inputs continues to be a significant challenge. One such task is long input summarization, where inputs are longer than the maximum input context of most pretrained models. Through an extensive set of experiments, we investigate what model architectural changes and pretraining paradigms can most efficiently adapt a pretrained Transformer for long input summarization. We find that a staggered, block-local Transformer with global encoder tokens strikes a good balance of performance and efficiency, and that an additional pretraining phase on long sequences meaningfully improves downstream summarization performance. Based on our findings, we introduce PEGASUS-X, an extension of the PEGASUS model with additional long input pretraining to handle inputs of up to 16K tokens. PEGASUS-X achieves strong performance on long input summarization tasks comparable with much larger models while adding few additional parameters and not requiring model parallelism to train."
         ]
 
         # The below article tests that we don't add any hypotheses outside of the top n_beams
@@ -612,13 +612,11 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
             input_ids=dct["input_ids"].to(torch_device),
             attention_mask=dct["attention_mask"].to(torch_device),
             num_beams=2,
+            max_length=32,
         )
 
         EXPECTED = [
-            # here expected 1,
-            # here expected 2,
-            # here expected 3,
-            # here expected 4,
+            'we investigate the performance of a new pretrained model for long input summarization. <n> the model'
         ]
 
         generated = tok.batch_decode(
@@ -842,7 +840,3 @@ class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin
     def test_retain_grad_hidden_states_attentions(self):
         # decoder cannot keep gradients
         return
-
-
-def round_up(n, k):
-    return math.ceil(n / k) * k

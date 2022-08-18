@@ -29,8 +29,8 @@ PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class PegasusXConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`PegasusXModel`]. It is used to instantiate an
-    PEGASUS model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    This is the configuration class to store the configuration of a [`PegasusXModel`]. It is used to instantiate a
+    PEGASUS-X model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the PEGASUS-X
     [zphang/pegasus-x-large](https://huggingface.co/zphang/pegasus-x-large) architecture.
 
@@ -39,14 +39,14 @@ class PegasusXConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50265):
+        vocab_size (`int`, *optional*, defaults to 96103):
             Vocabulary size of the PEGASUS-X model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`PegasusXModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimension of the layers and the pooler layer.
-        encoder_layers (`int`, *optional*, defaults to 12):
+        encoder_layers (`int`, *optional*, defaults to 16):
             Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 12):
+        decoder_layers (`int`, *optional*, defaults to 16):
             Number of decoder layers.
         encoder_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -67,7 +67,7 @@ class PegasusXConfig(PretrainedConfig):
             The dropout ratio for activations inside the fully connected layer.
         classifier_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for classifier.
-        max_position_embeddings (`int`, *optional*, defaults to 1024):
+        max_position_embeddings (`int`, *optional*, defaults to 16384):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         init_std (`float`, *optional*, defaults to 0.02):
@@ -83,10 +83,12 @@ class PegasusXConfig(PretrainedConfig):
         forced_eos_token_id (`int`, *optional*, defaults to 1):
             The id of the token to force as the last generated token when `max_length` is reached. Usually set to
             `eos_token_id`.
-        num_global_tokens (`int`, *optional*, defaults to 32):
+        num_global_tokens (`int`, *optional*, defaults to 128):
             Number of global tokens to use for the encoder
-        block_size=256 (`int`, *optional*, defaults to 256):
-            Block size for encoder localattention
+        block_size=512 (`int`, *optional*, defaults to 512):
+            Block size for encoder local attention
+            NOTE: sequence length should be an exact multiple of block size
+            NOTE: block_size must be a multiple of 2 if stagger_local_block is True
         stagger_local_block (`bool`, *optional*, defaults to `True`):
             Whether to stagger every other local attention by half a block
 
@@ -110,12 +112,12 @@ class PegasusXConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50265,
-        max_position_embeddings=1024,
-        encoder_layers=12,
+        vocab_size=96103,
+        max_position_embeddings=16384,
+        encoder_layers=16,
         encoder_ffn_dim=4096,
         encoder_attention_heads=16,
-        decoder_layers=12,
+        decoder_layers=16,
         decoder_ffn_dim=4096,
         decoder_attention_heads=16,
         encoder_layerdrop=0.0,
@@ -130,12 +132,12 @@ class PegasusXConfig(PretrainedConfig):
         init_std=0.02,
         decoder_start_token_id=0,
         classifier_dropout=0.0,
-        scale_embedding=False,
+        scale_embedding=True,
         pad_token_id=0,
         eos_token_id=1,
         forced_eos_token_id=1,
         num_global_tokens=32,
-        block_size=256,
+        block_size=512,
         stagger_local_blocks=True,
         **kwargs
     ):

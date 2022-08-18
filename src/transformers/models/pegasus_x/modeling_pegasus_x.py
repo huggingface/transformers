@@ -149,6 +149,7 @@ class PegasusXSinusoidalPositionalEmbedding(nn.Module):
         return pe[None].expand(batch_size, -1, -1)
 
 
+# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->PegasusX
 class PegasusXAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -158,6 +159,7 @@ class PegasusXAttention(nn.Module):
         num_heads: int,
         dropout: float = 0.0,
         is_decoder: bool = False,
+        bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -173,10 +175,10 @@ class PegasusXAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=False)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=False)
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -187,6 +189,7 @@ class PegasusXAttention(nn.Module):
         key_value_states: Optional[torch.Tensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -252,6 +255,15 @@ class PegasusXAttention(nn.Module):
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+        if layer_head_mask is not None:
+            if layer_head_mask.size() != (self.num_heads,):
+                raise ValueError(
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
+                    f" {layer_head_mask.size()}"
+                )
+            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
+            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
 
         if output_attentions:
             # this operation is a bit awkward, but it's required to
@@ -327,7 +339,6 @@ class PegasusXGlobalLocalAttention(nn.Module):
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
-        assert token_hidden_states.shape[1] % self.block_size == 0, "Sequence length should be multiple of block size"
         dim = DimensionInfo(
             B=token_hidden_states.shape[0],
             T=token_hidden_states.shape[1],
@@ -396,13 +407,13 @@ class PegasusXGlobalLocalAttention(nn.Module):
         sequence tokens are arranged in blocks for local attention, we unblock them and compute attention.
 
         Args:
-            global_q: [B, H, G, F] query vectors from global tokens
-            global_k: [B, H, G, F] key vectors from global tokens
-            global_v: [B, H, G, F] value vectors from global tokens
-            local_k: [B, H, P, F] key vectors from local tokens
-            local_v: [B, H, P, F] value vectors from local tokens
-            mask: [B, P] attention mask
-            dim: DimensionInfo wrapper for dimensions
+            global_q (`torch.FloatTensor`) of shape [B, H, G, F]: query vectors from global tokens
+            global_k (`torch.FloatTensor`) of shape [B, H, G, F]: key vectors from global tokens
+            global_v (`torch.FloatTensor`) of shape [B, H, G, F]: value vectors from global tokens
+            local_k (`torch.FloatTensor`) of shape [B, H, P, F]: key vectors from local tokens
+            local_v (`torch.FloatTensor`) of shape [B, H, P, F]: value vectors from local tokens
+            mask (`torch.FloatTensor`) of shape [B, P]: attention mask
+            dim (DimensionInfo): DimensionInfo wrapper for dimensions
 
         Returns:
             output of shape `[batch_sizes, length, features]`. where length will be padded to a multiple of block_size
@@ -434,13 +445,13 @@ class PegasusXGlobalLocalAttention(nn.Module):
         we need to tile and concatenate the global tokens to every local block
 
         Args:
-            global_k: [B, H, G, F] key vectors from global tokens
-            global_v: [B, H, G, F] value vectors from global tokens
-            local_q: [B, H, P, F] query vectors from local tokens
-            local_k: [B, H, P, F] key vectors from local tokens
-            local_v: [B, H, P, F] value vectors from local tokens
-            mask: [B, P] attention mask
-            dim: DimensionInfo wrapper for dimensions
+            global_k (`torch.FloatTensor`) of shape [B, H, G, F]: key vectors from global tokens
+            global_v (`torch.FloatTensor`) of shape [B, H, G, F]: value vectors from global tokens
+            local_q (`torch.FloatTensor`) of shape [B, H, P, F]: query vectors from local tokens
+            local_k (`torch.FloatTensor`) of shape [B, H, P, F]: key vectors from local tokens
+            local_v (`torch.FloatTensor`) of shape [B, H, P, F]: value vectors from local tokens
+            mask (`torch.FloatTensor`) of shape [B, P]: attention mask
+            dim (DimensionInfo): DimensionInfo wrapper for dimensions
 
         Returns:
             output of shape `[batch_sizes, length, features]`. where length will be padded to a multiple of block_size
@@ -500,8 +511,6 @@ class PegasusXEncoderLayer(nn.Module):
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
         self.stagger_blocks_this_layer = stagger_blocks_this_layer
         self.block_size = config.block_size
-        if stagger_blocks_this_layer:
-            assert config.block_size % 2 == 0, "Block size must be an even number"
 
     def forward(
         self,
@@ -585,7 +594,7 @@ class PegasusXEncoderLayer(nn.Module):
 
     @classmethod
     def pad_local_tokens(cls, hidden_states, attention_mask, block_size):
-        assert hidden_states.dim() == 3
+        # hidden_states: [batch_size, seq_len, hidden_dim]
         pad_size = block_size // 2
         mask_min_value = torch.finfo(hidden_states.dtype).min
         padded_hidden_states = torch.nn.functional.pad(
@@ -601,7 +610,7 @@ class PegasusXEncoderLayer(nn.Module):
 
     @classmethod
     def unpad_local_tokens(cls, padded_hidden_states, block_size):
-        assert padded_hidden_states.dim() == 3
+        # padded_hidden_states: [batch_size, padded seq_len, hidden_dim]
         pad_size = block_size // 2
         return padded_hidden_states[:, pad_size:-pad_size, :]
 
@@ -616,6 +625,7 @@ class PegasusXDecoderLayer(nn.Module):
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            bias=False,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -627,6 +637,7 @@ class PegasusXDecoderLayer(nn.Module):
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
+            bias=False,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
@@ -656,6 +667,7 @@ class PegasusXDecoderLayer(nn.Module):
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
+            use_cache: Whether to us KV cache for decoding
         """
         residual = hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
@@ -759,7 +771,7 @@ PEGASUS_X_GENERATION_EXAMPLE = r"""
     >>> from transformers import PegasusTokenizer, PegasusXForConditionalGeneration
 
     >>> model = PegasusXForConditionalGeneration.from_pretrained("zphang/pegasus-x-base")
-    >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-base")
+    >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
 
     >>> ARTICLE_TO_SUMMARIZE = (
     ...     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
@@ -1187,7 +1199,8 @@ class PegasusXDecoder(PegasusXPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+            inputs_embeds (`torch.FloatTensor` of
                 shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
                 control over how to convert `input_ids` indices into associated vectors than the model's internal
