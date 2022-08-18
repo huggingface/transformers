@@ -77,35 +77,37 @@ class JukeboxConfig(PretrainedConfig):
         hop_fraction (`list`, *optional*, defaults to [0.125, 0.5, 0.5]):
             # TODO detail this
         cond_zero_out (`bool`, *optional*, defaults to False):
-
+            Zero out weights when initialising. 
         cond_depth (`list`, *optional*, defaults to [3, 16, 16]):
-
+            Number of layers to use for the music conditioner. 
         cond_width (`list`, *optional*, defaults to [128, 1024, 1024]):
-
+            Width of the audio conditioning layer. 
         cond_dilation_growth_rate (`list`, *optional*, defaults to [1, 3, 3]):
-
+            Dilation grow rate used between each convolutionnal block. 
         cond_dilation_cycle (`list`, *optional*, defaults to [None, 8, 8]):
-
+            Cycle of dilation to use. Usually similar to the ones used in the VQVAE.
         cond_res_scale (`list`, *optional*, defaults to [None, True, False]):
-
+            Wheter or not to scale the residuals in the audio conditionner block. 
+            Since the top level prior doeas not have a conditionner, the default value is to None
+            and should not be modified. 
         cond_m_conv (`int`, *optional*, defaults to 1):
-
+            # TODO no idea what that really corresponds to? 
         cond_downs_t (`tuple`, *optional*, defaults to (3, 2, 2)):
-
+            Downsampling ... # TODO 
         cond_strides_t (`tuple`, *optional*, defaults to (2, 2, 2)):
-
+            Striding pattern to use #TODO 
         lyric_enc_spread (`bool`, *optional*, defaults to False):
-
+            Spread used in the attention pattern #TODO check what that is actually 
         lyric_enc_width (`list`, *optional*, defaults to [128, 128, 128]):
-
+            Width of the lyric encoder
         lyric_enc_depth (`list`, *optional*, defaults to [18, 3, 3]):
-
+            Number of blocks used in the lyric encoder is this different from lyric_enc_blocks? FIXME
         lyric_enc_heads (`int`, *optional*, defaults to 4):
-
+            Number of heads in the lyric encoder
         lyric_enc_m_attn (`float`, *optional*, defaults to 0.25):
-
+            # again, m_attn and m_mlp, I don't really know how to rename it
         lyric_enc_m_mlp (`float`, *optional*, defaults to 1.0):
-
+            # again, m_attn and m_mlp, I don't really know how to rename it
         lyric_enc_blocks (`int`, *optional*, defaults to 32):
 
         lyric_enc_init_scale (`list`, *optional*, defaults to [0.1, 0.4, 0.4]):
