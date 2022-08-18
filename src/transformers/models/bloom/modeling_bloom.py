@@ -220,7 +220,7 @@ class BloomGelu(nn.Module):
         else:
             return bloom_gelu_forward(x)
 
-# @torch.jit.script # this is shit for unknow reasons.
+@torch.jit.script # this is shit for unknow reasons.
 def _split_heads(fused_qkv: torch.Tensor, num_heads: int, head_dim: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory
@@ -243,7 +243,7 @@ def _split_heads(fused_qkv: torch.Tensor, num_heads: int, head_dim: int) -> Tupl
 
     return query_layer, key_layer, value_layer
 
-# @torch.jit.script
+@torch.jit.script
 def _merge_heads(x: torch.Tensor, num_heads: int, head_dim: int) -> torch.Tensor:
     """
     Merge heads together over the last dimenstion
