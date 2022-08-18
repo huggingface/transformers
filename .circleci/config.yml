@@ -1003,7 +1003,7 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip install .[torch,testing,vision]
             - run: pip install torchvision
-            - run: python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
+            - run: python -m pip install 'git+https://github.com/facebookresearch/detectron2.git@5aeb252b194b93dc2879b4ac34bc51a31b5aee13'
             - run: sudo apt install tesseract-ocr
             - run: pip install pytesseract
             - save_cache:
