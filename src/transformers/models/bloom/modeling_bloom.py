@@ -154,7 +154,7 @@ def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: 
     out = residual + out
     return out
 
-# @torch.jit.script
+@torch.jit.script
 def bloom_gelu_forward(x: torch.Tensor) -> torch.Tensor:
     """
     Custom bias GELU function. Adapted from Megatron-DeepSpeed code. Here we use a simple implementation (inference) to
@@ -188,10 +188,11 @@ def bloom_gelu_back(g: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
 class GeLUFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input: torch.Tensor) -> torch.Tensor:
-        if CUSTOM_KERNELS_ENABLED:
+        if false and CUSTOM_KERNELS_ENABLED:
+            """My kernel is actually still slow compared to what `jit` provides."""
+            raise ValueError("WTF")
             fused_bloom_gelu_cuda.foward(input)
         else:
-            raise ValueError("WTF")
             ctx.save_for_backward(input)
             return bloom_gelu_forward(input)
 
@@ -220,7 +221,7 @@ class BloomGelu(nn.Module):
         else:
             return bloom_gelu_forward(x)
 
-@torch.jit.script # this is shit for unknow reasons.
+# @torch.jit.script # this is shit for unknow reasons.
 def _split_heads(fused_qkv: torch.Tensor, num_heads: int, head_dim: int) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     Split the last dimension into (num_heads, head_dim) without making any copies, results share same memory
@@ -243,7 +244,7 @@ def _split_heads(fused_qkv: torch.Tensor, num_heads: int, head_dim: int) -> Tupl
 
     return query_layer, key_layer, value_layer
 
-@torch.jit.script
+# @torch.jit.script
 def _merge_heads(x: torch.Tensor, num_heads: int, head_dim: int) -> torch.Tensor:
     """
     Merge heads together over the last dimenstion
