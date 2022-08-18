@@ -382,6 +382,7 @@ class BloomAttention(nn.Module):
 
         if CUSTOM_KERNELS_ENABLED:
             assert self.training is False, "Only foward pass was implemented"
+            assert attention_mask.shape[-1] < 4096, "Custom kernel support only up to 4096 tokens"
             context_layer, present, attention_probs = fused_bloom_attention_cuda.forward(
                 fused_qkv,
                 layer_past,
