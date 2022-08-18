@@ -14,19 +14,32 @@
 # limitations under the License.
 """ Testing suite for the PyTorch ViLT model. """
 
+import tempfile
 import unittest
 
 from datasets import load_dataset
 from packaging import version
 
+import requests
 from transformers import ViltConfig, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property
+from transformers.testing_utils import (
+    require_accelerate,
+    require_torch,
+    require_torch_gpu,
+    require_torch_multi_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
+from transformers.utils import cached_property, is_accelerate_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
+
+if is_accelerate_available():
+    from accelerate.utils import compute_module_sizes
 
 if is_torch_available():
     import torch
@@ -230,6 +243,9 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
+
+    # Use `logits` as the non deterministic key by default. Otherwise retrieve the key from this dictionary
+    non_determisitic_keys = {"ViltModel": "pooler_output"}
 
     # ViltForMaskedLM, ViltForQuestionAnswering and ViltForImagesAndTextClassification require special treatment
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -509,6 +525,149 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
             model = ViltModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @require_accelerate
+    @require_torch_gpu
+    def test_cpu_offload(self):
+        r"""
+        We have to customly redefine these tests since the default test retrieves the first element
+        of the output which correspond to the non-deterministic hidden states.
+        Also since image tokens are sampled from a probabilistic distribution, it involves stochasticy.
+        we have to change the tolerance to `1e-3` to make sure the test pass.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+            base_output = model(**inputs_dict)
+
+            if model.__class__.__name__ in self.non_determisitic_keys.keys():
+                base_output = base_output[self.non_determisitic_keys[model.__class__.__name__]]
+            else:
+                base_output = base_output.logits
+
+            model_size = compute_module_sizes(model)[""]
+            # We test several splits of sizes to make sure it works.
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                for max_size in max_gpu_sizes:
+                    max_memory = {0: max_size, "cpu": model_size * 2}
+                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+                    # Making sure part of the model will actually end up offloaded
+                    self.assertSetEqual(set(new_model.hf_device_map.values()), {0, "cpu"})
+
+                    self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                    new_output = new_model(**inputs_dict)
+
+                    if new_model.__class__.__name__ in self.non_determisitic_keys.keys():
+                        new_output = new_output[self.non_determisitic_keys[new_model.__class__.__name__]]
+                    else:
+                        new_output = new_output.logits
+
+                    self.assertTrue(torch.allclose(base_output, new_output, atol=1e-3))
+
+    @require_accelerate
+    @require_torch_gpu
+    def test_disk_offload(self):
+        r"""
+        We have to customly redefine these tests since the default test retrieves the first element
+        of the output which correspond to the non-deterministic hidden states.
+        Also since image tokens are sampled from a probabilistic distribution, it involves stochasticy.
+        we have to change the tolerance to `1e-3` to make sure the test pass.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+            base_output = model(**inputs_dict)
+
+            if model.__class__.__name__ in self.non_determisitic_keys.keys():
+                base_output = base_output[self.non_determisitic_keys[model.__class__.__name__]]
+            else:
+                base_output = base_output.logits
+
+            model_size = compute_module_sizes(model)[""]
+            max_size = int(self.model_split_percents[0] * model_size)
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                max_memory = {0: max_size, "cpu": max_size}
+                with self.assertRaises(ValueError):
+                    # This errors out cause it's missing an offload folder
+                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+
+                new_model = model_class.from_pretrained(
+                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
+                )
+
+                self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                new_output = new_model(**inputs_dict)
+
+                if new_model.__class__.__name__ in self.non_determisitic_keys.keys():
+                    new_output = new_output[self.non_determisitic_keys[new_model.__class__.__name__]]
+                else:
+                    new_output = new_output.logits
+
+                self.assertTrue(torch.allclose(base_output, new_output, atol=1e-3))
+
+    @require_accelerate
+    @require_torch_multi_gpu
+    def test_model_parallelism(self):
+        r"""
+        We have to customly redefine these tests since the default test retrieves the first element
+        of the output which correspond to the non-deterministic hidden states.
+        Also since image tokens are sampled from a probabilistic distribution, it involves stochasticy.
+        we have to change the tolerance to `1e-3` to make sure the test pass.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+            base_output = model(**inputs_dict)
+
+            if model.__class__.__name__ in self.non_determisitic_keys.keys():
+                base_output = base_output[self.non_determisitic_keys[model.__class__.__name__]]
+            else:
+                base_output = base_output.logits
+
+            model_size = compute_module_sizes(model)[""]
+            # We test several splits of sizes to make sure it works.
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                for max_size in max_gpu_sizes:
+                    max_memory = {0: max_size, 1: model_size * 2, "cpu": model_size * 2}
+                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
+                    # Making sure part of the model will actually end up offloaded
+                    self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
+
+                    self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                    new_output = new_model(**inputs_dict)
+
+                    if new_model.__class__.__name__ in self.non_determisitic_keys.keys():
+                        new_output = new_output[self.non_determisitic_keys[new_model.__class__.__name__]]
+                    else:
+                        new_output = new_output.logits
+
+                    self.assertTrue(torch.allclose(base_output, new_output, atol=1e-3))
+
 
 @require_torch
 class ViltForImagesAndTextClassificationModelTest(ViltModelTest, unittest.TestCase):
@@ -530,7 +689,8 @@ class ViltForImagesAndTextClassificationModelTest(ViltModelTest, unittest.TestCa
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw)
     return image
 
 
