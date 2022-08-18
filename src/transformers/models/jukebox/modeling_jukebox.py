@@ -1577,8 +1577,12 @@ class JukeboxConditionalAutoregressive(nn.Module):
             lyric_hidden_states = hidden_states[:, : self.lyric_enc_len].reshape(-1, self.embed_dim)
             token_hidden_states = hidden_states[:, self.lyric_enc_len :].reshape(-1, self.embed_dim)
 
-            lyric_loss = F.cross_entropy(lyric_hidden_states, target[:, : self.lyric_enc_len].reshape(-1)) / np.log(2.0)
-            music_token_loss = F.cross_entropy(token_hidden_states, target[:, self.lyric_enc_len :].reshape(-1)) / np.log(2.0)
+            lyric_loss = F.cross_entropy(lyric_hidden_states, target[:, : self.lyric_enc_len].reshape(-1)) / np.log(
+                2.0
+            )
+            music_token_loss = F.cross_entropy(
+                token_hidden_states, target[:, self.lyric_enc_len :].reshape(-1)
+            ) / np.log(2.0)
 
             loss = (lyric_loss, music_token_loss)  # Note order! Lyric is first
         else:
@@ -2027,7 +2031,7 @@ class JukeboxPrior(nn.Module):
     - Single Encoder Decoder: This is a simplification where we combine them into a single model. We merge the text
       vocab
     and VQ vocab into a single large vocab, and the lyric tokens and VQ tokens into a single longer sequence of tokens
-    which we autoregressively model together. 
+    which we autoregressively model together.
 
     Question : why are the embeddings from the vq-vae not used? Or am I crazy? In the forward it is used, but not in
     the primed sample or sample functions. If the model is not trained using these/ uses the forward differently then I
@@ -2526,7 +2530,9 @@ class JukeboxPrior(nn.Module):
             gen_loss * self.gen_loss_dims / self.total_loss_dims
         )
         metrics = dict(
-            bpd=gen_loss.clone().detach(), lyric_enc_loss=lyric_enc_loss.clone().detach(), gen_loss=gen_loss.clone().detach()
+            bpd=gen_loss.clone().detach(),
+            lyric_enc_loss=lyric_enc_loss.clone().detach(),
+            gen_loss=gen_loss.clone().detach(),
         )
         if get_preds:
             metrics["preds"] = preds.clone().detach()
