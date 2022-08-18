@@ -310,11 +310,6 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-# print("------------------------------------------------------")
-# print("question answering mapping")
-# for x in TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES:
-#     print(x)
-# print("------------------------------------------------------")
 
 TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
