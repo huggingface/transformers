@@ -199,6 +199,7 @@ PYTORCH_EXPORT_MODELS = {
     ("roformer", "junnyu/roformer_chinese_base"),
     ("squeezebert", "squeezebert/squeezebert-uncased"),
     ("mobilebert", "google/mobilebert-uncased"),
+    ("mobilevit", "apple/mobilevit-small"),
     ("xlm", "xlm-clm-ende-1024"),
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
@@ -215,7 +216,7 @@ PYTORCH_EXPORT_MODELS = {
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
-    ("bloom", "bigscience/bloom-350m"),
+    ("bloom", "bigscience/bloom-560m"),
     ("gpt2", "gpt2"),
     ("gpt-neo", "EleutherAI/gpt-neo-125M"),
 }
@@ -284,6 +285,12 @@ class OnnxExportTestCaseV2(TestCase):
         model_class = FeaturesManager.get_model_class_for_feature(feature)
         config = AutoConfig.from_pretrained(model_name)
         model = model_class.from_config(config)
+
+        # Dynamic axes aren't supported for YOLO-like models. This means they cannot be exported to ONNX on CUDA devices.
+        # See: https://github.com/ultralytics/yolov5/pull/8378
+        if model.__class__.__name__.startswith("Yolos") and device != "cpu":
+            return
+
         onnx_config = onnx_config_class_constructor(model.config)
 
         if is_torch_available():

@@ -12,7 +12,7 @@ RUN git clone https://github.com/huggingface/transformers && cd transformers && 
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch,testing]
 
 # If set to nothing, will install the latest version
-ARG PYTORCH='1.12.0'
+ARG PYTORCH='1.12.1'
 ARG TORCH_VISION=''
 ARG TORCH_AUDIO=''
 
