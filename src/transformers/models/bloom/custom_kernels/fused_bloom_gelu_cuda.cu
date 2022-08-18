@@ -74,7 +74,7 @@ at::Tensor forward(
         // TODO @thomasw21 figure out everything warp related:
         //  - why do they have to be power of 2
         const auto MAX_THREADS_PER_SM = 1024; // TODO @thomas21 check why everyone is setting 1024 when officially it's 1024
-        auto num_params = x.nume(); // TODO @thomasw21 get `x.size()`
+        const auto num_params = x.numel(); // TODO @thomasw21 get `x.size()`
         const auto NUM_BLOCKS = (num_params - 1) / MAX_THREADS_PER_SM + 1;
 
         dim3 gridDim(NUM_BLOCKS); // Number of blocks that run
