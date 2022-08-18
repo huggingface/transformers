@@ -1003,7 +1003,10 @@ jobs:
             - run: pip install --upgrade pip
             - run: pip install .[torch,testing,vision]
             - run: pip install torchvision
-            - run: python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
+            # The commit `36a65a0907d90ed591479b2ebaa8b61cfa0b4ef0` in `detectron2` break things.
+            # See https://github.com/facebookresearch/detectron2/commit/36a65a0907d90ed591479b2ebaa8b61cfa0b4ef0#comments.
+            # TODO: Revert this change back once the above issue is fixed.
+            - run: python -m pip install 'git+https://github.com/facebookresearch/detectron2.git@5aeb252b194b93dc2879b4ac34bc51a31b5aee13'
             - run: sudo apt install tesseract-ocr
             - run: pip install pytesseract
             - save_cache:
