@@ -43,7 +43,6 @@ __global__ void forward_masked_softmax_kernel(
     kv_length_end_ = (kv_length_end_ > kv_length) ? kv_length : kv_length_end_;
     const auto kv_length_end = kv_length_end_;
 
-    // TODO @thomasw21 extract batch and q_length ids from row_id;
     const auto batch_id = blockIdx.x * rows_per_block + row_id;
 
     // We need 2 float storage for each row, one for max computation, the other for normalizing exponential
@@ -178,9 +177,10 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             */
             // TODO @thomasw21 figure out everything warp related:
             //  - why do they have to be power of 2
-            // TODO @thomasw21 implement version s.t. `MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD != 1` is valid.
-            const auto MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD = 1;
-            const auto MAX_THREADS_PER_SM = 1024; // TODO @thomas21 check why everyone is setting 1024 when officially it's 2048
+            // TODO @thomas21 check why everyone is setting 1024 when officially it's 2048
+            const auto MAX_THREADS_PER_SM = 1024;
+            // TODO @thomasw21 figure out how to have longer sequences, currently the maximum is `max_kv_length = MAX_THREADS_PER_SM * MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD`
+            const auto MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD = 4;
             // `effective_kv_length = kv_length // MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD`
             const auto effective_kv_length = (kv_length - 1)/ MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD + 1;
             const auto rows_per_block = MAX_THREADS_PER_SM / effective_kv_length;
@@ -188,9 +188,6 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
 
             const dim3 gridDim(num_blocks); // Number of blocks that run
             const dim3 blockDim(MAX_THREADS_PER_SM); // Number of threads that run per block
-            // TODO @thomasw21: Figure out how much I need
-            //  - each thread requires `MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD` in memory for each row
-            //  - threads has `ROWS_PER_BLOCK` rows.
             const int shared_mem_forward = rows_per_block * 2 * sizeof(float);
 
             // 192 * 2 ** 10
