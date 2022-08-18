@@ -38,13 +38,31 @@ Below are some notes to help you use this module, or follow the demos on [Google
 - Install `accelerate`
 `pip install accelerate>=0.12.0`
 
-### Running mixed-int8 models
+### Running mixed-int8 models - single GPU setup
 
 After installing the required libraries, the way to load your mixed 8-bit model is as follows:
 ```py
 model_name = "bigscience/bloom-2b5"
 model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
 ```
+
+### Running mixed-int8 models - multi GPU setup
+
+The way to load your mixed 8-bit model in multiple GPUs is as follows (same command as single GPU setup):
+```py
+model_name = "bigscience/bloom-2b5"
+model_8bit = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", load_in_8bit=True)
+```
+But you can control the GPU RAM you want to allocate on each GPU using `accelerate`. Use the `max_memory` argument as follows:
+
+```py
+max_memory_mapping = {0: "1GB", 1: "2GB"}
+model_name = "bigscience/bloom-3b"
+model_8bit = AutoModelForCausalLM.from_pretrained(
+    model_name, device_map="auto", load_in_8bit=True, max_memory=max_memory_mapping
+)
+```
+In this example, the first GPU will use 1GB of memory and the second 2GB.
 
 ### Colab demos
 
