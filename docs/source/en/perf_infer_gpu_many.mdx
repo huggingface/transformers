@@ -12,15 +12,8 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 # Efficient Inference on a Multiple GPUs
 
 This document contains information on how to efficiently infer on a multiple GPUs. 
-
-Make sure to first read on the [inference on a single GPU](perf_infer_cpu) as most of the techniques listed there would benefit the multi-gpu set up as well.
-
 <Tip>
 
- Note: A multi GPU setup can use the majority of the strategies described in the [single GPU section](perf infer gpu one). You must be aware of simple techniques, though, that can be used for a better usage.
+Note: A multi GPU setup can use the majority of the strategies described in the [single GPU section](perf infer gpu one). You must be aware of simple techniques, though, that can be used for a better usage.
 
 </Tip>
-
-## `bitsandbytes` integration for Int8 mixed-precision matrix decomposition - multi GPU setup
-
-Note that this features is also totally applicable in a single GPU setup as well - Check out the [single GPU section](perf_infer_gpu_one) for more details about the usage of it.
