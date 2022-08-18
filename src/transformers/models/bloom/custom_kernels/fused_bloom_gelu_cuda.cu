@@ -50,7 +50,7 @@ __global__ void forward_masked_softmax_kernel(
 #define CHECK_INPUT(x) CHECK_CUDA(x); CHECK_CONTIGUOUS(x)
 
 at::Tensor forward(
-    const at::Tensor x,
+    const at::Tensor x
 ) {
     CHECK_INPUT(x);
 
@@ -79,18 +79,15 @@ at::Tensor forward(
         // TODO @thomasw21 figure out everything warp related:
         //  - why do they have to be power of 2
         const auto MAX_THREADS_PER_SM = 1024; // TODO @thomas21 check why everyone is setting 1024 when officially it's 1024
-        const auto num_params = ; // TODO @thomasw21 get `x.size()`
+        auto num_params = x.nume(); // TODO @thomasw21 get `x.size()`
         const auto NUM_BLOCKS = (num_params - 1) / MAX_THREADS_PER_SM + 1;
 
         dim3 gridDim(NUM_BLOCKS); // Number of blocks that run
         dim3 blockDim(MAX_THREADS_PER_SM); // Number of threads that run per block
 
         // 192 * 2 ** 10
-        const auto MAX_L1_MEMORY = 196608;
-        const auto MAX_SMs = 108;
-        TORCH_CHECK(batch_size_times_num_heads * q_length < MAX_L1_MEMORY, "Shared memory exceeds 192KB limitation.");
-        // TORCH_CHECK(gridDim.x * gridDim.y * gridDim.z < MAX_SMs, "A100s only have 108 SMs. Raising as require blocks is bigger.");
-        TORCH_CHECK(blockDim.x * blockDim.y * blockDim.z < MAX_THREADS_PER_SM, "A100s only have 2048 threads per block. Raising as require requested threads is higher.");
+        // const auto MAX_L1_MEMORY = 196608;
+        // const auto MAX_SMs = 108;
 
         forward_masked_softmax_kernel<scalar_t, MAX_THREADS_PER_SM><<<gridDim, blockDim>>>(
             x.data<scalar_t>(),
