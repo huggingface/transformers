@@ -1359,7 +1359,6 @@ class TFModelTesterMixin:
                 continue
             # The number of elements in the loss should be the same as the number of elements in the label
             prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
-            breakpoint()
             added_label_names = sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)
             if not added_label_names:
                 continue  # This test is only for models with easily-separable labels
