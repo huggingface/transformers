@@ -1,5 +1,6 @@
 #include <ATen/Dispatch.h>
 #include <ATen/ATen.h>
+#incluse <torch/extension.h>
 
 /**
 * Friendly reminder of how multithreading works in CUDA: https://developer.nvidia.com/blog/even-easier-introduction-cuda
@@ -21,7 +22,7 @@
 * compute GELU: `x * 0.5 * (1.0 + torch.tanh(0.79788456 * x * (1 + 0.044715 * x * x)))`
 **/
 template<typename scalar_t, int64_t max_threads_per_sm>
-__global__ void forward_masked_softmax_kernel(
+__global__ void forward_kernel(
     const scalar_t* __restrict__ x, // [B, N, D]
     scalar_t* __restrict__ result, // [B, N, D]
     int64_t num_params
@@ -66,13 +67,6 @@ at::Tensor forward(
         *  - Max Thread Blocks / SM: 32
         */
 
-        /*
-        * We should split [batch_size_times_num_heads_block, q_length] in seperate blocks and [batch_size_times_num_heads_block_size, kv_length] a single block
-        * with multiple threads as we need to `sync_threads` to run exponential sum.
-        * We maximise the usage of threads within a single block
-        */
-        // TODO @thomasw21 figure out everything warp related:
-        //  - why do they have to be power of 2
         const auto MAX_THREADS_PER_SM = 1024; // TODO @thomas21 check why everyone is setting 1024 when officially it's 1024
         const auto num_params = x.numel(); // TODO @thomasw21 get `x.size()`
         const auto NUM_BLOCKS = (num_params - 1) / MAX_THREADS_PER_SM + 1;
@@ -84,7 +78,7 @@ at::Tensor forward(
         // const auto MAX_L1_MEMORY = 196608;
         // const auto MAX_SMs = 108;
 
-        forward_masked_softmax_kernel<scalar_t, MAX_THREADS_PER_SM><<<gridDim, blockDim>>>(
+        forward_kernel<scalar_t, MAX_THREADS_PER_SM><<<gridDim, blockDim>>>(
             x.data<scalar_t>(),
             result.data<scalar_t>(),
             num_params
