@@ -25,14 +25,13 @@
 /**
 * cast to fp32 if in fp16 + mask + softmax computation in fp32 + cast back to original dtype
 **/
-template<typename attention_scores_scalar>
+template<typename attention_scores_scalar, int64_t min_kv_length_shard_size_per_thread>
 __global__ void forward_masked_softmax_kernel(
     const torch::PackedTensorAccessor32<attention_scores_scalar, 2, torch::RestrictPtrTraits> attention_scores, // [B, KV]
     const torch::PackedTensorAccessor32<bool, 2, torch::RestrictPtrTraits> mask, // [B, KV]
     torch::PackedTensorAccessor32<attention_scores_scalar, 2, torch::RestrictPtrTraits> result, // [B, KV]
     const int64_t effective_kv_length,
     const dim3 blockDim,
-    const int64_t min_kv_length_shard_size_per_thread,
     const int64_t rows_per_block,
     const int64_t kv_length,
     const int64_t batch_size
@@ -72,7 +71,7 @@ __global__ void forward_masked_softmax_kernel(
     __syncthreads();
 
     // Compute exp(elt - max) masked
-    float exponential[kv_length_end - kv_length_start];
+    float exponential[min_kv_length_shard_size_per_thread];
     if (batch_id <= batch_size) {
         float thread_add = 0;
         for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
@@ -201,13 +200,12 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             // TORCH_CHECK(gridDim.x * gridDim.y * gridDim.z <= MAX_SMs, "A100s only have 108 SMs. Raising as require blocks is bigger.");
             TORCH_CHECK(blockDim.x * blockDim.y * blockDim.z <= MAX_THREADS_PER_SM, "A100s only have 2048 threads per block. Raising as require requested threads is higher.");
 
-            forward_masked_softmax_kernel<<<gridDim, blockDim, shared_mem_forward>>>(
+            forward_masked_softmax_kernel<scalar_t, MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD><<<gridDim, blockDim, shared_mem_forward>>>(
                 attention_scores_2d.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
                 attention_mask_2d.packed_accessor32<bool, 2, torch::RestrictPtrTraits>(),
                 attention_probs.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
                 effective_kv_length,
                 blockDim,
-                MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD, // number of values to run
                 rows_per_block,
                 kv_length,
                 batch_size_times_num_heads * q_length
