@@ -5,3 +5,4 @@ protobuf
 sacrebleu >= 1.4.12
 py7zr
 torch >= 1.3
+evaluate
