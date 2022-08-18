@@ -41,7 +41,7 @@ __global__ void forward_masked_softmax_kernel(
     const auto effective_kv_length_id = threadIdx.x % effective_kv_length;
     const auto kv_length_start = effective_kv_length_id * min_kv_length_shard_size_per_thread;
     auto kv_length_end_ = (effective_kv_length_id + 1) * min_kv_length_shard_size_per_thread;
-    kv_length_end_ = (kv_length_end > kv_length) ? kv_length : kv_length_end;
+    kv_length_end_ = (kv_length_end_ > kv_length) ? kv_length : kv_length_end_;
     const auto kv_length_end = kv_length_end_;
 
     // TODO @thomasw21 extract batch and q_length ids from row_id;
