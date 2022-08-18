@@ -1845,6 +1845,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torchdynamo
     def test_torchdynamo_memory(self):
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
+        import torchdynamo
         class CustomTrainer(Trainer):
             def compute_loss(self, model, inputs, return_outputs=False):
                 x = inputs["x"]
@@ -1861,7 +1862,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             def forward(self, x):
                 for _ in range(20):
-                    x = torch.nn.functional.relu(x)
+                    x = torch.cos(x)
                 return x
 
         mod = MyModule()
@@ -1881,6 +1882,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         orig_loss = trainer.training_step(mod, {"x": a})
         orig_peak_mem = torch.cuda.max_memory_allocated()
+        torchdynamo.reset()
         del trainer
 
         # 2. TorchDynamo nvfuser
@@ -1899,6 +1901,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         loss = trainer.training_step(mod, {"x": a})
         peak_mem = torch.cuda.max_memory_allocated()
+        torchdynamo.reset()
         del trainer
 
         # Functional check
