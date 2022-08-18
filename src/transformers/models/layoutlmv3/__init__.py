@@ -118,7 +118,7 @@ if TYPE_CHECKING:
         )
 
     try:
-        if not is_vision_available():
+        if not is_tf_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
