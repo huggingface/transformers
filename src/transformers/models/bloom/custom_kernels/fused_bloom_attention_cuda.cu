@@ -47,11 +47,8 @@ __global__ void forward_masked_softmax_kernel(
     // TODO @thomasw21 extract batch and q_length ids from row_id;
     const auto batch_id = blockIdx.x * rows_per_block + row_id;
 
-    const auto shared_mem_size = 2 * rows_per_block;
-    const auto exponential_mem_size = kv_length_end - kv_length_start;
-
     // We need 2 float storage for each row, one for max computation, the other for normalizing exponential
-    __shared__ float temp_storage[shared_mem_size];
+    extern __shared__ float temp_storage[];
     const auto row_id_mem_offset = row_id * 2;
     if (effective_kv_length_id == 0) {
         temp_storage[row_id_mem_offset] = -std::numeric_limits<float>::infinity();
@@ -75,7 +72,7 @@ __global__ void forward_masked_softmax_kernel(
     __syncthreads();
 
     // Compute exp(elt - max) masked
-    float exponential[exponential_mem_size];
+    float exponential[kv_length_end - kv_length_start];
     if (batch_id <= batch_size) {
         float thread_add = 0;
         for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
