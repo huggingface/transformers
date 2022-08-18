@@ -581,10 +581,9 @@ TIME_SERIES_TRANSFORMER_PREDICTION_EXAMPLE = r"""
     Summarization example:
 
     ```python
-    >>> from transformers import TimeSeriesTransformerTokenizer, TimeSeriesTransformerForConditionalGeneration
+    >>> from transformers import TimeSeriesTransformerForPrediction
 
     >>> model = TimeSeriesTransformerForConditionalGeneration.from_pretrained('huggingface/tst-ett')
-    >>> tokenizer = TimeSeriesTransformerTokenizer.from_pretrained('huggingface/tst-ett')
 
     >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
     >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
@@ -1379,6 +1378,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
         )
 
         prediction_loss = None
+        params = None
         if future_target is not None and future_observed_values is not None:
             params = self.output_params(outputs.last_hidden_state)
             distr = self.output_distribution(params, outputs.scale)
@@ -1393,7 +1393,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             prediction_loss = weighted_average(loss, weights=loss_weights)
 
         if not return_dict:
-            outputs = (params) + outputs[1:]
+            outputs = (params + outputs[1:]) if params is not None else outputs[1:]
             return ((prediction_loss,) + outputs) if prediction_loss is not None else outputs
 
         return Seq2SeqTSPredictionOutput(
