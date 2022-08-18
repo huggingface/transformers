@@ -244,6 +244,20 @@ class FlaxT5ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_input_embeds(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config, input_ids = config_and_inputs[:2]
+        model = FlaxT5ForConditionalGeneration.from_pretrained('t5-small')
+        shared_layer = model.get_shared_layer()
+        input_embeds = shared_layer.apply(
+            dict(params=model.params['shared']),input_ids)
+
+        pred_ids1 = model.generate(input_ids=input_ids).sequences
+        pred_ids2 = model.generate(None,input_embeds=input_embeds).sequences
+
+        err_msg = 'Predictions from input_ids and input_embeds are not the same'
+        assert((pred_ids1==pred_ids2).all()==True), err_msg
+
     def test_model_v1_1(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         # check that gated gelu feed forward and different word embeddings work
