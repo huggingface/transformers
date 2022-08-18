@@ -1846,6 +1846,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_torchdynamo_memory(self):
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
         import torchdynamo
+
         class CustomTrainer(Trainer):
             def compute_loss(self, model, inputs, return_outputs=False):
                 x = inputs["x"]
