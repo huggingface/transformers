@@ -25,7 +25,8 @@ import unittest.mock as mock
 from dataclasses import fields
 from importlib import import_module
 from math import isnan
-from typing import List, Tuple, Union, get_origin, get_type_hints
+from typing import List, Tuple, Union, get_type_hints
+from types import UnionType
 
 from datasets import Dataset
 
@@ -130,7 +131,7 @@ def _return_type_has_loss(model):
     if "return" not in return_type:
         return False
     return_type = return_type["return"]
-    if get_origin(return_type) is Union:
+    if isinstance(return_type, UnionType):
         for type_annotation in return_type.__args__:
             if inspect.isclass(type_annotation) and issubclass(type_annotation, ModelOutput):
                 field_names = [field.name for field in fields(type_annotation)]
