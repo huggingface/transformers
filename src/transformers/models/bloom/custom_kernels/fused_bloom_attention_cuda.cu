@@ -27,52 +27,78 @@
 **/
 template<typename attention_scores_scalar>
 __global__ void forward_masked_softmax_kernel(
-    const torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> attention_scores, // [B, N, D]
-    const torch::PackedTensorAccessor32<bool, 3, torch::RestrictPtrTraits> mask, // [B, N, D]
-    torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> result // [B, N, D]
+    const torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> attention_scores, // [B, KV]
+    const torch::PackedTensorAccessor32<bool, 3, torch::RestrictPtrTraits> mask, // [B, KV]
+    torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> result // [B, KV]
+    int64_t effective_kv_length,
+    dim3 blockDim,
+    int64_t min_kv_length_shard_size_per_thread,
+    int64_t rows_per_block,
+    int64_t kv_length,
+    int64_t batch_size,
 ) {
-    const int batch_id = blockIdx.x;
-    const int q_length_id = blockIdx.y;
-    const int batch_time_q_length_block_size = thread.y;
-    const int kv_length_id = threadIdx.x;
+    const auto row_id = threadIdx.x / effective_kv_length;
+    const auto effective_kv_length_id = threadIdx.x % effective_kv_length;
+    const auto kv_length_start = effective_kv_length_id * min_kv_length_shard_size_per_thread;
+    auto kv_length_end = (effective_kv_length_id + 1) * min_kv_length_shard_size_per_thread;
+    kv_length_end = kv_length_end > kv_length ? kv_length : kv_length_end;
 
-    // We need 2 float storage, one for max computation, the other for normalizing exponential
-    __shared__ float temp_storage[2];
-    if (kv_length_id == 0) {
-        temp_storage[0] = -std::numeric_limits<float>::infinity();
-        temp_storage[1] = 0;
+    // TODO @thomasw21 extract batch and q_length ids from row_id;
+    const auto batch_id = blockIdx.x * rows_per_block + row_id;
+
+    // We need 2 float storage for each row, one for max computation, the other for normalizing exponential
+    __shared__ float temp_storage[2 * num_rows_per_thread];
+    const auto row_id_mem_offset = row_id * 2;
+    if (effective_kv_length_id == 0) {
+        temp_storage[row_id_mem_offset] = -std::numeric_limits<float>::infinity();
+        temp_storage[row_id_mem_offset + 1] = 0;
     }
     __syncthreads();
 
     // Compute mask and max
-    float elt;
-    const auto mask_elt = mask[batch_id][q_length_id][kv_length_id];
-    if (mask_elt == 1) {
-        elt = -std::numeric_limits<float>::infinity();
-    } else {
-        elt = attention_scores[batch_id][q_length_id][kv_length_id];
+    if (batch_id <= batch_size) {
+        float thread_max = -std::numeric_limits<float>::infinity();
+        for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
+            if (mask[batch_id][kv_length_id] == 0) {
+                const auto candidate = attention_scores[batch_id][kv_length_id];
+                thread_max = thread_max < candidate ? candidate : thread_max;
+            }
+        }
         // TODO @thomasw21 with more memory we can probably compute a much faster `max-reduce` in parallel O(ln(n)) operations in each memory slot
-        gpuAtomicMax(&temp_storage[0], elt);
+        gpuAtomicMax(&temp_storage[row_id_mem_offset], thread_max);
     }
 
     __syncthreads();
 
     // Compute exp(elt - max) masked
-    float exponential;
-    if (mask_elt == 1) {
-        exponential = 0;
-    } else {
-        exponential = std::exp(elt - temp_storage[0]);
+    if (batch_id <= batch_size) {
+        float exponential[kv_length_end - kv_length_start];
+        float thread_add = 0;
+        for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
+            if (mask[batch_id][kv_length_id] == 0) {
+                exponential[kv_length_id - kv_length_start] = std::exp(attention_scores[batch_id][kv_length_id] - temp_storage[row_id_mem_offset]);
+                thread_add = thread_add + exponential[kv_length_id - kv_length_start];
+            } else {
+                exponential[kv_length_id - kv_length_start] = 0.;
+            }
+        }
         // TODO @thomasw21 with more memory we can probably compute a much faster `sum-reduce` in parallel O(ln(n)) operations in each memory slot
-        gpuAtomicAdd(&temp_storage[1], exponential);
+        gpuAtomicAdd(&temp_storage[row_id_mem_offset + 1], thread_add);
     }
 
-    // Compute sum of exponential
     __syncthreads();
 
     // Compute softmax
-    result[batch_id][q_length_id][kv_length_id] = static_cast<attention_scores_scalar>(exponential / temp_storage[1]);
+    if (batch_id <= batch_size) {
+        for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
+            result[batch_id][kv_length_id] = static_cast<attention_scores_scalar>(exponential[kv_length_id - kv_length_start] / temp_storage[row_id_mem_offset + 1]);
+        }
+    }
 }
+
+#define CHECK_CUDA(x) TORCH_CHECK(x.device().is_cuda(), #x " must be a CUDA tensor")
+#define CHECK_CONTIGUOUS(x) TORCH_CHECK(x.is_contiguous(), #x " must be contiguous")
+#define CHECK_INPUT(x) CHECK_CUDA(x); CHECK_CONTIGUOUS(x)
 
 std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forward(
     const at::Tensor fused_qkv,
@@ -117,14 +143,21 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
     // Computing `optionally_cast_fp16_to_fp32 + masked_fill + softmax + cast_to_intial_dtype`
     torch::Tensor attention_probs;
     if (true) {
+        // TODO @thomasw21: it's easier to think of attention_scores as 2D tensors
+        attention_scores = attention_scores.view({batch_size_times_num_heads * q_length, kv_length});
+        attention_mask = attention_mask.view({batch_size_times_num_heads * q_length, kv_length});
+
         // Custom kernel
         attention_probs = at::empty_like(attention_scores);
         const auto kv_length = key_layer.size(2);
-        // TODO @thomasw21: Check that input are both in the correct device + contiguous
+
+        // Check that inputs and contiguous + cuda tensors
+        CHECK_INPUT(attention_scores);
+        CHECK_INPUT(attention_mask);
 
         // TODO @thomas21: change by to this as it's cleaner when pytorch 1.13 comes out
-        // DISPATCH_CASE_FLOATING_TYPES(key_layer.scalar_type(), "masked_softmax", [&] {
-        AT_DISPATCH_FLOATING_TYPES_AND2(at::ScalarType::Half, at::ScalarType::BFloat16, key_layer.scalar_type(), "masked_softmax", [&] {
+        // DISPATCH_CASE_FLOATING_TYPES(attention_scores.scalar_type(), "masked_softmax", [&] {
+        AT_DISPATCH_FLOATING_TYPES_AND2(at::ScalarType::Half, at::ScalarType::BFloat16, attention_scores.scalar_type(), "masked_softmax", [&] {
             // TODO @thomasw21 I think this is necessary if you want to support all kinds of gpus.
             // const uint64_t maxGridY = at::cuda::getCurrentDeviceProperties()->maxGridSize[1];
 
@@ -147,15 +180,16 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             */
             // TODO @thomasw21 figure out everything warp related:
             //  - why do they have to be power of 2
+            // TODO @thomasw21 implement version s.t. `MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD != 1` is valid.
             const auto MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD = 1;
-            const auto MAX_THREADS_PER_SM = 1024; // TODO @thomas21 check why everyone is setting 1024 when officially it's 1024
-            const auto ROWS_PER_BLOCK = (MAX_THREADS_PER_SM * MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD) / kv_length;
-            // TODO @thomasw21 compute `ceil`.
-            const auto NUM_BLOCKS = (batch_size_times_num_heads * q_length - 1) / ROWS_PER_BLOCK + 1;
+            const auto MAX_THREADS_PER_SM = 1024; // TODO @thomas21 check why everyone is setting 1024 when officially it's 2048
+            // `effective_kv_length = kv_length // MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD`
+            const auto effective_kv_length = (kv_length - 1)/ MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD + 1;
+            const auto rows_per_block = MAX_THREADS_PER_SM / effective_kv_length;
+            const auto num_blocks = (batch_size_times_num_heads * q_length - 1) / rows_per_block + 1;
 
-            dim3 gridDim(NUM_BLOCKS); // Number of blocks that run
-            // TODO @thomas21: Maybe this needs to be converted to `MAX_THREADS_PER_SM` and let padding run nowhere.
-            dim3 blockDim(ROWS_PER_BLOCK, kv_length); // Number of threads that run per block
+            dim3 gridDim(num_blocks); // Number of blocks that run
+            dim3 blockDim(MAX_THREADS_PER_SM); // Number of threads that run per block
             // TODO @thomasw21: Figure out how much I need
             //  - each thread requires `MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD` in memory for each row
             //  - threads has `ROWS_PER_BLOCK` rows.
@@ -164,18 +198,26 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             // 192 * 2 ** 10
             const auto MAX_L1_MEMORY = 196608;
             const auto MAX_SMs = 108;
-            TORCH_CHECK(batch_size_times_num_heads * q_length < MAX_L1_MEMORY, "Shared memory exceeds 192KB limitation.");
-            // TORCH_CHECK(gridDim.x * gridDim.y * gridDim.z < MAX_SMs, "A100s only have 108 SMs. Raising as require blocks is bigger.");
-            TORCH_CHECK(blockDim.x * blockDim.y * blockDim.z < MAX_THREADS_PER_SM, "A100s only have 2048 threads per block. Raising as require requested threads is higher.");
+            TORCH_CHECK(batch_size_times_num_heads * q_length <= MAX_L1_MEMORY, "Shared memory exceeds 192KB limitation.");
+            // TORCH_CHECK(gridDim.x * gridDim.y * gridDim.z <= MAX_SMs, "A100s only have 108 SMs. Raising as require blocks is bigger.");
+            TORCH_CHECK(blockDim.x * blockDim.y * blockDim.z <= MAX_THREADS_PER_SM, "A100s only have 2048 threads per block. Raising as require requested threads is higher.");
 
             forward_masked_softmax_kernel<<<gridDim, blockDim, shared_mem_forward>>>(
-                attention_scores.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
-                attention_mask.packed_accessor32<bool, 3, torch::RestrictPtrTraits>(),
-                attention_probs.packed_accessor32<scalar_t, 3, torch::RestrictPtrTraits>(),
+                attention_scores.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                attention_mask.packed_accessor32<bool, 2, torch::RestrictPtrTraits>(),
+                attention_probs.packed_accessor32<scalar_t, 2, torch::RestrictPtrTraits>(),
+                effective_kv_length,
+                blockDim,
                 MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD, // number of values to run
-
+                rows_per_block,
+                kv_length,
+                batch_size_times_num_heads * q_length
             );
         });
+
+        // TODO @thomasw21: it's easier to think of attention_scores as 2D tensors
+        attention_scores = attention_scores.view({batch_size_times_num_heads, q_length, kv_length});
+        attention_mask = attention_mask.view({batch_size_times_num_heads, q_length, kv_length});
     } else {
         // Pytorch C++ API
         auto input_dtype = attention_scores.scalar_type();

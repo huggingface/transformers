@@ -39,7 +39,7 @@ __global__ void forward_masked_softmax_kernel(
     const auto elt = x[batch_id][q_length_id][kv_length_id];
 
     // Compute gelu
-    // TODO @thomasw21: Figure out where to find a tanh implementation that works for me. (I could hardcode it)
+    // TODO @thomasw21: Figure out where to find a tanh implementation that works for all kinds of scalar types. (I could hardcode it)
     result[batch_id][q_length_id][kv_length_id] = elt * 0.5 * (1.0 + std::tanh(0.79788456 * elt * (1 + 0.044715 * elt * elt)));
 }
 
