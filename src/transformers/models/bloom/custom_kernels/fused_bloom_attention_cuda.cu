@@ -29,13 +29,13 @@ template<typename attention_scores_scalar>
 __global__ void forward_masked_softmax_kernel(
     const torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> attention_scores, // [B, KV]
     const torch::PackedTensorAccessor32<bool, 3, torch::RestrictPtrTraits> mask, // [B, KV]
-    torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> result // [B, KV]
+    torch::PackedTensorAccessor32<attention_scores_scalar, 3, torch::RestrictPtrTraits> result, // [B, KV]
     int64_t effective_kv_length,
     dim3 blockDim,
     int64_t min_kv_length_shard_size_per_thread,
     int64_t rows_per_block,
     int64_t kv_length,
-    int64_t batch_size,
+    int64_t batch_size
 ) {
     const auto row_id = threadIdx.x / effective_kv_length;
     const auto effective_kv_length_id = threadIdx.x % effective_kv_length;
@@ -143,13 +143,14 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
     // Computing `optionally_cast_fp16_to_fp32 + masked_fill + softmax + cast_to_intial_dtype`
     torch::Tensor attention_probs;
     if (true) {
+        const auto kv_length = key_layer.size(2);
+
         // TODO @thomasw21: it's easier to think of attention_scores as 2D tensors
         attention_scores = attention_scores.view({batch_size_times_num_heads * q_length, kv_length});
         attention_mask = attention_mask.view({batch_size_times_num_heads * q_length, kv_length});
 
         // Custom kernel
         attention_probs = at::empty_like(attention_scores);
-        const auto kv_length = key_layer.size(2);
 
         // Check that inputs and contiguous + cuda tensors
         CHECK_INPUT(attention_scores);
@@ -158,9 +159,6 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
         // TODO @thomas21: change by to this as it's cleaner when pytorch 1.13 comes out
         // DISPATCH_CASE_FLOATING_TYPES(attention_scores.scalar_type(), "masked_softmax", [&] {
         AT_DISPATCH_FLOATING_TYPES_AND2(at::ScalarType::Half, at::ScalarType::BFloat16, attention_scores.scalar_type(), "masked_softmax", [&] {
-            // TODO @thomasw21 I think this is necessary if you want to support all kinds of gpus.
-            // const uint64_t maxGridY = at::cuda::getCurrentDeviceProperties()->maxGridSize[1];
-
             /*
             * Understanding how GPUs work: https://developer.nvidia.com/blog/cuda-refresher-cuda-programming-model/
             * A100 specifications: https://images.nvidia.com/aem-dam/en-zz/Solutions/data-center/nvidia-ampere-architecture-whitepaper.pdf
@@ -193,7 +191,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             // TODO @thomasw21: Figure out how much I need
             //  - each thread requires `MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD` in memory for each row
             //  - threads has `ROWS_PER_BLOCK` rows.
-            const int shared_mem_forward = ROWS_PER_BLOCK * MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD * 2 * sizeof(float);
+            const int shared_mem_forward = rows_per_block * 2 * sizeof(float);
 
             // 192 * 2 ** 10
             const auto MAX_L1_MEMORY = 196608;
