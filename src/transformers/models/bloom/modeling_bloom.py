@@ -188,7 +188,7 @@ def bloom_gelu_back(g: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
 class GeLUFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input: torch.Tensor) -> torch.Tensor:
-        if false and CUSTOM_KERNELS_ENABLED:
+        if False and CUSTOM_KERNELS_ENABLED:
             """My kernel is actually still slow compared to what `jit` provides."""
             raise ValueError("WTF")
             fused_bloom_gelu_cuda.foward(input)
