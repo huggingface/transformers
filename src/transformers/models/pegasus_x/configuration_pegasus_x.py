@@ -30,8 +30,8 @@ PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class PegasusXConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PegasusXModel`]. It is used to instantiate a
-    PEGASUS-X model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the PEGASUS-X
+    PEGASUS-X model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the PEGASUS-X
     [zphang/pegasus-x-large](https://huggingface.co/zphang/pegasus-x-large) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -86,9 +86,8 @@ class PegasusXConfig(PretrainedConfig):
         num_global_tokens (`int`, *optional*, defaults to 128):
             Number of global tokens to use for the encoder
         block_size=512 (`int`, *optional*, defaults to 512):
-            Block size for encoder local attention
-            NOTE: sequence length should be an exact multiple of block size
-            NOTE: block_size must be a multiple of 2 if stagger_local_block is True
+            Block size for encoder local attention. Sequence length should be an exact multiple of block size.
+            block_size must be a multiple of 2 if stagger_local_block is True
         stagger_local_block (`bool`, *optional*, defaults to `True`):
             Whether to stagger every other local attention by half a block
 
