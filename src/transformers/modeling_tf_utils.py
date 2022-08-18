@@ -1394,12 +1394,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             else:
                 y_pred = self(x, training=True)
             if self._using_dummy_loss:
-                if y_pred.loss.shape.rank == 0:
-                    # Scalar losses confuse Keras - reshape to (1,) to avoid this
-                    y_pred_loss = tf.reshape(y_pred.loss, (1,))
-                else:
-                    y_pred_loss = y_pred.loss
-                loss = self.compiled_loss(y_pred_loss, y_pred_loss, sample_weight, regularization_losses=self.losses)
+                loss = self.compiled_loss(y_pred.loss, y_pred.loss, sample_weight, regularization_losses=self.losses)
             else:
                 loss = None
 
@@ -1505,12 +1500,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         else:
             y_pred = self(x, training=False)
         if self._using_dummy_loss:
-            if y_pred.loss.shape.rank == 0:
-                # Scalar losses confuse Keras - reshape to (1,) to avoid this
-                y_pred_loss = tf.reshape(y_pred.loss, (1,))
-            else:
-                y_pred_loss = y_pred.loss
-            loss = self.compiled_loss(y_pred_loss, y_pred_loss, sample_weight, regularization_losses=self.losses)
+            loss = self.compiled_loss(y_pred.loss, y_pred.loss, sample_weight, regularization_losses=self.losses)
         else:
             loss = None
 
