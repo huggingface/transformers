@@ -87,7 +87,7 @@ at::Tensor forward(
         forward_masked_softmax_kernel<scalar_t, MAX_THREADS_PER_SM><<<gridDim, blockDim>>>(
             x.data<scalar_t>(),
             result.data<scalar_t>(),
-            num_params,
+            num_params
         );
     });
 
