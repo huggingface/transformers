@@ -4217,10 +4217,6 @@ if TYPE_CHECKING:
         )
         from .models.time_series_transformer import (
             TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TimeSeriesTransformerForCausalLM,
-            TimeSeriesTransformerForConditionalGeneration,
-            TimeSeriesTransformerForQuestionAnswering,
-            TimeSeriesTransformerForSequenceClassification,
             TimeSeriesTransformerForPrediction,
             TimeSeriesTransformerModel,
             TimeSeriesTransformerPreTrainedModel,

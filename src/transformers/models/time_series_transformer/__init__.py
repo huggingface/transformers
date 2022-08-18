@@ -57,10 +57,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_time_series_transformer import (
             TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TimeSeriesTransformerForConditionalGeneration,
-            TimeSeriesTransformerForCausalLM,
-            TimeSeriesTransformerForQuestionAnswering,
-            TimeSeriesTransformerForSequenceClassification,
             TimeSeriesTransformerForPrediction,
             TimeSeriesTransformerModel,
             TimeSeriesTransformerPreTrainedModel,

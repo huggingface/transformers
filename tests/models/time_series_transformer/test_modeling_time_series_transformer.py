@@ -33,10 +33,6 @@ if is_torch_available():
 
     from transformers import (
         TimeSeriesTransformerConfig,
-        TimeSeriesTransformerForConditionalGeneration,
-        TimeSeriesTransformerForQuestionAnswering,
-        TimeSeriesTransformerForCausalLM,
-        TimeSeriesTransformerForSequenceClassification,
         TimeSeriesTransformerForPrediction,
         TimeSeriesTransformerModel,
     )
@@ -208,6 +204,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, un
     all_model_classes = (
         (
             TimeSeriesTransformerModel,
+            TimeSeriesTransformerForPrediction,
             TimeSeriesTransformerForConditionalGeneration,
             TimeSeriesTransformerForSequenceClassification,
             TimeSeriesTransformerForQuestionAnswering,
