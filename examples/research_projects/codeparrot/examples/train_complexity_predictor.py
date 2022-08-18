@@ -3,24 +3,18 @@ from copy import deepcopy
 
 import numpy as np
 from datasets import ClassLabel, DatasetDict, load_dataset
-from torch.optim import AdamW
-
 from evaluate import load
-from transformers import (
-    AutoModelForSequenceClassification,
-    AutoTokenizer,
-    DataCollatorWithPadding,
-    Trainer,
-    TrainerCallback,
-    TrainingArguments,
-    get_scheduler,
-    set_seed,
-)
+
+from transformers import (AutoModelForSequenceClassification, AutoTokenizer,
+                          DataCollatorWithPadding, Trainer, TrainerCallback,
+                          TrainingArguments, set_seed)
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_ckpt", type=str, default="microsoft/unixcoder-base-nine")
+    parser.add_argument(
+        "--model_ckpt", type=str, default="microsoft/unixcoder-base-nine"
+    )
     parser.add_argument("--num_epochs", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=6)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1)
@@ -30,6 +24,7 @@ def get_args():
     parser.add_argument("--lr_scheduler_type", type=str, default="cosine")
     parser.add_argument("--num_warmup_steps", type=int, default=10)
     parser.add_argument("--weight_decay", type=float, default=0.01)
+    parser.add_argument("--output_dir", type=str, default="./results")
     return parser.parse_args()
 
 
@@ -42,19 +37,6 @@ def compute_metrics(eval_pred):
     return metric.compute(predictions=predictions, references=labels)
 
 
-def get_grouped_params(model, args, no_decay=["bias", "ln_1.weight", "ln_2.weight", "ln_f.weight"]):
-    params_with_wd, params_without_wd = [], []
-    for n, p in model.named_parameters():
-        if any(nd in n for nd in no_decay):
-            params_without_wd.append(p)
-        else:
-            params_with_wd.append(p)
-    return [
-        {"params": params_with_wd, "weight_decay": args.weight_decay},
-        {"params": params_without_wd, "weight_decay": 0.0},
-    ]
-
-
 class CustomCallback(TrainerCallback):
     def __init__(self, trainer) -> None:
         super().__init__()
@@ -63,7 +45,9 @@ class CustomCallback(TrainerCallback):
     def on_epoch_end(self, args, state, control, **kwargs):
         if control.should_evaluate:
             control_copy = deepcopy(control)
-            self._trainer.evaluate(eval_dataset=self._trainer.train_dataset, metric_key_prefix="train")
+            self._trainer.evaluate(
+                eval_dataset=self._trainer.train_dataset, metric_key_prefix="train"
+            )
             return control_copy
 
 
@@ -85,14 +69,18 @@ def main():
     print("Loading tokenizer and model")
     tokenizer = AutoTokenizer.from_pretrained(args.model_ckpt)
     tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForSequenceClassification.from_pretrained(args.model_ckpt, num_labels=7)
+    model = AutoModelForSequenceClassification.from_pretrained(
+        args.model_ckpt, num_labels=7
+    )
     model.config.pad_token_id = model.config.eos_token_id
 
     if args.freeze:
         for param in model.roberta.parameters():
             param.requires_grad = False
 
-    labels = ClassLabel(num_classes=7, names=list(set(train_test_validation["train"]["complexity"])))
+    labels = ClassLabel(
+        num_classes=7, names=list(set(train_test_validation["train"]["complexity"]))
+    )
 
     def tokenize(example):
         inputs = tokenizer(example["src"], truncation=True, max_length=1024)
@@ -110,18 +98,10 @@ def main():
     )
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-    # Prepare the optimizer and learning rate scheduler
-    optimizer = AdamW(get_grouped_params(model, args), lr=args.learning_rate)
-    lr_scheduler = get_scheduler(
-        name=args.lr_scheduler_type,
-        optimizer=optimizer,
-        num_training_steps=args.num_epochs,
-        num_warmup_steps=args.num_warmup_steps,
-    )
-
     training_args = TrainingArguments(
-        output_dir="./results_java",
+        output_dir=args.output_dir,
         learning_rate=args.learning_rate,
+        lr_scheduler_type=args.lr_scheduler_type,
         evaluation_strategy="epoch",
         save_strategy="epoch",
         logging_strategy="epoch",
@@ -143,7 +123,6 @@ def main():
         tokenizer=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
-        optimizers=(optimizer, lr_scheduler),
     )
 
     print("Training...")
