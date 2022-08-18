@@ -22,9 +22,10 @@ import random
 import tempfile
 import unittest
 import unittest.mock as mock
+from dataclasses import fields
 from importlib import import_module
 from math import isnan
-from typing import List, Tuple
+from typing import List, Tuple, Union, get_args, get_origin, get_type_hints
 
 from datasets import Dataset
 
@@ -122,6 +123,25 @@ def _config_zero_init(config):
         if "_range" in key or "_std" in key:
             setattr(configs_no_init, key, 0.0)
     return configs_no_init
+
+
+def _return_type_has_loss(model):
+    return_type = get_type_hints(model.call)
+    if "return" not in return_type:
+        return False
+    return_type = return_type["return"]
+    if get_origin(return_type) is Union:
+        for type_annotation in get_args(return_type):
+            if inspect.isclass(type_annotation) and issubclass(type_annotation, ModelOutput):
+                field_names = [field.name for field in fields(type_annotation)]
+                if "loss" in field_names:
+                    return True
+        return False
+    elif isinstance(return_type, tuple):
+        return False
+    elif isinstance(return_type, ModelOutput):
+        class_fields = fields(return_type)
+        return "loss" in class_fields
 
 
 @require_tf
@@ -1409,111 +1429,118 @@ class TFModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
-            if getattr(model, "hf_compute_loss", None):
-                # Test that model correctly compute the loss with kwargs
-                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
-                # Is there a better way to remove these decoder inputs?
-                prepared_for_class = {
-                    key: val
-                    for key, val in prepared_for_class.items()
-                    if key not in ("head_mask", "decoder_head_mask", "cross_attn_head_mask", "decoder_input_ids")
-                }
+            if not getattr(model, "hf_compute_loss", False) and not _return_type_has_loss(model):
+                return
+            # Test that model correctly compute the loss with kwargs
+            prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+            # Is there a better way to remove these decoder inputs?
+            # We also remove "return_loss" as this is covered by the train_step when using fit()
+            prepared_for_class = {
+                key: val
+                for key, val in prepared_for_class.items()
+                if key
+                not in ("head_mask", "decoder_head_mask", "cross_attn_head_mask", "decoder_input_ids", "return_loss")
+            }
 
-                possible_label_cols = {
-                    "labels",
-                    "label",
-                    "label_ids",
-                    "start_positions",
-                    "start_position",
-                    "end_positions",
-                    "end_position",
-                    "next_sentence_label",
-                }
-                label_names = possible_label_cols.intersection(set(prepared_for_class))
-                self.assertGreater(len(label_names), 0, msg="No matching label names found!")
-                labels = {key: val for key, val in prepared_for_class.items() if key in label_names}
-                inputs_minus_labels = {key: val for key, val in prepared_for_class.items() if key not in label_names}
-                self.assertGreater(len(inputs_minus_labels), 0)
-                accuracy_classes = [
-                    "ForPreTraining",
-                    "ForCausalLM",
-                    "ForMaskedLM",
-                    "ForQuestionAnswering",
-                    "ForMultipleChoice",
-                    "ForSequenceClassification",
-                    "ForTokenClassification",
-                    "ForNextSentencePrediction",
-                    "LMHeadModel",
-                ]
-                for accuracy_class in accuracy_classes:
-                    if model.__class__.__name__.endswith(accuracy_class):
-                        metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
-                        break
-                else:
-                    metrics = []
+            accuracy_classes = [
+                "ForPreTraining",
+                "ForCausalLM",
+                "ForMaskedLM",
+                "ForQuestionAnswering",
+                "ForMultipleChoice",
+                "ForSequenceClassification",
+                "ForTokenClassification",
+                "ForNextSentencePrediction",
+                "LMHeadModel",
+            ]
+            for accuracy_class in accuracy_classes:
+                if model.__class__.__name__.endswith(accuracy_class):
+                    metrics = [tf.keras.metrics.SparseCategoricalAccuracy()]
+                    break
+            else:
+                metrics = []
 
-                model(model.dummy_inputs)  # Build the model so we can get some constant weights
-                model_weights = model.get_weights()
+            model(model.dummy_inputs)  # Build the model so we can get some constant weights
+            model_weights = model.get_weights()
 
-                # Run eagerly to save some expensive compilation times
-                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True, metrics=metrics)
-                # Make sure the model fits without crashing regardless of where we pass the labels
-                history1 = model.fit(
-                    prepared_for_class,
-                    validation_data=prepared_for_class,
-                    steps_per_epoch=1,
-                    validation_steps=1,
-                    shuffle=False,
-                )
-                val_loss1 = history1.history["val_loss"][0]
-                self.assertTrue(not isnan(val_loss1))
-                accuracy1 = {key: val[0] for key, val in history1.history.items() if key.endswith("accuracy")}
+            # Run eagerly to save some expensive compilation times
+            model.compile(optimizer=tf.keras.optimizers.SGD(0.0), run_eagerly=True, metrics=metrics)
+            # Make sure the model fits without crashing regardless of where we pass the labels
+            history1 = model.fit(
+                prepared_for_class,
+                validation_data=prepared_for_class,
+                steps_per_epoch=1,
+                validation_steps=1,
+                shuffle=False,
+            )
+            val_loss1 = history1.history["val_loss"][0]
+            self.assertTrue(not isnan(val_loss1))
+            accuracy1 = {key: val[0] for key, val in history1.history.items() if key.endswith("accuracy")}
 
-                # We reinitialize the model here even though our learning rate was zero
-                # because BatchNorm updates weights by means other than gradient descent.
-                model.set_weights(model_weights)
+            possible_label_cols = {
+                "labels",
+                "label",
+                "label_ids",
+                "start_positions",
+                "start_position",
+                "end_positions",
+                "end_position",
+                "next_sentence_label",
+            }
+            label_names = possible_label_cols.intersection(set(prepared_for_class))
+            if len(label_names) == 0:
+                # The next tests only make sense for models with separate inputs and labels, and do not make
+                # sense for models that don't clearly distinguish between the two (e.g. CLIP)
+                return
+            labels = {key: val for key, val in prepared_for_class.items() if key in label_names}
+            inputs_minus_labels = {key: val for key, val in prepared_for_class.items() if key not in label_names}
+            self.assertGreater(len(inputs_minus_labels), 0)
 
-                history2 = model.fit(
-                    inputs_minus_labels,
-                    labels,
-                    validation_data=(inputs_minus_labels, labels),
-                    steps_per_epoch=1,
-                    validation_steps=1,
-                    shuffle=False,
-                )
-                val_loss2 = history2.history["val_loss"][0]
-                self.assertTrue(not isnan(val_loss2))
-                accuracy2 = {key: val[0] for key, val in history2.history.items() if key.endswith("accuracy")}
-                self.check_keras_fit_results(val_loss1, val_loss2)
-                self.assertEqual(history1.history.keys(), history2.history.keys())
-                for key in history1.history.keys():
-                    if not key.startswith("val_"):
-                        self.assertTrue("val_" + key in history1.history.keys(), "Outputs differ in train/test step!")
-                if metrics:
-                    self.assertTrue(len(accuracy1) == len(accuracy2) > 0, "Missing metrics!")
+            # We reinitialize the model here even though our learning rate was zero
+            # because BatchNorm updates weights by means other than gradient descent.
+            model.set_weights(model_weights)
 
-                # Make sure fit works with tf.data.Dataset and results are consistent
-                dataset = tf.data.Dataset.from_tensor_slices(prepared_for_class)
-                # Pass in all samples as a batch to match other `fit` calls
-                dataset = dataset.batch(len(dataset))
+            history2 = model.fit(
+                inputs_minus_labels,
+                labels,
+                validation_data=(inputs_minus_labels, labels),
+                steps_per_epoch=1,
+                validation_steps=1,
+                shuffle=False,
+            )
+            val_loss2 = history2.history["val_loss"][0]
+            self.assertTrue(not isnan(val_loss2))
+            accuracy2 = {key: val[0] for key, val in history2.history.items() if key.endswith("accuracy")}
+            self.check_keras_fit_results(val_loss1, val_loss2)
+            self.assertEqual(history1.history.keys(), history2.history.keys())
+            for key in history1.history.keys():
+                if not key.startswith("val_"):
+                    self.assertTrue("val_" + key in history1.history.keys(), "Outputs differ in train/test step!")
+            if metrics:
+                self.assertTrue(len(accuracy1) == len(accuracy2) > 0, "Missing metrics!")
 
-                # Reinitialize to fix batchnorm again
-                model.set_weights(model_weights)
+            # Make sure fit works with tf.data.Dataset and results are consistent
+            dataset = tf.data.Dataset.from_tensor_slices(prepared_for_class)
+            # Pass in all samples as a batch to match other `fit` calls
+            dataset = dataset.batch(len(dataset))
 
-                history3 = model.fit(
-                    dataset,
-                    validation_data=dataset,
-                    steps_per_epoch=1,
-                    validation_steps=1,
-                    shuffle=False,
-                )
-                val_loss3 = history3.history["val_loss"][0]
-                self.assertTrue(not isnan(val_loss3))
-                accuracy3 = {key: val[0] for key, val in history3.history.items() if key.endswith("accuracy")}
-                self.check_keras_fit_results(val_loss1, val_loss3)
-                self.assertEqual(history1.history.keys(), history3.history.keys())
-                if metrics:
-                    self.assertTrue(len(accuracy1) == len(accuracy3) > 0, "Missing metrics!")
+            # Reinitialize to fix batchnorm again
+            model.set_weights(model_weights)
+
+            history3 = model.fit(
+                dataset,
+                validation_data=dataset,
+                steps_per_epoch=1,
+                validation_steps=1,
+                shuffle=False,
+            )
+            val_loss3 = history3.history["val_loss"][0]
+            self.assertTrue(not isnan(val_loss3))
+            accuracy3 = {key: val[0] for key, val in history3.history.items() if key.endswith("accuracy")}
+            self.check_keras_fit_results(val_loss1, val_loss3)
+            self.assertEqual(history1.history.keys(), history3.history.keys())
+            if metrics:
+                self.assertTrue(len(accuracy1) == len(accuracy3) > 0, "Missing metrics!")
 
     def test_int64_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
