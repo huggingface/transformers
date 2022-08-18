@@ -1504,7 +1504,7 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
             epsilon=config.vision_config.layer_norm_eps, name="layernorm"
         )
 
-    def normalize_grid_corner_coordinates(self, feature_map: tf.Tensor):
+    def normalize_grid_corner_coordinates(self, feature_map: Optional[TFModelInputType] = None):
         # Computes normalized xy corner coordinates from feature_map.
         if not len(feature_map.shape) == 4:
             raise ValueError("Expected input shape is [batch_size, num_channels, height, width]")
@@ -1542,8 +1542,8 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
 
     def box_predictor(
         self,
-        image_feats: tf.Tensor,
-        feature_map: tf.Tensor,
+        image_feats: Optional[TFModelInputType] = None,
+        feature_map: Optional[TFModelInputType] = None,
     ) -> tf.Tensor:
         """
         Args:
@@ -1565,9 +1565,9 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
 
     def class_predictor(
         self,
-        image_feats: tf.Tensor,
-        query_embeds: tf.Tensor,
-        query_mask: tf.Tensor,
+        image_feats: Optional[TFModelInputType] = None,
+        query_embeds: Optional[TFModelInputType] = None,
+        query_mask: Optional[TFModelInputType] = None,
     ) -> Tuple[tf.Tensor, tf.Tensor]:
         """
         Args:
@@ -1584,9 +1584,9 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
 
     def image_text_embedder(
         self,
-        input_ids: tf.Tensor,
-        pixel_values: tf.Tensor,
-        attention_mask: tf.Tensor,
+        input_ids: Optional[TFModelInputType] = None,
+        pixel_values: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
     ) -> tf.Tensor:
         # Encode text
@@ -1596,7 +1596,7 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
 
         # Encode image
         image_embeds = self.owlvit.get_image_features(
-            pixel_values, return_projected=False, output_attentions=output_attentions
+            pixel_values=pixel_values, return_projected=False, output_attentions=output_attentions
         )
 
         # Resize class token
@@ -1623,9 +1623,9 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
     @replace_return_docstrings(output_type=TFOwlViTObjectDetectionOutput, config_class=OwlViTConfig)
     def call(
         self,
-        input_ids: tf.Tensor,
-        pixel_values: tf.Tensor,
-        attention_mask: Optional[tf.Tensor] = None,
+        input_ids: Optional[TFModelInputType] = None,
+        pixel_values: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
