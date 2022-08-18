@@ -138,21 +138,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_tf_layoutlmv3 import (
-            TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFLayoutLMv3ForQuestionAnswering,
-            TFLayoutLMv3ForSequenceClassification,
-            TFLayoutLMv3ForTokenClassification,
-            TFLayoutLMv3Model,
-            TFLayoutLMv3PreTrainedModel,
-        )
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
         from .feature_extraction_layoutlmv3 import LayoutLMv3FeatureExtractor
 
 else:
