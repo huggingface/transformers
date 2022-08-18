@@ -240,7 +240,8 @@ class FeaturesManager:
         "data2vec-vision": supported_features_mapping(
             "default",
             "image-classification",
-            "semantic-segmentation",
+            # ONNX doesn't support `adaptive_avg_pool2d` yet
+            # "semantic-segmentation",
             onnx_config_cls="models.data2vec.Data2VecVisionOnnxConfig",
         ),
         "deberta": supported_features_mapping(
