@@ -109,41 +109,42 @@ class JukeboxConfig(PretrainedConfig):
         lyric_enc_m_mlp (`float`, *optional*, defaults to 1.0):
             # again, m_attn and m_mlp, I don't really know how to rename it
         lyric_enc_blocks (`int`, *optional*, defaults to 32):
-
+            
         lyric_enc_init_scale (`list`, *optional*, defaults to [0.1, 0.4, 0.4]):
-
+            
         lyric_enc_loss_fraction (`list`, *optional*, defaults to [0.4, 0.0, 0.0]):
-
+            
         lyric_enc_attn_order (`list`, *optional*, defaults to [2, 0, 0]):
-
+            Which attention pattern to use for the lyric encoder
         lyric_enc_attn_dropout (`float`, *optional*, defaults to 0.0):
-
+            
         lyric_enc_resid_dropout (`float`, *optional*, defaults to 0.0):
-
+            
         lyric_enc_emb_dropout (`float`, *optional*, defaults to 0.0):
-
+            
         lyric_enc_zero_out (`bool`, *optional*, defaults to False):
-
+            
         lyric_enc_res_scale (`bool`, *optional*, defaults to False):
-
+            
         lyric_enc_pos_init (`bool`, *optional*, defaults to False):
-
+            
         lyric_enc_n_vocab (`int`, *optional*, defaults to 79):
-
+            
         prior_init_scale (`list`, *optional*, defaults to [0.2, 1, 1]):
-
+            
         prior_spread (`bool`, *optional*, defaults to False):
-
+            
         prior_zero_out (`bool`, *optional*, defaults to False):
-
+            
         prior_res_scale (`bool`, *optional*, defaults to False):
-
+            
         prior_pos_init (`bool`, *optional*, defaults to False):
-
+            
         prior_n_ctx (`tuple`, *optional*, defaults to (6144, 8192, 8192)):
-
+            Number of context tokens for each prior. The context tokens are the music tokens that are 
+            attended to when generating music tokens. 
         prior_latent_dim (`int`, *optional*, defaults to 2048):
-
+            Dimension of the latent music token space. Default value match the `vqvae_codebook_dimension`. 
         prior_width (`list`, *optional*, defaults to [2048, 1920, 1920]):
 
         prior_depth (`list`, *optional*, defaults to [72, 72, 72]):
@@ -151,13 +152,14 @@ class JukeboxConfig(PretrainedConfig):
         prior_n_heads (`list`, *optional*, defaults to [2, 1, 1]):
 
         prior_attn_order (`list`, *optional*, defaults to [12, 2, 2]):
-
+            Attention patterns to use in each prior. Depending on the value, cross attention, block attention and sparse 
+            attention blocks are stacked. 
         prior_blocks (`int`, *optional*, defaults to 64):
 
         prior_alignment_layer (`list`, *optional*, defaults to [68, None, None]):
-
+            Layer corresponding to the alignemnt between the lyrics and the audio. 
         prior_alignment_head (`list`, *optional*, defaults to [2, None, None]):
-
+            Index of the attention head which takes care of the alignemnt between the lyrics and the audio. 
         prior_m_attn (`float`, *optional*, defaults to 0.25):
 
         prior_attn_dropout (`int`, *optional*, defaults to 0):
@@ -167,15 +169,15 @@ class JukeboxConfig(PretrainedConfig):
         prior_emb_dropout (`int`, *optional*, defaults to 0):
 
         vqvae_levels (`int`, *optional*, defaults to 3):
-
+            Number of hierachical levels that used in the VQVAE. 
         vqvae_downs_t (`tuple`, *optional*, defaults to (3, 2, 2)):
 
         vqvae_strides_t (`tuple`, *optional*, defaults to (2, 2, 2)):
 
         vqvae_emmbedding_width (`int`, *optional*, defaults to 64):
-
+            Dimension of the codebook vectors.
         vqvae_codebook_dimension (`int`, *optional*, defaults to 2048):
-
+            Number of codes to use in each of the VQVAE. 
         vqvae_width (`int`, *optional*, defaults to 32):
 
         vqvae_depth (`int`, *optional*, defaults to 4):
