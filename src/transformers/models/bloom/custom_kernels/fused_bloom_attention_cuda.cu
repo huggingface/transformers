@@ -63,8 +63,10 @@ __global__ void forward_masked_softmax_kernel(
                 thread_max = (thread_max < candidate) ? candidate : thread_max;
             }
         }
-        // TODO @thomasw21 with more memory we can probably compute a much faster `max-reduce` in parallel O(ln(n)) operations in each memory slot
-        gpuAtomicMax(&temp_storage[row_id_mem_offset], thread_max);
+        if (thread_max != -std::numeric_limits<float>::infinity()) {
+            // TODO @thomasw21 with more memory we can probably compute a much faster `max-reduce` in parallel O(ln(n)) operations in each memory slot
+            gpuAtomicMax(&temp_storage[row_id_mem_offset], thread_max);
+        }
     }
 
     __syncthreads();
@@ -81,8 +83,10 @@ __global__ void forward_masked_softmax_kernel(
                 exponential[kv_length_id - kv_length_start] = 0.;
             }
         }
-        // TODO @thomasw21 with more memory we can probably compute a much faster `sum-reduce` in parallel O(ln(n)) operations in each memory slot
-        gpuAtomicAdd(&temp_storage[row_id_mem_offset + 1], thread_add);
+        if (thread_add > 0) {
+            // TODO @thomasw21 with more memory we can probably compute a much faster `sum-reduce` in parallel O(ln(n)) operations in each memory slot
+            gpuAtomicAdd(&temp_storage[row_id_mem_offset + 1], thread_add);
+        }
     }
 
     __syncthreads();

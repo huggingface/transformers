@@ -42,6 +42,7 @@ logger = logging.get_logger(__name__)
 CUSTOM_KERNELS_ENABLED=False
 try:
     from .custom_kernels import fused_bloom_attention_cuda
+    from .custom_kernels import fused_bloom_gelu_cuda
     CUSTOM_KERNELS_ENABLED=True
 except ImportError:
     logger.warning("We're not using custom kernels.")
@@ -187,8 +188,12 @@ def bloom_gelu_back(g: torch.Tensor, x: torch.Tensor) -> torch.Tensor:
 class GeLUFunction(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input: torch.Tensor) -> torch.Tensor:
-        ctx.save_for_backward(input)
-        return bloom_gelu_forward(input)
+        if CUSTOM_KERNELS_ENABLED:
+            fused_bloom_gelu_cuda.foward(input)
+        else:
+            raise ValueError("WTF")
+            ctx.save_for_backward(input)
+            return bloom_gelu_forward(input)
 
     @staticmethod
     def backward(ctx, grad_output: torch.Tensor) -> torch.Tensor:
