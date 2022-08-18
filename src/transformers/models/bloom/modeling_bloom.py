@@ -135,7 +135,7 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int) -> torch.Te
     alibi = slopes[..., None] * arange_tensor
     return alibi
 
-@torch.jit.script
+# @torch.jit.script
 def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: bool) -> torch.Tensor:
     """
     Dropout add function
@@ -154,7 +154,7 @@ def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: 
     out = residual + out
     return out
 
-@torch.jit.script
+# @torch.jit.script
 def bloom_gelu_forward(x: torch.Tensor) -> torch.Tensor:
     """
     Custom bias GELU function. Adapted from Megatron-DeepSpeed code. Here we use a simple implementation (inference) to
@@ -243,7 +243,7 @@ def _split_heads(fused_qkv: torch.Tensor, num_heads: int, head_dim: int) -> Tupl
 
     return query_layer, key_layer, value_layer
 
-@torch.jit.script
+# @torch.jit.script
 def _merge_heads(x: torch.Tensor, num_heads: int, head_dim: int) -> torch.Tensor:
     """
     Merge heads together over the last dimenstion
