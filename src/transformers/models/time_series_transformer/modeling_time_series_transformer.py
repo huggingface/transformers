@@ -1283,7 +1283,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
         elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
-                last_hidden_state=encoder_outputs,
+                last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
@@ -1291,7 +1291,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         dec_input = transformer_inputs[:, self.config.context_length :, ...]
         decoder_outputs = self.decoder(
             inputs_embeds=dec_input,
-            encoder_hidden_states=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs[0],
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1432,7 +1432,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             future_target=None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=False,
+            return_dict=True,
             use_cache=True,
         )
 
