@@ -3,8 +3,8 @@ from copy import deepcopy
 
 import numpy as np
 from datasets import ClassLabel, DatasetDict, load_dataset
-from evaluate import load
 
+from evaluate import load
 from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
@@ -18,9 +18,7 @@ from transformers import (
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--model_ckpt", type=str, default="microsoft/unixcoder-base-nine"
-    )
+    parser.add_argument("--model_ckpt", type=str, default="microsoft/unixcoder-base-nine")
     parser.add_argument("--num_epochs", type=int, default=5)
     parser.add_argument("--batch_size", type=int, default=6)
     parser.add_argument("--gradient_accumulation_steps", type=int, default=1)
@@ -51,9 +49,7 @@ class CustomCallback(TrainerCallback):
     def on_epoch_end(self, args, state, control, **kwargs):
         if control.should_evaluate:
             control_copy = deepcopy(control)
-            self._trainer.evaluate(
-                eval_dataset=self._trainer.train_dataset, metric_key_prefix="train"
-            )
+            self._trainer.evaluate(eval_dataset=self._trainer.train_dataset, metric_key_prefix="train")
             return control_copy
 
 
@@ -75,18 +71,14 @@ def main():
     print("Loading tokenizer and model")
     tokenizer = AutoTokenizer.from_pretrained(args.model_ckpt)
     tokenizer.pad_token = tokenizer.eos_token
-    model = AutoModelForSequenceClassification.from_pretrained(
-        args.model_ckpt, num_labels=7
-    )
+    model = AutoModelForSequenceClassification.from_pretrained(args.model_ckpt, num_labels=7)
     model.config.pad_token_id = model.config.eos_token_id
 
     if args.freeze:
         for param in model.roberta.parameters():
             param.requires_grad = False
 
-    labels = ClassLabel(
-        num_classes=7, names=list(set(train_test_validation["train"]["complexity"]))
-    )
+    labels = ClassLabel(num_classes=7, names=list(set(train_test_validation["train"]["complexity"])))
 
     def tokenize(example):
         inputs = tokenizer(example["src"], truncation=True, max_length=1024)
