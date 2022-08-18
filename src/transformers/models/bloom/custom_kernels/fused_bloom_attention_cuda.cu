@@ -41,13 +41,13 @@ __global__ void forward_masked_softmax_kernel(
     const auto effective_kv_length_id = threadIdx.x % effective_kv_length;
     const auto kv_length_start = effective_kv_length_id * min_kv_length_shard_size_per_thread;
     auto kv_length_end = (effective_kv_length_id + 1) * min_kv_length_shard_size_per_thread;
-    kv_length_end = kv_length_end > kv_length ? kv_length : kv_length_end;
+    kv_length_end = (kv_length_end > kv_length) ? kv_length : kv_length_end;
 
     // TODO @thomasw21 extract batch and q_length ids from row_id;
     const auto batch_id = blockIdx.x * rows_per_block + row_id;
 
     // We need 2 float storage for each row, one for max computation, the other for normalizing exponential
-    __shared__ float temp_storage[2 * num_rows_per_thread];
+    __shared__ float temp_storage[2 * rows_per_block];
     const auto row_id_mem_offset = row_id * 2;
     if (effective_kv_length_id == 0) {
         temp_storage[row_id_mem_offset] = -std::numeric_limits<float>::infinity();
@@ -61,7 +61,7 @@ __global__ void forward_masked_softmax_kernel(
         for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
             if (mask[batch_id][kv_length_id] == 0) {
                 const auto candidate = attention_scores[batch_id][kv_length_id];
-                thread_max = thread_max < candidate ? candidate : thread_max;
+                thread_max = (thread_max < candidate) ? candidate : thread_max;
             }
         }
         // TODO @thomasw21 with more memory we can probably compute a much faster `max-reduce` in parallel O(ln(n)) operations in each memory slot
@@ -71,8 +71,8 @@ __global__ void forward_masked_softmax_kernel(
     __syncthreads();
 
     // Compute exp(elt - max) masked
+    float exponential[kv_length_end - kv_length_start];
     if (batch_id <= batch_size) {
-        float exponential[kv_length_end - kv_length_start];
         float thread_add = 0;
         for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
             if (mask[batch_id][kv_length_id] == 0) {
@@ -195,7 +195,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
 
             // 192 * 2 ** 10
             const auto MAX_L1_MEMORY = 196608;
-            const auto MAX_SMs = 108;
+            // const auto MAX_SMs = 108;
             TORCH_CHECK(batch_size_times_num_heads * q_length <= MAX_L1_MEMORY, "Shared memory exceeds 192KB limitation.");
             // TORCH_CHECK(gridDim.x * gridDim.y * gridDim.z <= MAX_SMs, "A100s only have 108 SMs. Raising as require blocks is bigger.");
             TORCH_CHECK(blockDim.x * blockDim.y * blockDim.z <= MAX_THREADS_PER_SM, "A100s only have 2048 threads per block. Raising as require requested threads is higher.");
