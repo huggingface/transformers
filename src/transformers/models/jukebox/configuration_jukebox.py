@@ -79,7 +79,6 @@ class JukeboxConfig(PretrainedConfig):
         nb_relevant_lyric_tokens=[384, 0, 0],
         min_duration=17.84,
         max_duration=600.0,
-        fp16_params=True,
         max_nb_genres=5,
         init_std=0.2,
         hop_fraction=[0.125, 0.5, 0.5],
@@ -92,23 +91,23 @@ class JukeboxConfig(PretrainedConfig):
         cond_m_conv=1,
         cond_downs_t=(3, 2, 2),
         cond_strides_t=(2, 2, 2),
-        prime_spread=None,
-        prime_width=[128, 128, 128],
-        prime_depth=[18, 3, 3],
-        prime_heads=4,
-        prime_m_attn=0.25,
-        prime_m_mlp=1.0,
-        prime_blocks=32,
-        prime_init_scale=[0.1, 0.4, 0.4],
-        prime_loss_fraction=[0.4, 0.0, 0.0],
-        prime_attn_order=[2, 0, 0],
-        prime_attn_dropout=0.0,
-        prime_resid_dropout=0.0,
-        prime_emb_dropout=0.0,
-        prime_zero_out=False,
-        prime_res_scale=False,
-        prime_pos_init=False,
-        prime_n_vocab=79,
+        lyric_enc_spread=None,
+        lyric_enc_width=[128, 128, 128],
+        lyric_enc_depth=[18, 3, 3],
+        lyric_enc_heads=4,
+        lyric_enc_m_attn=0.25,
+        lyric_enc_m_mlp=1.0,
+        lyric_enc_blocks=32,
+        lyric_enc_init_scale=[0.1, 0.4, 0.4],
+        lyric_enc_loss_fraction=[0.4, 0.0, 0.0],
+        lyric_enc_attn_order=[2, 0, 0],
+        lyric_enc_attn_dropout=0.0,
+        lyric_enc_resid_dropout=0.0,
+        lyric_enc_emb_dropout=0.0,
+        lyric_enc_zero_out=False,
+        lyric_enc_res_scale=False,
+        lyric_enc_pos_init=False,
+        lyric_enc_n_vocab=79,
         prior_init_scale=[0.2, 1, 1],
         prior_spread=None,
         prior_zero_out=False,
@@ -146,7 +145,6 @@ class JukeboxConfig(PretrainedConfig):
         **kwargs,
     ):
 
-        self.fp16_params = fp16_params
         self.init_std = init_std
         self.copy_input = copy_input
         self.nb_priors = nb_priors
@@ -198,23 +196,23 @@ class JukeboxConfig(PretrainedConfig):
         self.lyric_conditioning = lyric_conditioning
         self.nb_relevant_lyric_tokens = nb_relevant_lyric_tokens
 
-        self.prime_attn_dropout = prime_attn_dropout
-        self.prime_attn_order = prime_attn_order
-        self.prime_blocks = prime_blocks
-        self.prime_depth = prime_depth
-        self.prime_emb_dropout = prime_emb_dropout
-        self.prime_heads = prime_heads
-        self.prime_init_scale = prime_init_scale
-        self.prime_loss_fraction = prime_loss_fraction
-        self.prime_m_attn = prime_m_attn
-        self.prime_m_mlp = prime_m_mlp
-        self.prime_pos_init = prime_pos_init
-        self.prime_resid_dropout = prime_resid_dropout
-        self.prime_res_scale = prime_res_scale
-        self.prime_spread = prime_spread
-        self.prime_width = prime_width
-        self.prime_zero_out = prime_zero_out
-        self.prime_n_vocab = prime_n_vocab
+        self.lyric_enc_attn_dropout = lyric_enc_attn_dropout
+        self.lyric_enc_attn_order = lyric_enc_attn_order
+        self.lyric_enc_blocks = lyric_enc_blocks
+        self.lyric_enc_depth = lyric_enc_depth
+        self.lyric_enc_emb_dropout = lyric_enc_emb_dropout
+        self.lyric_enc_heads = lyric_enc_heads
+        self.lyric_enc_init_scale = lyric_enc_init_scale
+        self.lyric_enc_loss_fraction = lyric_enc_loss_fraction
+        self.lyric_enc_m_attn = lyric_enc_m_attn
+        self.lyric_enc_m_mlp = lyric_enc_m_mlp
+        self.lyric_enc_pos_init = lyric_enc_pos_init
+        self.lyric_enc_resid_dropout = lyric_enc_resid_dropout
+        self.lyric_enc_res_scale = lyric_enc_res_scale
+        self.lyric_enc_spread = lyric_enc_spread
+        self.lyric_enc_width = lyric_enc_width
+        self.lyric_enc_zero_out = lyric_enc_zero_out
+        self.lyric_enc_n_vocab = lyric_enc_n_vocab
 
         # VQVAE parameters (all used)
         self.vqvae_levels = vqvae_levels
