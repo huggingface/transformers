@@ -516,7 +516,12 @@ def main():
 
         inputs, targets = [], []
         for i in range(len(examples[text_column])):
-            if examples[text_column][i] is not None and examples[summary_column][i] is not None:
+            if examples[text_column][i]:
+                if not examples[summary_column][i]:
+                    logger.warning(
+                        f"Found an empty reference summary at index {i}. This will be included in the preprocessed"
+                        " dataset."
+                    )
                 inputs.append(examples[text_column][i])
                 targets.append(examples[summary_column][i])
 
