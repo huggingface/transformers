@@ -91,7 +91,7 @@ class JukeboxConfig(PretrainedConfig):
             Since the top level prior doeas not have a conditionner, the default value is to None
             and should not be modified. 
         cond_m_conv (`int`, *optional*, defaults to 1):
-            # TODO no idea what that really corresponds to? 
+            Conditionner multiplier (the input states are mulitplied by that parameter for each convolution. 
         cond_downs_t (`tuple`, *optional*, defaults to (3, 2, 2)):
             Downsampling ... # TODO 
         cond_strides_t (`tuple`, *optional*, defaults to (2, 2, 2)):

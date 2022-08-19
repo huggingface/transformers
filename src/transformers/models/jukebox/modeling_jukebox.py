@@ -1673,7 +1673,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         else:
             return tokens
 
-    def split_chunks(length, chunk_size):
+    def split_chunks(self,length, chunk_size):
         n_passes = (length + chunk_size - 1) // chunk_size
         chunk_sizes = [*[chunk_size] * (n_passes - 1), (length - 1) % chunk_size + 1]
         return chunk_sizes
@@ -2738,7 +2738,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         config.vqvae_music_tokens_shapes = self.vqvae.music_tokens_shapes
         self.priors = nn.ModuleList([JukeboxPrior(config, level=i) for i in range(config.nb_priors)])
 
-    def split_batch(obj, n_samples, split_size):
+    def split_batch(self, obj, n_samples, split_size):
         n_passes = (n_samples + split_size - 1) // split_size
         if isinstance(obj, torch.Tensor):
             return torch.split(obj, split_size, dim=0)
