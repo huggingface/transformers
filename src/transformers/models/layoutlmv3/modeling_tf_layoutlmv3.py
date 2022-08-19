@@ -719,12 +719,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         visual_bbox_y = tf.tile(visual_bbox_y, [1, height])  # (height + 1, height)
 
         visual_bbox = tf.stack(
-            [
-                visual_bbox_x[:, :-1],
-                visual_bbox_y[:-1],
-                visual_bbox_x[:, 1:],
-                visual_bbox_y[1:],
-            ],
+            [visual_bbox_x[:, :-1], visual_bbox_y[:-1], visual_bbox_x[:, 1:], visual_bbox_y[1:]],
             axis=-1,
         )
         visual_bbox = tf.reshape(visual_bbox, [-1, 4])
