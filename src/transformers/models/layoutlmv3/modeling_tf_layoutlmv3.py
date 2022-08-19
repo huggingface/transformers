@@ -1477,7 +1477,7 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
         ```python
         >>> from transformers import AutoProcessor, TFAutoModelForQuestionAnswering
         >>> from datasets import load_dataset
-        >>> import torch
+        >>> import tensorflow as tf
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = TFAutoModelForQuestionAnswering.from_pretrained("microsoft/layoutlmv3-base")
