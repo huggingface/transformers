@@ -30,7 +30,7 @@ from torch import nn
 from torch.fx import Graph, GraphModule, Proxy, Tracer
 from torch.fx.proxy import ParameterProxy
 
-from .. import PretrainedConfig, PreTrainedModel, logging
+from .. import PretrainedConfig, PreTrainedModel, logging, BloomForCausalLM
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -51,7 +51,6 @@ from ..models.auto.modeling_auto import (
 )
 from ..utils import ENV_VARS_TRUE_VALUES, TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
 from ..utils.versions import importlib_metadata
-
 
 logger = logging.get_logger(__name__)
 _IS_IN_DEBUG_MODE = os.environ.get("FX_DEBUG_MODE", "").upper() in ENV_VARS_TRUE_VALUES
@@ -566,6 +565,11 @@ class HFProxy(Proxy):
             return self._metadata
         return super().__bool__()
 
+    def __iter__(self):
+        if hasattr(self, "_metadata") and self._metadata is not None:
+            return self._metadata.__iter__()
+        return super().__iter__()
+
     def __getattr__(self, k):
         if k == "_metadata":
             return self.__getattribute__(k)
@@ -783,6 +787,17 @@ class HFTracer(Tracer):
             inputs_dict[input_name] = torch.zeros(batch_size, seq_length, dtype=torch.float, device=device)
         elif "mask" in input_name or "ids" in input_name:
             inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
+        elif "past_key_values" == input_name:
+            batch_size, _ = shape
+            # Generating big sequence length for audio inputs.
+            past_seq_length = _generate_random_int()
+            if isinstance(model, BloomForCausalLM):
+                head_dim = model.config.hidden_size // model.config.n_head
+                past_key = torch.zeros(batch_size * model.config.n_head, head_dim, past_seq_length, dtype=torch.float, device=device)
+                past_value = torch.zeros(batch_size * model.config.n_head, past_seq_length, head_dim, dtype=torch.float, device=device)
+            else:
+                raise NotImplementedError(f"Unsupported input_name for creating dummy input for {model.__class__.__name__}: {input_name}")
+            inputs_dict[input_name] = [(past_key, past_value) for _ in range(model.config.n_layer)]
         else:
             shape_with_hidden_size = shape + [model.config.hidden_size]
             inputs_dict[input_name] = torch.zeros(shape_with_hidden_size, dtype=torch.float, device=device)
