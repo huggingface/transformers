@@ -525,26 +525,26 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
         if self.has_relative_attention_bias:
             self.rel_pos_bins = config.rel_pos_bins
             self.max_rel_pos = config.max_rel_pos
-            self.rel_pos_bias = tf.keras.layers.Embedding(
-                self.rel_pos_bins,
-                config.num_attention_heads,
-                embeddings_initializer=get_initializer(config.initializer_range),
+            self.rel_pos_bias = tf.keras.layers.Dense(
+                units=config.num_attention_heads,
+                kernel_initializer=get_initializer(config.initializer_range),
+                use_bias=False,
                 name="rel_pos_bias",
             )
 
         if self.has_spatial_attention_bias:
             self.max_rel_2d_pos = config.max_rel_2d_pos
             self.rel_2d_pos_bins = config.rel_2d_pos_bins
-            self.rel_pos_x_bias = tf.keras.layers.Embedding(
-                self.rel_2d_pos_bins,
-                config.num_attention_heads,
-                embeddings_initializer=get_initializer(config.initializer_range),
+            self.rel_pos_x_bias = tf.keras.layers.Dense(
+                units=config.num_attention_heads,
+                kernel_initializer=get_initializer(config.initializer_range),
+                use_bias=False,
                 name="rel_pos_x_bias",
             )
-            self.rel_pos_y_bias = tf.keras.layers.Embedding(
-                self.rel_2d_pos_bins,
-                config.num_attention_heads,
-                embeddings_initializer=get_initializer(config.initializer_range),
+            self.rel_pos_y_bias = tf.keras.layers.Dense(
+                units=config.num_attention_heads,
+                kernel_initializer=get_initializer(config.initializer_range),
+                use_bias=False,
                 name="rel_pos_y_bias",
             )
 
@@ -578,18 +578,19 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
 
     def _cal_pos_emb(
         self,
-        embedding_layer: tf.keras.layers.Embedding,
+        dense_layer: tf.keras.layers.Dense,
         position_ids: tf.Tensor,
         num_buckets: int,
         max_distance: int,
     ):
         rel_pos_matrix = self.relative_position_matrix(position_ids)
         rel_pos = self.relative_position_bucket(rel_pos_matrix, num_buckets, max_distance)
-        rel_pos = embedding_layer(rel_pos)
+        rel_pos_one_hot = tf.one_hot(rel_pos, depth=num_buckets, dtype=self.compute_dtype)
+        embedding = dense_layer(rel_pos_one_hot)
         # batch_size, seq_length, seq_length, num_heads --> batch_size, num_heads, seq_length, seq_length
-        rel_pos = tf.transpose(rel_pos, [0, 3, 1, 2])
-        rel_pos = tf.cast(rel_pos, dtype=self.compute_dtype)
-        return rel_pos
+        embedding = tf.transpose(embedding, [0, 3, 1, 2])
+        embedding = tf.cast(embedding, dtype=self.compute_dtype)
+        return embedding
 
     def _cal_1d_pos_emb(self, position_ids: tf.Tensor):
         return self._cal_pos_emb(self.rel_pos_bias, position_ids, self.rel_pos_bins, self.max_rel_pos)
