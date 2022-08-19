@@ -58,6 +58,8 @@ TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all LayoutLMv3 models at https://huggingface.co/models?filter=layoutlmv3
 ]
 
+LARGE_NEGATIVE = -1e8
+
 
 class TFLayoutLMv3PatchEmbeddings(tf.keras.layers.Layer):
     """LayoutLMv3 image (patch) embeddings."""
@@ -776,7 +778,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         # Since we are adding it to the raw scores before the softmax, this is
         # effectively the same as removing these entirely.
         extended_attention_mask = tf.cast(extended_attention_mask, self.compute_dtype)
-        extended_attention_mask = (1.0 - extended_attention_mask) * tf.experimental.numpy.finfo(self.compute_dtype).min
+        extended_attention_mask = (1.0 - extended_attention_mask) * LARGE_NEGATIVE
 
         return extended_attention_mask
 
