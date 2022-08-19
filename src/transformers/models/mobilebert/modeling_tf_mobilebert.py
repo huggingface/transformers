@@ -87,6 +87,35 @@ TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all MobileBERT models at https://huggingface.co/models?filter=mobilebert
 ]
 
+# Copied from transformers.models.bert.tf_modeling_bert.TFBertPreTrainingLoss
+class TFMobileBertPreTrainingLoss:
+    """
+    Loss function suitable for BERT-like pretraining, that is, the task of pretraining a language model by combining
+    NSP + MLM. .. note:: Any label of -100 will be ignored (along with the corresponding logits) in the loss
+    computation.
+    """
+
+    def hf_compute_loss(self, labels: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
+        loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
+        )
+
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_lm_losses = loss_fn(y_true=tf.nn.relu(labels["labels"]), y_pred=logits[0])
+        # make sure only labels that are not equal to -100
+        # are taken into account for the loss computation
+        lm_loss_mask = tf.cast(labels["labels"] != -100, dtype=unmasked_lm_losses.dtype)
+        masked_lm_losses = unmasked_lm_losses * lm_loss_mask
+        reduced_masked_lm_loss = tf.reduce_sum(masked_lm_losses) / tf.reduce_sum(lm_loss_mask)
+
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_ns_loss = loss_fn(y_true=tf.nn.relu(labels["next_sentence_label"]), y_pred=logits[1])
+        ns_loss_mask = tf.cast(labels["next_sentence_label"] != -100, dtype=unmasked_ns_loss.dtype)
+        masked_ns_loss = unmasked_ns_loss * ns_loss_mask
+
+        reduced_masked_ns_loss = tf.reduce_sum(masked_ns_loss) / tf.reduce_sum(ns_loss_mask)
+
+        return tf.reshape(reduced_masked_lm_loss + reduced_masked_ns_loss, (1,))
 
 class TFMobileBertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -981,7 +1010,7 @@ class TFMobileBertModel(TFMobileBertPreTrainedModel):
     """,
     MOBILEBERT_START_DOCSTRING,
 )
-class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
+class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel, TFMobileBertPreTrainingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.mobilebert = TFMobileBertMainLayer(config, name="mobilebert")
@@ -1043,10 +1072,17 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel):
         prediction_scores = self.predictions(sequence_output)
         seq_relationship_score = self.seq_relationship(pooled_output)
 
+        if labels is not None and next_sentence_label is not None:
+            d_labels = {"labels": labels}
+            d_labels["next_sentence_label"] = next_sentence_label
+            total_loss = self.hf_compute_loss(labels=d_labels, logits=(prediction_scores, seq_relationship_score))
+
         if not return_dict:
-            return (prediction_scores, seq_relationship_score) + outputs[2:]
+            output = (prediction_scores, seq_relationship_score) + outputs[2:]
+            return ((total_loss,) + output) if total_loss is not None else output
 
         return TFMobileBertForPreTrainingOutput(
+            loss=total_loss,
             prediction_logits=prediction_scores,
             seq_relationship_logits=seq_relationship_score,
             hidden_states=outputs.hidden_states,
