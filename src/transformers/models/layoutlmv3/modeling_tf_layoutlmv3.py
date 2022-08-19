@@ -16,7 +16,7 @@
 
 import collections
 import math
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import tensorflow as tf
 
@@ -66,7 +66,7 @@ def get_int_dtype(
     bbox: Optional[tf.Tensor],
     attention_mask: Optional[tf.Tensor],
     token_type_ids: Optional[tf.Tensor],
-):
+) -> tf.DType:
     if input_ids is not None:
         return input_ids.dtype
     elif bbox is not None:
@@ -103,7 +103,7 @@ class TFLayoutLMv3PatchEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.num_patches = (config.input_size**2) // (patch_sizes[0] * patch_sizes[1])
 
-    def call(self, pixel_values):
+    def call(self, pixel_values) -> tf.Tensor:
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
         pixel_values = tf.transpose(pixel_values, perm=[0, 2, 3, 1])
@@ -167,7 +167,7 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
         )
         self.max_2d_positions = config.max_2d_position_embeddings
 
-    def calculate_spatial_position_embeddings(self, bbox):
+    def calculate_spatial_position_embeddings(self, bbox: tf.Tensor) -> tf.Tensor:
         try:
             left_position_ids = bbox[:, :, 0]
             upper_position_ids = bbox[:, :, 1]
@@ -208,7 +208,7 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
         )
         return spatial_position_embeddings
 
-    def create_position_ids_from_inputs_embeds(self, inputs_embds):
+    def create_position_ids_from_inputs_embeds(self, inputs_embds: tf.Tensor) -> tf.Tensor:
         """
         We are provided embeddings directly. We cannot infer which are padded, so just generate sequential position
         ids.
@@ -223,7 +223,7 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
         position_ids = tf.tile(position_ids, (batch_size, 1))
         return position_ids
 
-    def create_position_ids_from_input_ids(self, input_ids):
+    def create_position_ids_from_input_ids(self, input_ids: tf.Tensor) -> tf.Tensor:
         """
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_token_index + 1.
         """
@@ -232,7 +232,7 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
         position_ids = position_ids + self.padding_token_index
         return position_ids
 
-    def create_position_ids(self, input_ids, inputs_embeds):
+    def create_position_ids(self, input_ids: tf.Tensor, inputs_embeds: tf.Tensor) -> tf.Tensor:
         if input_ids is None:
             return self.create_position_ids_from_inputs_embeds(inputs_embeds)
         else:
@@ -240,13 +240,13 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
 
     def call(
         self,
-        input_ids=None,
-        bbox=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
+        input_ids: Optional[tf.Tensor] = None,
+        bbox: tf.Tensor = None,
+        token_type_ids: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
         training: bool = False,
-    ):
+    ) -> tf.Tensor:
         if position_ids is None:
             position_ids = self.create_position_ids(input_ids, inputs_embeds)
 
@@ -345,7 +345,7 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
         rel_pos: Optional[tf.Tensor] = None,
         rel_2d_pos: Optional[tf.Tensor] = None,
         training: bool = False,
-    ):
+    ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
         query_layer = self.transpose_for_scores(self.query(hidden_states))
@@ -424,7 +424,7 @@ class TFLayoutLMv3Attention(tf.keras.layers.Layer):
         rel_pos: Optional[tf.Tensor] = None,
         rel_2d_pos: Optional[tf.Tensor] = None,
         training: bool = False,
-    ):
+    ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
         self_outputs = self.self_attention(
             hidden_states,
             attention_mask,
@@ -495,7 +495,7 @@ class TFLayoutLMv3Layer(tf.keras.layers.Layer):
         rel_pos: Optional[tf.Tensor] = None,
         rel_2d_pos: Optional[tf.Tensor] = None,
         training: bool = False,
-    ):
+    ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
         self_attention_outputs = self.attention(
             hidden_states,
             attention_mask,
@@ -623,7 +623,12 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
         return_dict: bool = True,
         position_ids: Optional[tf.Tensor] = None,
         training: bool = False,
-    ):
+    ) -> Union[
+        TFBaseModelOutput,
+        Tuple[tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+    ]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -753,7 +758,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         visual_bbox = tf.cast(visual_bbox, dtype=dtype)
         return visual_bbox
 
-    def embed_image(self, pixel_values: tf.Tensor):
+    def embed_image(self, pixel_values: tf.Tensor) -> tf.Tensor:
         embeddings = self.patch_embed(pixel_values)
 
         # add [CLS] token
@@ -768,7 +773,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         embeddings = self.norm(embeddings)
         return embeddings
 
-    def get_extended_attention_mask(self, attention_mask: tf.Tensor):
+    def get_extended_attention_mask(self, attention_mask: tf.Tensor) -> tf.Tensor:
         # Adapted from transformers.modelling_utils.ModuleUtilsMixin.get_extended_attention_mask
 
         n_dims = len(attention_mask.shape)
@@ -795,7 +800,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
 
         return extended_attention_mask
 
-    def get_head_mask(self, head_mask: Optional[tf.Tensor]):
+    def get_head_mask(self, head_mask: Optional[tf.Tensor]) -> Union[tf.Tensor, List[Optional[tf.Tensor]]]:
         if head_mask is None:
             return [None] * self.config.num_hidden_layers
 
@@ -835,7 +840,12 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ):
+    ) -> Union[
+        TFBaseModelOutput,
+        Tuple[tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+    ]:
         # This method can be called with a variety of modalities:
         # 1. text + layout
         # 2. text + layout + image
@@ -955,12 +965,12 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
 
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
-        
+
         return TFBaseModelOutput(
             last_hidden_state=sequence_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-        )            
+        )
 
 
 class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
@@ -1119,7 +1129,12 @@ class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ):
+    ) -> Union[
+        TFBaseModelOutput,
+        Tuple[tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+    ]:
         r"""
         Returns:
 
@@ -1200,7 +1215,7 @@ class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
             name="out_proj",
         )
 
-    def call(self, inputs: tf.Tensor, training: bool = False):
+    def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
         outputs = self.dropout(inputs, training=training)
         outputs = self.dense(outputs)
         outputs = self.dropout(outputs, training=training)
@@ -1241,7 +1256,13 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
         bbox: Optional[tf.Tensor] = None,
         pixel_values: Optional[tf.Tensor] = None,
         training: Optional[bool] = False,
-    ):
+    ) -> Union[
+        TFSequenceClassifierOutput,
+        Tuple[tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor],
+    ]:
         """
         Returns:
 
@@ -1353,7 +1374,13 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
         return_dict: Optional[bool] = None,
         pixel_values: Optional[tf.Tensor] = None,
         training: Optional[bool] = False,
-    ):
+    ) -> Union[
+        TFTokenClassifierOutput,
+        Tuple[tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor],
+    ]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -1467,7 +1494,13 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
         pixel_values: Optional[tf.Tensor] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ):
+    ) -> Union[
+        TFQuestionAnsweringModelOutput,
+        Tuple[tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+        Tuple[tf.Tensor, tf.Tensor, tf.Tensor, tf.Tensor],
+    ]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
