@@ -87,6 +87,7 @@ TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all MobileBERT models at https://huggingface.co/models?filter=mobilebert
 ]
 
+
 class TFMobileBertPreTrainingLoss:
     """
     Loss function suitable for BERT-like pretraining, that is, the task of pretraining a language model by combining
