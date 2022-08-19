@@ -249,7 +249,9 @@ class BloomAttention(nn.Module):
             query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim]
             value: [batch_size, seq_length, num_heads, head_dim]
         """
-        batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
+        batch_size = fused_qkv.size(0)
+        seq_length = fused_qkv.size(1)
+        three_times_hidden_size = fused_qkv.size(2)
         fused_qkv = fused_qkv.view(batch_size, seq_length, -1, 3, self.head_dim)
         return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
 
@@ -265,7 +267,7 @@ class BloomAttention(nn.Module):
         """
         # What we want to achieve is:
         # batch_size * num_heads, seq_length, head_dim -> batch_size, seq_length, num_heads * head_dim
-        batch_size_and_num_heads, seq_length, _ = x.shape
+        seq_length = x.size(1)
 
         # First view to decompose the batch size
         # batch_size * num_heads, seq_length, head_dim -> batch_size, num_heads, seq_length, head_dim
@@ -293,7 +295,8 @@ class BloomAttention(nn.Module):
         # 3 x [batch_size, seq_length, num_heads, head_dim]
         (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
 
-        batch_size, q_length, _, _ = query_layer.shape
+        batch_size = query_layer.size(0)
+        q_length = query_layer.size(1)
 
         query_layer = query_layer.transpose(1, 2).reshape(-1, q_length, self.head_dim)
         key_layer = key_layer.permute(0, 2, 3, 1).reshape(-1, self.head_dim, q_length)
@@ -306,7 +309,7 @@ class BloomAttention(nn.Module):
             key_layer = torch.cat((past_key, key_layer), dim=2)
             value_layer = torch.cat((past_value, value_layer), dim=1)
 
-        _, _, kv_length = key_layer.shape
+        kv_length = key_layer.size(2)
 
         if use_cache is True:
             present = (key_layer, value_layer)
@@ -326,11 +329,12 @@ class BloomAttention(nn.Module):
         attention_scores = matmul_result.view(batch_size, -1, q_length, kv_length)
 
         # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype - [batch_size, num_heads, q_length, kv_length]
-        input_dtype = attention_scores.dtype
+        # input_dtype = attention_scores.dtype
+        input_dtype = self.query_key_value.weight.dtype
         # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
         if input_dtype == torch.float16:
             attention_scores = attention_scores.to(torch.float)
-        attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min)
+        attn_weights = torch.masked_fill(attention_scores, attention_mask, -3e34) # torch.finfo(attention_scores.dtype).min
         attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
         # attention_probs = attention_probs * ~attention_mask # Prevent values to be too huge
 

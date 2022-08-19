@@ -541,6 +541,8 @@ class HFProxy(Proxy):
 
     @property
     def shape(self):
+        if hasattr(self, "_metadata") and self._metadata is not None:
+            return self._metadata.shape
         return self.tracer.create_proxy("call_method", "size", (self,), {})
 
     @property
