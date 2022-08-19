@@ -25,6 +25,7 @@ import sys
 import tempfile
 import unittest
 import unittest.mock as mock
+import warnings
 from collections import OrderedDict
 from itertools import takewhile
 from pathlib import Path
@@ -1838,19 +1839,35 @@ class TokenizerTesterMixin:
         if not self.test_rust_tokenizer:
             return
 
-        tokenizer = self.get_rust_tokenizer()
         sequence = "This is a text"
-        # check correct behaviour if no pad_token_id exists and add it eventually
-        self._check_no_pad_token_padding(tokenizer, sequence)
 
-        encoding = tokenizer(sequence)
-        with self.assertLogs("transformers", level="WARNING") as cm:
-            tokenizer.pad(encoding, return_attention_mask=True, return_tensors="pt")
-            self.assertIn(
-                "Please note that with a fast tokenizer a fast tokenizer, using the `__call__` method is faster than"
-                " using the `pad` method to get a padded encoding.",
-                cm.output[0],
-            )
+        tokenizer_fast = self.get_rust_tokenizer()
+        # check correct behaviour if no pad_token_id exists and add it eventually
+        self._check_no_pad_token_padding(tokenizer_fast, sequence)
+
+        encoding_fast = tokenizer_fast(sequence)
+
+        with warnings.catch_warnings(record=True) as w:
+            tokenizer_fast.pad(encoding_fast)
+        self.assertEqual(len(w), 1)
+        self.assertIn(
+            "Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to"
+            " encode the text followed by a call to the `pad` method to get a padded encoding.",
+            str(w[0].message),
+        )
+
+        if not self.test_slow_tokenizer:
+            return
+
+        tokenizer_slow = self.get_tokenizer()
+        # check correct behaviour if no pad_token_id exists and add it eventually
+        self._check_no_pad_token_padding(tokenizer_slow, sequence)
+
+        encoding_slow = tokenizer_slow(sequence)
+
+        with warnings.catch_warnings(record=True) as w:
+            tokenizer_slow.pad(encoding_slow)
+        self.assertEqual(len(w), 0)
 
     def test_separate_tokenizers(self):
         # This tests that tokenizers don't impact others. Unfortunately the case where it fails is when

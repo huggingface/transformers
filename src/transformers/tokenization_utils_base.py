@@ -2821,8 +2821,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         Padding side (left/right) padding token ids are defined at the tokenizer level (with `self.padding_side`,
         `self.pad_token_id` and `self.pad_token_type_id`).
 
-        Please note that with a fast tokenizer a fast tokenizer, using the `__call__` method is faster than using the
-        `pad` method to get a padded encoding.
+        Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to encode the
+        text followed by a call to the `pad` method to get a padded encoding.
 
         <Tip>
 
@@ -2873,10 +2873,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 Whether or not to print more information and warnings.
         """
         if self.__class__.__name__.endswith("Fast"):
-            logger.warning(
-                f"You're using a {self.__class__.__name__} tokenizer. Please note that with a fast tokenizer a fast"
-                " tokenizer, using the `__call__` method is faster than using the `pad` method to get a padded"
-                " encoding."
+            warnings.warn(
+                f"You're using a {self.__class__.__name__} tokenizer. Please note that with a fast tokenizer, using"
+                " the `__call__` method is faster than using a method to encode the text followed by a call to the"
+                " `pad` method to get a padded encoding."
             )
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
