@@ -1076,6 +1076,7 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel, TFMobileBertPreTra
         prediction_scores = self.predictions(sequence_output)
         seq_relationship_score = self.seq_relationship(pooled_output)
 
+        total_loss = None
         if labels is not None and next_sentence_label is not None:
             d_labels = {"labels": labels}
             d_labels["next_sentence_label"] = next_sentence_label
