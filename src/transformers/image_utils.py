@@ -131,7 +131,7 @@ class ImageFeatureExtractionMixin:
 
         return image.convert("RGB")
 
-    def rescale(self, image: np.ndarray, scale: Union[float, int]) -> np.ndarray:
+    def rescale_image(self, image: np.ndarray, scale: Union[float, int]) -> np.ndarray:
         """
         Rescale a numpy image by scale amount
         """
@@ -163,7 +163,7 @@ class ImageFeatureExtractionMixin:
         rescale = isinstance(image.flat[0], np.integer) if rescale is None else rescale
 
         if rescale:
-            image = self.rescale(image.astype(np.float32), 1 / 255.0)
+            image = self.rescale_image(image.astype(np.float32), 1 / 255.0)
 
         if channel_first and image.ndim == 3:
             image = image.transpose(2, 0, 1)
@@ -214,9 +214,9 @@ class ImageFeatureExtractionMixin:
         # type it may need rescaling.
         elif rescale:
             if isinstance(image, np.ndarray):
-                image = self.rescale(image.astype(np.float32), 1 / 255.0)
+                image = self.rescale_image(image.astype(np.float32), 1 / 255.0)
             elif is_torch_tensor(image):
-                image = self.rescale(image.float(), 1 / 255.0)
+                image = self.rescale_image(image.float(), 1 / 255.0)
 
         if isinstance(image, np.ndarray):
             if not isinstance(mean, np.ndarray):
@@ -392,3 +392,25 @@ class ImageFeatureExtractionMixin:
             image = self.to_numpy_array(image)
 
         return image[::-1, :, :]
+
+    def rotate(self, image, angle, resample=PIL.Image.NEAREST, expand=0, center=None, translate=None, fillcolor=None):
+        """
+        Returns a rotated copy of `image`. This method returns a copy of `image`, rotated the given number of degrees
+        counter clockwise around its centre.
+
+        Args:
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
+                The image to rotate. If `np.ndarray` or `torch.Tensor`, will be converted to `PIL.Image.Image` before
+                rotating.
+
+        Returns:
+            image: A rotated `PIL.Image.Image`.
+        """
+        self._ensure_format_supported(image)
+
+        if not isinstance(image, PIL.Image.Image):
+            image = self.to_pil_image(image)
+
+        return image.rotate(
+            angle, resample=resample, expand=expand, center=center, translate=translate, fillcolor=fillcolor
+        )

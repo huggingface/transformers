@@ -418,7 +418,6 @@ class TFGenerationMixin:
         post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, `(batch_size, sequence_length,
             feature_dim)` or `(batch_size, num_channels, height, width)`, *optional*):
                 The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
@@ -1336,7 +1335,6 @@ class TFGenerationMixin:
         post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
-
             input_ids (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
                 The sequence used as a prompt for the generation. If `None` the method initializes it with
                 `bos_token_id` and a batch size of 1.
@@ -2070,7 +2068,6 @@ class TFGenerationMixin:
         Generates sequences for models with a language modeling head using greedy decoding.
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             logits_processor (`TFLogitsProcessorList`, *optional*):
@@ -2323,7 +2320,6 @@ class TFGenerationMixin:
         Generates sequences for models with a language modeling head using multinomial sampling.
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             logits_processor (`TFLogitsProcessorList`, *optional*):
@@ -2600,7 +2596,6 @@ class TFGenerationMixin:
         Generates sequences for models with a language modeling head using beam search with multinomial sampling.
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             max_length (`int`, *optional*, defaults to 20):

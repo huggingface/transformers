@@ -17,8 +17,8 @@
 import unittest
 
 import numpy as np
-from parameterized import parameterized
 
+from parameterized import parameterized
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -202,16 +202,18 @@ class VideoMAEFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.T
             ),
         )
 
-    @parameterized.expand([
-        ("do_resize_True_do_center_crop_True_do_normalize_True", True, True, True),
-        ("do_resize_True_do_center_crop_True_do_normalize_False", True, True, False),
-        ("do_resize_True_do_center_crop_False_do_normalize_True", True, False, True),
-        ("do_resize_True_do_center_crop_False_do_normalize_False", True, False, False),
-        ("do_resize_False_do_center_crop_True_do_normalize_True", False, True, True),
-        ("do_resize_False_do_center_crop_True_do_normalize_False", False, True, False),
-        ("do_resize_False_do_center_crop_False_do_normalize_True", False, False, True),
-        ("do_resize_False_do_center_crop_False_do_normalize_False", False, False, False)
-    ])
+    @parameterized.expand(
+        [
+            ("do_resize_True_do_center_crop_True_do_normalize_True", True, True, True),
+            ("do_resize_True_do_center_crop_True_do_normalize_False", True, True, False),
+            ("do_resize_True_do_center_crop_False_do_normalize_True", True, False, True),
+            ("do_resize_True_do_center_crop_False_do_normalize_False", True, False, False),
+            ("do_resize_False_do_center_crop_True_do_normalize_True", False, True, True),
+            ("do_resize_False_do_center_crop_True_do_normalize_False", False, True, False),
+            ("do_resize_False_do_center_crop_False_do_normalize_True", False, False, True),
+            ("do_resize_False_do_center_crop_False_do_normalize_False", False, False, False),
+        ]
+    )
     def test_call_flags(self, _, do_resize, do_center_crop, do_normalize):
         # Initialize feature_extractor
         feature_extractor = self.feature_extraction_class(**self.feat_extract_dict)
@@ -221,7 +223,7 @@ class VideoMAEFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.T
         # create random PIL images
         video_inputs = prepare_video_inputs(self.feature_extract_tester, equal_resolution=False)
 
-        pixel_values = feature_extractor(video_inputs, return_tensors=None)['pixel_values']
+        pixel_values = feature_extractor(video_inputs, return_tensors=None)["pixel_values"]
         self.assertEqual(len(pixel_values), self.feature_extract_tester.batch_size)
 
         num_channels = self.feature_extract_tester.num_channels

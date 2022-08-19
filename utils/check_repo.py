@@ -206,6 +206,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("data2vec-text", "data2vec"),
         ("data2vec-audio", "data2vec"),
         ("data2vec-vision", "data2vec"),
+        ("donut-swin", "donut"),
     ]
 )
 
@@ -614,7 +615,6 @@ UNDOCUMENTED_OBJECTS = [
     "absl",  # External module
     "add_end_docstrings",  # Internal, should never have been in the main init.
     "add_start_docstrings",  # Internal, should never have been in the main init.
-    "cached_path",  # Internal used for downloading models.
     "convert_tf_weight_name_to_pt_weight_name",  # Internal used to convert model weights
     "logger",  # Internal logger
     "logging",  # External module

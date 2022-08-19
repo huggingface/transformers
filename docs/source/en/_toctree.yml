@@ -427,6 +427,8 @@
         title: CLIP
       - local: model_doc/data2vec
         title: Data2Vec
+      - local: model_doc/donut
+        title: Donut
       - local: model_doc/flava
         title: FLAVA
       - local: model_doc/groupvit

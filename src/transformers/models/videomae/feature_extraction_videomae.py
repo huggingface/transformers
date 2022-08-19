@@ -165,10 +165,17 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
 
         # if do_normalize=False, the casting to a numpy array won't happen, so we need to do it here
         make_channel_first = True if isinstance(videos[0][0], Image.Image) else videos[0][0].shape[-1] in (1, 3)
-        videos = [self.to_numpy_array_video(video, rescale=False, channel_first=make_channel_first) for video in videos]
+        videos = [
+            self.to_numpy_array_video(video, rescale=False, channel_first=make_channel_first) for video in videos
+        ]
 
         if self.do_normalize:
-            videos = [self.normalize_video(video, mean=self.image_mean, std=self.image_std, rescale=True, channel_first=False) for video in videos]
+            videos = [
+                self.normalize_video(
+                    video, mean=self.image_mean, std=self.image_std, rescale=True, channel_first=False
+                )
+                for video in videos
+            ]
 
         # return as BatchFeature
         data = {"pixel_values": videos}
