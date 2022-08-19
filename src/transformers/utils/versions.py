@@ -42,9 +42,9 @@ ops = {
 
 def _compare_versions(op, got_ver, want_ver, requirement, pkg, hint):
     if got_ver is None:
-        raise ValueError("got_ver is None")
+        raise ValueError(f"got_ver is None when checking {requirement} for {pkg}")
     if want_ver is None:
-        raise ValueError("want_ver is None")
+        raise ValueError(f"want_ver is None when checking {requirement} for {pkg}")
     if not ops[op](version.parse(got_ver), version.parse(want_ver)):
         raise ImportError(
             f"{requirement} is required for a normal functioning of this module, but found {pkg}=={got_ver}.{hint}"
