@@ -542,7 +542,7 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
         max_exact_buckets = num_buckets // 2
         is_small = buckets < max_exact_buckets
 
-        # the ofther half of the buckets are for logarithmically bigger bins in positions up to max_distance
+        # the other half of the buckets are for logarithmically bigger bins in positions up to max_distance
         buckets_log_ratio = tf.math.log(tf.cast(buckets, tf.float32) / max_exact_buckets)
         distance_log_ratio = math.log(max_distance / max_exact_buckets)
         buckets_big_offset = (
@@ -1488,7 +1488,7 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
         ```python
         >>> from transformers import AutoProcessor, TFAutoModelForQuestionAnswering
         >>> from datasets import load_dataset
-        >>> import torch
+        >>> import tensorflow as tf
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = TFAutoModelForQuestionAnswering.from_pretrained("microsoft/layoutlmv3-base")
@@ -1501,8 +1501,8 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
         >>> boxes = example["bboxes"]
 
         >>> encoding = processor(image, question, words, boxes=boxes, return_tensors="tf")
-        >>> start_positions = torch.tensor([1])
-        >>> end_positions = torch.tensor([3])
+        >>> start_positions = tf.convert_to_tensor([1])
+        >>> end_positions = tf.convert_to_tensor([3])
 
         >>> outputs = model(**encoding, start_positions=start_positions, end_positions=end_positions)
         >>> loss = outputs.loss
