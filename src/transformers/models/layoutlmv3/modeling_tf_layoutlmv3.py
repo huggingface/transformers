@@ -154,7 +154,7 @@ class TFLayoutLMv3TextEmbeddings(tf.keras.layers.Layer):
             right_position_ids = bbox[:, :, 2]
             lower_position_ids = bbox[:, :, 3]
         except IndexError as exception:
-            raise IndexError("Bounding box is not of shape (B, N, 4).") from exception
+            raise IndexError("Bounding box is not of shape (batch_size, seq_length, 4).") from exception
 
         try:
             left_position_embeddings = self.x_position_embeddings(left_position_ids)
@@ -295,13 +295,13 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
     def transpose_for_scores(self, x: tf.Tensor):
         shape = tf.shape(x)
         new_shape = (
-            shape[0],  # B
-            shape[1],  # N
+            shape[0],  # batch_size
+            shape[1],  # seq_length
             self.num_attention_heads,
             self.attention_head_size,
         )
         x = tf.reshape(x, new_shape)
-        return tf.transpose(x, perm=[0, 2, 1, 3])  # B, H, N, D
+        return tf.transpose(x, perm=[0, 2, 1, 3])  # batch_size, num_heads, seq_length, attention_head_size
 
     def cogview_attention(self, attention_scores: tf.Tensor, alpha: Union[float, int] = 32):
         """
@@ -332,7 +332,9 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
         normalised_query_layer = query_layer / self.attention_score_normaliser
-        transposed_key_layer = tf.transpose(key_layer, perm=[0, 1, 3, 2])  # B, H, D, N
+        transposed_key_layer = tf.transpose(
+            key_layer, perm=[0, 1, 3, 2]
+        )  # batch_size, num_heads, attention_head_size, seq_length
         attention_scores = tf.matmul(normalised_query_layer, transposed_key_layer)
 
         if self.has_relative_attention_bias and self.has_spatial_attention_bias:
@@ -355,9 +357,13 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
             attention_probs = attention_probs * head_mask
 
         context_layer = tf.matmul(attention_probs, value_layer)
-        context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])  # B, N, H, D
+        context_layer = tf.transpose(
+            context_layer, perm=[0, 2, 1, 3]
+        )  # batch_size, seq_length, num_heads, attention_head_size
         shape = tf.shape(context_layer)
-        context_layer = tf.reshape(context_layer, (shape[0], shape[1], self.all_head_size))  # B, N, H * D
+        context_layer = tf.reshape(
+            context_layer, (shape[0], shape[1], self.all_head_size)
+        )  # batch_size, seq_length, num_heads * attention_head_size
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -560,7 +566,8 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
         rel_pos_matrix = self.relative_position_matrix(position_ids)
         rel_pos = self.relative_position_bucket(rel_pos_matrix, num_buckets, max_distance)
         rel_pos = embedding_layer(rel_pos)
-        rel_pos = tf.transpose(rel_pos, [0, 3, 1, 2])  # B, N, N, H --> B, H, N, N
+        # batch_size, seq_length, seq_length, num_heads --> batch_size, num_heads, seq_length, seq_length
+        rel_pos = tf.transpose(rel_pos, [0, 3, 1, 2])
         rel_pos = tf.cast(rel_pos, dtype=self.compute_dtype)
         return rel_pos
 
@@ -780,16 +787,18 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
             n_dims = tf.rank(head_mask)
             if n_dims == 1:
                 # Gets a tensor with masks for each head (H).
-                head_mask = tf.expand_dims(head_mask, axis=0)  # 1, H
-                head_mask = tf.expand_dims(head_mask, axis=0)  # 1, 1, H
-                head_mask = tf.expand_dims(head_mask, axis=-1)  # 1, 1, H, 1
-                head_mask = tf.expand_dims(head_mask, axis=-1)  # 1, 1, H, 1, 1
-                head_mask = tf.tile(head_mask, [self.config.num_hidden_layers, 1, 1, 1, 1])  # L, 1, H, 1, 1
+                head_mask = tf.expand_dims(head_mask, axis=0)  # 1, num_heads
+                head_mask = tf.expand_dims(head_mask, axis=0)  # 1, 1, num_heads
+                head_mask = tf.expand_dims(head_mask, axis=-1)  # 1, 1, num_heads, 1
+                head_mask = tf.expand_dims(head_mask, axis=-1)  # 1, 1, num_heads, 1, 1
+                head_mask = tf.tile(
+                    head_mask, [self.config.num_hidden_layers, 1, 1, 1, 1]
+                )  # seq_length, 1, num_heads, 1, 1
             elif n_dims == 2:
                 # Gets a tensor with masks for each layer (L) and head (H).
-                head_mask = tf.expand_dims(head_mask, axis=1)  # L, 1, H
-                head_mask = tf.expand_dims(head_mask, axis=-1)  # L, 1, H, 1
-                head_mask = tf.expand_dims(head_mask, axis=-1)  # L, 1, H, 1, 1
+                head_mask = tf.expand_dims(head_mask, axis=1)  # seq_length, 1, num_heads
+                head_mask = tf.expand_dims(head_mask, axis=-1)  # seq_length, 1, num_heads, 1
+                head_mask = tf.expand_dims(head_mask, axis=-1)  # seq_length, 1, num_heads, 1, 1
             elif n_dims != 5:
                 raise ValueError(f"Wrong shape for head_mask (shape {head_mask.shape}).")
             assert tf.rank(head_mask) == 5, f"Got head_mask rank of {tf.rank(head_mask)}, but require 5."
@@ -929,7 +938,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
+        # attention_probs has shape batch_size x num_heads x seq_length x seq_length
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask)
