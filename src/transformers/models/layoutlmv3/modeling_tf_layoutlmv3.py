@@ -1262,7 +1262,7 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
         >>> boxes = example["bboxes"]
 
         >>> encoding = processor(image, words, boxes=boxes, return_tensors="tf")
-        >>> sequence_label = torch.tensor([1])
+        >>> sequence_label = tf.convert_to_tensor([1])
 
         >>> outputs = model(**encoding, labels=sequence_label)
         >>> loss = outputs.loss
