@@ -45,6 +45,11 @@ RUN python3 -m pip install -U "itsdangerous<2.1.0"
 
 RUN python3 -m pip install --no-cache-dir git+https://github.com/huggingface/accelerate@main#egg=accelerate
 
+# Add bitsandbytes for mixed int8 testing
+RUN python3 -m pip install -i https://test.pypi.org/simple/ bitsandbytes==0.31.5
+
+RUN python3 -m pip install --no-cache-dir decord
+
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop

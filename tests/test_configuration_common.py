@@ -246,7 +246,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         config.push_to_hub("test-config", use_auth_token=self._token)
 
         new_config = BertConfig.from_pretrained(f"{USER}/test-config")
-        for k, v in config.__dict__.items():
+        for k, v in config.to_dict().items():
             if k != "transformers_version":
                 self.assertEqual(v, getattr(new_config, k))
 
@@ -258,7 +258,7 @@ class ConfigPushToHubTester(unittest.TestCase):
             config.save_pretrained(tmp_dir, repo_id="test-config", push_to_hub=True, use_auth_token=self._token)
 
         new_config = BertConfig.from_pretrained(f"{USER}/test-config")
-        for k, v in config.__dict__.items():
+        for k, v in config.to_dict().items():
             if k != "transformers_version":
                 self.assertEqual(v, getattr(new_config, k))
 
@@ -269,7 +269,7 @@ class ConfigPushToHubTester(unittest.TestCase):
         config.push_to_hub("valid_org/test-config-org", use_auth_token=self._token)
 
         new_config = BertConfig.from_pretrained("valid_org/test-config-org")
-        for k, v in config.__dict__.items():
+        for k, v in config.to_dict().items():
             if k != "transformers_version":
                 self.assertEqual(v, getattr(new_config, k))
 
@@ -283,7 +283,7 @@ class ConfigPushToHubTester(unittest.TestCase):
             )
 
         new_config = BertConfig.from_pretrained("valid_org/test-config-org")
-        for k, v in config.__dict__.items():
+        for k, v in config.to_dict().items():
             if k != "transformers_version":
                 self.assertEqual(v, getattr(new_config, k))
 
@@ -323,7 +323,9 @@ class ConfigTestUtils(unittest.TestCase):
         base_config = PretrainedConfig()
         missing_keys = [key for key in base_config.__dict__ if key not in config_common_kwargs]
         # If this part of the test fails, you have arguments to addin config_common_kwargs above.
-        self.assertListEqual(missing_keys, ["is_encoder_decoder", "_name_or_path", "transformers_version"])
+        self.assertListEqual(
+            missing_keys, ["is_encoder_decoder", "_name_or_path", "_commit_hash", "transformers_version"]
+        )
         keys_with_defaults = [key for key, value in config_common_kwargs.items() if value == getattr(base_config, key)]
         if len(keys_with_defaults) > 0:
             raise ValueError(
@@ -345,14 +347,14 @@ class ConfigTestUtils(unittest.TestCase):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
         response_mock.status_code = 500
-        response_mock.headers = []
+        response_mock.headers = {}
         response_mock.raise_for_status.side_effect = HTTPError
 
         # Download this model to make sure it's in the cache.
         _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
+        with mock.patch("requests.request", return_value=response_mock) as mock_head:
             _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()

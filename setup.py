@@ -116,7 +116,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.1.0,<1.0",
+    "huggingface-hub>=0.8.1,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -144,7 +144,6 @@ _deps = [
     "ray[tune]",
     "regex!=2019.12.17",
     "requests",
-    "resampy<0.3.1",
     "rjieba",
     "rouge-score",
     "sacrebleu>=1.4.12,<2.0.0",
@@ -162,7 +161,7 @@ _deps = [
     "timeout-decorator",
     "timm",
     "tokenizers>=0.11.1,!=0.11.3,<0.13",
-    "torch>=1.0,<1.12",
+    "torch>=1.0,!=0.12.0",
     "torchaudio",
     "pyctcdecode>=0.3.0",
     "tqdm>=4.27",
@@ -270,7 +269,7 @@ extras["sigopt"] = deps_list("sigopt")
 extras["integrations"] = extras["optuna"] + extras["ray"] + extras["sigopt"]
 
 extras["serving"] = deps_list("pydantic", "uvicorn", "fastapi", "starlette")
-extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer", "resampy")  # resampy can be removed once unpinned.
+extras["audio"] = deps_list("librosa", "pyctcdecode", "phonemizer")
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
@@ -412,7 +411,6 @@ setup(
     url="https://github.com/huggingface/transformers",
     package_dir={"": "src"},
     packages=find_packages("src"),
-    package_data={"transformers": ["py.typed"]},
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},

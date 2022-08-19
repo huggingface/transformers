@@ -187,19 +187,19 @@ jobs:
         working-directory: /transformers
         run: |
           pip install -r examples/pytorch/_tests_requirements.txt
-          python3 -m pytest -v --make-reports=examples_gpu examples/pytorch
+          python3 -m pytest -v --make-reports=single-gpu_examples_gpu examples/pytorch
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/examples_gpu/failures_short.txt
+        run: cat /transformers/reports/single-gpu_examples_gpu/failures_short.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
         uses: actions/upload-artifact@v2
         with:
-          name: run_examples_gpu
-          path: /transformers/reports/examples_gpu
+          name: single-gpu_run_examples_gpu
+          path: /transformers/reports/single-gpu_examples_gpu
 
   run_pipelines_torch_gpu:
     name: PyTorch pipelines

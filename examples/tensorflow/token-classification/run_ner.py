@@ -18,14 +18,14 @@ Fine-tuning a 🤗 Transformers model on token classification tasks (NER, POS, C
 without using a Trainer.
 """
 
+import json
 import logging
+import os
 import random
 from dataclasses import dataclass, field
-from functools import partial
 from typing import Optional
 
 import datasets
-import numpy as np
 import tensorflow as tf
 from datasets import ClassLabel, load_dataset
 
@@ -33,10 +33,11 @@ import evaluate
 import transformers
 from transformers import (
     CONFIG_MAPPING,
-    MODEL_MAPPING,
     AutoConfig,
     AutoTokenizer,
+    DataCollatorForTokenClassification,
     HfArgumentParser,
+    PushToHubCallback,
     TFAutoModelForTokenClassification,
     TFTrainingArguments,
     create_optimizer,
@@ -48,11 +49,7 @@ from transformers.utils.versions import require_version
 
 logger = logging.getLogger(__name__)
 logger.addHandler(logging.StreamHandler())
-require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
-
-# You should update this to your particular problem to have better documentation of `model_type`
-MODEL_CONFIG_CLASSES = list(MODEL_MAPPING.keys())
-MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
+require_version("datasets>=1.8.0", "To fix: pip install -r examples/tensorflow/token-classification/requirements.txt")
 
 
 # region Command-line arguments
@@ -83,7 +80,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -190,61 +187,6 @@ class DataTrainingArguments:
                 extension = self.validation_file.split(".")[-1]
                 assert extension in ["csv", "json"], "`validation_file` should be a csv or a json file."
         self.task_name = self.task_name.lower()
-
-
-# endregion
-
-
-# region Data generator
-def sample_generator(dataset, tokenizer, shuffle, pad_to_multiple_of=None):
-    # Trim off the last partial batch if present
-    if shuffle:
-        sample_ordering = np.random.permutation(len(dataset))
-    else:
-        sample_ordering = np.arange(len(dataset))
-    for sample_idx in sample_ordering:
-        example = dataset[int(sample_idx)]
-        # Handle dicts with proper padding and conversion to tensor.
-        example = tokenizer.pad(example, return_tensors="np", pad_to_multiple_of=pad_to_multiple_of)
-        if tokenizer.pad_token_id is not None:
-            example["labels"][example["attention_mask"] == 0] = -100
-        example = {key: tf.convert_to_tensor(arr) for key, arr in example.items()}
-
-        yield example, example["labels"]  # TF needs some kind of labels, even if we don't use them
-    return
-
-
-# endregion
-
-
-# region Helper functions
-def dataset_to_tf(dataset, tokenizer, total_batch_size, num_epochs, shuffle):
-    train_generator = partial(sample_generator, dataset, tokenizer, shuffle=shuffle)
-    train_signature = {
-        feature: tf.TensorSpec(shape=(None,), dtype=tf.int64)
-        for feature in dataset.features
-        if feature != "special_tokens_mask"
-    }
-    # This may need to be changed depending on your particular model or tokenizer!
-    padding_values = {key: tf.convert_to_tensor(0, dtype=tf.int64) for key in dataset.features}
-    padding_values["labels"] = tf.convert_to_tensor(-100, dtype=tf.int64)
-    if tokenizer.pad_token_id is not None:
-        padding_values["input_ids"] = tf.convert_to_tensor(tokenizer.pad_token_id, dtype=tf.int64)
-    train_signature["labels"] = train_signature["input_ids"]
-    train_signature = (train_signature, train_signature["labels"])
-    options = tf.data.Options()
-    options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
-    tf_dataset = (
-        tf.data.Dataset.from_generator(train_generator, output_signature=train_signature)
-        .with_options(options)
-        .padded_batch(
-            batch_size=total_batch_size,
-            drop_remainder=True,
-            padding_values=(padding_values, np.array(0, dtype=np.int64)),
-        )
-        .repeat(int(num_epochs))
-    )
-    return tf_dataset
 
 
 # endregion
@@ -419,6 +361,14 @@ def main():
     train_dataset = processed_raw_datasets["train"]
     eval_dataset = processed_raw_datasets["validation"]
 
+    if data_args.max_train_samples is not None:
+        max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+        train_dataset = train_dataset.select(range(max_train_samples))
+
+    if data_args.max_eval_samples is not None:
+        max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+        eval_dataset = eval_dataset.select(range(max_eval_samples))
+
     # Log a few random samples from the training set:
     for index in random.sample(range(len(train_dataset)), 3):
         logger.info(f"Sample {index} of the training set: {train_dataset[index]}.")
@@ -439,43 +389,62 @@ def main():
         # endregion
 
         # region Create TF datasets
+
+        # We need the DataCollatorForTokenClassification here, as we need to correctly pad labels as
+        # well as inputs.
+        collate_fn = DataCollatorForTokenClassification(tokenizer=tokenizer, return_tensors="tf")
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
-        train_batches_per_epoch = len(train_dataset) // total_train_batch_size
-        tf_train_dataset = dataset_to_tf(
+
+        dataset_options = tf.data.Options()
+        dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+
+        # model.prepare_tf_dataset() wraps a Hugging Face dataset in a tf.data.Dataset which is ready to use in
+        # training. This is the recommended way to use a Hugging Face dataset when training with Keras. You can also
+        # use the lower-level dataset.to_tf_dataset() method, but you will have to specify things like column names
+        # yourself if you use this method, whereas they are automatically inferred from the model input names when
+        # using model.prepare_tf_dataset()
+        # For more info see the docs:
+        # https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.TFPreTrainedModel.prepare_tf_dataset
+        # https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.to_tf_dataset
+
+        tf_train_dataset = model.prepare_tf_dataset(
             train_dataset,
-            tokenizer,
-            total_batch_size=total_train_batch_size,
-            num_epochs=training_args.num_train_epochs,
+            collate_fn=collate_fn,
+            batch_size=total_train_batch_size,
             shuffle=True,
-        )
+        ).with_options(dataset_options)
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
-        eval_batches_per_epoch = len(eval_dataset) // total_eval_batch_size
-        tf_eval_dataset = dataset_to_tf(
+        tf_eval_dataset = model.prepare_tf_dataset(
             eval_dataset,
-            tokenizer,
-            total_batch_size=total_eval_batch_size,
-            num_epochs=training_args.num_train_epochs,
+            collate_fn=collate_fn,
+            batch_size=total_eval_batch_size,
             shuffle=False,
-        )
+        ).with_options(dataset_options)
 
         # endregion
 
         # region Optimizer, loss and compilation
+        num_train_steps = int(len(tf_train_dataset) * training_args.num_train_epochs)
+        if training_args.warmup_steps > 0:
+            num_warmup_steps = training_args.warmup_steps
+        elif training_args.warmup_ratio > 0:
+            num_warmup_steps = int(num_train_steps * training_args.warmup_ratio)
+        else:
+            num_warmup_steps = 0
+
         optimizer, lr_schedule = create_optimizer(
             init_lr=training_args.learning_rate,
-            num_train_steps=int(training_args.num_train_epochs * train_batches_per_epoch),
-            num_warmup_steps=training_args.warmup_steps,
+            num_train_steps=num_train_steps,
+            num_warmup_steps=num_warmup_steps,
             adam_beta1=training_args.adam_beta1,
             adam_beta2=training_args.adam_beta2,
             adam_epsilon=training_args.adam_epsilon,
             weight_decay_rate=training_args.weight_decay,
+            adam_global_clipnorm=training_args.max_grad_norm,
         )
 
-        def dummy_loss(y_true, y_pred):
-            return tf.reduce_mean(y_pred)
-
-        model.compile(loss={"loss": dummy_loss}, optimizer=optimizer)
+        model.compile(optimizer=optimizer, jit_compile=training_args.xla)
         # endregion
 
         # Metrics
@@ -517,6 +486,39 @@ def main():
 
         # endregion
 
+        # region Preparing push_to_hub and model card
+        push_to_hub_model_id = training_args.push_to_hub_model_id
+        model_name = model_args.model_name_or_path.split("/")[-1]
+        if not push_to_hub_model_id:
+            if data_args.dataset_name is not None:
+                push_to_hub_model_id = f"{model_name}-finetuned-{data_args.dataset_name}"
+            else:
+                push_to_hub_model_id = f"{model_name}-finetuned-token-classification"
+
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "token-classification"}
+        if data_args.dataset_name is not None:
+            model_card_kwargs["dataset_tags"] = data_args.dataset_name
+            if data_args.dataset_config_name is not None:
+                model_card_kwargs["dataset_args"] = data_args.dataset_config_name
+                model_card_kwargs["dataset"] = f"{data_args.dataset_name} {data_args.dataset_config_name}"
+            else:
+                model_card_kwargs["dataset"] = data_args.dataset_name
+
+        if training_args.push_to_hub:
+            callbacks = [
+                PushToHubCallback(
+                    output_dir=training_args.output_dir,
+                    model_id=push_to_hub_model_id,
+                    organization=training_args.push_to_hub_organization,
+                    token=training_args.push_to_hub_token,
+                    tokenizer=tokenizer,
+                    **model_card_kwargs,
+                )
+            ]
+        else:
+            callbacks = []
+        # endregion
+
         # region Training
         logger.info("***** Running training *****")
         logger.info(f"  Num examples = {len(train_dataset)}")
@@ -524,23 +526,43 @@ def main():
         logger.info(f"  Instantaneous batch size per device = {training_args.per_device_train_batch_size}")
         logger.info(f"  Total train batch size = {total_train_batch_size}")
         # Only show the progress bar once on each machine.
+
         model.fit(
             tf_train_dataset,
             validation_data=tf_eval_dataset,
             epochs=int(training_args.num_train_epochs),
-            steps_per_epoch=train_batches_per_epoch,
-            validation_steps=eval_batches_per_epoch,
+            callbacks=callbacks,
         )
         # endregion
 
         # region Predictions
-        # For predictions, we preload the entire validation set - note that if you have a really giant validation
-        # set, you might need to change this!
-        eval_inputs = {key: tf.ragged.constant(eval_dataset[key]).to_tensor() for key in eval_dataset.features}
-        predictions = model.predict(eval_inputs, batch_size=training_args.per_device_eval_batch_size)["logits"]
-        predictions = tf.math.argmax(predictions, axis=-1)
-        labels = np.array(eval_inputs["labels"])
-        labels[np.array(eval_inputs["attention_mask"]) == 0] = -100
+        # If you have variable batch sizes (i.e. not using pad_to_max_length), then
+        # this bit might fail on TF < 2.8 because TF can't concatenate outputs of varying seq
+        # length from predict().
+
+        try:
+            predictions = model.predict(tf_eval_dataset, batch_size=training_args.per_device_eval_batch_size)["logits"]
+        except tf.python.framework.errors_impl.InvalidArgumentError:
+            raise ValueError(
+                "Concatenating predictions failed! If your version of TensorFlow is 2.8.0 or older "
+                "then you will need to use --pad_to_max_length to generate predictions, as older "
+                "versions of TensorFlow cannot concatenate variable-length predictions as RaggedTensor."
+            )
+        if isinstance(predictions, tf.RaggedTensor):
+            predictions = predictions.to_tensor(default_value=-100)
+        predictions = tf.math.argmax(predictions, axis=-1).numpy()
+        if "label" in eval_dataset:
+            labels = eval_dataset.with_format("tf")["label"]
+        else:
+            labels = eval_dataset.with_format("tf")["labels"]
+        if isinstance(labels, tf.RaggedTensor):
+            labels = labels.to_tensor(default_value=-100)
+        labels = labels.numpy()
+        attention_mask = eval_dataset.with_format("tf")["attention_mask"]
+        if isinstance(attention_mask, tf.RaggedTensor):
+            attention_mask = attention_mask.to_tensor(default_value=-100)
+        attention_mask = attention_mask.numpy()
+        labels[attention_mask == 0] = -100
         preds, refs = get_labels(predictions, labels)
         metric.add_batch(
             predictions=preds,
@@ -550,12 +572,15 @@ def main():
         logger.info("Evaluation metrics:")
         for key, val in eval_metric.items():
             logger.info(f"{key}: {val:.4f}")
+
+        if training_args.output_dir is not None:
+            output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+            with open(output_eval_file, "w") as writer:
+                writer.write(json.dumps(eval_metric))
         # endregion
 
-    # We don't do predictions in the strategy scope because there are some issues in there right now.
-    # They'll get fixed eventually, promise!
-
-    if training_args.output_dir is not None:
+    if training_args.output_dir is not None and not training_args.push_to_hub:
+        # If we're not pushing to hub, at least save a local copy when we're done
         model.save_pretrained(training_args.output_dir)
 
 
