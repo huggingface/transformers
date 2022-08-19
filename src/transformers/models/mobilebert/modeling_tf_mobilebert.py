@@ -87,7 +87,6 @@ TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all MobileBERT models at https://huggingface.co/models?filter=mobilebert
 ]
 
-# Copied from transformers.models.bert.tf_modeling_bert.TFBertPreTrainingLoss
 class TFMobileBertPreTrainingLoss:
     """
     Loss function suitable for BERT-like pretraining, that is, the task of pretraining a language model by combining
@@ -95,6 +94,7 @@ class TFMobileBertPreTrainingLoss:
     computation.
     """
 
+    # Copied from transformers.models.bert.tf_modeling_bert.TFBertPreTrainingLoss.hf_compute_loss
     def hf_compute_loss(self, labels: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
@@ -116,6 +116,7 @@ class TFMobileBertPreTrainingLoss:
         reduced_masked_ns_loss = tf.reduce_sum(masked_ns_loss) / tf.reduce_sum(ns_loss_mask)
 
         return tf.reshape(reduced_masked_lm_loss + reduced_masked_ns_loss, (1,))
+
 
 class TFMobileBertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
