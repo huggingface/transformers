@@ -95,7 +95,7 @@ class TFMobileBertPreTrainingLoss:
     computation.
     """
 
-    # Copied from transformers.models.bert.tf_modeling_bert.TFBertPreTrainingLoss.hf_compute_loss
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertPreTrainingLoss.hf_compute_loss
     def hf_compute_loss(self, labels: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
