@@ -1250,7 +1250,7 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
         ```python
         >>> from transformers import AutoProcessor, TFAutoModelForSequenceClassification
         >>> from datasets import load_dataset
-        >>> import torch
+        >>> import tensorflow as tf
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/layoutlmv3-base", apply_ocr=False)
         >>> model = TFAutoModelForSequenceClassification.from_pretrained("microsoft/layoutlmv3-base")
