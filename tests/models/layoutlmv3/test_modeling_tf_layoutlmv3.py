@@ -15,6 +15,7 @@
 """ Testing suite for the TensorFlow LayoutLMv3 model. """
 
 import copy
+import inspect
 import unittest
 
 import numpy as np
@@ -312,15 +313,72 @@ class TFLayoutLMv3ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(
-        reason="""
-    We disable this test from TFModelTesterMixin because it assumes
-    that the model only accepts input_ids or pixel_values, but not both.
-    That assumption sometimes causes the test to break, although the model works fine.
-    """
-    )
     def test_loss_computation(self):
-        pass
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            if getattr(model, "hf_compute_loss", None):
+                # The number of elements in the loss should be the same as the number of elements in the label
+                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                added_label = prepared_for_class[
+                    sorted(list(prepared_for_class.keys() - inputs_dict.keys()), reverse=True)[0]
+                ]
+                expected_loss_size = added_label.shape.as_list()[:1]
+
+                # Test that model correctly compute the loss with kwargs
+                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                input_ids = prepared_for_class.pop("input_ids")
+
+                loss = model(input_ids, **prepared_for_class)[0]
+                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
+
+                # Test that model correctly compute the loss when we mask some positions
+                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                input_ids = prepared_for_class.pop("input_ids")
+                if "labels" in prepared_for_class:
+                    labels = prepared_for_class["labels"].numpy()
+                    if len(labels.shape) > 1 and labels.shape[1] != 1:
+                        labels[0] = -100
+                        prepared_for_class["labels"] = tf.convert_to_tensor(labels)
+                        loss = model(input_ids, **prepared_for_class)[0]
+                        self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
+                        self.assertTrue(not np.any(np.isnan(loss.numpy())))
+
+                # Test that model correctly compute the loss with a dict
+                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                loss = model(prepared_for_class)[0]
+                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
+
+                # Test that model correctly compute the loss with a tuple
+                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+
+                # Get keys that were added with the _prepare_for_class function
+                label_keys = prepared_for_class.keys() - inputs_dict.keys()
+                signature = inspect.signature(model.call).parameters
+                signature_names = list(signature.keys())
+
+                # Create a dictionary holding the location of the tensors in the tuple
+                tuple_index_mapping = {0: "input_ids"}
+                for label_key in label_keys:
+                    label_key_index = signature_names.index(label_key)
+                    tuple_index_mapping[label_key_index] = label_key
+                sorted_tuple_index_mapping = sorted(tuple_index_mapping.items())
+                # Initialize a list with their default values, update the values and convert to a tuple
+                list_input = []
+
+                for name in signature_names:
+                    if name != "kwargs":
+                        list_input.append(signature[name].default)
+
+                for index, value in sorted_tuple_index_mapping:
+                    list_input[index] = prepared_for_class[value]
+
+                tuple_input = tuple(list_input)
+
+                # Send to model
+                loss = model(tuple_input[:-1])[0]
+
+                self.assertTrue(loss.shape.as_list() == expected_loss_size or loss.shape.as_list() == [1])
 
     def test_model(self):
         (
