@@ -307,7 +307,7 @@ def is_main_process(local_rank):
     Whether or not the current process is the local process, based on `xm.get_ordinal()` (for TPUs) first, then on
     `local_rank`.
     """
-    if is_torch_tpu_available():
+    if is_torch_tpu_available(check_device=True):
         import torch_xla.core.xla_model as xm
 
         return xm.get_ordinal() == 0
@@ -318,7 +318,7 @@ def total_processes_number(local_rank):
     """
     Return the number of processes launched in parallel. Works with `torch.distributed` and TPUs.
     """
-    if is_torch_tpu_available():
+    if is_torch_tpu_available(check_device=True):
         import torch_xla.core.xla_model as xm
 
         return xm.xrt_world_size()
@@ -337,7 +337,6 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     should be run immediately after the operation to be measured has completed.
 
     Args:
-
     - split: name to prefix metric (like train, eval, test...)
     - start_time: operation start time
     - num_samples: number of samples processed
@@ -653,6 +652,7 @@ def find_executable_batch_size(
 class FSDPOption(ExplicitEnum):
     FULL_SHARD = "full_shard"
     SHARD_GRAD_OP = "shard_grad_op"
+    NO_SHARD = "no_shard"
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
 

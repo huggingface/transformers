@@ -45,7 +45,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 1088, 7, 7]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/regnet-y-040"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/regnet-y-040",
@@ -93,9 +93,15 @@ class RegNetEmbeddings(nn.Module):
         self.embedder = RegNetConvLayer(
             config.num_channels, config.embedding_size, kernel_size=3, stride=2, activation=config.hidden_act
         )
+        self.num_channels = config.num_channels
 
-    def forward(self, hidden_state):
-        hidden_state = self.embedder(hidden_state)
+    def forward(self, pixel_values):
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        hidden_state = self.embedder(pixel_values)
         return hidden_state
 
 

@@ -21,7 +21,7 @@ import numpy as np
 
 from tests.test_modeling_common import floats_tensor
 from transformers import DetrConfig, MaskFormerConfig, SwinConfig, is_torch_available, is_vision_available
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -212,6 +212,13 @@ class MaskFormerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
+    @require_torch_multi_gpu
+    @unittest.skip(
+        reason="MaskFormer has some layers using `add_module` which doesn't work well with `nn.DataParallel`"
+    )
+    def test_multi_gpu_data_parallel_forward(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -380,9 +387,12 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         self.assertEqual(
             masks_queries_logits.shape, (1, model.config.num_queries, inputs_shape[-2] // 4, inputs_shape[-1] // 4)
         )
-        expected_slice = torch.tensor(
-            [[-1.3738, -1.7725, -1.9365], [-1.5978, -1.9869, -2.1524], [-1.5796, -1.9271, -2.0940]]
-        ).to(torch_device)
+        expected_slice = [
+            [-1.3737124, -1.7724937, -1.9364233],
+            [-1.5977281, -1.9867939, -2.1523695],
+            [-1.5795398, -1.9269832, -2.093942],
+        ]
+        expected_slice = torch.tensor(expected_slice).to(torch_device)
         self.assertTrue(torch.allclose(masks_queries_logits[0, 0, :3, :3], expected_slice, atol=TOLERANCE))
         # class_queries_logits
         class_queries_logits = outputs.class_queries_logits

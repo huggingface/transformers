@@ -58,13 +58,13 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         array3 = feature_extractor.to_numpy_array(image, rescale=False)
         self.assertTrue(array3.dtype, np.uint8)
         self.assertEqual(array3.shape, (3, 16, 32))
-        self.assertTrue(np.array_equal(array1, array3.astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array1, array3.astype(np.float32) * (1 / 255.0)))
 
         # Conversion with no rescale and not channel first
         array4 = feature_extractor.to_numpy_array(image, rescale=False, channel_first=False)
         self.assertTrue(array4.dtype, np.uint8)
         self.assertEqual(array4.shape, (16, 32, 3))
-        self.assertTrue(np.array_equal(array2, array4.astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array2, array4.astype(np.float32) * (1 / 255.0)))
 
     def test_conversion_array_to_array(self):
         feature_extractor = ImageFeatureExtractionMixin()
@@ -74,13 +74,13 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         array1 = feature_extractor.to_numpy_array(array)
         self.assertTrue(array1.dtype, np.float32)
         self.assertEqual(array1.shape, (3, 16, 32))
-        self.assertTrue(np.array_equal(array1, array.transpose(2, 0, 1).astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array1, array.transpose(2, 0, 1).astype(np.float32) * (1 / 255.0)))
 
         # Same with no permute
         array2 = feature_extractor.to_numpy_array(array, channel_first=False)
         self.assertTrue(array2.dtype, np.float32)
         self.assertEqual(array2.shape, (16, 32, 3))
-        self.assertTrue(np.array_equal(array2, array.astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array2, array.astype(np.float32) * (1 / 255.0)))
 
         # Force rescale to False
         array3 = feature_extractor.to_numpy_array(array, rescale=False)
@@ -110,13 +110,13 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         array1 = feature_extractor.to_numpy_array(array)
         self.assertTrue(array1.dtype, np.float32)
         self.assertEqual(array1.shape, (3, 16, 32))
-        self.assertTrue(np.array_equal(array1, array.transpose(2, 0, 1).astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array1, array.transpose(2, 0, 1).astype(np.float32) * (1 / 255.0)))
 
         # Same with no permute
         array2 = feature_extractor.to_numpy_array(array, channel_first=False)
         self.assertTrue(array2.dtype, np.float32)
         self.assertEqual(array2.shape, (16, 32, 3))
-        self.assertTrue(np.array_equal(array2, array.astype(np.float32) / 255.0))
+        self.assertTrue(np.array_equal(array2, array.astype(np.float32) * (1 / 255.0)))
 
         # Force rescale to False
         array3 = feature_extractor.to_numpy_array(array, rescale=False)
@@ -160,7 +160,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertTrue(np.array_equal(np.array(image2), array))
 
         # If the array has floating type, it's rescaled by default.
-        image3 = feature_extractor.to_pil_image(array.astype(np.float32) / 255.0)
+        image3 = feature_extractor.to_pil_image(array.astype(np.float32) * (1 / 255.0))
         self.assertTrue(isinstance(image3, PIL.Image.Image))
         self.assertTrue(np.array_equal(np.array(image3), array))
 
@@ -170,7 +170,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertTrue(np.array_equal(np.array(image4), array))
 
         # And with floats + channel first.
-        image5 = feature_extractor.to_pil_image(array.transpose(2, 0, 1).astype(np.float32) / 255.0)
+        image5 = feature_extractor.to_pil_image(array.transpose(2, 0, 1).astype(np.float32) * (1 / 255.0))
         self.assertTrue(isinstance(image5, PIL.Image.Image))
         self.assertTrue(np.array_equal(np.array(image5), array))
 
@@ -201,7 +201,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertTrue(np.array_equal(np.array(image4), array))
 
         # And with floats + channel first.
-        image5 = feature_extractor.to_pil_image(tensor.permute(2, 0, 1).float() / 255.0)
+        image5 = feature_extractor.to_pil_image(tensor.permute(2, 0, 1).float() * (1 / 255.0))
         self.assertTrue(isinstance(image5, PIL.Image.Image))
         self.assertTrue(np.array_equal(np.array(image5), array))
 
@@ -316,7 +316,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertEqual(normalized_image.shape, (3, 16, 32))
 
         # During the conversion rescale and channel first will be applied.
-        expected = array.transpose(2, 0, 1).astype(np.float32) / 255.0
+        expected = array.transpose(2, 0, 1).astype(np.float32) * (1 / 255.0)
         np_mean = np.array(mean).astype(np.float32)[:, None, None]
         np_std = np.array(std).astype(np.float32)[:, None, None]
         expected = (expected - np_mean) / np_std

@@ -36,23 +36,13 @@ VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 PRETRAINED_VOCAB_FILES_MAP = {
     "tokenizer_file": {
         "bigscience/tokenizer": "https://huggingface.co/bigscience/tokenizer/blob/main/tokenizer.json",
-        "bigscience/bloom-350m": "https://huggingface.co/bigscience/bloom-350m/blob/main/tokenizer.json",
-        "bigscience/bloom-760m": "https://huggingface.co/bigscience/bloom-760m/blob/main/tokenizer.json",
-        "bigscience/bloom-1b3": "https://huggingface.co/bigscience/bloom-1b3/blob/main/tokenizer.json",
-        "bigscience/bloom-2b5": "https://huggingface.co/bigscience/bloom-2b5/blob/main/tokenizer.json",
-        "bigscience/bloom-6b3": "https://huggingface.co/bigscience/bloom-2b5/blob/main/tokenizer.json",
+        "bigscience/bloom-560m": "https://huggingface.co/bigscience/bloom-560m/blob/main/tokenizer.json",
+        "bigscience/bloom-1b1": "https://huggingface.co/bigscience/bloom-1b1/blob/main/tokenizer.json",
+        "bigscience/bloom-1b7": "https://huggingface.co/bigscience/bloom-1b7/blob/main/tokenizer.json",
+        "bigscience/bloom-3b": "https://huggingface.co/bigscience/bloom-3b/blob/main/tokenizer.json",
+        "bigscience/bloom-7b1": "https://huggingface.co/bigscience/bloom-7b1/blob/main/tokenizer.json",
         "bigscience/bloom": "https://huggingface.co/bigscience/bloom/blob/main/tokenizer.json",
     },
-}
-
-PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
-    "bigscience/tokenizer": 1024,
-    "bigscience/bloom-350m": 1024,
-    "bigscience/bloom-760m": 1024,
-    "bigscience/bloom-1b3": 1024,
-    "bigscience/bloom-2b5": 1024,
-    "bigscience/bloom-6b3": 1024,
-    "bigscience/bloom": 1024,
 }
 
 
@@ -109,9 +99,9 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = None
+    # No `max_model_input_sizes` as BLOOM uses ALiBi positional embeddings
 
     def __init__(
         self,
@@ -136,7 +126,6 @@ class BloomTokenizerFast(PreTrainedTokenizerFast):
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
-
         pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
         if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
             pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))

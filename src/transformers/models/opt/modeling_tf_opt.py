@@ -30,7 +30,6 @@ from ...modeling_tf_utils import (
     TFModelInputType,
     TFPreTrainedModel,
     TFSharedEmbeddings,
-    TFWrappedEmbeddings,
     keras_serializable,
     unpack_inputs,
 )
@@ -54,14 +53,19 @@ _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
+# Causal LM output
+_CAUSAL_LM_EXPECTED_OUTPUT = "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
+
 LARGE_NEGATIVE = -1e8
 
 
+# Copied from transformers.models.bart.modeling_tf_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
     """
-    bsz, tgt_len = input_ids_shape
+    bsz = input_ids_shape[0]
+    tgt_len = input_ids_shape[1]
     mask = tf.ones((tgt_len, tgt_len)) * LARGE_NEGATIVE
     mask_cond = tf.range(shape_list(mask)[-1])
 
@@ -73,7 +77,8 @@ def _make_causal_mask(input_ids_shape: tf.TensorShape, past_key_values_length: i
     return tf.tile(mask[None, None, :, :], (bsz, 1, 1, 1))
 
 
-def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None, past_key_values_length: int = 0):
+# Copied from transformers.models.bart.modeling_tf_bart._expand_mask
+def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -495,30 +500,22 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         self.padding_idx = config.pad_token_id
         self.layerdrop = config.layerdrop
         num_embeddings = config.max_position_embeddings
-
-        self.shared = TFSharedEmbeddings(
-            config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="model.decoder.embed_tokens"
+        self.embed_tokens = TFSharedEmbeddings(
+            config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="embed_tokens"
         )
-
         self.embed_positions = TFOPTLearnedPositionalEmbedding(
             num_embeddings,
             config.hidden_size,
             name="embed_positions",
         )
 
-        # set tf scope correctly
-        if load_weight_prefix is None:
-            load_weight_prefix = "decoder.embed_tokens"
-
-        with tf.compat.v1.variable_scope(load_weight_prefix) as shared_abs_scope_name:
-            pass
-
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        embed_tokens.vocab_size = self.shared.vocab_size
-        embed_tokens.hidden_size = self.shared.hidden_size
-
-        self.embed_tokens = embed_tokens
+        # Note that the only purpose of `config._remove_final_layer_norm` is to keep backward compatibility
+        # with checkpoints that have been fine-tuned before transformers v4.20.1
+        # see https://github.com/facebookresearch/metaseq/pull/164
+        if config.do_layer_norm_before and not config._remove_final_layer_norm:
+            self.final_layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="final_layer_norm")
+        else:
+            self.final_layer_norm = None
 
         if config.word_embed_proj_dim != config.hidden_size:
             self.project_out = tf.keras.layers.Dense(config.word_embed_proj_dim, name="project_out", use_bias=False)
@@ -538,17 +535,11 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         self.embed_tokens = embed_tokens
 
     def set_input_embeddings(self, new_embeddings):
-        self.shared.weight = new_embeddings
-        self.shared.vocab_size = self.shared.weight.shape[0]
-        # retrieve correct absolute scope for embed token wrapper
-        with tf.compat.v1.variable_scope("decoder.embed_tokens") as shared_abs_scope_name:
-            pass
-        # Wraps layer to avoid problems with weight restoring and ensuring we're in the correct TF scope.
-        embed_tokens = TFWrappedEmbeddings(self.shared, abs_scope_name=shared_abs_scope_name)
-        self.set_embed_tokens(embed_tokens)
+        self.embed_tokens.vocab_size = new_embeddings.shape[0]
+        self.embed_tokens.weight = new_embeddings
 
     def get_input_embeddings(self):
-        return self.shared
+        return self.embed_tokens
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, past_key_values_length):
         # create causal mask
@@ -610,7 +601,7 @@ class TFOPTDecoder(tf.keras.layers.Layer):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`.
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
             inputs_embeds (`tf.Tensor` of
                 shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
@@ -701,6 +692,9 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             if output_attentions:
                 all_self_attns += (layer_self_attn,)
 
+        if self.final_layer_norm is not None:
+            hidden_states = self.final_layer_norm(hidden_states)
+
         if self.project_out is not None:
             hidden_states = self.project_out(hidden_states)
 
@@ -731,7 +725,7 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
         self.decoder = TFOPTDecoder(config, name="decoder")
 
     def get_input_embeddings(self):
-        return self.decoder.shared
+        return self.decoder.embed_tokens
 
     def set_input_embeddings(self, new_embeddings):
         self.decoder.set_input_embeddings(new_embeddings)
@@ -797,7 +791,7 @@ class TFOPTModel(TFOPTPreTrainedModel):
         self.model = TFOPTMainLayer(config, name="model")
 
     def get_input_embeddings(self):
-        return self.model.decoder.shared
+        return self.model.decoder.embed_tokens
 
     def set_input_embeddings(self, new_embeddings):
         self.model.set_input_embeddings(new_embeddings)
@@ -903,6 +897,13 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
 
     @unpack_inputs
     @replace_return_docstrings(output_type=TFCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFCausalLMOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_CAUSAL_LM_EXPECTED_OUTPUT,
+    )
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -973,25 +974,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
                 for more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import GPT2Tokenizer, TFOPTForCausalLM
-
-        >>> model = TFOPTForCausalLM.from_pretrained("facebook/opt-350m")
-        >>> tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-350m")
-
-        >>> prompt = "Hey, are you consciours? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="tf")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
-        ```"""
+        """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1013,8 +996,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
             training=training,
         )
 
-        logits = self.model.decoder.shared(outputs[0], mode="linear")
-
+        logits = self.model.decoder.embed_tokens(outputs[0], mode="linear")
         loss = None
         if labels is not None:
             # shift labels to the left and cut last logit token

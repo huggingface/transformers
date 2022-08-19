@@ -20,6 +20,8 @@ from typing import Dict, Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
+from transformers import shape_list
+
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling, TFSequenceClassifierOutput
 from ...modeling_tf_utils import (
@@ -77,10 +79,17 @@ class TFConvNextEmbeddings(tf.keras.layers.Layer):
             bias_initializer="zeros",
         )
         self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layernorm")
+        self.num_channels = config.num_channels
 
     def call(self, pixel_values):
         if isinstance(pixel_values, dict):
             pixel_values = pixel_values["pixel_values"]
+
+        num_channels = shape_list(pixel_values)[1]
+        if tf.executing_eagerly() and num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
 
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
@@ -321,7 +330,8 @@ class TFConvNextMainLayer(tf.keras.layers.Layer):
             hidden_states = tuple([tf.transpose(h, perm=(0, 3, 1, 2)) for h in encoder_outputs[1]])
 
         if not return_dict:
-            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+            hidden_states = hidden_states if output_hidden_states else ()
+            return (last_hidden_state, pooled_output) + hidden_states
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=last_hidden_state,
@@ -374,7 +384,8 @@ class TFConvNextPreTrainedModel(TFPreTrainedModel):
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
-        return self.call(inputs)
+        output = self.call(inputs)
+        return self.serving_output(output)
 
 
 CONVNEXT_START_DOCSTRING = r"""
@@ -483,6 +494,14 @@ class TFConvNextModel(TFConvNextPreTrainedModel):
             hidden_states=outputs.hidden_states,
         )
 
+    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=output.hidden_states,
+        )
+
 
 @add_start_docstrings(
     """
@@ -575,3 +594,7 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
             logits=logits,
             hidden_states=outputs.hidden_states,
         )
+
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=output.hidden_states)

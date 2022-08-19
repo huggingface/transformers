@@ -28,7 +28,14 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 if is_torch_available():
     import torch
 
-    from transformers import BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST, BloomForCausalLM, BloomModel, BloomTokenizerFast
+    from transformers import (
+        BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
+        BloomForCausalLM,
+        BloomForSequenceClassification,
+        BloomForTokenClassification,
+        BloomModel,
+        BloomTokenizerFast,
+    )
 
 
 @require_torch
@@ -96,9 +103,13 @@ class BloomModelTester:
         if self.use_input_mask:
             input_mask = random_attention_mask([self.batch_size, self.seq_length])
 
+        sequence_labels = None
+        if self.use_labels:
+            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
+
         config = self.get_config(gradient_checkpointing=gradient_checkpointing)
 
-        return (config, input_ids, input_mask)
+        return (config, input_ids, input_mask, sequence_labels)
 
     def get_config(self, gradient_checkpointing=False, slow_but_exact=True):
         return BloomConfig(
@@ -116,6 +127,7 @@ class BloomModelTester:
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
+            num_labels=self.num_labels,
             gradient_checkpointing=gradient_checkpointing,
             slow_but_exact=slow_but_exact,
             dtype="float32",
@@ -245,6 +257,23 @@ class BloomModelTester:
         self.parent.assertEqual(result.loss.shape, ())
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
+    def create_and_check_sequence_classification_model(self, config, input_ids, input_mask, *args):
+        config.num_labels = self.num_labels
+        model = BloomForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(input_ids, attention_mask=input_mask)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
+
+    def create_and_check_token_classification_model(self, config, input_ids, input_mask, *args):
+        model = BloomForTokenClassification(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(input_ids, attention_mask=input_mask)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):
@@ -269,7 +298,7 @@ class BloomModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
-        config, input_ids, input_mask = config_and_inputs
+        config, input_ids, input_mask, sequence_labels = config_and_inputs
 
         inputs_dict = {"input_ids": input_ids}
 
@@ -279,9 +308,19 @@ class BloomModelTester:
 @require_torch
 class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (BloomModel, BloomForCausalLM) if is_torch_available() else ()
+    all_model_classes = (
+        (
+            BloomModel,
+            BloomForCausalLM,
+            BloomForSequenceClassification,
+            BloomForTokenClassification,
+        )
+        if is_torch_available()
+        else ()
+    )
+
     all_generative_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
-    fx_compatible = False
+    fx_compatible = True
     test_missing_keys = False
     test_pruning = False
     test_torchscript = True  # torch.autograd functions seems to be not supported
@@ -313,6 +352,14 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_lm_head_model(*config_and_inputs)
 
+    def test_bloom_sequence_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_sequence_classification_model(*config_and_inputs)
+
+    def test_bloom_token_classification_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_token_classification_model(*config_and_inputs)
+
     def test_bloom_gradient_checkpointing(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_forward_and_backwards(*config_and_inputs, gradient_checkpointing=True)
@@ -330,15 +377,35 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @slow
     @require_torch_gpu
     def test_simple_generation(self):
-        path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
+        # This test is a bit flaky. For some GPU architectures, pytorch sets by default allow_fp16_reduced_precision_reduction = True and some operations
+        # do not give the same results under this configuration, especially torch.baddmm and torch.bmm. https://pytorch.org/docs/stable/notes/numerical_accuracy.html#fp16-on-mi200
+        # As we leave the default value (True) for allow_fp16_reduced_precision_reduction , the tests failed when running in half-precision with smaller models (560m)
+        # Please see: https://pytorch.org/docs/stable/notes/cuda.html#reduced-precision-reduction-in-fp16-gemms
+        # This discrepancy is observed only when using small models and seems to be stable for larger models.
+        # Our conclusion is that these operations are flaky for small inputs but seems to be stable for larger inputs (for the functions `baddmm` and `bmm`), and therefore for larger models.
+
+        # Here is a summary of an ablation study of our observations
+        # EXPECTED_OUTPUT = "I enjoy walking with my cute dog, and I love to watch the kids play. I am a very active person, and I am a very good listener. I am a very good person, and I am a very good person. I am a"
+        # 560m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
+        # 560m + allow_fp16_reduced_precision_reduction = False  + torch.baddm  ==> PASS
+        # 560m + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==> PASS
+        # 560m + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> FAIL
+
+        # EXPECTED_OUTPUT = "I enjoy walking with my cute dog, but I also enjoy hiking, biking, and swimming. I love to cook and bake. I love to cook and bake. I love to cook and bake. I love to cook and bake. I love"
+        # >=1b1 + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==> PASS  (for use_cache=True and use_cache=False)
+        # >=1b1 + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> PASS
+        # >=1b1 + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
+
+        path_560m = "bigscience/bloom-560m"
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").cuda()
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
+        tokenizer = BloomTokenizerFast.from_pretrained(path_560m)
 
         input_sentence = "I enjoy walking with my cute dog"
+        # This output has been obtained using fp32 model on the huggingface DGX workstation - NVIDIA A100 GPU
         EXPECTED_OUTPUT = (
-            "I enjoy walking with my cute dog, and I love to watch the kids play. I am a very active person, and I am"
-            " a very good listener. I am a very good person, and I am a very good person. I am a"
+            "I enjoy walking with my cute dog, and I love to watch the kids play with the kids. I am a very "
+            "active person, and I enjoy working out, and I am a very active person. I am a very active person, and I"
         )
 
         input_ids = tokenizer.encode(input_sentence, return_tensors="pt")
@@ -349,10 +416,10 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @slow
     @require_torch_gpu
     def test_batch_generation(self):
-        path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
+        path_560m = "bigscience/bloom-560m"
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").cuda()
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
+        tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
 
         input_sentence = ["I enjoy walking with my cute dog", "I enjoy walking with my cute dog"]
 
@@ -369,10 +436,11 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @slow
     @require_torch_gpu
     def test_batch_generation_padd(self):
-        path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, torch_dtype="auto", use_cache=True).cuda()
+
+        path_560m = "bigscience/bloom-560m"
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").cuda()
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
+        tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
 
         input_sentence = ["I enjoy walking with my cute dog", "Hello my name is"]
         input_sentence_without_pad = "Hello my name is"
@@ -676,7 +744,7 @@ class BloomEmbeddingTest(unittest.TestCase):
         }
 
         if cuda_available:
-            self.assertEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item())
+            self.assertAlmostEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item(), places=4)
         else:
             self.assertAlmostEqual(MEAN_VALUE_LAST_LM, logits.last_hidden_state.mean().item(), places=3)
 

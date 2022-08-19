@@ -19,9 +19,10 @@ import functools
 import inspect
 import math
 import operator
+import os
 import random
 import warnings
-from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Type, Union
 
 import torch
 from packaging import version
@@ -48,11 +49,12 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
-from ..utils import TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
+from ..utils import ENV_VARS_TRUE_VALUES, TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
 from ..utils.versions import importlib_metadata
 
 
 logger = logging.get_logger(__name__)
+_IS_IN_DEBUG_MODE = os.environ.get("FX_DEBUG_MODE", "").upper() in ENV_VARS_TRUE_VALUES
 
 
 def _generate_supported_model_class_names(
@@ -98,10 +100,12 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "bert",
     "blenderbot",
     "blenderbot-small",
+    "bloom",
     "clip",
     "deberta",
     "deberta-v2",
     "distilbert",
+    "donut-swin",
     "electra",
     "gpt2",
     "gpt_neo",
@@ -115,6 +119,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "megatron-bert",
     "mobilebert",
     "mt5",
+    "nezha",
     "opt",
     "pegasus",
     "plbart",
@@ -126,8 +131,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "trocr",
     "vit",
     "xglm",
-    # "xlnet",
-    # TODO: add support for them as it should be quite easy to do so (small blocking issues).
+    #    "xlnet",
 ]
 
 _REGULAR_SUPPORTED_MODELS = []
@@ -304,10 +308,20 @@ def torch_matmul(input, other, *, out=None):
 
 def torch_bmm(input, mat2, *, out=None):
     if out is not None:
-        raise ValueError("Don't support in-place abs for MetaTensor analysis")
+        raise ValueError("Don't support in-place bmm for MetaTensor analysis")
     batch_size, n, m = input.shape
     _, _, p = mat2.shape
     return torch.empty(batch_size, n, p, device="meta")
+
+
+def torch_baddbmm(input, batch1, batch2, *, beta=1, alpha=1, out=None):
+    if out is not None:
+        raise ValueError("Don't support in-place baddbmm for MetaTensor analysis")
+    return torch_bmm(batch1, batch2)
+
+
+def torch_tensor_baddbmm(self, batch1, batch2, *, beta=1, alpha=1, out=None):
+    return torch_baddbmm(self, batch1, batch2, beta=beta, alpha=alpha, out=out)
 
 
 def torch_einsum(equation, *operands):
@@ -494,6 +508,8 @@ _MANUAL_META_OVERRIDES: Dict[Callable, Callable] = {
     torch.Tensor.mul: torch_tensor_mul,
     torch.matmul: torch_matmul,
     torch.bmm: torch_bmm,
+    torch.baddbmm: torch_baddbmm,
+    torch.Tensor.baddbmm: torch_tensor_baddbmm,
     torch.einsum: torch_einsum,
     torch.Tensor.repeat: torch_tensor_repeat,
     torch.roll: torch_roll,
@@ -561,10 +577,8 @@ class HFProxy(Proxy):
         return self.tracer.create_proxy("call_function", operator.setitem, (self, indices, values), {})
 
     def __contains__(self, key):
-        # To handle cases such as :
-        # `"some_key" in kwargs`
-        if self.node.op == "placeholder":
-            return False
+        if hasattr(self, "_metadata") and self._metadata is not None:
+            return key in self._metadata
         return super().__contains__(key)
 
 
@@ -667,7 +681,12 @@ class HFTracer(Tracer):
         if input_name in ["labels", "start_positions", "end_positions"]:
 
             batch_size = shape[0]
-            if model_class_name in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
+            if model_class_name in [
+                *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES),
+                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES),
+            ]:
                 inputs_dict["labels"] = torch.zeros(batch_size, dtype=torch.long, device=device)
             elif model_class_name in [
                 *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES),
@@ -700,11 +719,6 @@ class HFTracer(Tracer):
                 inputs_dict["labels"] = torch.zeros(*labels_shape, dtype=labels_dtype, device=device)
 
             elif model_class_name in [
-                *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
-                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
-            ]:
-                inputs_dict["labels"] = torch.zeros(batch_size, dtype=torch.long, device=device)
-            elif model_class_name in [
                 *get_values(MODEL_FOR_PRETRAINING_MAPPING_NAMES),
                 *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES),
                 *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
@@ -714,7 +728,9 @@ class HFTracer(Tracer):
             ]:
                 inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
             else:
-                raise NotImplementedError(f"{model_class_name} not supported yet.")
+                raise NotImplementedError(
+                    f"Generating the dummy input named {input_name} for {model_class_name} is not supported yet."
+                )
         elif "pixel_values" in input_name:
             batch_size = shape[0]
             image_size = getattr(model.config, "image_size", None)
@@ -835,7 +851,8 @@ class HFTracer(Tracer):
                 raise ValueError("Don't support composite output yet")
             rv.install_metadata(meta_out)
         except Exception as e:
-            warnings.warn(f"Could not compute metadata for {kind} target {target}: {e}")
+            if _IS_IN_DEBUG_MODE:
+                warnings.warn(f"Could not compute metadata for {kind} target {target}: {e}")
 
         return rv
 
@@ -885,15 +902,49 @@ class HFTracer(Tracer):
 
     def trace(
         self,
-        root: PreTrainedModel,
+        root: Union[torch.nn.Module, Callable[..., Any]],
         concrete_args: Optional[Dict[str, Any]] = None,
-        method_names: Optional[Iterable[str]] = None,
+        dummy_inputs: Optional[Dict[str, Any]] = None,
+        complete_concrete_args_with_inputs_not_in_dummy_inputs: bool = True,
     ) -> Graph:
+        """
+        Traces `root` and returns the corresponding FX `torch.fx.Graph` representation. `root` can either be a
+        `torch.nn.Module` instance or a Python callable. Note that after this call, `self.root` may be different from
+        the `root` passed in here. For example, when a free function is passed to `trace()`, we will create a
+        `torch.nn.Module` instance to use as the root and add embedded constants to.
+
+        Args:
+            root (`torch.nn.Module` or  `Callable`):
+                Either a `torch.nn.Module`` or a function to be traced through. If root is not a
+                [`~transformers.PreTrainedModel`], then `dummy_inputs` must be passed, otherwise tracing will fail.
+            concrete_args (`Dict[str, Any], *optional*):
+                Concrete arguments that should not be treated as Proxies
+            dummy_inputs (`Dict[str, Any]`, *optional*):
+                The dummy inputs needed to handle data-dependent control-flow if `root` is not a
+                [`~transformers.PreTrainedModel`]. It can also be used when `root` is a
+                [`~transformers.PreTrainedModel`] to specify custom dummy inputs for a subset or all the model inputs.
+            complete_concrete_args_with_inputs_not_in_dummy_inputs (`bool`, *optional*, defaults to `True`):
+                If `True`, and `dummy_inputs` is specified, every argument that `root` can take that is not in
+                `dummy_inputs` and not in `concrete_args` will be added to `concrete_args`, otherwise does nothing.
+
+        Returns:
+            `torch.fx.Graph`:
+                A FX `torch.fx.Graph` representing the semantics of the passed-in `root`.
+
+        """
+        sig = inspect.signature(root.forward if isinstance(root, torch.nn.Module) else root)
 
         if concrete_args is None:
             concrete_args = {}
 
-        sig = inspect.signature(root.forward)
+        if dummy_inputs is not None and complete_concrete_args_with_inputs_not_in_dummy_inputs:
+            for param in sig.parameters.values():
+                if param.name in dummy_inputs:
+                    continue
+                if param.default is inspect.Parameter.empty:
+                    raise ValueError(f"You need to specify a default value for the parameter {param.name}.")
+            concrete_args.update({p.name: p.default for p in sig.parameters.values() if p.name not in dummy_inputs})
+
         input_names = sig.parameters.keys() - concrete_args.keys()
 
         # Creating a random input shape to generate dummy inputs.
@@ -905,11 +956,27 @@ class HFTracer(Tracer):
             num_choices = _generate_random_int(low=2, high=5)
             shape.insert(1, num_choices)
 
-        inputs = {}
+        inputs = dict(dummy_inputs) if dummy_inputs is not None else {}
         for input_name in input_names:
-            inputs.update(self._generate_dummy_input(root, input_name, shape))
+            if input_name in inputs:
+                continue
+            # We enforce that root must either be a PreTrainedModel or deserialized from a serialized traced model to
+            # be able to use HFTracer._generate_dummy_input.
+            if isinstance(root, PreTrainedModel) or type(root).__qualname__.startswith("_deserialize_graph_module"):
+                inputs.update(self._generate_dummy_input(root, input_name, shape))
+            else:
+                raise RuntimeError(
+                    f"Could not generate input named {input_name} for because root is not a"
+                    " transformers.PreTrainedModel."
+                )
 
-        concrete_metas = {input_name: input_.to("meta") for input_name, input_ in inputs.items()}
+        concrete_metas = {
+            input_name: input_.to("meta") if isinstance(input_, torch.Tensor) else input_
+            for input_name, input_ in inputs.items()
+        }
+        for param in sig.parameters.values():
+            if param.kind == inspect.Parameter.VAR_KEYWORD and param.name not in input_names:
+                concrete_metas[f"**{param.name}"] = {}
         self.meta_args = concrete_metas
         self.patched_torch_methods = {
             target: _gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
@@ -938,18 +1005,15 @@ class HFTracer(Tracer):
                     node.type = torch.Tensor
                 # It is a concrete arg so it is not used and should be removed.
                 else:
-                    if hasattr(torch.fx._symbolic_trace, "_assert_is_none"):
-                        # Newer versions of torch.fx emit an assert statement
-                        # for concrete arguments; delete those before we delete
-                        # the concrete arg.
-                        to_delete = []
-                        for user in node.users:
-                            if user.target == torch.fx._symbolic_trace._assert_is_none:
-                                to_delete.append(user)
-                        for user in to_delete:
-                            self.graph.erase_node(user)
+                    to_visit = [node]
+                    to_delete = collections.OrderedDict()
+                    while to_visit:
+                        n = to_visit.pop(0)
+                        to_delete[n] = None
+                        to_visit += list(n.users.keys())
 
-                    self.graph.erase_node(node)
+                    for user in reversed(to_delete.keys()):
+                        self.graph.erase_node(user)
 
             # TODO: solves GraphModule creation.
             # Without this, return type annotation "Tuple" is causing code execution failure.
@@ -1012,9 +1076,32 @@ class HFTracer(Tracer):
         )
 
 
+def get_concrete_args(model: nn.Module, input_names: List[str]):
+    sig = inspect.signature(model.forward)
+
+    if not (set(input_names) <= set(sig.parameters.keys())):
+        formatted_input_names = input_names[0] if len(input_names) == 1 else ", ".join(input_names)
+        formatted_allowed_input_names = ", ".join(sig.parameters.keys())
+        raise ValueError(
+            f"The model does not have input(s) named: {formatted_input_names}, expected a subset of the following:"
+            f" {formatted_allowed_input_names}"
+        )
+
+    return {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
+
+
+def check_if_model_is_supported(model: PreTrainedModel):
+    if model.__class__.__name__ not in _SUPPORTED_MODELS:
+        supported_model_names = ", ".join(_SUPPORTED_MODELS)
+        raise NotImplementedError(
+            f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
+        )
+
+
 def symbolic_trace(
     model: PreTrainedModel,
     input_names: Optional[List[str]] = None,
+    disable_check: bool = False,
 ) -> GraphModule:
 
     """
@@ -1025,6 +1112,8 @@ def symbolic_trace(
             The model to trace.
         input_names (`List[str]`, *optional*):
             The names of the inputs of the traced model. If unset, model.dummy_inputs.keys() are used instead.
+        disable_check (`bool`, *optional*, defaults to `False`):
+            If `True`, no check is done before trying to trace the model, this is mostly usesul for debugging purposes.
 
     Returns:
         `torch.fx.GraphModule`: A GraphModule constructed by recording operations seen while tracing the model.
@@ -1041,24 +1130,10 @@ def symbolic_trace(
         input_names = model.dummy_inputs.keys()
 
     input_names = list(input_names)
+    concrete_args = get_concrete_args(model, input_names)
 
-    sig = inspect.signature(model.forward)
-
-    if not (set(input_names) <= set(sig.parameters.keys())):
-        formatted_input_names = input_names[0] if len(input_names) == 1 else ", ".join(input_names)
-        formatted_allowed_input_names = ", ".join(sig.parameters.keys())
-        raise ValueError(
-            f"The model does not have input(s) named: {formatted_input_names}, expected a subset of the following:"
-            f" {formatted_allowed_input_names}"
-        )
-
-    concrete_args = {p.name: p.default for p in sig.parameters.values() if p.name not in input_names}
-
-    if model.__class__.__name__ not in _SUPPORTED_MODELS:
-        supported_model_names = ", ".join(_SUPPORTED_MODELS)
-        raise NotImplementedError(
-            f"Model {model.__class__.__name__} is not supported yet, supported models: {supported_model_names}"
-        )
+    if not disable_check:
+        check_if_model_is_supported(model)
 
     # Tracing.
     tracer = HFTracer()

@@ -21,7 +21,7 @@ jobs:
         id: cache
         with:
           path: ~/venv/
-          key: v3-tests_templates-${{ hashFiles('setup.py') }}
+          key: v4-tests_templates-${{ hashFiles('setup.py') }}
 
       - name: Create virtual environment on cache miss
         if: steps.cache.outputs.cache-hit != 'true'

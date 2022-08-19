@@ -256,35 +256,27 @@ class MBart50OneToManyIntegrationTest(unittest.TestCase):
 
     @require_torch
     def test_batch_fairseq_parity(self):
-        batch = self.tokenizer(self.src_text, padding=True)
-        with self.tokenizer.as_target_tokenizer():
-            targets = self.tokenizer(self.tgt_text, padding=True, return_tensors="pt")
-        labels = targets["input_ids"]
-        batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id).tolist()
-        labels = labels.tolist()
+        batch = self.tokenizer(self.src_text, text_target=self.tgt_text, padding=True, return_tensors="pt")
+        batch["decoder_input_ids"] = shift_tokens_right(batch["labels"], self.tokenizer.pad_token_id)
 
         # fairseq batch: https://gist.github.com/sshleifer/cba08bc2109361a74ac3760a7e30e4f4
         assert batch.input_ids[1][0] == EN_CODE
         assert batch.input_ids[1][-1] == 2
-        assert labels[1][0] == RO_CODE
-        assert labels[1][-1] == 2
-        assert batch.decoder_input_ids[1][:2] == [2, RO_CODE]
+        assert batch.labels[1][0] == RO_CODE
+        assert batch.labels[1][-1] == 2
+        assert batch.decoder_input_ids[1][:2].tolist() == [2, RO_CODE]
 
     @require_torch
     def test_tokenizer_prepare_batch(self):
         batch = self.tokenizer(
-            self.src_text, padding=True, truncation=True, max_length=len(self.expected_src_tokens), return_tensors="pt"
+            self.src_text,
+            text_target=self.tgt_text,
+            padding=True,
+            truncation=True,
+            max_length=len(self.expected_src_tokens),
+            return_tensors="pt",
         )
-        with self.tokenizer.as_target_tokenizer():
-            targets = self.tokenizer(
-                self.tgt_text,
-                padding=True,
-                truncation=True,
-                max_length=len(self.expected_src_tokens),
-                return_tensors="pt",
-            )
-        labels = targets["input_ids"]
-        batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id)
+        batch["decoder_input_ids"] = shift_tokens_right(batch["labels"], self.tokenizer.pad_token_id)
 
         self.assertIsInstance(batch, BatchEncoding)
 
@@ -299,8 +291,9 @@ class MBart50OneToManyIntegrationTest(unittest.TestCase):
 
     def test_seq2seq_max_target_length(self):
         batch = self.tokenizer(self.src_text, padding=True, truncation=True, max_length=3, return_tensors="pt")
-        with self.tokenizer.as_target_tokenizer():
-            targets = self.tokenizer(self.tgt_text, padding=True, truncation=True, max_length=10, return_tensors="pt")
+        targets = self.tokenizer(
+            text_target=self.tgt_text, padding=True, truncation=True, max_length=10, return_tensors="pt"
+        )
         labels = targets["input_ids"]
         batch["decoder_input_ids"] = shift_tokens_right(labels, self.tokenizer.pad_token_id)
 

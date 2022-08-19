@@ -1,20 +1,27 @@
 import gzip
 import hashlib
+import json
 import multiprocessing
 import os
+import re
 import shutil
 import time
+from pathlib import Path
 
 import numpy as np
 from datasets import load_dataset
 
 from arguments import PreprocessingArguments
+from minhash_deduplication import deduplicate_dataset
 from transformers import AutoTokenizer, HfArgumentParser
+
+
+PATTERN = re.compile(r"\s+")
 
 
 def get_hash(example):
     """Get hash of content field."""
-    return {"hash": hashlib.md5(example["content"].strip().encode("utf-8")).hexdigest()}
+    return {"hash": hashlib.md5(re.sub(PATTERN, "", example["content"]).encode("utf-8")).hexdigest()}
 
 
 def line_stats(example):
@@ -146,7 +153,7 @@ def filter(example, uniques, args):
 def compress_file(file_path):
     """Compress a file with g-zip."""
     with open(file_path, "rb") as f_in:
-        with gzip.open(file_path + ".gz", "wb", compresslevel=6) as f_out:
+        with gzip.open(str(file_path) + ".gz", "wb", compresslevel=6) as f_out:
             shutil.copyfileobj(f_in, f_out)
     os.unlink(file_path)
 
@@ -179,12 +186,29 @@ ds_filter = ds.filter(filter, fn_kwargs={"uniques": uniques, "args": args})
 print(f"Time to filter dataset: {time.time()-t_start:.2f}")
 print(f"Size of filtered dataset: {len(ds_filter)}")
 
+# Deduplicate with minhash and jaccard similarity
+if args.near_deduplication:
+    t_start = time.time()
+    ds_filter, duplicate_clusters = deduplicate_dataset(ds_filter, args.jaccard_threshold)
+    print(f"Time to deduplicate dataset: {time.time()-t_start:.2f}")
+    print(f"Size of deduplicate dataset: {len(ds_filter)}")
+
 # Save data in batches of samples_per_file
-if not os.path.exists(args.output_dir):
-    os.makedirs(args.output_dir)
+output_dir = Path(args.output_dir)
+output_dir.mkdir(exist_ok=True)
+
+# save duplicate_clusters in the output_dir as artifacts
+# not sure it is the right place the save it
+if args.near_deduplication:
+    with open(output_dir / "duplicate_clusters.json", "w") as f:
+        json.dump(duplicate_clusters, f)
+
+data_dir = output_dir / "data"
+data_dir.mkdir(exist_ok=True)
+
 t_start = time.time()
 for file_number, index in enumerate(range(0, len(ds_filter), args.samples_per_file)):
-    file_path = f"{args.output_dir}/file-{file_number+1:012}.json"
+    file_path = str(data_dir / f"file-{file_number+1:012}.json")
     end_index = min(len(ds_filter), index + args.samples_per_file)
     ds_filter.select(list(range(index, end_index))).to_json(file_path)
     compress_file(file_path)
