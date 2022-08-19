@@ -1673,7 +1673,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         else:
             return tokens
 
-    def split_chunks(self,length, chunk_size):
+    def split_chunks(self, length, chunk_size):
         n_passes = (length + chunk_size - 1) // chunk_size
         chunk_sizes = [*[chunk_size] * (n_passes - 1), (length - 1) % chunk_size + 1]
         return chunk_sizes
