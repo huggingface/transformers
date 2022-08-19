@@ -362,7 +362,7 @@ class TFTapasModelTester:
             "labels": labels,
         }
         result = model(inputs)
-        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.loss.shape, (1,))
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
 
         # case 2: weak supervision for aggregation (WTQ)
@@ -377,7 +377,7 @@ class TFTapasModelTester:
             "float_answer": float_answer,
         }
         result = model(inputs)
-        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.loss.shape, (1,))
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.logits_aggregation.shape, (self.batch_size, self.num_aggregation_labels))
 
@@ -393,7 +393,7 @@ class TFTapasModelTester:
             "aggregation_labels": aggregation_labels,
         }
         result = model(inputs)
-        self.parent.assertEqual(result.loss.shape, ())
+        self.parent.assertEqual(result.loss.shape, (1,))
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.logits_aggregation.shape, (self.batch_size, self.num_aggregation_labels))
 
