@@ -1834,6 +1834,24 @@ class TokenizerTesterMixin:
                     self.assertEqual(attention_mask + [0] * padding_size, right_padded_attention_mask)
                     self.assertEqual([0] * padding_size + attention_mask, left_padded_attention_mask)
 
+    def test_padding_warning_message_fast_tokenizer(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        tokenizer = self.get_rust_tokenizer()
+        sequence = "This is a text"
+        # check correct behaviour if no pad_token_id exists and add it eventually
+        self._check_no_pad_token_padding(tokenizer, sequence)
+
+        encoding = tokenizer(sequence)
+        with self.assertLogs("transformers", level="WARNING") as cm:
+            tokenizer.pad(encoding, return_attention_mask=True, return_tensors="pt")
+            self.assertIn(
+                "Please note that with a fast tokenizer a fast tokenizer, using the `__call__` method is faster than"
+                " using the `pad` method to get a padded encoding.",
+                cm.output[0],
+            )
+
     def test_separate_tokenizers(self):
         # This tests that tokenizers don't impact others. Unfortunately the case where it fails is when
         # we're loading an S3 configuration from a pre-trained identifier, and we have no way of testing those today.
