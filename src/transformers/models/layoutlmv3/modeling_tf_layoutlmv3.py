@@ -295,7 +295,7 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
 
     def transpose_for_scores(self, x: tf.Tensor):
         new_shape = (
-            *shape_list(x)[:-1],
+            *tf.shape(x)[:-1],
             self.num_attention_heads,
             self.attention_head_size,
         )
