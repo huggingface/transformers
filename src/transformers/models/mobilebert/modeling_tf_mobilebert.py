@@ -1040,6 +1040,8 @@ class TFMobileBertForPreTraining(TFMobileBertPreTrainedModel, TFMobileBertPreTra
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        next_sentence_label: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFMobileBertForPreTrainingOutput]:
         r"""
