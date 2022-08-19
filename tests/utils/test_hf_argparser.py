@@ -253,7 +253,7 @@ class HfArgumentParserTest(unittest.TestCase):
             "bar": 3.14,
             "baz": "42",
             "flag": True,
-            "extra": 42
+            "extra": 42,
         }
 
         self.assertRaises(ValueError, parser.parse_dict, args_dict, allow_extra_keys=False)
