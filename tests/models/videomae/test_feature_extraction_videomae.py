@@ -241,7 +241,7 @@ class VideoMAEFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.T
                     resized_shape = (c, height, width)
                 else:
                     short, long = min_size, int(long * min_size / short)
-                    resized_shape = (c, long, short) if w <= h else (c, short, long)
+                    resized_shape = (c, long, short) if width <= height else (c, short, long)
                 expected_shape = [resized_shape]
             if do_center_crop:
                 expected_shape = [(num_channels, crop_size, crop_size)]
