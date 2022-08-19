@@ -25,6 +25,7 @@ import sys
 import tempfile
 import unittest
 from collections.abc import Mapping
+from contextlib import ContextDecorator
 from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
@@ -1615,3 +1616,39 @@ class RequestCounter:
             self.other_request_count += 1
 
         return self.old_request(method=method, **kwargs)
+
+
+# adapted from https://stackoverflow.com/questions/32163436/python-decorator-for-printing-every-line-executed-by-a-function
+class set_reproducible(ContextDecorator):
+    r"""
+    A context decorator to set a manual seed before each PyTorch's forward pass. This is useful for models that
+    involves stochasticity during their forward pass to ensure reproducibility and the capability to run som tests.
+    """
+
+    def __init__(self, seed=42):
+        super().__init__()
+        self.seed = seed
+
+    def __enter__(self):
+        sys.settrace(self.trace_calls)
+
+    def __exit__(self, *exc):
+        # stop tracing functions after quitting
+        # the context manager
+        sys.settrace(None)
+
+    def trace_calls(self, frame, event, arg):
+        # We want to only trace our call events
+        # and setting the seed before the forward function
+        if event != "call":
+            return
+        elif frame.f_code.co_name != "forward":
+            return
+        # Set the seed when it is a call to a function
+        # which is different from forward pass
+        return self.set_seed
+
+    def set_seed(self, frame, event, arg):
+        # Set the seed
+        torch.manual_seed(self.seed)
+        return
