@@ -426,12 +426,7 @@ class TFLayoutLMv3ModelIntegrationTest(unittest.TestCase):
         bbox = tf.expand_dims(tf.constant([[1, 2, 3, 4], [5, 6, 7, 8]]), axis=0)
 
         # forward pass
-        outputs = model(
-            input_ids=input_ids,
-            bbox=bbox,
-            pixel_values=pixel_values,
-            training=False,
-        )
+        outputs = model(input_ids=input_ids, bbox=bbox, pixel_values=pixel_values, training=False)
 
         # verify the logits
         expected_shape = (1, 199, 768)
