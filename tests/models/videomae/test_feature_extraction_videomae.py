@@ -234,8 +234,8 @@ class VideoMAEFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.T
         for video_input, video_output in zip(video_inputs, pixel_values):
             expected_shape = [(3, *video_input[0].size[::-1])]
             if do_resize:
-                c, h, w = expected_shape[0]
-                short, long = (w, h) if w <= h else (h, w)
+                c, height, width = expected_shape[0]
+                short, long = (width, height) if width <= height else (height, width)
                 min_size = size
                 if short == min_size:
                     resized_shape = (c, h, w)
