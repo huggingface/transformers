@@ -785,27 +785,27 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
     def get_head_mask(self, head_mask: Optional[tf.Tensor]):
         if head_mask is None:
             return [None] * self.config.num_hidden_layers
-        else:
-            n_dims = tf.rank(head_mask)
-            if n_dims == 1:
-                # Gets a tensor with masks for each head (H).
-                head_mask = tf.expand_dims(head_mask, axis=0)  # 1, num_heads
-                head_mask = tf.expand_dims(head_mask, axis=0)  # 1, 1, num_heads
-                head_mask = tf.expand_dims(head_mask, axis=-1)  # 1, 1, num_heads, 1
-                head_mask = tf.expand_dims(head_mask, axis=-1)  # 1, 1, num_heads, 1, 1
-                head_mask = tf.tile(
-                    head_mask, [self.config.num_hidden_layers, 1, 1, 1, 1]
-                )  # seq_length, 1, num_heads, 1, 1
-            elif n_dims == 2:
-                # Gets a tensor with masks for each layer (L) and head (H).
-                head_mask = tf.expand_dims(head_mask, axis=1)  # seq_length, 1, num_heads
-                head_mask = tf.expand_dims(head_mask, axis=-1)  # seq_length, 1, num_heads, 1
-                head_mask = tf.expand_dims(head_mask, axis=-1)  # seq_length, 1, num_heads, 1, 1
-            elif n_dims != 5:
-                raise ValueError(f"Wrong shape for head_mask (shape {head_mask.shape}).")
-            assert tf.rank(head_mask) == 5, f"Got head_mask rank of {tf.rank(head_mask)}, but require 5."
-            head_mask = tf.cast(head_mask, self.compute_dtype)
-            return head_mask
+
+        n_dims = tf.rank(head_mask)
+        if n_dims == 1:
+            # Gets a tensor with masks for each head (H).
+            head_mask = tf.expand_dims(head_mask, axis=0)  # 1, num_heads
+            head_mask = tf.expand_dims(head_mask, axis=0)  # 1, 1, num_heads
+            head_mask = tf.expand_dims(head_mask, axis=-1)  # 1, 1, num_heads, 1
+            head_mask = tf.expand_dims(head_mask, axis=-1)  # 1, 1, num_heads, 1, 1
+            head_mask = tf.tile(
+                head_mask, [self.config.num_hidden_layers, 1, 1, 1, 1]
+            )  # seq_length, 1, num_heads, 1, 1
+        elif n_dims == 2:
+            # Gets a tensor with masks for each layer (L) and head (H).
+            head_mask = tf.expand_dims(head_mask, axis=1)  # seq_length, 1, num_heads
+            head_mask = tf.expand_dims(head_mask, axis=-1)  # seq_length, 1, num_heads, 1
+            head_mask = tf.expand_dims(head_mask, axis=-1)  # seq_length, 1, num_heads, 1, 1
+        elif n_dims != 5:
+            raise ValueError(f"Wrong shape for head_mask (shape {head_mask.shape}).")
+        assert tf.rank(head_mask) == 5, f"Got head_mask rank of {tf.rank(head_mask)}, but require 5."
+        head_mask = tf.cast(head_mask, self.compute_dtype)
+        return head_mask
 
     def get_int_dtype(
         self,
