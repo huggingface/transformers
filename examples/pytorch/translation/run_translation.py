@@ -26,8 +26,9 @@ from typing import Optional
 
 import datasets
 import numpy as np
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 
+import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -92,7 +93,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -118,12 +119,12 @@ class DataTrainingArguments:
     validation_file: Optional[str] = field(
         default=None,
         metadata={
-            "help": "An optional input evaluation data file to evaluate the metrics (sacreblue) on a jsonlines file."
+            "help": "An optional input evaluation data file to evaluate the metrics (sacrebleu) on a jsonlines file."
         },
     )
     test_file: Optional[str] = field(
         default=None,
-        metadata={"help": "An optional input test data file to evaluate the metrics (sacreblue) on a jsonlines file."},
+        metadata={"help": "An optional input test data file to evaluate the metrics (sacrebleu) on a jsonlines file."},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
@@ -522,7 +523,7 @@ def main():
         )
 
     # Metric
-    metric = load_metric("sacrebleu")
+    metric = evaluate.load("sacrebleu")
 
     def postprocess_text(preds, labels):
         preds = [pred.strip() for pred in preds]

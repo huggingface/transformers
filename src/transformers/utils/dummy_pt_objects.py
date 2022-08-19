@@ -406,6 +406,9 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = None
 MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING = None
 
 
+MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING = None
+
+
 MODEL_FOR_VISION_2_SEQ_MAPPING = None
 
 
@@ -566,6 +569,13 @@ class AutoModelForTableQuestionAnswering(metaclass=DummyObject):
 
 
 class AutoModelForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForVideoClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -1672,6 +1682,23 @@ class DistilBertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class DonutSwinModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class DonutSwinPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 DPR_CONTEXT_ENCODER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
@@ -2730,6 +2757,34 @@ class LukeForEntitySpanClassification(metaclass=DummyObject):
 
 
 class LukeForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukeForMultipleChoice(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukeForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukeForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class LukeForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -4719,6 +4774,37 @@ class VanModel(metaclass=DummyObject):
 
 
 class VanPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class VideoMAEForPreTraining(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VideoMAEForVideoClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VideoMAEModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class VideoMAEPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

@@ -28,10 +28,11 @@ from pathlib import Path
 
 import datasets
 import torch
-from datasets import ClassLabel, load_dataset, load_metric
+from datasets import ClassLabel, load_dataset
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
+import evaluate
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
@@ -49,9 +50,12 @@ from transformers import (
     default_data_collator,
     get_scheduler,
 )
-from transformers.utils import get_full_repo_name, send_example_telemetry
+from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
 from transformers.utils.versions import require_version
 
+
+# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
+check_min_version("4.22.0.dev0")
 
 logger = get_logger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/token-classification/requirements.txt")
@@ -394,7 +398,7 @@ def main():
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
-    if config.model_type in {"gpt2", "roberta"}:
+    if config.model_type in {"bloom", "gpt2", "roberta"}:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True, add_prefix_space=True)
     else:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True)
@@ -580,7 +584,7 @@ def main():
             accelerator.init_trackers("ner_no_trainer", experiment_config)
 
     # Metrics
-    metric = load_metric("seqeval")
+    metric = evaluate.load("seqeval")
 
     def get_labels(predictions, references):
         # Transform predictions and references tensos to numpy arrays
