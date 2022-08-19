@@ -36,7 +36,6 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from .configuration_layoutlmv3 import LayoutLMv3Config
 
@@ -294,8 +293,10 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
         self.has_spatial_attention_bias = config.has_spatial_attention_bias
 
     def transpose_for_scores(self, x: tf.Tensor):
+        shape = tf.shape(x)
         new_shape = (
-            *tf.shape(x)[:-1],
+            shape[0],  # B
+            shape[1],  # N
             self.num_attention_heads,
             self.attention_head_size,
         )
@@ -355,7 +356,8 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
 
         context_layer = tf.matmul(attention_probs, value_layer)
         context_layer = tf.transpose(context_layer, perm=[0, 2, 1, 3])  # B, N, H, D
-        context_layer = tf.reshape(context_layer, (*shape_list(context_layer)[:2], self.all_head_size))  # B, N, H * D
+        shape = tf.shape(context_layer)
+        context_layer = tf.reshape(context_layer, (shape[0], shape[1], self.all_head_size))  # B, N, H * D
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
