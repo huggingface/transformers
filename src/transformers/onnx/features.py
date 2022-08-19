@@ -554,7 +554,7 @@ class FeaturesManager:
         return task_to_automodel[task]
 
     @staticmethod
-    def determine_framework(model: str, framework: str) -> str:
+    def determine_framework(model: str, framework: str = None) -> str:
         """
         Determines the framework to use for the export.
 
@@ -577,7 +577,6 @@ class FeaturesManager:
             return framework
 
         framework_map = {"pt": "PyTorch", "tf": "TensorFlow"}
-
         exporter_map = {"pt": "torch", "tf": "tf2onnx"}
 
         if os.path.isdir(model):
@@ -592,7 +591,6 @@ class FeaturesManager:
                     f" or {TF2_WEIGHTS_NAME} for TensorFlow."
                 )
             logger.info(f"Local {framework_map[framework]} model found.")
-
         else:
             if is_torch_available():
                 framework = "pt"
