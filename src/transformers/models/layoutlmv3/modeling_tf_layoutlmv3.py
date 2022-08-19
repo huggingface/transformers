@@ -728,7 +728,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         # We should not hardcode max_len to 1000, but it is done by the reference implementation,
         # so we keep it for compatibility with the pretrained weights. The more correct approach
         # would have been to pass on max_len=config.max_2d_position_embeddings - 1.
-        width, height = image_size
+        height, width = image_size
 
         visual_bbox_x = tf.cast(tf.range(0, max_len * (width + 1), max_len) / width, tf.int32)
         visual_bbox_x = tf.expand_dims(visual_bbox_x, axis=0)
@@ -739,12 +739,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         visual_bbox_y = tf.tile(visual_bbox_y, [1, height])  # (height + 1, height)
 
         visual_bbox = tf.stack(
-            [
-                visual_bbox_x[:, :-1],
-                visual_bbox_y[:-1],
-                visual_bbox_x[:, 1:],
-                visual_bbox_y[1:],
-            ],
+            [visual_bbox_x[:, :-1], visual_bbox_y[:-1], visual_bbox_x[:, 1:], visual_bbox_y[1:]],
             axis=-1,
         )
         visual_bbox = tf.reshape(visual_bbox, [-1, 4])
@@ -958,14 +953,14 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
 
         sequence_output = encoder_outputs[0]
 
-        if return_dict:
-            return TFBaseModelOutput(
-                last_hidden_state=sequence_output,
-                hidden_states=encoder_outputs.hidden_states,
-                attentions=encoder_outputs.attentions,
-            )
-        else:
+        if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
+        
+        return TFBaseModelOutput(
+            last_hidden_state=sequence_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )            
 
 
 class TFLayoutLMv3PreTrainedModel(TFPreTrainedModel):
