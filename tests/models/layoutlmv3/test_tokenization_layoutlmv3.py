@@ -20,6 +20,7 @@ import re
 import shutil
 import tempfile
 import unittest
+import warnings
 from typing import List
 
 from transformers import AddedToken, LayoutLMv3TokenizerFast, SpecialTokensMixin, is_tf_available, is_torch_available
@@ -667,6 +668,42 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
 
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
+
+    def test_padding_warning_message_fast_tokenizer(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        words, boxes = self.get_words_and_boxes_batch()
+
+        tokenizer_fast = self.get_rust_tokenizer()
+
+        encoding_fast = tokenizer_fast(
+            words,
+            boxes=boxes,
+        )
+
+        with warnings.catch_warnings(record=True) as w:
+            tokenizer_fast.pad(encoding_fast)
+        self.assertEqual(len(w), 1)
+        self.assertIn(
+            "Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to"
+            " encode the text followed by a call to the `pad` method to get a padded encoding.",
+            str(w[0].message),
+        )
+
+        if not self.test_slow_tokenizer:
+            return
+
+        tokenizer_slow = self.get_tokenizer()
+
+        encoding_slow = tokenizer_slow(
+            words,
+            boxes=boxes,
+        )
+
+        with warnings.catch_warnings(record=True) as w:
+            tokenizer_slow.pad(encoding_slow)
+        self.assertEqual(len(w), 0)
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
