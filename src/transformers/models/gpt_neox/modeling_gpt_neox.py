@@ -300,6 +300,7 @@ class GPTNeoXMLP(nn.Module):
 class GPTNeoXLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.gpt_j_residual = config.gpt_j_residual
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = GPTNeoXAttention(config)
@@ -314,21 +315,39 @@ class GPTNeoXLayer(nn.Module):
         layer_past=None,
         output_attentions=False,
     ):
-        residual = hidden_states
-        ln_out = self.input_layernorm(hidden_states)
-        attention_layer_outputs = self.attention(
-            ln_out,
-            attention_mask=attention_mask,
-            layer_past=layer_past,
-            head_mask=head_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-        )
-        attn_output = attention_layer_outputs[0]  # output_attn: a, present, (attentions)
-        outputs = attention_layer_outputs[1:]
+        if self.gpt_j_residual:
+            residual = hidden_states
+            ln_out = self.input_layernorm(hidden_states)
+            attention_layer_outputs = self.attention(
+                ln_out,
+                attention_mask=attention_mask,
+                layer_past=layer_past,
+                head_mask=head_mask,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
+            attn_output = attention_layer_outputs[0]  # output_attn: a, present, (attentions)
+            outputs = attention_layer_outputs[1:]
 
-        mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
-        hidden_states = mlp_output + attn_output + residual
+            mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
+            hidden_states = mlp_output + attn_output + residual
+        else:
+            residual = hidden_states
+            ln_out = self.input_layernorm(hidden_states)
+            attention_layer_outputs = self.attention(
+                ln_out,
+                attention_mask=attention_mask,
+                layer_past=layer_past,
+                head_mask=head_mask,
+                use_cache=use_cache,
+                output_attentions=output_attentions,
+            )
+            attn_output = attention_layer_outputs[0]  # output_attn: a, present, (attentions)
+            attn_output = attn_output + residual
+            outputs = attention_layer_outputs[1:]
+
+            mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
+            hidden_states = mlp_output + attn_output
 
         if use_cache:
             outputs = (hidden_states,) + outputs
