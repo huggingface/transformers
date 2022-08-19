@@ -955,6 +955,12 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
 
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
+        
+        return TFBaseModelOutput(
+            last_hidden_state=sequence_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )            
 
         return TFBaseModelOutput(
             last_hidden_state=sequence_output,
