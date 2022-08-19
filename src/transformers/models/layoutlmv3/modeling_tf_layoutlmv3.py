@@ -61,6 +61,24 @@ TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST = [
 LARGE_NEGATIVE = -1e8
 
 
+def get_int_dtype(
+    input_ids: Optional[tf.Tensor],
+    bbox: Optional[tf.Tensor],
+    attention_mask: Optional[tf.Tensor],
+    token_type_ids: Optional[tf.Tensor],
+):
+    if input_ids is not None:
+        return input_ids.dtype
+    elif bbox is not None:
+        return bbox.dtype
+    elif attention_mask is not None:
+        return attention_mask.dtype
+    elif token_type_ids is not None:
+        return token_type_ids.dtype
+    else:
+        return tf.int32
+
+
 class TFLayoutLMv3PatchEmbeddings(tf.keras.layers.Layer):
     """LayoutLMv3 image (patch) embeddings."""
 
@@ -807,24 +825,6 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         head_mask = tf.cast(head_mask, self.compute_dtype)
         return head_mask
 
-    def get_int_dtype(
-        self,
-        input_ids: Optional[tf.Tensor],
-        bbox: Optional[tf.Tensor],
-        attention_mask: Optional[tf.Tensor],
-        token_type_ids: Optional[tf.Tensor],
-    ):
-        if input_ids is not None:
-            return input_ids.dtype
-        elif bbox is not None:
-            return bbox.dtype
-        elif attention_mask is not None:
-            return attention_mask.dtype
-        elif token_type_ids is not None:
-            return token_type_ids.dtype
-        else:
-            return tf.int32
-
     @unpack_inputs
     def call(
         self,
@@ -866,7 +866,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds or pixel_values")
 
-        int_dtype = self.get_int_dtype(input_ids, attention_mask, token_type_ids, bbox)
+        int_dtype = get_int_dtype(input_ids, attention_mask, token_type_ids, bbox)
 
         if input_ids is not None or inputs_embeds is not None:
             if attention_mask is None:
