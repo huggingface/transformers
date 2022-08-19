@@ -124,6 +124,10 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         is_encoder_decoder: bool = True,
         activation_function: str = "gelu",
         dropout: float = 0.1,
+        encoder_layerdrop: float = 0.1,
+        decoder_layerdrop: float = 0.1,
+        attention_dropout: float = 0.1,
+        activation_dropout: float = 0.1,
         num_parallel_samples: int = 100,
         init_std: float = 0.02,
         use_cache=True,
@@ -157,10 +161,10 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.decoder_layers = decoder_layers
 
         self.dropout = dropout
-        self.attention_dropout = dropout
-        self.activation_dropout = dropout
-        self.encoder_layerdrop = dropout
-        self.decoder_layerdrop = dropout
+        self.attention_dropout = attention_dropout
+        self.activation_dropout = activation_dropout
+        self.encoder_layerdrop = encoder_layerdrop
+        self.decoder_layerdrop = decoder_layerdrop
 
         self.activation_function = activation_function
         self.init_std = init_std
