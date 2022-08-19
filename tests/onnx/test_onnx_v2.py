@@ -199,6 +199,7 @@ PYTORCH_EXPORT_MODELS = {
     ("roformer", "junnyu/roformer_chinese_base"),
     ("squeezebert", "squeezebert/squeezebert-uncased"),
     ("mobilebert", "google/mobilebert-uncased"),
+    ("mobilevit", "apple/mobilevit-small"),
     ("xlm", "xlm-clm-ende-1024"),
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
