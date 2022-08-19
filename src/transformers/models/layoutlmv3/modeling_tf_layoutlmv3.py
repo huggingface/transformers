@@ -534,7 +534,7 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
         max_exact_buckets = num_buckets // 2
         is_small = buckets < max_exact_buckets
 
-        # the ofther half of the buckets are for logarithmically bigger bins in positions up to max_distance
+        # the other half of the buckets are for logarithmically bigger bins in positions up to max_distance
         buckets_log_ratio = tf.math.log(tf.cast(buckets, tf.float32) / max_exact_buckets)
         distance_log_ratio = math.log(max_distance / max_exact_buckets)
         buckets_big_offset = (
