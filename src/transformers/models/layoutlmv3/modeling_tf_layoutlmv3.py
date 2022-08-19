@@ -1490,8 +1490,8 @@ class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAn
         >>> boxes = example["bboxes"]
 
         >>> encoding = processor(image, question, words, boxes=boxes, return_tensors="tf")
-        >>> start_positions = torch.tensor([1])
-        >>> end_positions = torch.tensor([3])
+        >>> start_positions = tf.convert_to_tensor([1])
+        >>> end_positions = tf.convert_to_tensor([3])
 
         >>> outputs = model(**encoding, start_positions=start_positions, end_positions=end_positions)
         >>> loss = outputs.loss
