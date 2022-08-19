@@ -79,7 +79,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
 def contrastive_loss(logits: tf.Tensor) -> tf.Tensor:
     return tf.math.reduce_mean(
         tf.keras.metrics.sparse_categorical_crossentropy(
-            y_true=tf.range(shape_list(logits)[0]), y_pred=logits, from_logits=True
+            y_true=tf.range(tf.shape(logits)[0]), y_pred=logits, from_logits=True
         )
     )
 
@@ -132,7 +132,7 @@ class TFOwlViTOutput(ModelOutput):
 @dataclass
 class TFOwlViTObjectDetectionOutput(ModelOutput):
     """
-    Output type of [`OwlViTForObjectDetection`].
+    Output type of [`TFOwlViTForObjectDetection`].
 
     Args:
         loss (`tf.Tensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
@@ -219,7 +219,7 @@ class TFOwlViTVisionEmbeddings(tf.keras.layers.Layer):
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
         """`pixel_values` is expected to be of NCHW format."""
 
-        batch_size, num_channels, height, width = shape_list(pixel_values)
+        batch_size, num_channels, height, width = tf.shape(pixel_values)
 
         # When running on CPU, `tf.nn.conv2d` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
@@ -286,13 +286,13 @@ class TFOwlViTTextEmbeddings(tf.keras.layers.Layer):
         if inputs_embeds is None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
-        input_shape = shape_list(inputs_embeds)[:-1]
+        batch_size, seq_len = tf.shape(inputs_embeds)[:-1]
 
         if position_ids is None:
-            position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
+            position_ids = tf.expand_dims(tf.range(start=0, limit=seq_len), axis=0)
 
         position_embeds = tf.gather(params=self.position_embedding, indices=position_ids)
-        position_embeds = tf.tile(input=position_embeds, multiples=(input_shape[0], 1, 1))
+        position_embeds = tf.tile(input=position_embeds, multiples=(batch_size, 1, 1))
         final_embeddings = inputs_embeds + position_embeds
 
         return final_embeddings
@@ -353,7 +353,7 @@ class TFOwlViTAttention(tf.keras.layers.Layer):
     ) -> Tuple[tf.Tensor]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size = shape_list(hidden_states)[0]
+        batch_size = tf.shape(hidden_states)[0]
         mixed_query_layer = self.q_proj(inputs=hidden_states)
         mixed_key_layer = self.k_proj(inputs=hidden_states)
         mixed_value_layer = self.v_proj(inputs=hidden_states)
@@ -547,7 +547,7 @@ class TFOwlViTTextTransformer(tf.keras.layers.Layer):
         return_dict: bool,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-        input_shape = shape_list(input_ids)
+        input_shape = tf.shape(input_ids)
 
         embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
@@ -607,7 +607,6 @@ class TFOwlViTTextTransformer(tf.keras.layers.Layer):
         # set diagonal & lower triangular parts to 0 (i.e. the places not to be masked)
         # TIP: think the 2D matrix as the space of (query_seq, key_seq)
         to_mask = tf.linalg.band_part(to_mask, 0, -1)
-        # to_mask = tf.linalg.band_part(to_mask, -1, 0)
         to_mask = tf.linalg.set_diag(to_mask, diagonal=diag)
 
         return tf.broadcast_to(input=to_mask, shape=(batch_size, 1, seq_length, seq_length))
@@ -627,7 +626,7 @@ class TFOwlViTTextMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value: tf.Variable):
         self.text_model.embeddings.weight = value
-        self.text_model.embeddings.vocab_size = shape_list(value)[0]
+        self.text_model.embeddings.vocab_size = tf.shape(value)[0]
 
     @unpack_inputs
     def call(
@@ -643,7 +642,7 @@ class TFOwlViTTextMainLayer(tf.keras.layers.Layer):
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
 
-        input_shape = shape_list(input_ids)
+        input_shape = tf.shape(input_ids)
 
         if attention_mask is None:
             attention_mask = tf.fill(dims=input_shape, value=1)
@@ -886,7 +885,7 @@ class TFOwlViTMainLayer(tf.keras.layers.Layer):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        input_shape = shape_list(input_ids)
+        input_shape = tf.shape(input_ids)
 
         if attention_mask is None:
             attention_mask = tf.fill(dims=input_shape, value=1)
@@ -1307,8 +1306,8 @@ class TFOwlViTModel(TFOwlViTPreTrainedModel):
     ) -> tf.Tensor:
         r"""
         Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`OwlViTTextModel`].
+            text_features (`tf.Tensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
+            applying the projection layer to the pooled output of [`TFOwlViTTextModel`].
 
         Examples:
         ```python
@@ -1459,10 +1458,7 @@ class TFOwlViTClassPredictionHead(tf.keras.layers.Layer):
         self.elu = get_tf_activation("elu")
 
     def call(
-        self,
-        image_embeds: tf.Tensor,
-        query_embeds: tf.Tensor,
-        query_mask: tf.Tensor,
+        self, image_embeds: tf.Tensor, query_embeds: tf.Tensor, query_mask: tf.Tensor,
     ) -> Tuple[tf.Tensor]:
 
         image_class_embeds = self.dense0(image_embeds)
@@ -1507,19 +1503,17 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
     def normalize_grid_corner_coordinates(self, feature_map: Optional[TFModelInputType] = None):
         # Computes normalized xy corner coordinates from feature_map.
         if not len(feature_map.shape) == 4:
-            raise ValueError("Expected input shape is [batch_size, num_channels, height, width]")
+            raise ValueError("Expected input shape is [batch_size, num_patches, num_patches, hidden_dim]")
 
-        height, width = feature_map.shape[1], feature_map.shape[2]
+        num_patches = feature_map.shape[1]
 
-        box_coordinates = np.stack(np.meshgrid(np.arange(1, width + 1), np.arange(1, height + 1)), axis=-1).astype(
+        box_coordinates = np.stack(np.meshgrid(np.arange(1, num_patches + 1), np.arange(1, num_patches + 1)), axis=-1).astype(
             np.float32
         )
-        box_coordinates /= np.array([width, height], np.float32)
+        box_coordinates /= np.array([num_patches, num_patches], np.float32)
 
-        # Flatten (h, w, 2) -> (h*w, 2)
-        box_coordinates = box_coordinates.reshape(
-            box_coordinates.shape[0] * box_coordinates.shape[1], box_coordinates.shape[2]
-        )
+        # Flatten (num_patches, num_patches, 2) -> (num_patches**2, 2)
+        box_coordinates = box_coordinates.reshape(num_patches**2, box_coordinates.shape[2])
         box_coordinates = tf.convert_to_tensor(box_coordinates)
 
         return box_coordinates
@@ -1533,7 +1527,7 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
         box_coord_bias = tf.math.log(box_coordinates + 1e-4) - tf.math.log1p(-box_coordinates + 1e-4)
 
         # The box size is biased to the patch size
-        box_size = tf.experimental.numpy.full_like(box_coord_bias, 1.0 / feature_map.shape[-2])
+        box_size = tf.ones_like(box_coord_bias) * 1.0 / feature_map.shape[-2]
         box_size_bias = tf.math.log(box_size + 1e-4) - tf.math.log1p(-box_size + 1e-4)
 
         # Compute box bias
@@ -1608,14 +1602,10 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
         image_embeds = self.layer_norm(image_embeds)
 
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
-        new_size = (
-            image_embeds.shape[0],
-            int(np.sqrt(image_embeds.shape[1])),
-            int(np.sqrt(image_embeds.shape[1])),
-            image_embeds.shape[-1],
-        )
+        batch_size, all_patches, hidden_size = tf.shape(image_embeds)
+        num_patches = int(np.sqrt(all_patches))
+        new_size = (batch_size, num_patches, num_patches, hidden_size)
         image_embeds = tf.reshape(image_embeds, new_size)
-
         return (image_embeds, text_embeds)
 
     @unpack_inputs
@@ -1641,7 +1631,7 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
         >>> from transformers import OwlViTProcessor, TFOwlViTForObjectDetection
 
         >>> processor = OwlViTProcessor.from_pretrained("google/owlvit-base-patch32")
-        >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
+        >>> model = TFOwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1678,15 +1668,15 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
             output_attentions=output_attentions,
         )
 
-        batch_size, height, width, hidden_dim = feature_map.shape
-        image_feats = tf.reshape(feature_map, (batch_size, height * width, hidden_dim))
+        batch_size, num_patches, num_patches, hidden_dim = tf.shape(feature_map)
+        image_feats = tf.reshape(feature_map, (batch_size, num_patches**2, hidden_dim))
 
         # Reshape from [batch_size * max_text_queries, hidden_dim] -> [batch_size, max_text_queries, hidden_dim]
-        max_text_queries = input_ids.shape[0] // batch_size
-        query_embeds = tf.reshape(query_embeds, (batch_size, max_text_queries, query_embeds.shape[-1]))
+        max_text_queries = tf.shape(input_ids)[0] // batch_size
+        query_embeds = tf.reshape(query_embeds, (batch_size, max_text_queries, tf.shape(query_embeds)[-1]))
 
         # If first token is 0, then this is a padded query [batch_size, num_queries].
-        input_ids = tf.reshape(input_ids, (batch_size, max_text_queries, input_ids.shape[-1]))
+        input_ids = tf.reshape(input_ids, (batch_size, max_text_queries, tf.shape(input_ids)[-1]))
         query_mask = input_ids[..., 0] > 0
 
         # Predict object classes [batch_size, num_patches, num_queries+1]
@@ -1695,6 +1685,7 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map)
 
+        # Text and vision model last hidden states have different dimensions and are returned separately
         if not return_dict:
             output = (
                 pred_logits,
