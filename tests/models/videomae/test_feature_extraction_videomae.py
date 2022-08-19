@@ -238,7 +238,7 @@ class VideoMAEFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.T
                 short, long = (width, height) if width <= height else (height, width)
                 min_size = size
                 if short == min_size:
-                    resized_shape = (c, h, w)
+                    resized_shape = (c, height, width)
                 else:
                     short, long = min_size, int(long * min_size / short)
                     resized_shape = (c, long, short) if w <= h else (c, short, long)
