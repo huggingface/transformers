@@ -1644,8 +1644,7 @@ class set_reproducible(ContextDecorator):
             return
         elif frame.f_code.co_name != "forward":
             return
-        # Set the seed when it is a call to a function
-        # which is different from forward pass
+        # Set the seed when it is a call to a forward function
         return self.set_seed
 
     def set_seed(self, frame, event, arg):
