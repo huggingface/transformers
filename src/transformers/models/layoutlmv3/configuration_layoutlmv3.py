@@ -212,7 +212,7 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
                     ("input_ids", {0: "batch", 1: "sequence"}),
                     ("bbox", {0: "batch", 1: "sequence"}),
                     ("attention_mask", {0: "batch", 1: "sequence"}),
-                    ("pixel_values", {0: "batch", 1: "sequence"}),
+                    ("pixel_values", {0: "batch", 1: "num_channels"}),
                 ]
             )
 
