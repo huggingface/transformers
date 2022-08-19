@@ -728,7 +728,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         # We should not hardcode max_len to 1000, but it is done by the reference implementation,
         # so we keep it for compatibility with the pretrained weights. The more correct approach
         # would have been to pass on max_len=config.max_2d_position_embeddings - 1.
-        width, height = image_size
+        height, width = image_size
 
         visual_bbox_x = tf.cast(tf.range(0, max_len * (width + 1), max_len) / width, tf.int32)
         visual_bbox_x = tf.expand_dims(visual_bbox_x, axis=0)
