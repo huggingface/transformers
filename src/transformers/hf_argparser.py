@@ -234,29 +234,65 @@ class HfArgumentParser(ArgumentParser):
 
             return (*outputs,)
 
-    def parse_json_file(self, json_file: str) -> Tuple[DataClass, ...]:
+    def parse_json_file(self, json_file: str, allow_extra_keys: bool = True) -> Tuple[DataClass, ...]:
         """
         Alternative helper method that does not use `argparse` at all, instead loading a json file and populating the
         dataclass types.
+
+        Args:
+            json_file:
+                File name of the json file to parse
+            allow_extra_keys:
+                Defaults to True. If False, will raise an exception if the json file contains keys that are not parsed.
+
+        Returns:
+            Tuple consisting of:
+
+                - the dataclass instances in the same order as they were passed to the initializer.abspath
+                - if applicable, an additional namespace for more (non-dataclass backed) arguments added to the parser
+                  after initialization.
+                - The potential list of remaining argument strings. (same as argparse.ArgumentParser.parse_known_args)
         """
         data = json.loads(Path(json_file).read_text())
+        unused_keys = set(data.keys())
         outputs = []
         for dtype in self.dataclass_types:
             keys = {f.name for f in dataclasses.fields(dtype) if f.init}
             inputs = {k: v for k, v in data.items() if k in keys}
+            unused_keys.difference_update(inputs.keys())
             obj = dtype(**inputs)
             outputs.append(obj)
+        if not allow_extra_keys and unused_keys:
+            raise ValueError(f"Some keys are not used by the HfArgumentParser: {sorted(unused_keys)}")
         return (*outputs,)
 
-    def parse_dict(self, args: dict) -> Tuple[DataClass, ...]:
+    def parse_dict(self, args: dict, allow_extra_keys: bool = True) -> Tuple[DataClass, ...]:
         """
         Alternative helper method that does not use `argparse` at all, instead uses a dict and populating the dataclass
         types.
+
+        Args:
+            args:
+                dict containing config values
+            allow_extra_keys:
+                Defaults to True. If False, will raise an exception if the dict contains keys that are not parsed.
+
+        Returns:
+            Tuple consisting of:
+
+                - the dataclass instances in the same order as they were passed to the initializer.abspath
+                - if applicable, an additional namespace for more (non-dataclass backed) arguments added to the parser
+                  after initialization.
+                - The potential list of remaining argument strings. (same as argparse.ArgumentParser.parse_known_args)
         """
+        unused_keys = set(args.keys())
         outputs = []
         for dtype in self.dataclass_types:
             keys = {f.name for f in dataclasses.fields(dtype) if f.init}
             inputs = {k: v for k, v in args.items() if k in keys}
+            unused_keys.difference_update(inputs.keys())
             obj = dtype(**inputs)
             outputs.append(obj)
+        if not allow_extra_keys and unused_keys:
+            raise ValueError(f"Some keys are not used by the HfArgumentParser: {sorted(unused_keys)}")
         return (*outputs,)
