@@ -833,7 +833,11 @@ class TFXGLMModel(TFXGLMPreTrainedModel):
         pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
+        cross_attns = (
+            tf.convert_to_tensor(output.cross_attentions)
+            if self.config.output_attentions and self.config.add_cross_attention
+            else None
+        )
 
         return TFBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=output.hidden_states,
@@ -973,7 +977,11 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
         pkv = tf.convert_to_tensor(output.past_key_values) if self.config.use_cache else None
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-        cross_attns = tf.convert_to_tensor(output.cross_attentions) if self.config.output_attentions else None
+        cross_attns = (
+            tf.convert_to_tensor(output.cross_attentions)
+            if self.config.output_attentions and self.config.add_cross_attention
+            else None
+        )
 
         return TFCausalLMOutputWithCrossAttentions(
             loss=output.loss,
