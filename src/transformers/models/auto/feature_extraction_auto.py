@@ -46,6 +46,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("deit", "DeiTFeatureExtractor"),
         ("detr", "DetrFeatureExtractor"),
         ("detr", "DetrFeatureExtractor"),
+        ("donut", "DonutFeatureExtractor"),
         ("dpt", "DPTFeatureExtractor"),
         ("flava", "FlavaFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),

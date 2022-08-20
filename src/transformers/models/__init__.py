@@ -52,6 +52,7 @@ from . import (
     dialogpt,
     distilbert,
     dit,
+    donut,
     dpr,
     dpt,
     electra,
