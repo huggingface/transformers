@@ -75,7 +75,7 @@ class JukeboxConfig(PretrainedConfig):
         init_std (`float`, *optional*, defaults to 0.2):
             Standard deviation used to inital the model.
         hop_fraction (`list`, *optional*, defaults to [0.125, 0.5, 0.5]):
-            # TODO detail this
+            # TODO detail this amount of space between each of the sampling windows oif `n_ctx` tokens
         cond_zero_out (`bool`, *optional*, defaults to False):
             Zero out weights when initialising.
         cond_depth (`list`, *optional*, defaults to [3, 16, 16]):

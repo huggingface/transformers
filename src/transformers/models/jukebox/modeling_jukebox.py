@@ -1381,7 +1381,7 @@ class JukeboxTransformer(nn.Module):
             else:
                 hidden_states = attn_layer(hidden_states, lyric_encoder_states=None, sample=sample)
             if attn_layer.attn.record_attn:
-                self.saved_attn_weights.append(attn_layer.attn.w)
+                self.saved_attn_weights.append(attn_layer.attn.c_attn.weight)
         if not fp16_out:
             hidden_states = hidden_states.float()
         return hidden_states
@@ -1563,7 +1563,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         )  # Pos emb and dropout
 
         hidden_states = self.transformer(
-            hidden_states, lyric_encoder_states=lyric_encoder_states, fp16=fp16
+            hidden_states, lyric_encoder_states=lyric_encoder_states, fp16=fp16, fp16_out=fp16
         )  # Transformer
         if self.add_cond_after_transformer:  # Piped doesnt add x_cond
             hidden_states = hidden_states + audio_conditioning
@@ -1647,7 +1647,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 )
                 self.transformer.check_cache(n_samples, sample_t, fp16)
                 hidden_states = self.transformer(
-                    hidden_states, lyric_encoder_states=lyric_encoder_states, sample=True, fp16=fp16
+                    hidden_states, lyric_encoder_states=lyric_encoder_states, sample=True, fp16=fp16, fp16_out=fp16
                 )
                 if self.add_cond_after_transformer:
                     hidden_states = hidden_states + cond
@@ -2361,7 +2361,7 @@ class JukeboxPrior(nn.Module):
 
     def get_cond(self, music_tokens_conds, metadata):
         """
-        Converts the tokens to the input_embeddings. Splits the lyrics and the metadata. Lyric tokens can be None
+        Converts the input tokens to input_embeddings. Splits the lyrics form the rest of the metadata. Lyric tokens can be None.
         """
         if metadata is not None:
             n_labels = metadata.shape[1] - self.nb_relevant_lyric_tokens
@@ -2490,7 +2490,7 @@ class JukeboxPrior(nn.Module):
         self, music_tokens, music_tokens_conds=[], metadata=None, fp16=False, get_preds=False, get_attn_weights=False
     ):
         """
-        Applies a forward pass using the conditioning tokens. Different from the classif forward as it does not use the
+        Applies a forward pass using the conditioning tokens. Different from the classic forward as it does not use the
         vqvae's encoding layers.
 
         Args:
@@ -2571,8 +2571,6 @@ class JukeboxPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
     def __init__(self, *inputs, **kwargs):
         super().__init__(*inputs, **kwargs)
@@ -2612,6 +2610,8 @@ def get_starts(total_length, n_ctx, hop_length):
 def get_alignment(music_tokens, labels, prior, fp16, config):
     """
     Compute the lyric to music token alignment, but for now it cannot be used.
+
+    IN THE Oiginal code,
     """
     level = prior.levels - 1  # Top level used
     n_ctx = prior.n_ctx
@@ -2632,20 +2632,20 @@ def get_alignment(music_tokens, labels, prior, fp16, config):
     alignment_hops = {}
     indices_hops = {}
     # prior.to(tokens.device)
-    prior.to("cpu")
+    prior.to("cuda")
     gc.collect()
     torch.cuda.empty_cache()
     for start in get_range(get_starts(total_length, n_ctx, hop_length)):
         end = start + n_ctx
         # set metadata offset, sample_length and lyrics tokens
         metadata, indices_hop = prior.get_metadata(labels, start, config.sample_length, get_indices=True, offset=0)
-        metadata.to("cpu")
+        metadata.to("cuda")
         tokens_bs = torch.chunk(tokens, batch_size, dim=0)
         metadata_bs = torch.chunk(metadata, batch_size, dim=0)
         w_hops = []
         for tokens_i, metadata_i in zip(tokens_bs, metadata_bs):
-            tokens_i = tokens_i.to("cpu")
-            metadata_i = metadata_i.to("cpu")
+            tokens_i = tokens_i.to("cuda")
+            metadata_i = metadata_i.to("cuda")
             w_hop = prior.forward_tokens(
                 tokens_i[:, start:end], [], metadata_i, fp16=fp16, get_attn_weights=attn_layers
             )
@@ -2669,13 +2669,12 @@ def get_alignment(music_tokens, labels, prior, fp16, config):
     alignments = []
     for item in range(batch_size):
         # Note each item has different length lyrics
-        full_tokens = labels[:, 3:]
+        full_tokens = labels[0, 3:]
         alignment = np.zeros((total_length, len(full_tokens) + 1))
         for start in reversed(get_starts(total_length, n_ctx, hop_length)):
             end = start + n_ctx
             alignment_hop = alignment_hops[start][item]
             indices = indices_hops[start][item]
-
             alignment[start:end, indices] = alignment_hop
         alignment = alignment[: total_length - padding_length, :-1]  # remove token padding, and last lyric index
         alignments.append(alignment)
@@ -2844,7 +2843,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             )
         return music_tokens
 
-    # Sample multiple levels
+    @torch.no_grad()
     def _sample(
         self,
         music_tokens,
@@ -2864,12 +2863,13 @@ class JukeboxModel(JukeboxPreTrainedModel):
         fp16=False,
     ):
         top_prior = self.priors[-1]
-        total_length = (
-            sample_length
-            if sample_length is not None
-            else (int(sample_length_in_seconds * self.config.sampling_rate) // top_prior.raw_to_tokens)
-            * top_prior.raw_to_tokens
-        )
+        if sample_length is not None:
+            total_length = sample_length
+        else:
+            total_length = (
+                int(sample_length_in_seconds * self.config.sampling_rate) // top_prior.raw_to_tokens
+            ) * top_prior.raw_to_tokens
+
         sampling_kwargs = [
             dict(
                 temp=0.99,
@@ -2932,17 +2932,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 if alignments is None and self.priors[-1] is not None and self.priors[-1].nb_relevant_lyric_tokens > 0:
                     gc.collect()
                     torch.cuda.empty_cache()
-                    # should memory profile this function it takes up to 77% of 88GB RAM which seems to be a loooooooot 96%
-                    # has to be either a memory leak or, since all the attention is stored, everything is stored and it
-                    # is not optimal
-                    alignments = get_alignment(
-                        music_tokens,
-                        labels[-1],
-                        self.priors[-1],
-                        sampling_kwargs[-1]["fp16"],
-                        self.config,
-                    )
-                    pass  # consumes too much ram
+                    with torch.no_grad():
+                        alignments = get_alignment(music_tokens, labels[-1], self.priors[-1], fp16, self.config)
+                    torch.save({"alignments": alignments}, f"{logdir}/lyric_alignments.pt")
+                    # disable saving to html, TODO should we do it
         return music_tokens
 
     # Generate ancestral samples given a list of artists and genres
@@ -2979,9 +2972,3 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
 
 # TODO add tied embeddings for the lyric encoder lm head as well as the proj_out when they are not seperated.
-
-
-# Training the prior on next token prediction using a bert tokenizer would make more sens than only predicting the letter
-# Indeed the model in unconditional sampling does not generate proper lyrics. Thus should have been
-# That is why we hear jibbrish. Could also have 3 levels of encoding were you predict entires sentences corresponding to the
-# highest level, then lower level words etc
