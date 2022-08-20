@@ -31,11 +31,11 @@ logger = logging.get_logger(__name__)
 
 BLOOM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bigscience/bloom": "https://huggingface.co/bigscience/bloom/resolve/main/config.json",
-    "bigscience/bloom-350m": "https://huggingface.co/bigscience/bloom-350m/blob/main/config.json",
-    "bigscience/bloom-760m": "https://huggingface.co/bigscience/bloom-760m/blob/main/config.json",
-    "bigscience/bloom-1b3": "https://huggingface.co/bigscience/bloom-1b3/blob/main/config.json",
-    "bigscience/bloom-2b5": "https://huggingface.co/bigscience/bloom-2b5/blob/main/config.json",
-    "bigscience/bloom-6b3": "https://huggingface.co/bigscience/bloom-6b3/blob/main/config.json",
+    "bigscience/bloom-560m": "https://huggingface.co/bigscience/bloom-560m/blob/main/config.json",
+    "bigscience/bloom-1b1": "https://huggingface.co/bigscience/bloom-1b1/blob/main/config.json",
+    "bigscience/bloom-1b7": "https://huggingface.co/bigscience/bloom-1b7/blob/main/config.json",
+    "bigscience/bloom-3b": "https://huggingface.co/bigscience/bloom-3b/blob/main/config.json",
+    "bigscience/bloom-7b1": "https://huggingface.co/bigscience/bloom-7b1/blob/main/config.json",
 }
 
 
@@ -214,14 +214,19 @@ class BloomOnnxConfig(OnnxConfigWithPast):
                 batch, seqlen = common_inputs["input_ids"].shape
                 # Not using the same length for past_key_values
                 past_key_values_length = seqlen + 2
-                past_shape = (
-                    batch,
+                head_dim = self._config.hidden_size // self.num_attention_heads
+                past_key_shape = (
+                    batch * self.num_attention_heads,
+                    head_dim,
                     past_key_values_length,
-                    self.num_attention_heads,
-                    self._config.hidden_size // self.num_attention_heads,
+                )
+                past_value_shape = (
+                    batch * self.num_attention_heads,
+                    past_key_values_length,
+                    head_dim,
                 )
                 ordered_inputs["past_key_values"] = [
-                    (torch.zeros(past_shape), torch.zeros(past_shape)) for _ in range(self.num_layers)
+                    (torch.zeros(past_key_shape), torch.zeros(past_value_shape)) for _ in range(self.num_layers)
                 ]
 
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]

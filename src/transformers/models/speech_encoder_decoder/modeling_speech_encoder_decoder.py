@@ -482,8 +482,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel):
         'Mr. Quilter ist der Apostel der Mittelschicht und wir freuen uns, sein Evangelium willkommen heißen zu können.'
 
         >>> # Training: Train model on English transcription
-        >>> with processor.as_target_processor():
-        ...     labels = processor(ds[0]["text"], return_tensors="pt").input_ids
+        >>> labels = processor(text=ds[0]["text"], return_tensors="pt").input_ids
 
         >>> loss = model(input_values, labels=labels).loss
         >>> loss.backward()

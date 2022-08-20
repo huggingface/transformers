@@ -14,11 +14,9 @@
 # limitations under the License.
 """ PyTorch DeBERTa-v2 model."""
 
-import math
 from collections.abc import Sequence
 from typing import Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
@@ -190,6 +188,23 @@ class XDropout(torch.autograd.Function):
             return grad_output.masked_fill(mask, 0) * ctx.scale, None
         else:
             return grad_output, None
+
+    @staticmethod
+    def symbolic(g: torch._C.Graph, input: torch._C.Value, local_ctx: Union[float, DropoutContext]) -> torch._C.Value:
+        from torch.onnx import symbolic_opset12
+
+        dropout_p = local_ctx
+        if isinstance(local_ctx, DropoutContext):
+            dropout_p = local_ctx.dropout
+        # StableDropout only calls this function when training.
+        train = True
+        # TODO: We should check if the opset_version being used to export
+        # is > 12 here, but there's no good way to do that. As-is, if the
+        # opset_version < 12, export will fail with a CheckerError.
+        # Once https://github.com/pytorch/pytorch/issues/78391 is fixed, do something like:
+        # if opset_version < 12:
+        #   return torch.onnx.symbolic_opset9.dropout(g, input, dropout_p, train)
+        return symbolic_opset12.dropout(g, input, dropout_p, train)
 
 
 # Copied from transformers.models.deberta.modeling_deberta.StableDropout
@@ -535,11 +550,17 @@ class DebertaV2Encoder(nn.Module):
 
 
 def make_log_bucket_position(relative_pos, bucket_size, max_position):
-    sign = np.sign(relative_pos)
+    sign = torch.sign(relative_pos)
     mid = bucket_size // 2
-    abs_pos = np.where((relative_pos < mid) & (relative_pos > -mid), mid - 1, np.abs(relative_pos))
-    log_pos = np.ceil(np.log(abs_pos / mid) / np.log((max_position - 1) / mid) * (mid - 1)) + mid
-    bucket_pos = np.where(abs_pos <= mid, relative_pos, log_pos * sign).astype(np.int)
+    abs_pos = torch.where(
+        (relative_pos < mid) & (relative_pos > -mid),
+        torch.tensor(mid - 1).type_as(relative_pos),
+        torch.abs(relative_pos),
+    )
+    log_pos = (
+        torch.ceil(torch.log(abs_pos / mid) / torch.log(torch.tensor((max_position - 1) / mid)) * (mid - 1)) + mid
+    )
+    bucket_pos = torch.where(abs_pos <= mid, relative_pos.type_as(log_pos), log_pos * sign)
     return bucket_pos
 
 
@@ -561,12 +582,12 @@ def build_relative_position(query_size, key_size, bucket_size=-1, max_position=-
         `torch.LongTensor`: A tensor with shape [1, query_size, key_size]
 
     """
-    q_ids = np.arange(0, query_size)
-    k_ids = np.arange(0, key_size)
-    rel_pos_ids = q_ids[:, None] - np.tile(k_ids, (q_ids.shape[0], 1))
+    q_ids = torch.arange(0, query_size)
+    k_ids = torch.arange(0, key_size)
+    rel_pos_ids = q_ids[:, None] - k_ids[None, :]
     if bucket_size > 0 and max_position > 0:
         rel_pos_ids = make_log_bucket_position(rel_pos_ids, bucket_size, max_position)
-    rel_pos_ids = torch.tensor(rel_pos_ids, dtype=torch.long)
+    rel_pos_ids = rel_pos_ids.to(torch.long)
     rel_pos_ids = rel_pos_ids[:query_size, :]
     rel_pos_ids = rel_pos_ids.unsqueeze(0)
     return rel_pos_ids
@@ -695,8 +716,10 @@ class DisentangledSelfAttention(nn.Module):
             scale_factor += 1
         if "p2c" in self.pos_att_type:
             scale_factor += 1
-        scale = math.sqrt(query_layer.size(-1) * scale_factor)
-        attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2)) / scale
+        scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+        attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2)) / torch.tensor(
+            scale, dtype=query_layer.dtype
+        )
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
             rel_att = self.disentangled_attention_bias(
@@ -770,7 +793,7 @@ class DisentangledSelfAttention(nn.Module):
         score = 0
         # content->position
         if "c2p" in self.pos_att_type:
-            scale = math.sqrt(pos_key_layer.size(-1) * scale_factor)
+            scale = torch.sqrt(torch.tensor(pos_key_layer.size(-1), dtype=torch.float) * scale_factor)
             c2p_att = torch.bmm(query_layer, pos_key_layer.transpose(-1, -2))
             c2p_pos = torch.clamp(relative_pos + att_span, 0, att_span * 2 - 1)
             c2p_att = torch.gather(
@@ -778,11 +801,11 @@ class DisentangledSelfAttention(nn.Module):
                 dim=-1,
                 index=c2p_pos.squeeze(0).expand([query_layer.size(0), query_layer.size(1), relative_pos.size(-1)]),
             )
-            score += c2p_att / scale
+            score += c2p_att / torch.tensor(scale, dtype=c2p_att.dtype)
 
         # position->content
         if "p2c" in self.pos_att_type:
-            scale = math.sqrt(pos_query_layer.size(-1) * scale_factor)
+            scale = torch.sqrt(torch.tensor(pos_query_layer.size(-1), dtype=torch.float) * scale_factor)
             if key_layer.size(-2) != query_layer.size(-2):
                 r_pos = build_relative_position(
                     key_layer.size(-2),
@@ -801,7 +824,7 @@ class DisentangledSelfAttention(nn.Module):
                 dim=-1,
                 index=p2c_pos.squeeze(0).expand([query_layer.size(0), key_layer.size(-2), key_layer.size(-2)]),
             ).transpose(-1, -2)
-            score += p2c_att / scale
+            score += p2c_att / torch.tensor(scale, dtype=p2c_att.dtype)
 
         return score
 
@@ -920,7 +943,7 @@ DEBERTA_START_DOCSTRING = r"""
 
     This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.```
+    and behavior.
 
 
     Parameters:

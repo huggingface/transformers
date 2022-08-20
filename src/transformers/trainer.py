@@ -71,7 +71,12 @@ from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
-from .pytorch_utils import ALL_LAYERNORM_LAYERS
+from .pytorch_utils import (
+    ALL_LAYERNORM_LAYERS,
+    is_torch_greater_or_equal_than_1_6,
+    is_torch_greater_or_equal_than_1_10,
+    is_torch_less_than_1_11,
+)
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -165,11 +170,11 @@ if is_in_notebook():
 if is_apex_available():
     from apex import amp
 
-if version.parse(torch.__version__) >= version.parse("1.6"):
+if is_torch_greater_or_equal_than_1_6:
     _is_torch_generator_available = True
     _is_native_cuda_amp_available = True
 
-if version.parse(torch.__version__) >= version.parse("1.10"):
+if is_torch_greater_or_equal_than_1_10:
     _is_native_cpu_amp_available = True
 
 if is_datasets_available():
@@ -405,7 +410,7 @@ class Trainer:
             # Would have to update setup.py with torch>=1.12.0
             # which isn't ideally given that it will force people not using FSDP to also use torch>=1.12.0
             # below is the current alternative.
-            if version.parse(torch.__version__) < version.parse("1.12.0"):
+            if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.12.0"):
                 raise ValueError("FSDP requires PyTorch >= 1.12.0")
 
             from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
@@ -565,9 +570,11 @@ class Trainer:
                     self.scaler = ShardedGradScaler()
                 elif self.fsdp is not None:
                     if self.amp_dtype == torch.float16:
-                        from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
+                        from torch.distributed.fsdp.sharded_grad_scaler import (
+                            ShardedGradScaler as FSDPShardedGradScaler,
+                        )
 
-                        self.scaler = ShardedGradScaler()
+                        self.scaler = FSDPShardedGradScaler()
                     else:
                         self.do_grad_scaling = False
                         self.use_cuda_amp = False
@@ -1342,9 +1349,8 @@ class Trainer:
                     reshard_after_forward=zero_3,
                     cpu_offload=cpu_offload,
                 ).to(self.args.device)
-
         # Distributed training using PyTorch FSDP
-        if self.fsdp is not None:
+        elif self.fsdp is not None:
             # PyTorch FSDP!
             from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
             from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
@@ -1366,6 +1372,8 @@ class Trainer:
                     transformer_cls_to_wrap = get_module_class_from_name(
                         model, self.args.fsdp_transformer_layer_cls_to_wrap
                     )
+                    if transformer_cls_to_wrap is None:
+                        raise Exception("Could not find the transformer layer class to wrap in the model.")
                     auto_wrap_policy = functools.partial(
                         transformer_auto_wrap_policy,
                         # Transformer layer class to wrap
@@ -1390,7 +1398,6 @@ class Trainer:
                 )
                 if FSDPOption.OFFLOAD not in self.args.fsdp:
                     model.to(self.args.device)
-
         elif is_sagemaker_dp_enabled():
             model = nn.parallel.DistributedDataParallel(
                 model, device_ids=[int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))]
@@ -1674,7 +1681,7 @@ class Trainer:
                 is_random_sampler = hasattr(train_dataloader, "sampler") and isinstance(
                     train_dataloader.sampler, RandomSampler
                 )
-                if version.parse(torch.__version__) < version.parse("1.11") or not is_random_sampler:
+                if is_torch_less_than_1_11 or not is_random_sampler:
                     # We just need to begin an iteration to create the randomization of the sampler.
                     # That was before PyTorch 1.11 however...
                     for _ in train_dataloader:
@@ -1928,7 +1935,9 @@ class Trainer:
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
-                load_result = model.load_state_dict(state_dict)
+                # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
+                # which takes *args instead of **kwargs
+                load_result = model.load_state_dict(state_dict, False)
                 # release memory
                 del state_dict
                 self._issue_warnings_after_load(load_result)
@@ -1982,7 +1991,9 @@ class Trainer:
                     # We load the model state dict on the CPU to avoid an OOM error.
                     state_dict = torch.load(best_model_path, map_location="cpu")
                     # If the model is on the GPU, it still works!
-                    load_result = model.load_state_dict(state_dict)
+                    # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
+                    # which takes *args instead of **kwargs
+                    load_result = model.load_state_dict(state_dict, False)
                 if not is_sagemaker_mp_enabled():
                     self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
@@ -2428,7 +2439,7 @@ class Trainer:
         arguments, depending on the situation.
         """
         if self.use_cuda_amp or self.use_cpu_amp:
-            if version.parse(torch.__version__) >= version.parse("1.10"):
+            if is_torch_greater_or_equal_than_1_10:
                 ctx_manager = (
                     torch.cpu.amp.autocast(dtype=self.amp_dtype)
                     if self.use_cpu_amp
