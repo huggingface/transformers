@@ -971,6 +971,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         train: bool = False,
         params: dict = None,
         dropout_rng: PRNGKey = None,
+        input_embeds: Optional[jnp.ndarray] = None
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -986,7 +987,10 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
 
         # prepare encoder inputs
         if attention_mask is None:
-            attention_mask = jnp.ones_like(input_ids)
+            if input_ids is not None:
+                attention_mask = jnp.ones_like(input_ids)
+            else:
+                attention_mask = jnp.ones(input_embeds.shape[:-1])
 
         # prepare decoder inputs
         if decoder_attention_mask is None:
@@ -995,9 +999,12 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         # Handle any PRNG if needed
         rngs = {"dropout": dropout_rng} if dropout_rng is not None else {}
 
+        if input_ids is not None:
+            input_ids = jnp.array(input_ids, dtype="i4")
+            
         return self.module.apply(
             {"params": params or self.params},
-            input_ids=jnp.array(input_ids, dtype="i4"),
+            input_ids=input_ids,
             attention_mask=jnp.array(attention_mask, dtype="i4"),
             decoder_input_ids=jnp.array(decoder_input_ids, dtype="i4"),
             decoder_attention_mask=jnp.array(decoder_attention_mask, dtype="i4"),
@@ -1006,6 +1013,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
             return_dict=return_dict,
             deterministic=not train,
             rngs=rngs,
+            input_embeds = input_embeds
         )
 
     def init_cache(self, batch_size, max_length, encoder_outputs):
@@ -1494,6 +1502,9 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
             dtype=self.dtype,
         )
 
+    def get_shared_layer(self):
+        return self.shared
+
     def __call__(
         self,
         input_ids=None,
@@ -1508,6 +1519,14 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         input_embeds=None,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if input_ids is not None:
+            B,L = input_ids.shape
+        else:
+            B,L = input_embeds.shape[:2]
+
+        if attention_mask is None:
+            attention_mask = jnp.ones([B,L],dtype=int)
 
         # Encode
         encoder_outputs = self.encoder(
