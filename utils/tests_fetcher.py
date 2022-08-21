@@ -465,6 +465,7 @@ EXPECTED_TEST_FILES_NEVER_TOUCHED = [
     "tests/sagemaker/test_single_node_gpu.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_model_parallel.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_data_parallel.py",  # SageMaker test
+    "tests/mixed_int8/test_mixed_int8.py",  # Mixed-int8 bitsandbytes test
 ]
 
 

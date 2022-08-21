@@ -105,7 +105,7 @@ You can also write your own device map following the same format (a dictionary l
 device_map = {"shared": 0, "encoder": 0, "decoder": 1, "lm_head": 1}
 ```
 
-Another way to minimize the memory impact of your model is to instantiate it at a lower precision dtype (like `torch.float16`).
+Another way to minimize the memory impact of your model is to instantiate it at a lower precision dtype (like `torch.float16`) or use direct quantization techniques as described below.
 
 ### Model Instantiation dtype
 
@@ -132,7 +132,6 @@ model = AutoModel.from_config(config)
 ```
 
 Due to Pytorch design, this functionality is only available for floating dtypes.
-
 
 
 ## ModuleUtilsMixin
