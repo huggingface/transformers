@@ -194,6 +194,13 @@ class TFOwlViTVisionEmbeddings(tf.keras.layers.Layer):
             name="patch_embedding",
         )
 
+        self.position_embedding = tf.keras.layers.Embedding(
+            input_dim=self.num_positions, 
+            output_dim=self.embed_dim,
+            embeddings_initializer=get_initializer(self.config.initializer_factor * self.config.initializer_range),
+            name="position_embedding",
+        )
+
     def build(self, input_shape: tf.TensorShape):
 
         factor = self.config.initializer_factor
@@ -204,14 +211,6 @@ class TFOwlViTVisionEmbeddings(tf.keras.layers.Layer):
             trainable=True,
             name="class_embedding",
         )
-
-        with tf.name_scope("position_embedding"):
-            self.position_embedding = self.add_weight(
-                shape=(self.num_positions, self.embed_dim),
-                initializer=get_initializer(self.config.initializer_range * factor),
-                trainable=True,
-                name="embeddings",
-            )
 
         super().build(input_shape)
 
@@ -244,30 +243,19 @@ class TFOwlViTTextEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: OwlViTTextConfig, **kwargs):
         super().__init__(**kwargs)
 
-        self.embed_dim = config.hidden_size
-        self.vocab_size = config.vocab_size
+        self.token_embedding = tf.keras.layers.Embedding(
+            input_dim=config.vocab_size, 
+            output_dim=config.hidden_size,
+            embeddings_initializer=get_initializer(self.config.initializer_factor * self.config.initializer_range),
+            name="token_embedding",
+        )
 
-        self.config = config
-
-    def build(self, input_shape: tf.TensorShape):
-
-        with tf.name_scope("token_embedding"):
-            self.weight = self.add_weight(
-                shape=(self.vocab_size, self.embed_dim),
-                initializer=get_initializer(self.config.initializer_factor * self.config.initializer_range),
-                trainable=True,
-                name="weight",
-            )
-
-        with tf.name_scope("position_embedding"):
-            self.position_embedding = self.add_weight(
-                shape=(self.config.max_position_embeddings, self.embed_dim),
-                initializer=get_initializer(self.config.initializer_factor * self.config.initializer_range),
-                trainable=True,
-                name="embeddings",
-            )
-
-        super().build(input_shape)
+        self.position_embedding = tf.keras.layers.Embedding(
+            input_dim=config.max_position_embeddings, 
+            output_dim=config.hidden_size,
+            embeddings_initializer=get_initializer(self.config.initializer_factor * self.config.initializer_range),
+            name="position_embedding",
+        )
 
     def call(
         self,
