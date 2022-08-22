@@ -1,20 +1,13 @@
 import os
 from pathlib import Path
-from tempfile import NamedTemporaryFile, TemporaryDirectory
+from tempfile import NamedTemporaryFile
 from unittest import TestCase
-from unittest.mock import MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 
 from parameterized import parameterized
-from transformers import (
-    AutoConfig,
-    AutoModel,
-    PreTrainedTokenizerBase,
-    TFAutoModel,
-    is_tf_available,
-    is_torch_available,
-)
+from transformers import AutoConfig, PreTrainedTokenizerBase, is_tf_available, is_torch_available
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
@@ -45,38 +38,6 @@ class OnnxUtilsTestCaseV2(TestCase):
     """
     Cover all the utilities involved to export ONNX models
     """
-
-    @classmethod
-    def setUpClass(cls):
-        # Create local checkpoints - one time setup
-        test_model = "mrm8488/bert-tiny-finetuned-squadv2"
-        cls.test_model = test_model
-
-        pt_temp_dir = TemporaryDirectory()
-        local_pt_ckpt = pt_temp_dir.name
-        model_pt = AutoModel.from_pretrained(test_model)
-        model_pt.save_pretrained(local_pt_ckpt)
-        cls.pt_temp_dir = pt_temp_dir
-        cls.local_pt_ckpt = local_pt_ckpt
-
-        tf_temp_dir = TemporaryDirectory()
-        local_tf_ckpt = tf_temp_dir.name
-        model_tf = TFAutoModel.from_pretrained(test_model, from_pt=True)
-        model_tf.save_pretrained(local_tf_ckpt)
-        cls.tf_temp_dir = tf_temp_dir
-        cls.local_tf_ckpt = local_tf_ckpt
-
-        invalid_temp_dir = TemporaryDirectory()
-        local_invalid_ckpt = invalid_temp_dir.name
-        cls.invalid_temp_dir = invalid_temp_dir
-        cls.local_invalid_ckpt = local_invalid_ckpt
-
-    @classmethod
-    def tearDownClass(cls):
-        # Remove local checkpoints
-        cls.pt_temp_dir.cleanup()
-        cls.tf_temp_dir.cleanup()
-        cls.invalid_temp_dir.cleanup()
 
     @require_torch
     @patch("transformers.onnx.convert.is_torch_onnx_dict_inputs_support_available", return_value=False)
@@ -132,67 +93,6 @@ class OnnxUtilsTestCaseV2(TestCase):
                 "past_key.2": 2,
             },
         )
-
-    def test_determine_framework(self):
-        """
-        Ensure the expected framework is determined.
-        """
-        torch_str = "pt"
-        tf_str = "tf"
-        mock_framework = "mock_framework"
-
-        # Framework provided - return whatever the user provides
-        result = FeaturesManager.determine_framework(self.test_model, mock_framework)
-        self.assertEqual(result, mock_framework)
-
-        # Local checkpoint provided - return whatever the user provides
-        result = FeaturesManager.determine_framework(self.local_pt_ckpt, mock_framework)
-        self.assertEqual(result, mock_framework)
-
-        result = FeaturesManager.determine_framework(self.local_tf_ckpt, mock_framework)
-        self.assertEqual(result, mock_framework)
-
-        # Framework not provided and local checkpoint is used
-        result = FeaturesManager.determine_framework(self.local_pt_ckpt)
-        self.assertEqual(result, torch_str)
-
-        result = FeaturesManager.determine_framework(self.local_tf_ckpt)
-        self.assertEqual(result, tf_str)
-
-        # Framework not provided and invalid local checkpoint is used
-        with self.assertRaises(FileNotFoundError):
-            result = FeaturesManager.determine_framework(self.local_invalid_ckpt)
-
-        # Framework not provided, hub model is used (no local checkpoint directory)
-        # TensorFlow not in environment -> use PyTorch
-        mock_tf_available = MagicMock(return_value=False)
-        with patch("transformers.onnx.features.is_tf_available", mock_tf_available):
-            result = FeaturesManager.determine_framework(self.test_model)
-            self.assertEqual(result, torch_str)
-
-        # PyTorch not in environment -> use TensorFlow
-        mock_torch_available = MagicMock(return_value=False)
-        with patch("transformers.onnx.features.is_torch_available", mock_torch_available):
-            result = FeaturesManager.determine_framework(self.test_model)
-            self.assertEqual(result, tf_str)
-
-        # Both in environment -> use PyTorch
-        mock_tf_available = MagicMock(return_value=True)
-        mock_torch_available = MagicMock(return_value=True)
-        with patch("transformers.onnx.features.is_tf_available", mock_tf_available), patch(
-            "transformers.onnx.features.is_torch_available", mock_torch_available
-        ):
-            result = FeaturesManager.determine_framework(self.test_model)
-            self.assertEqual(result, torch_str)
-
-        # Both not in enviornemnt -> raise error
-        mock_tf_available = MagicMock(return_value=False)
-        mock_torch_available = MagicMock(return_value=False)
-        with patch("transformers.onnx.features.is_tf_available", mock_tf_available), patch(
-            "transformers.onnx.features.is_torch_available", mock_torch_available
-        ):
-            with pytest.raises(EnvironmentError):
-                result = FeaturesManager.determine_framework(self.test_model)
 
 
 class OnnxConfigTestCaseV2(TestCase):
@@ -299,6 +199,7 @@ PYTORCH_EXPORT_MODELS = {
     ("roformer", "junnyu/roformer_chinese_base"),
     ("squeezebert", "squeezebert/squeezebert-uncased"),
     ("mobilebert", "google/mobilebert-uncased"),
+    ("mobilevit", "apple/mobilevit-small"),
     ("xlm", "xlm-clm-ende-1024"),
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
@@ -384,6 +285,12 @@ class OnnxExportTestCaseV2(TestCase):
         model_class = FeaturesManager.get_model_class_for_feature(feature)
         config = AutoConfig.from_pretrained(model_name)
         model = model_class.from_config(config)
+
+        # Dynamic axes aren't supported for YOLO-like models. This means they cannot be exported to ONNX on CUDA devices.
+        # See: https://github.com/ultralytics/yolov5/pull/8378
+        if model.__class__.__name__.startswith("Yolos") and device != "cpu":
+            return
+
         onnx_config = onnx_config_class_constructor(model.config)
 
         if is_torch_available():
