@@ -129,7 +129,8 @@ class TFMobileViTConvLayer(tf.keras.layers.Layer):
             self.activation = None
 
     def call(self, features: tf.Tensor) -> tf.Tensor:
-        features = self.convolution(self.padding(features))
+        padded_features = self.padding(features)
+        features = self.convolution(padded_features)
         if self.normalization is not None:
             features = self.normalization(features)
         if self.activation is not None:
@@ -700,7 +701,17 @@ class TFMobileViTMainLayer(tf.keras.layers.Layer):
 
         if not return_dict:
             output = (last_hidden_state, pooled_output) if pooled_output is not None else (last_hidden_state,)
-            return output + encoder_outputs[1:]
+
+            # Change to NCHW output format to have uniformity in the modules
+            if not self.expand_output:
+                remaining_encoder_outputs = encoder_outputs[1:]
+                remaining_encoder_outputs = tuple(
+                    [tf.transpose(h, perm=(0, 3, 1, 2)) for h in remaining_encoder_outputs[0]]
+                )
+                remaining_encoder_outputs = (remaining_encoder_outputs,)
+                return output + remaining_encoder_outputs
+            else:
+                return output + encoder_outputs[1:]
 
         # Change the other hidden state outputs to NCHW as well
         if output_hidden_states:
@@ -733,7 +744,7 @@ class TFMobileViTPreTrainedModel(TFPreTrainedModel):
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
             shape=(
-                3,  
+                3,
                 self.config.num_channels,
                 self.config.image_size,
                 self.config.image_size,
@@ -908,6 +919,10 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
             hidden_states=outputs.hidden_states,
         )
 
+    def serving_output(self, output: TFImageClassifierOutputWithNoAttention) -> TFImageClassifierOutputWithNoAttention:
+        # hidden_states and attention not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
+        return TFImageClassifierOutputWithNoAttention(logits=output.logits, hidden_states=output.hidden_states)
+
 
 class TFMobileViTASPPPooling(tf.keras.layers.Layer):
     def __init__(self, config: MobileViTConfig, in_channels: int, out_channels: int, **kwargs) -> None:
@@ -993,15 +1008,12 @@ class TFMobileViTASPP(tf.keras.layers.Layer):
 
     def call(self, features: tf.Tensor) -> tf.Tensor:
         # since the hidden states were transposed to have `(batch_size, channels, height, width)`
-        # layout.
+        # layout we transpose them back to have `(batch_size, height, width, channels)` layout.
         features = tf.transpose(features, perm=[0, 2, 3, 1])
         pyramid = []
         for conv in self.convs:
-            # print(f"From TFMobileViTASPP: {conv(features).shape}")
             pyramid.append(conv(features))
         pyramid = tf.concat(pyramid, axis=-1)
-
-        # print(f"From TFMobileViTASPP first convolution: {self.convs[0].convolution.kernel.shape}")
 
         pooled_features = self.project(pyramid)
         pooled_features = self.dropout(pooled_features)
@@ -1032,7 +1044,6 @@ class TFMobileViTDeepLabV3(tf.keras.layers.Layer):
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         features = self.aspp(hidden_states[-1])
-        # print(f"From MobileViTDeepLabV3: {features.shape}")
         features = self.dropout(features)
         features = self.classifier(features)
         return features
