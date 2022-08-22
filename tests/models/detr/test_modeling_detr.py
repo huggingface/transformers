@@ -420,7 +420,9 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         # use greyscale pixel values
-        inputs_dict["pixel_values"] = floats_tensor([self.model_tester.batch_size, 1, self.model_tester.min_size, self.model_tester.max_size])
+        inputs_dict["pixel_values"] = floats_tensor(
+            [self.model_tester.batch_size, 1, self.model_tester.min_size, self.model_tester.max_size]
+        )
 
         # let's set num_channels to 1
         config.num_channels = 1
