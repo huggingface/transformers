@@ -623,7 +623,7 @@ class TFCLIPVisionTransformer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.embeddings = TFCLIPVisionEmbeddings(config, name="embeddings")
-        self.pre_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="pre_layrnorm")
+        self.pre_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="pre_layernorm")
         self.encoder = TFCLIPEncoder(config, name="encoder")
         self.post_layernorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="post_layernorm")
 
