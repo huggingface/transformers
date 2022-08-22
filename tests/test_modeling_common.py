@@ -54,6 +54,7 @@ from transformers.testing_utils import (
     require_accelerate,
     require_torch,
     require_torch_gpu,
+    require_torch_cpu,
     require_torch_multi_gpu,
     require_usr_bin_time,
     slow,
@@ -468,6 +469,7 @@ class ModelTesterMixin:
             loss = model(**inputs).loss
             loss.backward()
 
+    @require_torch_cpu
     def test_torch_bfloat16_embeddings(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
