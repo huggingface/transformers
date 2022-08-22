@@ -25,8 +25,6 @@ import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutput, TFBaseModelOutputWithPooling
-
-# Public API
 from ...modeling_tf_utils import (
     DUMMY_INPUTS,
     TFModelInputType,
@@ -1965,9 +1963,10 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        output_segmentation: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
-    ) -> Union[GroupViTConfig, Tuple[tf.Tensor]]:
+    ) -> Union[TFGroupViTModelOutput, Tuple[tf.Tensor]]:
         r"""
         Returns:
 
@@ -2001,6 +2000,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
             return_loss=return_loss,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
+            output_segmentation=output_segmentation,
             return_dict=return_dict,
         )
 
