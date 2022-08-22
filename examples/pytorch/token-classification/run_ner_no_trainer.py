@@ -398,7 +398,7 @@ def main():
             "You can do it from another script, save it, and load it from here, using --tokenizer_name."
         )
 
-    if config.model_type in {"gpt2", "roberta"}:
+    if config.model_type in {"bloom", "gpt2", "roberta"}:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True, add_prefix_space=True)
     else:
         tokenizer = AutoTokenizer.from_pretrained(tokenizer_name_or_path, use_fast=True)
@@ -574,14 +574,12 @@ def main():
         checkpointing_steps = None
 
     # We need to initialize the trackers we use, and also store our configuration.
-    # We initialize the trackers only on main process because `accelerator.log`
-    # only logs on main process and we don't want empty logs/runs on other processes.
+    # The trackers initializes automatically on the main process.
     if args.with_tracking:
-        if accelerator.is_main_process:
-            experiment_config = vars(args)
-            # TensorBoard cannot log Enums, need the raw value
-            experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
-            accelerator.init_trackers("ner_no_trainer", experiment_config)
+        experiment_config = vars(args)
+        # TensorBoard cannot log Enums, need the raw value
+        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+        accelerator.init_trackers("ner_no_trainer", experiment_config)
 
     # Metrics
     metric = evaluate.load("seqeval")
