@@ -464,7 +464,7 @@ def main():
 
     # Optimizer
     # Split weights in two groups, one with weight decay and the other not.
-    no_decay = ["bias", "LayerNorm.weight"]
+    no_decay = ["bias", "layer_norm.weight"]
     optimizer_grouped_parameters = [
         {
             "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
@@ -558,9 +558,14 @@ def main():
             starting_epoch = int(training_difference.replace("epoch_", "")) + 1
             resume_step = None
         else:
-            resume_step = int(training_difference.replace("step_", ""))
+            # need to multiply `gradient_accumulation_steps` to reflect real steps
+            resume_step = int(training_difference.replace("step_", "")) * args.gradient_accumulation_steps
             starting_epoch = resume_step // len(train_dataloader)
             resume_step -= starting_epoch * len(train_dataloader)
+
+    # update the progress_bar if load from checkpoint
+    progress_bar.update(starting_epoch * num_update_steps_per_epoch)
+    completed_steps = starting_epoch * num_update_steps_per_epoch
 
     for epoch in range(starting_epoch, args.num_train_epochs):
         model.train()
@@ -570,7 +575,9 @@ def main():
             # We need to skip steps until we reach the resumed step
             if args.resume_from_checkpoint and epoch == starting_epoch:
                 if resume_step is not None and step < resume_step:
-                    completed_steps += 1
+                    if step % args.gradient_accumulation_steps == 0:
+                        progress_bar.update(1)
+                        completed_steps += 1
                     continue
 
             with accelerator.accumulate(model):
