@@ -496,7 +496,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
 
         if config.use_learned_position_embeddings:
-            self.embed_positions = TrOCRLearnedPositionalEmbedding(config.max_position_embeddings, config.hidden_size)
+            self.embed_positions = TrOCRLearnedPositionalEmbedding(config.max_position_embeddings, config.hidden_size, config)
         else:
             self.embed_positions = TrOCRSinusoidalPositionalEmbedding(
                 config.max_position_embeddings + self.padding_idx + 1,

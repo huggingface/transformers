@@ -717,6 +717,7 @@ class MBartEncoder(MBartPreTrainedModel):
         self.embed_positions = MBartLearnedPositionalEmbedding(
             config.max_position_embeddings,
             embed_dim,
+            config
         )
         self.layers = nn.ModuleList([MBartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
@@ -891,6 +892,7 @@ class MBartDecoder(MBartPreTrainedModel):
         self.embed_positions = MBartLearnedPositionalEmbedding(
             config.max_position_embeddings,
             config.d_model,
+            config
         )
         self.layers = nn.ModuleList([MBartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
