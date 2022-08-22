@@ -19,7 +19,6 @@ import inspect
 import unittest
 
 from transformers import MobileViTConfig
-from transformers.configuration_utils import PretrainedConfig
 from transformers.file_utils import is_tf_available, is_vision_available
 from transformers.testing_utils import require_tf, slow
 
