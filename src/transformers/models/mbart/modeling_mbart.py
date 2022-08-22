@@ -128,10 +128,11 @@ class MBartLearnedPositionalEmbedding(nn.Embedding):
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int):
+    def __init__(self, num_embeddings: int, embedding_dim: int, config: MBartConfig):
         # MBart is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
+        self.config = config
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
     def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
@@ -141,7 +142,8 @@ class MBartLearnedPositionalEmbedding(nn.Embedding):
         positions = torch.arange(
             past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
         ).expand(bsz, -1)
-
+        if self.config.use_torch_bfloat16_embeddings:
+            return super().forward(positions + self.offset).to(dtype=torch.bfloat16)
         return super().forward(positions + self.offset)
 
 

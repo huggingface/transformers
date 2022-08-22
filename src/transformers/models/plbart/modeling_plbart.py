@@ -125,10 +125,11 @@ class PLBartLearnedPositionalEmbedding(nn.Embedding):
     This module learns positional embeddings up to a fixed maximum size.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int):
+    def __init__(self, num_embeddings: int, embedding_dim: int, config: PLBartConfig):
         # PLBart is set up so that if padding_idx is specified then offset the embedding ids by 2
         # and adjust num_embeddings appropriately. Other models don't have this hack
         self.offset = 2
+        self.config = config
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
     def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
@@ -138,7 +139,8 @@ class PLBartLearnedPositionalEmbedding(nn.Embedding):
         positions = torch.arange(
             past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
         ).expand(bsz, -1)
-
+        if self.config.use_torch_bfloat16_embeddings:
+            return super().forward(positions + self.offset).to(dtype=torch.bfloat16)
         return super().forward(positions + self.offset)
 
 
@@ -688,10 +690,7 @@ class PLBartEncoder(PLBartPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
-        self.embed_positions = PLBartLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            embed_dim,
-        )
+        self.embed_positions = PLBartLearnedPositionalEmbedding(config.max_position_embeddings, embed_dim, config)
         self.layers = nn.ModuleList([PLBartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
@@ -770,8 +769,10 @@ class PLBartEncoder(PLBartPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
-
         embed_pos = self.embed_positions(input)
+        if self.config.use_torch_bfloat16_embeddings:
+            inputs_embeds = inputs_embeds.to(dtype=torch.bfloat16)
+            embed_pos = embed_pos.to(dtype=torch.bfloat16)
 
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.layernorm_embedding(hidden_states)
@@ -861,10 +862,7 @@ class PLBartDecoder(PLBartPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
-        self.embed_positions = PLBartLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-        )
+        self.embed_positions = PLBartLearnedPositionalEmbedding(config.max_position_embeddings, config.d_model, config)
         self.layers = nn.ModuleList([PLBartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
@@ -1003,6 +1001,8 @@ class PLBartDecoder(PLBartPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input) * self.embed_scale
+        if self.config.use_torch_bfloat16_embeddings:
+            inputs_embeds = inputs_embeds.to(dtype=torch.bfloat16)
 
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
@@ -1047,7 +1047,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1072,7 +1071,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,

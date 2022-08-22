@@ -667,9 +667,13 @@ class ModuleUtilsMixin:
         if self.config.use_torch_bfloat16_embeddings:
             encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=torch.bfloat16)
         else:
-            encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+            encoder_extended_attention_mask = encoder_extended_attention_mask.to(
+                dtype=self.dtype
+            )  # fp16 compatibility
 
-        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * torch.finfo(encoder_extended_attention_mask.dtype).min
+        encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * torch.finfo(
+            encoder_extended_attention_mask.dtype
+        ).min
 
         return encoder_extended_attention_mask
 
@@ -2224,7 +2228,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 raise
         elif from_pt:
-
             # restore default dtype
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
