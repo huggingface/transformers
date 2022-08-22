@@ -1,11 +1,10 @@
+from tempfile import TemporaryDirectory
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
-from pathlib import Path
-from tempfile import TemporaryDirectory
 
 from transformers import AutoModel, TFAutoModel
 from transformers.onnx import FeaturesManager
-from transformers.testing_utils import SMALL_MODEL_IDENTIFIER, require_torch, require_tf
+from transformers.testing_utils import SMALL_MODEL_IDENTIFIER, require_tf, require_torch
 
 
 @require_torch
@@ -83,7 +82,7 @@ class DetermineFrameWorkTest(TestCase):
         """
         torch_str = "pt"
         tf_str = "tf"
-    
+
         # Framework not provided, hub model is used (no local checkpoint directory)
         # TensorFlow not in environment -> use PyTorch
         mock_tf_available = MagicMock(return_value=False)
