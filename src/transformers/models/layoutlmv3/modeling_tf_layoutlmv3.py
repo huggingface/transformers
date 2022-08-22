@@ -530,9 +530,6 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
                 name="rel_pos_y_bias",
             )
 
-    def relative_position_matrix(self, position_ids: tf.Tensor):
-        return tf.expand_dims(position_ids, axis=-2) - tf.expand_dims(position_ids, axis=-1)
-
     def relative_position_bucket(self, relative_positions: tf.Tensor, num_buckets: int, max_distance: int):
         # the negative relative positions are assigned to the interval [0, num_buckets / 2]
         # we deal with this by assigning absolute relative positions to the interval [0, num_buckets / 2]
@@ -565,7 +562,7 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
         num_buckets: int,
         max_distance: int,
     ):
-        rel_pos_matrix = self.relative_position_matrix(position_ids)
+        rel_pos_matrix = tf.expand_dims(position_ids, axis=-2) - tf.expand_dims(position_ids, axis=-1)
         rel_pos = self.relative_position_bucket(rel_pos_matrix, num_buckets, max_distance)
         rel_pos_one_hot = tf.one_hot(rel_pos, depth=num_buckets, dtype=self.compute_dtype)
         embedding = dense_layer(rel_pos_one_hot)
