@@ -210,7 +210,7 @@ def _run_torch_jit(in_queue, out_queue):
         try:
             traced_model = symbolic_trace(model, input_names)
             traced_output = traced_model(**filtered_inputs)
-        except:
+        except Exception:
             error = f"Couldn't trace module.\n{traceback.format_exc()}"
             raise
 
@@ -232,7 +232,7 @@ def _run_torch_jit(in_queue, out_queue):
         for i in range(num_outputs):
             try:
                 assert torch.allclose(model_output[i], traced_output[i])
-            except:
+            except Exception:
                 error = (
                     f"traced {i}th output doesn't match model {i}th output for"
                     f" {model_class}.\n{traceback.format_exc()}"
@@ -242,7 +242,7 @@ def _run_torch_jit(in_queue, out_queue):
         # Test that the model can be TorchScripted
         try:
             scripted = torch.jit.script(traced_model)
-        except:
+        except Exception:
             error = unittest.TestCase.fail(f"Could not TorchScript the traced model.\n{traceback.format_exc()}")
             raise
         scripted_output = scripted(**filtered_inputs)
@@ -251,7 +251,7 @@ def _run_torch_jit(in_queue, out_queue):
         for i in range(num_outputs):
             try:
                 assert torch.allclose(model_output[i], scripted_output[i])
-            except:
+            except Exception:
                 error = (
                     f"scripted {i}th output doesn't match model {i}th output for"
                     f" {model_class}.\n{traceback.format_exc()}"
@@ -266,7 +266,7 @@ def _run_torch_jit(in_queue, out_queue):
                     pickle.dump(traced_model, f)
                 with open(pkl_file_name, "rb") as f:
                     loaded = pickle.load(f)
-            except:
+            except Exception:
                 error = f"Couldn't serialize / deserialize the traced model.\n{traceback.format_exc()}"
                 raise
 
@@ -276,13 +276,13 @@ def _run_torch_jit(in_queue, out_queue):
             for i in range(num_outputs):
                 try:
                     assert torch.allclose(model_output[i], loaded_output[i])
-                except:
+                except Exception:
                     error = (
                         f"serialized model {i}th output doesn't match model {i}th output for"
                         f" {model_class}.\n{traceback.format_exc()}"
                     )
                     raise
-    except:
+    except Exception:
         if error is None:
             error = f"{traceback.format_exc()}"
 
