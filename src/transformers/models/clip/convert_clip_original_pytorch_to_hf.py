@@ -93,7 +93,7 @@ def copy_vison_model_and_projection(hf_model, pt_model):
     hf_model.visual_projection.weight.data = pt_model.visual.proj.data.T
 
     # copy layer norms
-    copy_linear(hf_model.vision_model.pre_layrnorm, pt_model.visual.ln_pre)
+    copy_linear(hf_model.vision_model.pre_layernorm, pt_model.visual.ln_pre)
     copy_linear(hf_model.vision_model.post_layernorm, pt_model.visual.ln_post)
 
     # copy embeds
