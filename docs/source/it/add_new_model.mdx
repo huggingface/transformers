@@ -18,31 +18,29 @@ creato una specifica *call-for-model-addition* che spiega passo dopo passo come 
 questo *call-for-model-addition* vogliamo insegnare a volenterosi e esperti collaboratori della community come implementare
 un modello in 🤗 Transformers.
 
-Se questo é qualcosa che puó interessarvi, siete liberi di controllare l'attuale “calls-for-model-addition” [qui](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model/open_model_proposals/README.md)
+Se questo é qualcosa che può interessarvi, siete liberi di controllare l'attuale “calls-for-model-addition” [qui](https://github.com/huggingface/transformers/tree/main/templates/adding_a_new_model/open_model_proposals/README.md)
 e contattarci. 
 
-Se il modello sará selezionato, allora potrete lavorare insieme a un membro di Hugging Face per integrare il modello in 🤗
-Transformers. Cosí facendo, ci guadagnerai in una comprensione totale, sia teorica che pratica, del modello proposto. Inoltre, 
-sarai l'artefice di un importante e grande contributo open-source a 🤗 Transformers. Durante l'implementazione avrai l'
-opportunitá di:
+Se il modello sarà selezionato, allora potrete lavorare insieme a un membro di Hugging Face per integrare il modello in 🤗
+Transformers. Così facendo, ci guadagnerai in una comprensione totale, sia teorica che pratica, del modello proposto. Inoltre, 
+sarai l'artefice di un importante contributo open-source a 🤗 Transformers. Durante l'implementazione avrai l'opportunità di:
 
-- ottenere piú comprensione delle best practices in open-source
-- capire i principi di design di una della librerie NLP piú popolari 
-- capire come efficientemente testare intensi modelli NLP
-- capire come integrare utilitá Python come `black`, `isort`, `make fix-copies` in una libreria per 
-garantire sempre di avere un codice leggibile e pulito 
+- ottenere più comprensione delle best practices in open-source
+- capire i principi di design di una della librerie NLP più popolari 
+- capire come efficientemente testare complessi modelli NLP
+- capire come integrare utilit Python come `black`, `isort`, `make fix-copies` in una libreria per garantire sempre di avere un codice leggibile e pulito 
 
-Siamo anche contenti se vuoi aggiungere un modello che non puó essere trovato nella cartella “calls-for-model-addition”. 
-Le seguenti sezioni spiegano in dettaglio come aggiungere un nuovo modello. Puó anche essere molto utile controllare modelli
-giá aggiunti [qui](https://github.com/huggingface/transformers/pulls?q=is%3Apr+label%3A%22PR+for+Model+Addition%22+is%3Aclosed),
+Siamo anche contenti se vuoi aggiungere un modello che non può essere trovato nella cartella “calls-for-model-addition”. 
+Le seguenti sezioni spiegano in dettaglio come aggiungere un nuovo modello. Può anche essere molto utile controllare modelli
+già aggiunti [qui](https://github.com/huggingface/transformers/pulls?q=is%3Apr+label%3A%22PR+for+Model+Addition%22+is%3Aclosed),
 per capire se richiamano il modello che vorreste aggiungere. 
 
 Per cominciare, vediamo una panoramica general della libreria Transformers.
 
 ## Panoramica generale su 🤗 Transformers
 
-Prima di tutto, vediamo in generale 🤗 Transformers. 🤗 Transformers é una libreria culturalmente molto strutturata, quindi
-puó essere che a volte non sei d'accordo con alcune filosofie della libreria o scelte di design. Dalla nostra esperienza, 
+Prima di tutto, vediamo in generale 🤗 Transformers. 🤗 Transformers é una libreria molto strutturata, quindi
+puà essere che a volte ci sia un disaccordo con alcune filosofie della libreria o scelte di design. Dalla nostra esperienza, 
 tuttavia, abbiamo trovato che le scelte fondamentali di design della libreria sono cruciali per usare 🤗 Transformers efficacemente
 su larga scala, mantenendo i costi a un livello accettabile.  
 
