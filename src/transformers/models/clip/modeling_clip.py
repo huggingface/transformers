@@ -745,7 +745,7 @@ class CLIPVisionTransformer(nn.Module):
         embed_dim = config.hidden_size
 
         self.embeddings = CLIPVisionEmbeddings(config)
-        self.pre_layrnorm = nn.LayerNorm(embed_dim)
+        self.pre_layernorm = nn.LayerNorm(embed_dim)
         self.encoder = CLIPEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim)
 
@@ -772,7 +772,7 @@ class CLIPVisionTransformer(nn.Module):
             raise ValueError("You have to specify pixel_values")
 
         hidden_states = self.embeddings(pixel_values)
-        hidden_states = self.pre_layrnorm(hidden_states)
+        hidden_states = self.pre_layernorm(hidden_states)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
