@@ -179,7 +179,9 @@ class LayoutLMv3FeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         >>> from transformers import LayoutLMv3FeatureExtractor
         >>> from PIL import Image
 
-        >>> image = Image.open("name_of_your_document - can be a png file, pdf, etc.").convert("RGB")
+        >>> image = Image.open(
+        ...     "name_of_your_document - can be a png, jpg, etc. of your documents (PDFs must be converted to images)."
+        ... ).convert("RGB")
 
         >>> # option 1: with apply_ocr=True (default)
         >>> feature_extractor = LayoutLMv3FeatureExtractor()
