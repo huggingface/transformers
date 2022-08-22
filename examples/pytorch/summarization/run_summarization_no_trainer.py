@@ -573,7 +573,7 @@ def main():
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # Figure out how many steps we should save the Accelerator states
-    if hasattr(args.checkpointing_steps, "isdigit"):
+    if hasattr(args, "checkpointing_steps"):
         checkpointing_steps = args.checkpointing_steps
         if args.checkpointing_steps.isdigit():
             checkpointing_steps = int(args.checkpointing_steps)
