@@ -3,7 +3,6 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
-from ..models.vision_encoder_decoder import VisionEncoderDecoderModel
 from ..utils import add_end_docstrings, is_pytesseract_available, is_torch_available, is_vision_available, logging
 from .base import PIPELINE_INIT_ARGS, Pipeline
 from .question_answering import select_starts_ends
@@ -89,6 +88,9 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.check_model_type(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING)
+
+        # NOTE: As Donut evolves and other similar models emerge, we should generalize this
+        self.is_vision_encoder_decoder = self.model.config.__class__.__name__ == "VisionEncoderDecoderConfig"
 
     def _sanitize_parameters(
         self,
@@ -211,7 +213,6 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         doc_stride=None,
         max_question_len=64,
         max_seq_len=None,
-        word_boxes: Tuple[str, List[float]] = None,
         lang=None,
         tesseract_config="",
     ):
@@ -233,11 +234,11 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             image = load_image(input["image"])
             if self.feature_extractor is not None:
                 image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
-            elif isinstance(self.model, VisionEncoderDecoderModel):
+            elif self.is_vision_encoder_decoder:
                 raise ValueError("If you are using a VisionEncoderDecoderModel, you must provide a feature extractor")
 
         words, boxes = None, None
-        if not isinstance(self.model, VisionEncoderDecoderModel):
+        if not self.is_vision_encoder_decoder:
             if "word_boxes" in input:
                 words = [x[0] for x in input["word_boxes"]]
                 boxes = [x[1] for x in input["word_boxes"]]
@@ -264,7 +265,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
                 f" {self.tokenizer.padding_side}"
             )
 
-        if isinstance(self.model, VisionEncoderDecoderModel):
+        if self.is_vision_encoder_decoder:
             task_prompt = f'<s_docvqa><s_question>{input["question"]}</s_question><s_answer>'
             # Adapted from https://huggingface.co/spaces/nielsr/donut-docvqa/blob/main/app.py
             encoding = {
@@ -354,7 +355,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         word_ids = model_inputs.pop("word_ids", None)
         words = model_inputs.pop("words", None)
 
-        if isinstance(self.model, VisionEncoderDecoderModel):
+        if self.is_vision_encoder_decoder:
             model_outputs = self.model.generate(**model_inputs)
         else:
             model_outputs = self.model(**model_inputs)
@@ -366,7 +367,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         return model_outputs
 
     def postprocess(self, model_outputs, top_k=1, **kwargs):
-        if isinstance(self.model, VisionEncoderDecoderModel):
+        if self.is_vision_encoder_decoder:
             answers = self.postprocess_encoder_decoder(model_outputs)
         else:
             answers = self.postprocess_extractive_qa(model_outputs, top_k=top_k, **kwargs)
@@ -427,3 +428,5 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
 
         if handle_impossible_answer:
             answers.append({"score": min_null_score, "answer": "", "start": 0, "end": 0})
+
+        return answers
