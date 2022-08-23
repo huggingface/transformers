@@ -1054,11 +1054,6 @@ class ClearMLCallback(TrainerCallback):
 
         self._initialized = False
         self._clearml_task = None
-        try:
-            from collections import defaultdict
-            self._clearml_log_dict = defaultdict(list)
-        except Exception as e:
-            raise Exception(e)
 
     def setup(self, args, state, model, tokenizer, **kwargs):
         if self._clearml is None:
@@ -1068,29 +1063,18 @@ class ClearMLCallback(TrainerCallback):
                 'Automatic ClearML logging enabled.'
             )
             if self._clearml_task is None:
-                self._clearml_task = self._clearml.Task.init(
-                                                    project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
-                                                    task_name=os.getenv("CLEARML_TASK", "Trainer")
-                                                    )
+                self._clearml_task = self._clearml.Task.init(project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),task_name=os.getenv("CLEARML_TASK", "Trainer"), auto_connect_frameworks={'tensorboard': False})
                 self._initialized = True
                 logger.info(
                     'ClearML Task has been initialized.'
                 )
 
             combined_dict = {**args.to_sanitized_dict()}
-
+            self._clearml_task.connect(combined_dict, "Args")
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
-                combined_dict = {**model_config, **combined_dict}
-            # Report Configuarations as Hyperparameters
-            if self._clearml_task:
-                self._clearml_task.connect(combined_dict)
-            # Report Model (Before Training/Fine-Tuning)
-            if model and self._clearml_task:
-                self._clearml_task.upload_artifact("Model", model)
-            # Report Tokenizer (Before Training/Fine-Tuning)
-            if tokenizer and self._clearml_task:
-                self._clearml_task.upload_artifact("Tokenizer", tokenizer)
+                self._clearml_task.connect(model_config, "Model Configuration")
+
 
     def on_train_begin(self, args, state, control, model=None, tokenizer=None, **kwargs):
         if self._clearml is None:
@@ -1133,13 +1117,6 @@ class ClearMLCallback(TrainerCallback):
                         f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
                         "This invocation of ClearML logger's  report_scalar() "
                         "is incorrect so we dropped this attribute.")
-
-    def on_save(self, args, state, control, **kwargs):
-        if self._clearml_task and state.is_world_process_zero:
-            ckpt_dir = f"checkpoint-{state.global_step}"
-            artifact_path = os.path.join(args.output_dir, ckpt_dir)
-            logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. This may take time.")
-            self._clearml_task.upload_artifact(name=ckpt_dir, artifact_object=artifact_path)
 
 
 INTEGRATION_TO_CALLBACK = {
