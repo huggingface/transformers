@@ -2673,14 +2673,22 @@ class Trainer:
             if isinstance(unwrap_model(self.model), PreTrainedModel):
                 if state_dict is None:
                     state_dict = self.model.state_dict()
-                unwrap_model(self.model).save_pretrained(output_dir, state_dict=state_dict)
+                if is_sagemaker_mp_enabled():
+                    # SageMaker Model Parallel doesn't support loading the sharded model checkpoints
+                    unwrap_model(self.model).save_pretrained(output_dir, state_dict=state_dict, max_shard_size="99999999GB")
+                else:
+                    unwrap_model(self.model).save_pretrained(output_dir, state_dict=state_dict)
             else:
                 logger.info("Trainer.model is not a `PreTrainedModel`, only saving its state dict.")
                 if state_dict is None:
                     state_dict = self.model.state_dict()
                 torch.save(state_dict, os.path.join(output_dir, WEIGHTS_NAME))
         else:
-            self.model.save_pretrained(output_dir, state_dict=state_dict)
+            if is_sagemaker_mp_enabled():
+                # SageMaker Model Parallel doesn't support loading the sharded model checkpoints
+                self.model.save_pretrained(output_dir, state_dict=state_dict, max_shard_size="99999999GB")
+            else:
+                self.model.save_pretrained(output_dir, state_dict=state_dict)
         if self.tokenizer is not None:
             self.tokenizer.save_pretrained(output_dir)
 
