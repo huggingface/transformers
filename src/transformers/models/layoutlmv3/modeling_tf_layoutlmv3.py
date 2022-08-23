@@ -1115,6 +1115,9 @@ LAYOUTLMV3_INPUTS_DOCSTRING = r"""
     LAYOUTLMV3_START_DOCSTRING,
 )
 class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"position_ids"]
+
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
         self.layoutlmv3 = TFLayoutLMv3MainLayer(config, name="layoutlmv3")
@@ -1239,6 +1242,9 @@ class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
     LAYOUTLMV3_START_DOCSTRING,
 )
 class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSequenceClassificationLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"position_ids"]
+
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(config, **kwargs)
         self.config = config
@@ -1347,6 +1353,9 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
     LAYOUTLMV3_START_DOCSTRING,
 )
 class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenClassificationLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"position_ids"]
+
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(config, **kwargs)
         self.num_labels = config.num_labels
@@ -1474,6 +1483,9 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
     LAYOUTLMV3_START_DOCSTRING,
 )
 class TFLayoutLMv3ForQuestionAnswering(TFLayoutLMv3PreTrainedModel, TFQuestionAnsweringLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [r"position_ids"]
+
     def __init__(self, config: LayoutLMv3Config, **kwargs):
         super().__init__(config, **kwargs)
 
