@@ -260,8 +260,8 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 {"score": 0.9987, "label": "remote", "mask": "7703408f54da1d0ebda47841da875e48"},
                 {"score": 0.9995, "label": "remote", "mask": "bd726918f10fed3efaef0091e11f923b"},
                 {"score": 0.9722, "label": "couch", "mask": "226d6dcb98bebc3fbc208abdc0c83196"},
-                {"score": 0.9994, "label": "cat", "mask": "fa5d8d5c329546ba5339f3095641ef56"}
-            ]
+                {"score": 0.9994, "label": "cat", "mask": "fa5d8d5c329546ba5339f3095641ef56"},
+            ],
         )
 
         outputs = image_segmenter(
@@ -284,7 +284,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                     {"score": 0.9987, "label": "remote", "mask": "7703408f54da1d0ebda47841da875e48"},
                     {"score": 0.9995, "label": "remote", "mask": "bd726918f10fed3efaef0091e11f923b"},
                     {"score": 0.9722, "label": "couch", "mask": "226d6dcb98bebc3fbc208abdc0c83196"},
-                    {"score": 0.9994, "label": "cat", "mask": "fa5d8d5c329546ba5339f3095641ef56"}
+                    {"score": 0.9994, "label": "cat", "mask": "fa5d8d5c329546ba5339f3095641ef56"},
                 ],
                 [
                     {"score": 0.9094, "label": "blanket", "mask": "6500201749480f87154fd967783b2b97"},
@@ -292,9 +292,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                     {"score": 0.9987, "label": "remote", "mask": "7703408f54da1d0ebda47841da875e48"},
                     {"score": 0.9995, "label": "remote", "mask": "bd726918f10fed3efaef0091e11f923b"},
                     {"score": 0.9722, "label": "couch", "mask": "226d6dcb98bebc3fbc208abdc0c83196"},
-                    {"score": 0.9994, "label": "cat", "mask": "fa5d8d5c329546ba5339f3095641ef56"}
-                ]
-            ]
+                    {"score": 0.9994, "label": "cat", "mask": "fa5d8d5c329546ba5339f3095641ef56"},
+                ],
+            ],
         )
 
     @require_torch
