@@ -583,7 +583,7 @@ class TFBeitRelativePositionBias(tf.keras.layers.Layer):
         return tf.transpose(relative_position_bias, [2, 0, 1])
     
     
-class TFData2VecVisionEncoder(tf.keras.layers.Layer):
+class TFBeitEncoder(tf.keras.layers.Layer):
     def __init__(self, config: BeitConfig, window_size: Optional[tuple] = None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
@@ -768,7 +768,7 @@ class TFBeitPooler(tf.keras.layers.Layer):
     """,
     BEIT_START_DOCSTRING,
 )
-class TFBeitForImageClassification(TFData2VecVisionPreTrainedModel, TFSequenceClassificationLoss):
+class TFBeitForImageClassification(TFBeitPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config: BeitConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
