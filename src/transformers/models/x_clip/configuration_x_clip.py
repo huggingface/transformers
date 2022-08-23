@@ -160,7 +160,8 @@ class XClipVisionConfig(PretrainedConfig):
         mit_hidden_size (`int`, *optional*, defaults to 512):
             Dimensionality of the encoder layers of the Multiframe Integration Transformer (MIT).
         mit_intermediate_size (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Multiframe Integration Transformer (MIT).
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Multiframe Integration Transformer
+            (MIT).
         mit_num_hidden_layers (`int`, *optional*, defaults to 1):
             Number of hidden layers in the Multiframe Integration Transformer (MIT).
         mit_num_attention_heads (`int`, *optional*, defaults to 8):

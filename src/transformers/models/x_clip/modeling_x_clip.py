@@ -70,7 +70,7 @@ def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
 # Copied from transformers.models.clip.modeling_clip.clip_loss with clip->x_clip
 def x_clip_loss(similarity: torch.Tensor) -> torch.Tensor:
     caption_loss = contrastive_loss(similarity)
-    image_loss = contrastive_loss(similarity.T)
+    image_loss = contrastive_loss(similarity.t())
     return (caption_loss + image_loss) / 2.0
 
 
@@ -1102,8 +1102,6 @@ class XClipMultiframeIntegrationTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
-        residual = hidden_states
-        
         # add position embeddings
         hidden_states = hidden_states + self.position_embedding
 
