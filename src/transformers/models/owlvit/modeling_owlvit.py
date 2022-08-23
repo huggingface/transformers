@@ -1148,7 +1148,7 @@ class OwlViTClassPredictionHead(nn.Module):
             pred_logits = torch.where(query_mask == 0, -1e6, pred_logits)
             pred_logits = pred_logits.to(torch.float32)
 
-        return (pred_logits, image_class_embeds)
+        return pred_logits, image_class_embeds
 
 
 class OwlViTForObjectDetection(OwlViTPreTrainedModel):
@@ -1239,10 +1239,10 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             query_mask:
                 Must be provided with query_embeddings. A mask indicating which query embeddings are valid.
         """
-        (pred_logits, image_class_embeds) = self.class_head(image_feats, query_embeds, query_mask)
+        pred_logits, image_class_embeds = self.class_head(image_feats, query_embeds, query_mask)
 
-        return (pred_logits, image_class_embeds)
-
+        return pred_logits, image_class_embeds
+    
     def image_text_embedder(
         self,
         input_ids: torch.Tensor,
@@ -1277,7 +1277,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         )
         image_embeds = image_embeds.reshape(new_size)
 
-        return (image_embeds, text_embeds)
+        return image_embeds, text_embeds
 
     @add_start_docstrings_to_model_forward(OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=OwlViTObjectDetectionOutput, config_class=OwlViTConfig)
@@ -1367,7 +1367,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         query_mask = input_ids[..., 0] > 0
 
         # Predict object classes [batch_size, num_patches, num_queries+1]
-        (pred_logits, class_embeds) = self.class_predictor(image_feats, query_embeds, query_mask)
+        pred_logits, class_embeds = self.class_predictor(image_feats, query_embeds, query_mask)
 
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map)
