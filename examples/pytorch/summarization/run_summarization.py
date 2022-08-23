@@ -512,16 +512,15 @@ def main():
         )
 
     def preprocess_function(examples):
-        # remove pairs where at least one record is None
-
+        warned_about_empty = False
         inputs, targets = [], []
         for i in range(len(examples[text_column])):
             if examples[text_column][i]:
-                if not examples[summary_column][i]:
+                if not examples[summary_column][i] and not warned_about_empty:
                     logger.warning(
-                        f"Found an empty reference summary at index {i}. This will be included in the preprocessed"
-                        " dataset."
+                        "Found an empty reference summary. This will be included in the preprocessed dataset."
                     )
+                    warned_about_empty = True
                 inputs.append(examples[text_column][i])
                 targets.append(examples[summary_column][i])
 
