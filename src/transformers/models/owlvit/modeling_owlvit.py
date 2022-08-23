@@ -1164,7 +1164,7 @@ class OwlViTClassPredictionHead(nn.Module):
             pred_logits = torch.where(query_mask == 0, -1e6, pred_logits)
             pred_logits = pred_logits.to(torch.float32)
 
-        return pred_logits, image_class_embeds
+        return (pred_logits, image_class_embeds)
 
 
 class OwlViTForObjectDetection(OwlViTPreTrainedModel):
@@ -1245,7 +1245,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         image_feats: torch.FloatTensor,
         query_embeds: torch.FloatTensor,
         query_mask: torch.Tensor,
-    ) -> Tuple[torch.FloatTensor, torch.FloatTensor]:
+    ) -> Tuple[torch.FloatTensor]:
         """
         Args:
             image_feats:
@@ -1255,9 +1255,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             query_mask:
                 Must be provided with query_embeddings. A mask indicating which query embeddings are valid.
         """
-        pred_logits, image_class_embeds = self.class_head(image_feats, query_embeds, query_mask)
+        (pred_logits, image_class_embeds) = self.class_head(image_feats, query_embeds, query_mask)
 
-        return pred_logits, image_class_embeds
+        return (pred_logits, image_class_embeds)
 
     def image_text_embedder(
         self,
@@ -1266,7 +1266,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-    ) -> Union[Tuple, OwlViTOutput]:
+    ) -> Tuple[torch.FloatTensor]:
 
         # Encode text and image
         outputs = self.owlvit(
@@ -1383,7 +1383,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         query_mask = input_ids[..., 0] > 0
 
         # Predict object classes [batch_size, num_patches, num_queries+1]
-        pred_logits, class_embeds = self.class_predictor(image_feats, query_embeds, query_mask)
+        (pred_logits, class_embeds) = self.class_predictor(image_feats, query_embeds, query_mask)
 
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map)
