@@ -48,28 +48,32 @@ def to_channel_dimension_format(image: np.ndarray, channel_dim: Union[ChannelDim
 
     Args:
         image (`numpy.ndarray`):
-            The image to convert to the PIL Image format.
+            The image to have its channel dimension set.
         channel_dim (`ChannelDimension`):
             The channel dimension format to use.
 
     Returns:
         image: A converted np.ndarray.
     """
+    if not isinstance(image, np.ndarray):
+        raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
+
     current_channel_dim = infer_channel_dimension_format(image)
     target_channel_dim = ChannelDimension(channel_dim)
     if current_channel_dim == target_channel_dim:
         return image
 
     if target_channel_dim == ChannelDimension.FIRST:
-        return image.transpose((2, 0, 1))
+        image = image.transpose((2, 0, 1))
+    elif target_channel_dim == ChannelDimension.LAST:
+        image = image.transpose((1, 2, 0))
+    else:
+        raise ValueError("Unsupported channel dimension format: {}".format(channel_dim))
 
-    if target_channel_dim == ChannelDimension.LAST:
-        return image.transpose((1, 2, 0))
-
-    raise ValueError("Unsupported channel dimension format: {}".format(channel_dim))
+    return image
 
 
-def rescale_image(
+def rescale(
     image: np.ndarray, scale: Union[float, int] = 255, data_format: Optional[ChannelDimension] = None, dtype=np.float32
 ) -> np.ndarray:
     """
@@ -89,6 +93,9 @@ def rescale_image(
     Returns:
         image: A rescaled np.ndarray image.
     """
+    if not isinstance(image, np.ndarray):
+        raise ValueError(f"Input image must be of type np.ndarray, got {type(image)}")
+
     rescaled_image = image * scale
     if data_format is not None:
         rescaled_image = to_channel_dimension_format(rescaled_image, data_format)
@@ -113,12 +120,12 @@ def to_pil_image(
     if isinstance(image, PIL.Image.Image):
         return image
 
+    # Convert all tensors to numpy arrays before converting to PIL image
     if is_torch_tensor(image) or is_tf_tensor(image):
         image = image.numpy()
     elif is_jax_tensor(image):
         image = np.array(image)
-
-    if not isinstance(image, np.ndarray):
+    elif not isinstance(image, np.ndarray):
         raise ValueError("Input image type not supported: {}".format(type(image)))
 
     # If the channel as been moved to first dim, we put it back at the end.
@@ -127,7 +134,7 @@ def to_pil_image(
     # PIL.Image can only store uint8 values, so we rescale the image to be between 0 and 255 if needed.
     do_rescale = isinstance(image.flat[0], float) if do_rescale is None else do_rescale
     if do_rescale:
-        image = rescale_image(image, 255)
+        image = rescale(image, 255)
     image = image.astype(np.uint8)
     return PIL.Image.fromarray(image)
 

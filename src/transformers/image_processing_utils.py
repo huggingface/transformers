@@ -31,8 +31,7 @@ class BatchFeature(BaseBatchFeature):
 
     Args:
         data (`dict`):
-            Dictionary of lists/arrays/tensors returned by the __call__/pad methods ('pixel_values', 'attention_mask',
-            etc.).
+            Dictionary of lists/arrays/tensors returned by the __call__ method ('pixel_values', etc.).
         tensor_type (`Union[None, str, TensorType]`, *optional*):
             You can give a tensor_type here to convert the lists of integers in PyTorch/TensorFlow/Numpy Tensors at
             initialization.
