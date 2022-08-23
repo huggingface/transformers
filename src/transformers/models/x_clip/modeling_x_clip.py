@@ -312,7 +312,6 @@ class XClipEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
-        print_values=False,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -327,14 +326,12 @@ class XClipEncoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
-
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
         )
-
         hidden_states = residual + hidden_states
 
         residual = hidden_states
@@ -709,7 +706,6 @@ class XClipEncoder(nn.Module):
                     attention_mask,
                     causal_attention_mask,
                     output_attentions=output_attentions,
-                    print_values=idx == 0,
                 )
 
             hidden_states = layer_outputs[0]
@@ -1308,6 +1304,7 @@ class XClipModel(XClipPreTrainedModel):
 
         # TODO remove this assertion (text pooler output)
         assert torch.allclose(text_embeds[0, :3], torch.tensor([-0.2870, -0.3504, 0.0417]), atol=1e-4)
+        print("Looks ok!")
 
         # normalized features
         image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
