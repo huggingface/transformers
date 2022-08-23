@@ -435,29 +435,48 @@ def quantize(onnx_model_path: Path) -> Path:
     Returns: The Path generated for the quantized
     """
     import onnx
-    from onnxruntime.quantization import QuantizationMode, quantize
+    from onnx.onnx_pb import ModelProto
+    from onnxruntime.quantization import QuantizationMode
+    from onnxruntime.quantization.onnx_quantizer import ONNXQuantizer
+    from onnxruntime.quantization.registry import IntegerOpsRegistry
 
+    # Load the ONNX model
     onnx_model = onnx.load(onnx_model_path.as_posix())
 
-    # Discussed with @yufenglee from ONNX runtime, this will be address in the next release of onnxruntime
-    print(
-        "As of onnxruntime 1.4.0, models larger than 2GB will fail to quantize due to protobuf constraint.\n"
-        "This limitation will be removed in the next release of onnxruntime."
+    if parse(onnx.__version__) < parse("1.5.0"):
+        print(
+            "Models larger than 2GB will fail to quantize due to protobuf constraint.\n"
+            "Please upgrade to onnxruntime >= 1.5.0."
+        )
+
+    # Copy it
+    copy_model = ModelProto()
+    copy_model.CopyFrom(onnx_model)
+
+    # Construct quantizer
+    quantizer = ONNXQuantizer(
+        model=copy_model,
+        per_channel=False,
+        reduce_range=False,
+        mode=QuantizationMode.IntegerOps,
+        static=False,
+        weight_qType=True,
+        input_qType=False,
+        tensors_range=None,
+        nodes_to_quantize=None,
+        nodes_to_exclude=None,
+        op_types_to_quantize=list(IntegerOpsRegistry),
     )
 
-    quantized_model = quantize(
-        model=onnx_model,
-        quantization_mode=QuantizationMode.IntegerOps,
-        force_fusions=True,
-        symmetric_weight=True,
-    )
+    # Quantize and export
+    quantizer.quantize_model()
 
     # Append "-quantized" at the end of the model's name
     quantized_model_path = generate_identified_filename(onnx_model_path, "-quantized")
 
     # Save model
     print(f"Quantized model has been written at {quantized_model_path}: \N{heavy check mark}")
-    onnx.save_model(quantized_model, quantized_model_path.as_posix())
+    onnx.save_model(quantizer.model.model, quantized_model_path.as_posix())
 
     return quantized_model_path
 
