@@ -15,6 +15,7 @@
 """ PyTorch X-CLIP model."""
 
 
+from copy import copy
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
@@ -1081,6 +1082,45 @@ class XClipVisionModel(XClipPreTrainedModel):
         )
 
 
+class XClipMultiframeIntegrationTransformer(nn.Module):
+    """
+    This corresponds to the `MultiframeIntegrationTransformer` class in the original implementation.
+    """
+
+    def __init__(self, config: XClipVisionConfig):
+        super().__init__()
+
+        self.position_embedding = nn.Parameter(torch.empty(1, config.num_frames, config.hidden_size))
+        self.encoder = XClipEncoder(config)
+
+    def forward(
+        self,
+        hidden_states,
+        attention_mask: Optional[torch.Tensor] = None,
+        causal_attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
+        residual = hidden_states
+        
+        # add position embeddings
+        hidden_states = hidden_states + self.position_embedding
+
+        # TODO support output hidden states and/or attentions
+        encoder_outputs = self.encoder(
+            inputs_embeds=hidden_states,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        last_hidden_state = encoder_outputs[0]
+
+        last_hidden_state = last_hidden_state.type(hidden_states.dtype) + hidden_states
+
+        return last_hidden_state.mean(dim=1, keepdim=False)
+
+
 @add_start_docstrings(X_CLIP_START_DOCSTRING)
 class XClipModel(XClipPreTrainedModel):
     config_class = XClipConfig
@@ -1116,6 +1156,13 @@ class XClipModel(XClipPreTrainedModel):
 
         self.prompts_visual_layernorm = nn.LayerNorm(self.vision_embed_dim)
         self.prompts_visual_projection = nn.Parameter(torch.randn(self.vision_embed_dim, self.text_embed_dim))
+
+        mit_config = copy(vision_config)
+        mit_config.hidden_size = vision_config.mit_hidden_size
+        mit_config.intermediate_size = vision_config.mit_intermediate_size
+        mit_config.num_hidden_layers = vision_config.mit_num_hidden_layers
+        mit_config.num_attention_heads = vision_config.mit_num_attention_heads
+        self.mit = XClipMultiframeIntegrationTransformer(mit_config)
 
         # Initialize weights and apply final processing
         self.post_init()

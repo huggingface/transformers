@@ -63,6 +63,11 @@ def rename_key(name):
         name = name.replace("visual.proj", "visual_projection.weight")
     if "text_projection" in name:
         name = name.replace("text_projection", "text_projection.weight")
+    # mit
+    if name == "mit.positional_embedding":
+        name = name.replace("positional", "position")
+    if name.startswith("mit.resblocks"):
+        name = name.replace("mit.resblocks", "mit.encoder.layers")
     # things on top
     if "prompts_visual_proj" in name:
         name = name.replace("prompts_visual_proj", "prompts_visual_projection")
@@ -120,9 +125,21 @@ def convert_state_dict(orig_state_dict, config):
                             dim : dim * 2
                         ]
                         orig_state_dict[f"vision_model.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
-            elif "mit" in key:
-                # TODO: multihead self-attention of MIT
-                pass
+            elif key.startswith("mit"):
+                layer_num = key_split[2]
+                dim = config.vision_config.mit_hidden_size
+                if "weight" in key:
+                    orig_state_dict[f"mit.encoder.layers.{layer_num}.self_attn.q_proj.weight"] = val[:dim, :]
+                    orig_state_dict[f"mit.encoder.layers.{layer_num}.self_attn.k_proj.weight"] = val[
+                        dim : dim * 2, :
+                    ]
+                    orig_state_dict[f"mit.encoder.layers.{layer_num}.self_attn.v_proj.weight"] = val[-dim:, :]
+                else:
+                    orig_state_dict[f"mit.encoder.layers.{layer_num}.self_attn.q_proj.bias"] = val[:dim]
+                    orig_state_dict[f"mit.encoder.layers.{layer_num}.self_attn.k_proj.bias"] = val[
+                        dim : dim * 2
+                    ]
+                    orig_state_dict[f"mit.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
             else:
                 layer_num = key_split[2]
                 dim = config.text_config.hidden_size
@@ -139,7 +156,7 @@ def convert_state_dict(orig_state_dict, config):
                     ]
                     orig_state_dict[f"text_model.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
 
-        elif key.startswith("prompts_generator") or key.startswith("mit"):
+        elif key.startswith("prompts_generator"):
             # TODO
             pass
         else:

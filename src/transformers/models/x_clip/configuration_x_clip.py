@@ -157,6 +157,14 @@ class XClipVisionConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
+        mit_hidden_size (`int`, *optional*, defaults to 512):
+            Dimensionality of the encoder layers of the Multiframe Integration Transformer (MIT).
+        mit_intermediate_size (`int`, *optional*, defaults to 2048):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Multiframe Integration Transformer (MIT).
+        mit_num_hidden_layers (`int`, *optional*, defaults to 1):
+            Number of hidden layers in the Multiframe Integration Transformer (MIT).
+        mit_num_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads for each attention layer in the Multiframe Integration Transformer (MIT).
         image_size (`int`, *optional*, defaults to 224):
             The size (resolution) of each image.
         patch_size (`int`, *optional*, defaults to 32):
@@ -201,6 +209,10 @@ class XClipVisionConfig(PretrainedConfig):
         intermediate_size=3072,
         num_hidden_layers=12,
         num_attention_heads=12,
+        mit_hidden_size=512,
+        mit_intermediate_size=2048,
+        mit_num_hidden_layers=1,
+        mit_num_attention_heads=8,
         num_channels=3,
         image_size=224,
         patch_size=32,
@@ -221,6 +233,10 @@ class XClipVisionConfig(PretrainedConfig):
         self.dropout = dropout
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.mit_hidden_size = mit_hidden_size
+        self.mit_intermediate_size = mit_intermediate_size
+        self.mit_num_hidden_layers = mit_num_hidden_layers
+        self.mit_num_attention_heads = mit_num_attention_heads
         self.num_channels = num_channels
         self.patch_size = patch_size
         self.num_frames = num_frames
