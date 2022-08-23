@@ -2873,11 +2873,14 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 Whether or not to print more information and warnings.
         """
         if self.__class__.__name__.endswith("Fast"):
-            warnings.warn(
-                f"You're using a {self.__class__.__name__} tokenizer. Please note that with a fast tokenizer, using"
-                " the `__call__` method is faster than using a method to encode the text followed by a call to the"
-                " `pad` method to get a padded encoding."
-            )
+            if not self.deprecation_warnings.get("Asking-to-pad-a-fast-tokenizer", False):
+                logger.warning_advice(
+                    f"You're using a {self.__class__.__name__} tokenizer. Please note that with a fast tokenizer,"
+                    " using the `__call__` method is faster than using a method to encode the text followed by a call"
+                    " to the `pad` method to get a padded encoding."
+                )
+                self.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = True
+
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):

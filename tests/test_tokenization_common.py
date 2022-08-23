@@ -25,7 +25,6 @@ import sys
 import tempfile
 import unittest
 import unittest.mock as mock
-import warnings
 from collections import OrderedDict
 from itertools import takewhile
 from pathlib import Path
@@ -49,6 +48,7 @@ from transformers import (
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
+    logging,
 )
 from transformers.testing_utils import (
     TOKEN,
@@ -81,6 +81,8 @@ from test_module.custom_tokenization import CustomTokenizer  # noqa E402
 if is_tokenizers_available():
     from test_module.custom_tokenization_fast import CustomTokenizerFast
 
+
+logger = logging.get_logger(__name__)
 
 NON_ENGLISH_TAGS = ["chinese", "dutch", "french", "finnish", "german", "multilingual"]
 
@@ -1847,13 +1849,13 @@ class TokenizerTesterMixin:
 
         encoding_fast = tokenizer_fast(sequence)
 
-        with warnings.catch_warnings(record=True) as w:
+        with self.assertLogs("transformers", level="WARNING") as cm:
             tokenizer_fast.pad(encoding_fast)
-        self.assertEqual(len(w), 1)
+        self.assertEqual(len(cm.records), 1)
         self.assertIn(
             "Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to"
             " encode the text followed by a call to the `pad` method to get a padded encoding.",
-            str(w[0].message),
+            cm.records[0].message,
         )
 
         if not self.test_slow_tokenizer:
@@ -1865,9 +1867,16 @@ class TokenizerTesterMixin:
 
         encoding_slow = tokenizer_slow(sequence)
 
-        with warnings.catch_warnings(record=True) as w:
+        with self.assertLogs(level="WARNING") as cm:
+            # We want to assert there are no warnings, but the 'assertLogs' method does not support that.
+            # Therefore, we are adding a dummy warning, and then we will assert it is the only warning.
+            logger.warning("Dummy warning")
             tokenizer_slow.pad(encoding_slow)
-        self.assertEqual(len(w), 0)
+        self.assertEqual(len(cm.records), 1)
+        self.assertIn(
+            "Dummy warning",
+            cm.records[0].message,
+        )
 
     def test_separate_tokenizers(self):
         # This tests that tokenizers don't impact others. Unfortunately the case where it fails is when

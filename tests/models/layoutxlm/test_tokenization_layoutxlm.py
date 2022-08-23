@@ -17,10 +17,16 @@ import inspect
 import shutil
 import tempfile
 import unittest
-import warnings
 from typing import List
 
-from transformers import AddedToken, LayoutXLMTokenizerFast, SpecialTokensMixin, is_tf_available, is_torch_available
+from transformers import (
+    AddedToken,
+    LayoutXLMTokenizerFast,
+    SpecialTokensMixin,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 from transformers.models.layoutxlm.tokenization_layoutxlm import LayoutXLMTokenizer
 from transformers.testing_utils import (
     get_tests_dir,
@@ -41,6 +47,7 @@ from ...test_tokenization_common import (
 )
 
 
+logger = logging.get_logger(__name__)
 SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 
 
@@ -711,13 +718,13 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             boxes=boxes,
         )
 
-        with warnings.catch_warnings(record=True) as w:
+        with self.assertLogs("transformers", level="WARNING") as cm:
             tokenizer_fast.pad(encoding_fast)
-        self.assertEqual(len(w), 1)
+        self.assertEqual(len(cm.records), 1)
         self.assertIn(
             "Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to"
             " encode the text followed by a call to the `pad` method to get a padded encoding.",
-            str(w[0].message),
+            cm.records[0].message,
         )
 
         if not self.test_slow_tokenizer:
@@ -730,9 +737,16 @@ class LayoutXLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             boxes=boxes,
         )
 
-        with warnings.catch_warnings(record=True) as w:
+        with self.assertLogs(level="WARNING") as cm:
+            # We want to assert there are no warnings, but the 'assertLogs' method does not support that.
+            # Therefore, we are adding a dummy warning, and then we will assert it is the only warning.
+            logger.warning("Dummy warning")
             tokenizer_slow.pad(encoding_slow)
-        self.assertEqual(len(w), 0)
+        self.assertEqual(len(cm.records), 1)
+        self.assertIn(
+            "Dummy warning",
+            cm.records[0].message,
+        )
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
