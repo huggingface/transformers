@@ -423,8 +423,7 @@ class XClipVisionEncoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        print("Initial values of hidden states:", hidden_states[0, :3, :3])
-
+        # TODO improve variable names
         bt, l, d = hidden_states.size()
         b = bt // self.T
         msg_token = self.message_fc(hidden_states[:, 0, :])
@@ -453,8 +452,6 @@ class XClipVisionEncoderLayer(nn.Module):
         hidden_states = self.layer_norm2(hidden_states)
         hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
-
-        print("Initial values of hidden states after residual:", hidden_states[0, :3, :3])
 
         outputs = (hidden_states,)
 
@@ -773,8 +770,6 @@ class XClipTextTransformer(nn.Module):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
 
-        print("Initial hidden states of the Text encoder:", hidden_states[0, :3, :3])
-
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             attention_mask=attention_mask,
@@ -786,8 +781,6 @@ class XClipTextTransformer(nn.Module):
 
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.final_layer_norm(last_hidden_state)
-
-        print("Initial values of the text final hidden states:", last_hidden_state[0, :3, :3])
 
         # text_embeds.shape = [batch_size, sequence_length, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
@@ -930,8 +923,6 @@ class XClipVisionEncoder(nn.Module):
 
         hidden_states = inputs_embeds
         for idx, encoder_layer in enumerate(self.layers):
-            print("---------LAYER ---------", idx)
-
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
@@ -1102,9 +1093,13 @@ class XClipMultiframeIntegrationTransformer(nn.Module):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
+        residual = hidden_states
+
         # add position embeddings
         hidden_states = hidden_states + self.position_embedding
 
+        print("Hidden states after position embedding:", hidden_states[0,:3,:3])
+        
         # TODO support output hidden states and/or attentions
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -1114,7 +1109,7 @@ class XClipMultiframeIntegrationTransformer(nn.Module):
         )
         last_hidden_state = encoder_outputs[0]
 
-        last_hidden_state = last_hidden_state.type(hidden_states.dtype) + hidden_states
+        last_hidden_state = last_hidden_state.type(hidden_states.dtype) + residual
 
         return last_hidden_state.mean(dim=1, keepdim=False)
 
@@ -1262,8 +1257,6 @@ class XClipModel(XClipPreTrainedModel):
         pooled_output = vision_outputs[1]  # pooled_output
         image_features = self.visual_projection(pooled_output)
 
-        print("Shape of image features:", image_features.shape)
-
         # TODO add the following:
         # img_features = self.prompts_visual_ln(img_features)
         # img_features = img_features @ self.prompts_visual_proj
@@ -1332,6 +1325,24 @@ class XClipModel(XClipPreTrainedModel):
         # TODO remove this assertion (vision pooler output)
         assert torch.allclose(vision_outputs.pooler_output[0, :3], torch.tensor([-0.2987, 1.0489, 0.3702]), atol=1e-4)
 
+        image_embeds = vision_outputs[1]
+        image_embeds = self.visual_projection(image_embeds)
+
+        cls_features = image_embeds.view(batch_size, num_frames, -1)
+
+        print("Shape of MIT input:", cls_features.shape)
+        print("Initial values of MIT input:", cls_features[0,:3,:3])
+
+        image_embeds = self.mit(cls_features)
+
+        print("Shape of output of MIT:", image_embeds.shape)
+        print("First values of output of MIT:", image_embeds[0,:3])
+
+        img_features = vision_outputs[0][:, 1:, :]
+        img_features = self.prompts_visual_layernorm(img_features)
+        img_features = img_features @ self.prompts_visual_projection
+        img_features = img_features.view(batch_size, num_frames, -1, image_embeds.shape[-1])
+
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1340,10 +1351,7 @@ class XClipModel(XClipPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        image_embeds = vision_outputs[1]
-        image_embeds = self.visual_projection(image_embeds)
-
+        
         text_embeds = text_outputs[1]
         text_embeds = self.text_projection(text_embeds)
 
