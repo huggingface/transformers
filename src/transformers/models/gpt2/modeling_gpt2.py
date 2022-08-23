@@ -808,8 +808,11 @@ class GPT2Model(GPT2PreTrainedModel):
             # positions we want to attend and the dtype's smallest value for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
-            attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-            attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
+            if self.config.use_torch_bfloat16_embeddings:
+                attention_mask = attention_mask.to(torch.bfloat16)
+            else:
+                attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+            attention_mask = (1.0 - attention_mask) * torch.finfo(attention_mask.dtype).min
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -830,11 +833,17 @@ class GPT2Model(GPT2PreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
+        if self.config.use_torch_bfloat16_embeddings:
+            inputs_embeds = inputs_embeds.to(dtype=torch.bfloat16)
         position_embeds = self.wpe(position_ids)
+        if self.config.use_torch_bfloat16_embeddings:
+            position_embeds = position_embeds.to(dtype=torch.bfloat16)
         hidden_states = inputs_embeds + position_embeds
 
         if token_type_ids is not None:
             token_type_embeds = self.wte(token_type_ids)
+            if self.config.use_torch_bfloat16_embeddings:
+                token_type_embeds = token_type_embeds.to(dtype=torch.bfloat16)
             hidden_states = hidden_states + token_type_embeds
 
         hidden_states = self.drop(hidden_states)

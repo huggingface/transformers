@@ -266,7 +266,6 @@ class AlbertAttention(nn.Module):
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads}"
             )
-
         self.num_attention_heads = config.num_attention_heads
         self.hidden_size = config.hidden_size
         self.attention_head_size = config.hidden_size // config.num_attention_heads
@@ -723,13 +722,20 @@ class AlbertModel(AlbertPreTrainedModel):
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         extended_attention_mask = attention_mask.unsqueeze(1).unsqueeze(2)
-        extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
-        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(self.dtype).min
+        if self.config.use_torch_bfloat16_embeddings:
+            extended_attention_mask = extended_attention_mask.to(dtype=torch.bfloat16)
+        else:
+            extended_attention_mask = extended_attention_mask.to(dtype=self.dtype)  # fp16 compatibility
+        extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(extended_attention_mask.dtype).min
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
             input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds
         )
+        if self.config.use_torch_bfloat16_embeddings:
+            embedding_output = embedding_output.to(dtype=torch.bfloat16)
+            if torch.is_tensor(head_mask):
+                head_mask = head_mask.to(dtype=torch.bfloat16)
         encoder_outputs = self.encoder(
             embedding_output,
             extended_attention_mask,

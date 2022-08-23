@@ -576,6 +576,11 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embeddings(input_ids)  # (bs, seq_length, dim)
+        if self.config.use_torch_bfloat16_embeddings:
+            inputs_embeds = inputs_embeds.to(dtype=torch.bfloat16)
+            attention_mask = attention_mask.to(dtype=torch.bfloat16)
+            if torch.is_tensor(head_mask):
+                head_mask = head_mask.to(dtype=torch.bfloat16)
         return self.transformer(
             x=inputs_embeds,
             attn_mask=attention_mask,
