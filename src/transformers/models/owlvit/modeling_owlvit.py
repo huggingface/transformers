@@ -1265,7 +1265,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pixel_values: torch.FloatTensor,
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = None,
-    ) -> torch.FloatTensor:
+        output_hidden_states: Optional[bool] = None,
+    ) -> Union[Tuple, OwlViTOutput]:
 
         # Encode text and image
         outputs = self.owlvit(
@@ -1273,12 +1274,12 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_base_image_embeds=True,
         )
-        image_embeds = outputs.image_embeds
-        text_embeds = outputs.text_embeds
 
         # Resize class token
+        image_embeds = outputs.image_embeds
         new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
         class_token_out = torch.broadcast_to(image_embeds[:, :1, :], new_size)
 
@@ -1294,8 +1295,13 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             image_embeds.shape[-1],
         )
         image_embeds = image_embeds.reshape(new_size)
+        text_embeds = outputs.text_embeds
 
-        return image_embeds, text_embeds
+        # Last hidden states from text and vision transformers
+        text_model_last_hidden_states = outputs.text_model_output.last_hidden_state
+        vision_model_last_hidden_states = outputs.vision_model_output.last_hidden_state
+
+        return (text_embeds, image_embeds, text_model_last_hidden_states, vision_model_last_hidden_states)
 
     @add_start_docstrings_to_model_forward(OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=OwlViTObjectDetectionOutput, config_class=OwlViTConfig)
@@ -1349,29 +1355,21 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        # Return last hidden states of text and vision transformers
-        text_model_last_hidden_states = None
-        vision_model_last_hidden_states = None
-
-        if output_hidden_states:
-            outputs = self.owlvit(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-            )
-
-            text_model_last_hidden_states = outputs[-2][0]
-            vision_model_last_hidden_states = outputs[-1][0]
-
         # Embed images and text queries
-        feature_map, query_embeds = self.image_text_embedder(
+        outputs = self.image_text_embedder(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
         )
+
+        # Last hidden states of text and vision transformers
+        text_model_last_hidden_states = outputs[2]
+        vision_model_last_hidden_states = outputs[3]
+
+        query_embeds = outputs[0]
+        feature_map = outputs[1]
 
         batch_size, num_patches, num_patches, hidden_dim = feature_map.shape
         image_feats = torch.reshape(feature_map, (batch_size, num_patches * num_patches, hidden_dim))
