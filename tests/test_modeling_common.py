@@ -73,6 +73,14 @@ from transformers.utils import (
     is_tf_available,
     is_torch_fx_available,
 )
+from transformers.utils.dummy_pt_objects import (
+    AlbertModel,
+    BartModel,
+    DistilBertModel,
+    ElectraModel,
+    GPT2Model,
+    RobertaModel,
+)
 from transformers.utils.generic import ModelOutput
 
 
@@ -179,7 +187,6 @@ TINY_BERT_FOR_TOKEN_CLASSIFICATION = "hf-internal-testing/tiny-bert-for-token-cl
 
 @require_torch
 class ModelTesterMixin:
-
     model_tester = None
     all_model_classes = ()
     all_generative_model_classes = ()
@@ -406,7 +413,6 @@ class ModelTesterMixin:
             base_class = base_class[0]
 
         for model_class in self.all_model_classes:
-
             if model_class == base_class:
                 continue
 
@@ -537,23 +543,26 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                amp = torch.cpu.amp.autocast
-                inputs = self._prepare_for_class(inputs_dict, model_class)
-
-                with amp():
-                    model.config.use_torch_bfloat16_embeddings = False
-                    first = model(**inputs)[0]
-                    model.config.use_torch_bfloat16_embeddings = True
-                    second = model(**inputs)[0]
-            out_1 = first.cpu().float().numpy()
-            out_2 = second.cpu().float().numpy()
-            out_1 = out_1[~np.isnan(out_1)]
-            out_2 = out_2[~np.isnan(out_2)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 0.05)
+            if isinstance(
+                model, (BertModel, AlbertModel, BartModel, RobertaModel, DistilBertModel, ElectraModel, GPT2Model)
+            ):
+                model.to(torch_device)
+                model.eval()
+                with torch.no_grad():
+                    amp = torch.cpu.amp.autocast
+                    inputs = self._prepare_for_class(inputs_dict, model_class)
+                    print(inputs)
+                    with amp():
+                        model.config.use_torch_bfloat16_embeddings = False
+                        first = model(**inputs)[0]
+                        model.config.use_torch_bfloat16_embeddings = True
+                        second = model(**inputs)[0]
+                out_1 = first.cpu().float().numpy()
+                out_2 = second.cpu().float().numpy()
+                out_1 = out_1[~np.isnan(out_1)]
+                out_2 = out_2[~np.isnan(out_2)]
+                max_diff = np.amax(np.abs(out_1 - out_2))
+                self.assertLessEqual(max_diff, 0.05)
 
     def test_training_gradient_checkpointing(self):
         if not self.model_tester.is_training:
@@ -714,7 +723,6 @@ class ModelTesterMixin:
 
     # This is copied from `torch/testing/_internal/jit_utils.py::clear_class_registry`
     def clear_torch_jit_class_registry(self):
-
         torch._C._jit_clear_class_registry()
         torch.jit._recursive.concrete_type_store = torch.jit._recursive.ConcreteTypeStore()
         torch.jit._state._clear_class_state()
@@ -1860,7 +1868,6 @@ class ModelTesterMixin:
             )
 
     def prepare_tf_inputs_from_pt_inputs(self, pt_inputs_dict):
-
         tf_inputs_dict = {}
         for key, tensor in pt_inputs_dict.items():
             # skip key that does not exist in tf
@@ -1881,7 +1888,6 @@ class ModelTesterMixin:
         return tf_inputs_dict
 
     def check_pt_tf_models(self, tf_model, pt_model, pt_inputs_dict):
-
         tf_inputs_dict = self.prepare_tf_inputs_from_pt_inputs(pt_inputs_dict)
 
         # send pytorch inputs to the correct device
@@ -1913,7 +1919,6 @@ class ModelTesterMixin:
         import transformers
 
         for model_class in self.all_model_classes:
-
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
             tf_model_class_name = "TF" + model_class.__name__  # Add the "TF" at the beginning
@@ -2550,7 +2555,6 @@ class ModelTesterMixin:
 
             for problem_type in problem_types:
                 with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
-
                     config.problem_type = problem_type["title"]
                     config.num_labels = problem_type["num_labels"]
 
