@@ -188,7 +188,7 @@ class BertEmbeddings(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        self.config = config
+        # self.config = config
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
@@ -246,8 +246,8 @@ class BertEmbeddings(nn.Module):
             embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
-        if self.config.use_torch_bfloat16_embeddings:
-            embeddings = embeddings.to(dtype=torch.bfloat16)
+        # if self.config.use_torch_bfloat16_embeddings:
+        #     embeddings = embeddings.to(dtype=torch.bfloat16)
         return embeddings
 
 
@@ -340,10 +340,10 @@ class BertSelfAttention(nn.Module):
             position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
             distance = position_ids_l - position_ids_r
             positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            if self.config.use_torch_bfloat16_embeddings:
-                positional_embedding = positional_embedding.to(dtype=torch.bfloat16)
-            else:
-                positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+            # if self.config.use_torch_bfloat16_embeddings:
+            #     positional_embedding = positional_embedding.to(dtype=torch.bfloat16)
+            # else:
+            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
             if self.position_embedding_type == "relative_key":
                 relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
@@ -1000,7 +1000,8 @@ class BertModel(BertPreTrainedModel):
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
+        if self.config.use_torch_bfloat16_embeddings:
+                extended_attention_mask = extended_attention_mask.to(dtype=torch.bfloat16)
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
@@ -1009,6 +1010,8 @@ class BertModel(BertPreTrainedModel):
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+            if self.config.use_torch_bfloat16_embeddings:
+                encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=torch.bfloat16)
         else:
             encoder_extended_attention_mask = None
 
@@ -1018,7 +1021,9 @@ class BertModel(BertPreTrainedModel):
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
+        if self.config.use_torch_bfloat16_embeddings:
+            if torch.is_tensor(head_mask):
+                head_mask = head_mask.to(dtype=torch.bfloat16)
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -1026,6 +1031,8 @@ class BertModel(BertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
+        if self.config.use_torch_bfloat16_embeddings:
+            embedding_output = embedding_output.to(dtype=torch.bfloat16)
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,

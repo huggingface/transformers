@@ -232,6 +232,9 @@ class PretrainedConfig(PushToHubMixin):
             Whether the model should use legacy TensorFlow losses. Legacy losses have variable output shapes and may
             not be XLA-compatible. This option is here for backward compatibility and will be removed in Transformers
             v5.
+        use_torch_bfloat16_embeddings (`bool`,  *optional*, defaults to `False`):
+            Whether or not the model should use BFloat16 embeddings (only used by some PyTorch models: albert, bert,
+            bart, distilbert, electra, gpt2, roberta)
     """
     model_type: str = ""
     is_composition: bool = False

@@ -477,7 +477,7 @@ class ModelTesterMixin:
             model.to(torch_device)
             model.eval()
             with torch.no_grad():
-                amp = torch.cuda.amp.autocast if torch_device == "cuda" else torch.cpu.amp.autocast
+                amp = torch.cpu.amp.autocast
                 inputs = self._prepare_for_class(inputs_dict, model_class)
 
                 with amp():

@@ -76,7 +76,6 @@ class RobertaEmbeddings(nn.Module):
     # Copied from transformers.models.bert.modeling_bert.BertEmbeddings.__init__
     def __init__(self, config):
         super().__init__()
-        self.config = config
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
@@ -139,8 +138,6 @@ class RobertaEmbeddings(nn.Module):
             embeddings += position_embeddings
         embeddings = self.LayerNorm(embeddings)
         embeddings = self.dropout(embeddings)
-        if self.config.use_torch_bfloat16_embeddings:
-            embeddings = embeddings.to(dtype=torch.bfloat16)
         return embeddings
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
@@ -171,7 +168,6 @@ class RobertaSelfAttention(nn.Module):
                 f"heads ({config.num_attention_heads})"
             )
 
-        self.config = config
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
@@ -251,10 +247,7 @@ class RobertaSelfAttention(nn.Module):
             position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
             distance = position_ids_l - position_ids_r
             positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            if self.config.use_torch_bfloat16_embeddings:
-                positional_embedding = positional_embedding.to(dtype=torch.bfloat16)
-            else:
-                positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
+            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
 
             if self.position_embedding_type == "relative_key":
                 relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
@@ -829,7 +822,8 @@ class RobertaModel(RobertaPreTrainedModel):
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
+        if self.config.use_torch_bfloat16_embeddings:
+            extended_attention_mask = extended_attention_mask.to(dtype=torch.bfloat16)
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
@@ -838,6 +832,8 @@ class RobertaModel(RobertaPreTrainedModel):
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+            if self.config.use_torch_bfloat16_embeddings:
+                encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=torch.bfloat16)
         else:
             encoder_extended_attention_mask = None
 
@@ -855,6 +851,10 @@ class RobertaModel(RobertaPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
+        if self.config.use_torch_bfloat16_embeddings:
+            embedding_output = embedding_output.to(dtype=torch.bfloat16)
+            if torch.is_tensor(head_mask):
+                head_mask = head_mask.to(dtype=torch.bfloat16)
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
