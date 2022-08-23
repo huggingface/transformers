@@ -715,11 +715,11 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         # would have been to pass on max_len=config.max_2d_position_embeddings - 1.
         height, width = image_size
 
-        visual_bbox_x = tf.cast(tf.range(0, max_len * (width + 1), max_len) / width, tf.int32)
+        visual_bbox_x = tf.range(0, max_len * (width + 1), max_len) // width
         visual_bbox_x = tf.expand_dims(visual_bbox_x, axis=0)
         visual_bbox_x = tf.tile(visual_bbox_x, [width, 1])  # (width, width + 1)
 
-        visual_bbox_y = tf.cast(tf.range(0, max_len * (height + 1), max_len) / height, tf.int32)
+        visual_bbox_y = tf.range(0, max_len * (height + 1), max_len) // height
         visual_bbox_y = tf.expand_dims(visual_bbox_y, axis=1)
         visual_bbox_y = tf.tile(visual_bbox_y, [1, height])  # (height + 1, height)
 
