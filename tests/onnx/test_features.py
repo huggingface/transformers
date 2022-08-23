@@ -9,7 +9,7 @@ from transformers.testing_utils import SMALL_MODEL_IDENTIFIER, require_tf, requi
 
 @require_torch
 @require_tf
-class DetermineFrameWorkTest(TestCase):
+class DetermineFrameworkTest(TestCase):
     """
     Test `FeaturesManager.determine_framework`
     """
