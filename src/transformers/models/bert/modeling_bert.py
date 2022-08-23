@@ -1822,7 +1822,6 @@ class BertForQuestionAnswering(BertPreTrainedModel):
         expected_output=_QA_EXPECTED_OUTPUT,
         expected_loss=_QA_EXPECTED_LOSS,
     )
-    #@profile
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,

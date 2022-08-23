@@ -516,6 +516,9 @@ OWLVIT_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
+        return_base_image_embeds (`bool`, *optional*):
+            Whether or not to return unprojected image embeddings. Set to True when `OwlViTModel` is called within
+            `OwlViTForObjectDetection`.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -1010,6 +1013,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        return_base_image_embeds: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, OwlViTOutput]:
         r"""
@@ -1036,6 +1040,9 @@ class OwlViTModel(OwlViTPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        # Whether to return unprojected image features
+        return_base_image_embeds = return_base_image_embeds if return_base_image_embeds is not None else False
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
@@ -1071,6 +1078,15 @@ class OwlViTModel(OwlViTPreTrainedModel):
         loss = None
         if return_loss:
             loss = owlvit_loss(logits_per_text)
+
+        if return_base_image_embeds:
+            image_embeds = self.get_image_features(
+                pixel_values=pixel_values,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                return_projected=False,
+            )
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
@@ -1167,15 +1183,15 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def normalize_grid_corner_coordinates(self, feature_map: torch.FloatTensor):
         # Computes normalized xy corner coordinates from feature_map.
         if not feature_map.ndim == 4:
-            raise ValueError("Expected input shape is [batch_size, num_channels, height, width]")
+            raise ValueError("Expected input shape is [batch_size, num_patches, num_patches, hidden_dim]")
 
         device = feature_map.device
-        height, width = feature_map.shape[1:3]
+        num_patches = feature_map.shape[1]
 
-        box_coordinates = np.stack(np.meshgrid(np.arange(1, width + 1), np.arange(1, height + 1)), axis=-1).astype(
-            np.float32
-        )
-        box_coordinates /= np.array([width, height], np.float32)
+        box_coordinates = np.stack(
+            np.meshgrid(np.arange(1, num_patches + 1), np.arange(1, num_patches + 1)), axis=-1
+        ).astype(np.float32)
+        box_coordinates /= np.array([num_patches, num_patches], np.float32)
 
         # Flatten (h, w, 2) -> (h*w, 2)
         box_coordinates = box_coordinates.reshape(
@@ -1242,7 +1258,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         pred_logits, image_class_embeds = self.class_head(image_feats, query_embeds, query_mask)
 
         return pred_logits, image_class_embeds
-    
+
     def image_text_embedder(
         self,
         input_ids: torch.Tensor,
@@ -1250,15 +1266,17 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = None,
     ) -> torch.FloatTensor:
-        # Encode text
-        text_embeds = self.owlvit.get_text_features(
-            input_ids=input_ids, attention_mask=attention_mask, output_attentions=output_attentions
-        )
 
-        # Encode image
-        image_embeds = self.owlvit.get_image_features(
-            pixel_values, return_projected=False, output_attentions=output_attentions
+        # Encode text and image
+        outputs = self.owlvit(
+            pixel_values=pixel_values,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            return_base_image_embeds=True,
         )
+        image_embeds = outputs.image_embeds
+        text_embeds = outputs.text_embeds
 
         # Resize class token
         new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
@@ -1355,8 +1373,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             output_attentions=output_attentions,
         )
 
-        batch_size, height, width, hidden_dim = feature_map.shape
-        image_feats = torch.reshape(feature_map, (batch_size, height * width, hidden_dim))
+        batch_size, num_patches, num_patches, hidden_dim = feature_map.shape
+        image_feats = torch.reshape(feature_map, (batch_size, num_patches * num_patches, hidden_dim))
 
         # Reshape from [batch_size * max_text_queries, hidden_dim] -> [batch_size, max_text_queries, hidden_dim]
         max_text_queries = input_ids.shape[0] // batch_size
