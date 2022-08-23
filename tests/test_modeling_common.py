@@ -53,8 +53,8 @@ from transformers.testing_utils import (
     is_staging_test,
     require_accelerate,
     require_torch,
-    require_torch_gpu,
     require_torch_cpu,
+    require_torch_gpu,
     require_torch_multi_gpu,
     require_usr_bin_time,
     slow,
@@ -499,7 +499,7 @@ class ModelTesterMixin:
                 out_1 = out_1[~np.isnan(out_1)]
                 out_2 = out_2[~np.isnan(out_2)]
                 max_diff = np.amax(np.abs(out_1 - out_2))
-                self.assertLessEqual(max_diff, 0.05)
+                self.assertLessEqual(max_diff, 0.1)
 
     def test_training_gradient_checkpointing(self):
         if not self.model_tester.is_training:

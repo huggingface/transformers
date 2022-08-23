@@ -511,9 +511,11 @@ def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch."""
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
+
 def require_torch_cpu(test_case):
     """Decorator marking a test that requires CPU and PyTorch."""
     return unittest.skipUnless(torch_device == "cpu", "test requires CPU")(test_case)
+
 
 def require_torch_bf16_gpu(test_case):
     """Decorator marking a test that requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0"""
@@ -775,7 +777,6 @@ class CaptureStd:
     ```"""
 
     def __init__(self, out=True, err=True, replay=True):
-
         self.replay = replay
 
         if out:
@@ -1125,7 +1126,6 @@ class TestCasePlus(unittest.TestCase):
             tmp_dir(`string`): either the same value as passed via *tmp_dir* or the path to the auto-selected tmp dir
         """
         if tmp_dir is not None:
-
             # defining the most likely desired behavior for when a custom path is provided.
             # this most likely indicates the debug mode where we want an easily locatable dir that:
             # 1. gets cleared out before the test (if it already exists)
@@ -1203,7 +1203,6 @@ class TestCasePlus(unittest.TestCase):
         return max_rss
 
     def tearDown(self):
-
         # get_auto_remove_tmp_dir feature: remove registered temp dirs
         for path in self.teardown_tmp_dirs:
             shutil.rmtree(path, ignore_errors=True)
@@ -1475,7 +1474,6 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
 
 
 def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
-
     loop = asyncio.get_event_loop()
     result = loop.run_until_complete(
         _stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo)
