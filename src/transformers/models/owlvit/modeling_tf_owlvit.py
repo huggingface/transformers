@@ -863,6 +863,7 @@ class TFOwlViTMainLayer(tf.keras.layers.Layer):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        return_base_image_embeds: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFOwlViTOutput, Tuple[tf.Tensor]]:
@@ -914,6 +915,16 @@ class TFOwlViTMainLayer(tf.keras.layers.Layer):
         loss = None
         if return_loss:
             loss = owlvit_loss(logits_per_text)
+
+        if return_base_image_embeds:
+            image_embeds = self.get_image_features(
+                pixel_values=pixel_values,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+                return_projected=False,
+                training=training,
+            )
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
