@@ -915,10 +915,12 @@ class SpecialTokensMixin:
     ) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
-        it with indices starting from length of the current vocabulary.
+        it with indices starting from length of the current vocabulary and and will be isolated before the tokenization
+        algorithm is applied. Added tokens and tokens from the vocabulary of the tokenization algorithm are therefore
+        not treated in the same way.
 
-        Note,None When adding new tokens to the vocabulary, you should make sure to also resize the token embedding
-        matrix of the model so that its embedding matrix matches the tokenizer.
+        Note, when adding new tokens to the vocabulary, you should make sure to also resize the token embedding matrix
+        of the model so that its embedding matrix matches the tokenizer.
 
         In order to do that, please use the [`~PreTrainedModel.resize_token_embeddings`] method.
 
