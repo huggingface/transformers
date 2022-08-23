@@ -863,7 +863,7 @@ class TFOwlViTMainLayer(tf.keras.layers.Layer):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_base_image_embeds: Optional[bool] = None,
+        return_base_image_embeds: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFOwlViTOutput, Tuple[tf.Tensor]]:
@@ -1057,6 +1057,9 @@ OWLVIT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
             used instead.
+        return_base_image_embeds (`bool`, *optional*):
+            Whether or not to return unprojected image embeddings. Set to True when `TFOwlViTModel` is called within
+            `TFOwlViTForObjectDetection`.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
             eager mode, in graph mode the value will always be set to True.
@@ -1381,6 +1384,7 @@ class TFOwlViTModel(TFOwlViTPreTrainedModel):
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        return_base_image_embeds: Optional[bool] = False,
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFOwlViTOutput, Tuple[tf.Tensor]]:
@@ -1580,18 +1584,19 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
         pixel_values: Optional[TFModelInputType] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
-    ) -> tf.Tensor:
-        # Encode text
-        text_embeds = self.owlvit.get_text_features(
-            input_ids=input_ids, attention_mask=attention_mask, output_attentions=output_attentions
-        )
-
-        # Encode image
-        image_embeds = self.owlvit.get_image_features(
-            pixel_values=pixel_values, return_projected=False, output_attentions=output_attentions
+        output_hidden_states: Optional[bool] = None,
+    ) -> Tuple[tf.Tensor]:
+        # Encode text and image
+        outputs = self.owlvit(
+            pixel_values=pixel_values,
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            return_base_image_embeds=True,
         )
 
         # Resize class token
+        image_embeds = outputs.image_embeds
         new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
         class_token_out = tf.broadcast_to(image_embeds[:, :1, :], new_size)
 
@@ -1603,8 +1608,15 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
         batch_size, all_patches, hidden_size = tf.shape(image_embeds)
         num_patches = int(np.sqrt(all_patches))
         new_size = (batch_size, num_patches, num_patches, hidden_size)
+
         image_embeds = tf.reshape(image_embeds, new_size)
-        return (image_embeds, text_embeds)
+        text_embeds = outputs.text_embeds
+
+        # Last hidden states from text and vision transformers
+        text_model_last_hidden_states = outputs.text_model_output.last_hidden_state
+        vision_model_last_hidden_states = outputs.vision_model_output.last_hidden_state
+
+        return (text_embeds, image_embeds, text_model_last_hidden_states, vision_model_last_hidden_states)
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING)
@@ -1642,30 +1654,21 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        # Return last hidden states of text and vision transformers
-        text_model_last_hidden_states = None
-        vision_model_last_hidden_states = None
-
-        if output_hidden_states:
-            outputs = self.owlvit(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                attention_mask=attention_mask,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-            )
-
-            text_model_last_hidden_states = outputs[-2][0]
-            vision_model_last_hidden_states = outputs[-1][0]
-
         # Embed images and text queries
-        feature_map, query_embeds = self.image_text_embedder(
+        outputs = self.image_text_embedder(
             input_ids=input_ids,
             pixel_values=pixel_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
 
+        # Last hidden states of text and vision transformers
+        text_model_last_hidden_states = outputs[2]
+        vision_model_last_hidden_states = outputs[3]
+
+        query_embeds = outputs[0]
+        feature_map = outputs[1]
+        
         batch_size, num_patches, num_patches, hidden_dim = tf.shape(feature_map)
         image_feats = tf.reshape(feature_map, (batch_size, num_patches**2, hidden_dim))
 
