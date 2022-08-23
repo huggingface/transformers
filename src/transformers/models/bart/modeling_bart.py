@@ -135,7 +135,6 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
         positions = torch.arange(
             past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
         ).expand(bsz, -1)
-
         return super().forward(positions + self.offset)
 
 
@@ -719,7 +718,7 @@ class BartEncoder(BartPretrainedModel):
 
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
-            embed_dim,
+            embed_dim
         )
         self.layers = nn.ModuleList([BartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
@@ -801,7 +800,9 @@ class BartEncoder(BartPretrainedModel):
             inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         embed_pos = self.embed_positions(input)
-
+        if self.config.use_torch_bfloat16_embeddings:
+            inputs_embeds = inputs_embeds.to(dtype=torch.bfloat16)
+            embed_pos = embed_pos.to(dtype=torch.bfloat16)
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -891,7 +892,7 @@ class BartDecoder(BartPretrainedModel):
 
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
-            config.d_model,
+            config.d_model
         )
         self.layers = nn.ModuleList([BartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
@@ -1031,7 +1032,8 @@ class BartDecoder(BartPretrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input) * self.embed_scale
-
+        if self.config.use_torch_bfloat16_embeddings:
+            inputs_embeds = inputs_embeds.to(dtype=torch.bfloat16)
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
@@ -1043,7 +1045,8 @@ class BartDecoder(BartPretrainedModel):
 
         # embed positions
         positions = self.embed_positions(input, past_key_values_length)
-
+        if self.config.use_torch_bfloat16_embeddings:
+            positions = positions.to(dtype=torch.bfloat16)
         hidden_states = inputs_embeds + positions
         hidden_states = self.layernorm_embedding(hidden_states)
 
