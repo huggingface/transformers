@@ -1038,6 +1038,9 @@ LAYOUTLMV3_INPUTS_DOCSTRING = r"""
         input_ids (`Numpy array` or `tf.Tensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
+            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
+            token. See `pixel_values` for `patch_sequence_length`.
+
             Indices can be obtained using [`LayoutLMv3Tokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
@@ -1049,14 +1052,22 @@ LAYOUTLMV3_INPUTS_DOCSTRING = r"""
             format, where (x0, y0) corresponds to the position of the upper left corner in the bounding box, and (x1,
             y1) represents the position of the lower right corner.
 
+            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
+            token. See `pixel_values` for `patch_sequence_length`.
+
         pixel_values (`tf.Tensor` of shape `(batch_size, num_channels, height, width)`):
-            Batch of document images.
+            Batch of document images. Each image is divided into patches of shape `(num_channels, config.patch_size,
+            config.patch_size)` and the total number of patches (=`patch_sequence_length`) equals to `((height /
+            config.patch_size) * (width / config.patch_size))`.
 
         attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
+
+            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
+            token. See `pixel_values` for `patch_sequence_length`.
 
             [What are attention masks?](../glossary#attention-mask)
         token_type_ids (`Numpy array` or `tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1066,10 +1077,16 @@ LAYOUTLMV3_INPUTS_DOCSTRING = r"""
             - 0 corresponds to a *sentence A* token,
             - 1 corresponds to a *sentence B* token.
 
+            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
+            token. See `pixel_values` for `patch_sequence_length`.
+
             [What are token type IDs?](../glossary#token-type-ids)
         position_ids (`Numpy array` or `tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
+
+            Note that `sequence_length = token_sequence_length + patch_sequence_length + 1` where `1` is for [CLS]
+            token. See `pixel_values` for `patch_sequence_length`.
 
             [What are position IDs?](../glossary#position-ids)
         head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
