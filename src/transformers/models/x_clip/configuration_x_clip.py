@@ -57,8 +57,9 @@ class XClipTextConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported. layer_norm_eps (`float`, *optional*,
-            defaults to 1e-5): The epsilon used by the layer normalization layers.
+            `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+            The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         dropout (`float`, *optional*, defaults to 0.0):
@@ -282,8 +283,21 @@ class XClipConfig(PretrainedConfig):
             Dictionary of configuration options used to initialize [`XClipVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and vision projection layers.
+        prompt_layers (`int`, *optional*, defaults to 2):
+            Number of layers in the video specific prompt generator.
+        prompt_alpha (`float`, *optional*, defaults to 0.1):
+            Alpha value to use in the video specific prompt generator.
+        prompt_hidden_act (`str` or `function`, *optional*, defaults to `"quick_gelu"`):
+            The non-linear activation function (function or string) in the video specific prompt generator. If string,
+            `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` ``"quick_gelu"` are supported.
+        prompt_num_attention_heads (`int`, *optional*, defaults to 8):
+            Number of attention heads in the cross-attention of the video specific prompt generator.
+        prompt_attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for the attention layers in the video specific prompt generator.
+        prompt_projection_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability for the projection layers in the video specific prompt generator.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* paramter. Default is used as per the original XClip implementation.
+            The inital value of the *logit_scale* parameter. Default is used as per the original XClip implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
     """
@@ -296,6 +310,12 @@ class XClipConfig(PretrainedConfig):
         text_config_dict=None,
         vision_config_dict=None,
         projection_dim=512,
+        prompt_layers=2,
+        prompt_alpha=0.1,
+        prompt_hidden_act="quick_gelu",
+        prompt_num_attention_heads=8,
+        prompt_attention_dropout=0.0,
+        prompt_projection_dropout=0.0,
         logit_scale_init_value=2.6592,
         **kwargs
     ):
@@ -313,6 +333,12 @@ class XClipConfig(PretrainedConfig):
         self.vision_config = XClipVisionConfig(**vision_config_dict)
 
         self.projection_dim = projection_dim
+        self.prompt_layers = prompt_layers
+        self.prompt_alpha = prompt_alpha
+        self.prompt_hidden_act = prompt_hidden_act
+        self.prompt_num_attention_heads = prompt_num_attention_heads
+        self.prompt_attention_dropout = prompt_attention_dropout
+        self.prompt_projection_dropout = prompt_projection_dropout
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
 

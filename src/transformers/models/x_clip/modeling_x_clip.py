@@ -1112,6 +1112,96 @@ class XClipMultiframeIntegrationTransformer(nn.Module):
         return last_hidden_state.mean(dim=1, keepdim=False)
 
 
+class XClipCrossAttention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.num_heads = config.prompt_num_attention_heads
+
+        dim = config.projection_dim
+        head_dim = dim // self.num_heads
+        self.scale = head_dim**-0.5
+
+        self.q_proj = nn.Linear(dim, dim, bias=False)
+        self.k_proj = nn.Linear(dim, dim, bias=False)
+        self.v_proj = nn.Linear(dim, dim, bias=False)
+
+        self.attn_drop = nn.Dropout(config.prompt_attention_dropout)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(config.prompt_projection_dropout)
+
+    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
+        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+
+    def forward(self, queries, keys, values):
+        """Input shape: Batch x Time x Channel"""
+        B, N, C = queries.shape
+        B, M, C = keys.shape
+        q = self.q_proj(queries).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        k = self.k_proj(keys).reshape(B, M, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        v = self.v_proj(values).reshape(B, M, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+
+        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x
+
+
+class PromptGeneratorLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        embed_dim = config.projection_dim
+        self.cross_attn = XClipCrossAttention(config)
+        self.norm1 = nn.LayerNorm(embed_dim)
+        self.norm3 = nn.LayerNorm(embed_dim)
+        self.mlp = nn.Sequential(
+            nn.Linear(embed_dim, embed_dim * 4),
+            ACT2FN[config.prompt_hidden_act],
+            nn.Dropout(config.prompt_attention_dropout),
+            nn.Linear(embed_dim * 4, embed_dim),
+        )
+
+    def forward(self, x, visual):
+        x = x + self.cross_attn(self.norm1(x), visual, visual)
+        x = x + self.mlp(self.norm3(x))
+        return x
+
+
+class XClipPromptGenerator(nn.Module):
+    """This corresponds to the `VideoSpecificPrompt` class in the original implementation."""
+
+    def __init__(self, config):
+        super().__init__()
+        embed_dim = config.projection_dim
+        self.layernorm = nn.LayerNorm(embed_dim)
+        self.decoder = nn.ModuleList([PromptGeneratorLayer(config) for _ in range(config.prompt_layers)])
+        self.alpha = nn.Parameter(torch.ones(embed_dim) * config.prompt_alpha)
+        # self.apply(self._init_weights)
+
+    # TODO do this in the init weights of XClipModel
+    # def _init_weights(self, m):
+    #     if isinstance(m, nn.Linear):
+    #         trunc_normal_(m.weight, std=.02)
+    #         if isinstance(m, nn.Linear) and m.bias is not None:
+    #             nn.init.constant_(m.bias, 0)
+    #     elif isinstance(m, nn.LayerNorm):
+    #         nn.init.constant_(m.bias, 0)
+    #         nn.init.constant_(m.weight, 1.0)
+
+    def forward(self, text, visual):
+        visual = self.layernorm(visual)
+        for layer in self.decoder:
+            text = layer(text, visual)
+
+        return self.alpha * text
+
+
 @add_start_docstrings(X_CLIP_START_DOCSTRING)
 class XClipModel(XClipPreTrainedModel):
     config_class = XClipConfig
@@ -1154,6 +1244,8 @@ class XClipModel(XClipPreTrainedModel):
         mit_config.num_hidden_layers = vision_config.mit_num_hidden_layers
         mit_config.num_attention_heads = vision_config.mit_num_attention_heads
         self.mit = XClipMultiframeIntegrationTransformer(mit_config)
+
+        self.prompts_generator = XClipPromptGenerator(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1340,6 +1432,7 @@ class XClipModel(XClipPreTrainedModel):
         img_features = self.prompts_visual_layernorm(img_features)
         img_features = img_features @ self.prompts_visual_projection
         img_features = img_features.view(batch_size, num_frames, -1, image_embeds.shape[-1])
+        img_features = img_features.mean(dim=1, keepdim=False)
 
         text_outputs = self.text_model(
             input_ids=input_ids,
@@ -1356,6 +1449,9 @@ class XClipModel(XClipPreTrainedModel):
         # TODO remove this assertion (text pooler output)
         assert torch.allclose(text_embeds[0, :3], torch.tensor([-0.2870, -0.3504, 0.0417]), atol=1e-4)
         print("Looks ok!")
+
+        text_embeds = text_embeds.unsqueeze(0).expand(batch_size, -1, -1)
+        text_embeds = text_embeds + self.prompts_generator(text_embeds, img_features)
 
         # normalized features
         image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)

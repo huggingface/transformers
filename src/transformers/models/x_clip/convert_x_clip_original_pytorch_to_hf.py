@@ -63,17 +63,19 @@ def rename_key(name):
         name = name.replace("visual.proj", "visual_projection.weight")
     if "text_projection" in name:
         name = name.replace("text_projection", "text_projection.weight")
-    # mit
-    if name == "mit.positional_embedding":
-        name = name.replace("positional", "position")
-    if name.startswith("mit.resblocks"):
-        name = name.replace("mit.resblocks", "mit.encoder.layers")
     # things on top
     if "prompts_visual_proj" in name:
         name = name.replace("prompts_visual_proj", "prompts_visual_projection")
     if "prompts_visual_ln" in name:
         name = name.replace("prompts_visual_ln", "prompts_visual_layernorm")
-    # TODO: prompts generator, mit
+    # mit
+    if name == "mit.positional_embedding":
+        name = name.replace("positional", "position")
+    if name.startswith("mit.resblocks"):
+        name = name.replace("mit.resblocks", "mit.encoder.layers")
+    # prompts generator
+    if name.startswith("prompts_generator.norm"):
+        name = name.replace("prompts_generator.norm", "prompts_generator.layernorm")
 
     return name
 
@@ -151,10 +153,6 @@ def convert_state_dict(orig_state_dict, config):
                         dim : dim * 2
                     ]
                     orig_state_dict[f"text_model.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
-
-        elif key.startswith("prompts_generator"):
-            # TODO
-            pass
         else:
             new_key_name = rename_key(key)
             if new_key_name in ["visual_projection.weight", "text_projection.weight"]:
@@ -193,8 +191,12 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_pat
     with torch.no_grad():
         outputs = model(input_ids=input_ids, pixel_values=pixel_values)
 
-    # TODO verify outputs
-    print(outputs.keys())
+    # Verify outputs
+    logits_per_image = outputs.logits_per_image
+    probs = logits_per_image.softmax(dim=1)
+    expected_probs = torch.tensor([[[0.0019], [0.9951], [0.0030]]])
+    assert torch.allclose(probs, expected_probs, atol=1e-3)
+    print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
