@@ -312,6 +312,7 @@ class XClipEncoderLayer(nn.Module):
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = False,
+        print_values=False,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -326,12 +327,14 @@ class XClipEncoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.layer_norm1(hidden_states)
+
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             causal_attention_mask=causal_attention_mask,
             output_attentions=output_attentions,
         )
+
         hidden_states = residual + hidden_states
 
         residual = hidden_states
@@ -706,6 +709,7 @@ class XClipEncoder(nn.Module):
                     attention_mask,
                     causal_attention_mask,
                     output_attentions=output_attentions,
+                    print_values=idx == 0,
                 )
 
             hidden_states = layer_outputs[0]
@@ -786,12 +790,12 @@ class XClipTextTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
+        print("Initial values of the text final hidden states:", last_hidden_state[0, :3, :3])
+
         # text_embeds.shape = [batch_size, sequence_length, transformer.width]
         # take features from the eot embedding (eot_token is the highest number in each sequence)
         pooled_output = last_hidden_state[torch.arange(last_hidden_state.shape[0]), input_ids.argmax(dim=-1)]
 
-        print("Initial values of the text pooled output:", pooled_output[0,:3])
-        
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
@@ -1018,9 +1022,6 @@ class XClipVisionTransformer(nn.Module):
         pooled_output = last_hidden_state[:, 0, :]
         pooled_output = self.post_layernorm(pooled_output)
 
-        print("Shape of pooled output:", pooled_output.shape)
-        print("Initial values of pooled output:", pooled_output[0, :3])
-
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
@@ -1220,6 +1221,8 @@ class XClipModel(XClipPreTrainedModel):
         pooled_output = vision_outputs[1]  # pooled_output
         image_features = self.visual_projection(pooled_output)
 
+        print("Shape of image features:", image_features.shape)
+
         # TODO add the following:
         # img_features = self.prompts_visual_ln(img_features)
         # img_features = img_features @ self.prompts_visual_proj
@@ -1285,7 +1288,8 @@ class XClipModel(XClipPreTrainedModel):
             return_dict=return_dict,
         )
 
-        print("Shape of input_ids:", input_ids.shape)
+        # TODO remove this assertion (vision pooler output)
+        assert torch.allclose(vision_outputs.pooler_output[0, :3], torch.tensor([-0.2987, 1.0489, 0.3702]), atol=1e-4)
 
         text_outputs = self.text_model(
             input_ids=input_ids,
@@ -1301,6 +1305,9 @@ class XClipModel(XClipPreTrainedModel):
 
         text_embeds = text_outputs[1]
         text_embeds = self.text_projection(text_embeds)
+
+        # TODO remove this assertion (text pooler output)
+        assert torch.allclose(text_embeds[0, :3], torch.tensor([-0.2870, -0.3504, 0.0417]), atol=1e-4)
 
         # normalized features
         image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)

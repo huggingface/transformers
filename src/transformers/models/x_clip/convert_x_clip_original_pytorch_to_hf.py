@@ -120,6 +120,9 @@ def convert_state_dict(orig_state_dict, config):
                             dim : dim * 2
                         ]
                         orig_state_dict[f"vision_model.encoder.layers.{layer_num}.self_attn.v_proj.bias"] = val[-dim:]
+            elif "mit" in key:
+                # TODO: multihead self-attention of MIT
+                pass
             else:
                 layer_num = key_split[2]
                 dim = config.text_config.hidden_size
@@ -170,7 +173,9 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_pat
     # inputs = feature_extractor(images=image, return_tensors="pt")
 
     tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-    input_ids = tokenizer(["playing sports", "eating spaghetti", "go shopping"], padding="max_length", return_tensors="pt").input_ids
+    input_ids = tokenizer(
+        ["playing sports", "eating spaghetti", "go shopping"], padding="max_length", return_tensors="pt"
+    ).input_ids
 
     with torch.no_grad():
         outputs = model(input_ids=input_ids, pixel_values=pixel_values)
