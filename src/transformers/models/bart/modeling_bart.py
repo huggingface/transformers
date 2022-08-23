@@ -135,6 +135,7 @@ class BartLearnedPositionalEmbedding(nn.Embedding):
         positions = torch.arange(
             past_key_values_length, past_key_values_length + seq_len, dtype=torch.long, device=self.weight.device
         ).expand(bsz, -1)
+
         return super().forward(positions + self.offset)
 
 
@@ -726,7 +727,7 @@ class BartEncoder(BartPretrainedModel):
 
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
-            embed_dim
+            embed_dim,
         )
         self.layers = nn.ModuleList([BartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
@@ -902,7 +903,7 @@ class BartDecoder(BartPretrainedModel):
 
         self.embed_positions = BartLearnedPositionalEmbedding(
             config.max_position_embeddings,
-            config.d_model
+            config.d_model,
         )
         self.layers = nn.ModuleList([BartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
@@ -1090,7 +1091,6 @@ class BartDecoder(BartPretrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1115,7 +1115,6 @@ class BartDecoder(BartPretrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -1219,7 +1218,6 @@ class BartModel(BartPretrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Seq2SeqModelOutput]:
-
         # different to other models, Bart automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:

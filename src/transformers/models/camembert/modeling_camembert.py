@@ -516,7 +516,6 @@ class CamembertEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -876,7 +875,8 @@ class CamembertModel(CamembertPreTrainedModel):
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
+        if self.config.use_torch_bfloat16_embeddings:
+            extended_attention_mask = extended_attention_mask.to(dtype=torch.bfloat16)
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
         if self.config.is_decoder and encoder_hidden_states is not None:
@@ -885,6 +885,8 @@ class CamembertModel(CamembertPreTrainedModel):
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+            if self.config.use_torch_bfloat16_embeddings:
+                encoder_extended_attention_mask = encoder_extended_attention_mask.to(dtype=torch.bfloat16)
         else:
             encoder_extended_attention_mask = None
 
@@ -902,6 +904,10 @@ class CamembertModel(CamembertPreTrainedModel):
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
+        if self.config.use_torch_bfloat16_embeddings:
+            embedding_output = embedding_output.to(dtype=torch.bfloat16)
+            if torch.is_tensor(head_mask):
+                head_mask = head_mask.to(dtype=torch.bfloat16)
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,

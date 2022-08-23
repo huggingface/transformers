@@ -525,9 +525,11 @@ def require_torch_gpu(test_case):
     """Decorator marking a test that requires CUDA and PyTorch."""
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
+
 def require_torch_cpu(test_case):
     """Decorator marking a test that requires CPU and PyTorch."""
     return unittest.skipUnless(torch_device == "cpu", "test requires CPU")(test_case)
+
 
 def require_torch_bf16_gpu(test_case):
     """Decorator marking a test that requires torch>=1.10, using Ampere GPU or newer arch with cuda>=11.0"""

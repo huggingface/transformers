@@ -782,6 +782,9 @@ class PLBartEncoder(PLBartPreTrainedModel):
         embed_pos = self.embed_positions(input)
         embed_pos = embed_pos.to(inputs_embeds.device)
 
+        if self.config.use_torch_bfloat16_embeddings:
+            inputs_embeds = inputs_embeds.to(dtype=torch.bfloat16)
+            embed_pos = embed_pos.to(dtype=torch.bfloat16)
         hidden_states = inputs_embeds + embed_pos
         hidden_states = self.layernorm_embedding(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1012,7 +1015,8 @@ class PLBartDecoder(PLBartPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input) * self.embed_scale
-
+        if self.config.use_torch_bfloat16_embeddings:
+            inputs_embeds = inputs_embeds.to(dtype=torch.bfloat16)
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
@@ -1026,6 +1030,8 @@ class PLBartDecoder(PLBartPreTrainedModel):
         positions = self.embed_positions(input, past_key_values_length)
         positions = positions.to(inputs_embeds.device)
 
+        if self.config.use_torch_bfloat16_embeddings:
+            positions = positions.to(dtype=torch.bfloat16)
         hidden_states = inputs_embeds + positions
         hidden_states = self.layernorm_embedding(hidden_states)
 
@@ -1057,7 +1063,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1082,7 +1087,6 @@ class PLBartDecoder(PLBartPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
