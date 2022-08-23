@@ -1098,8 +1098,6 @@ class XClipMultiframeIntegrationTransformer(nn.Module):
         # add position embeddings
         hidden_states = hidden_states + self.position_embedding
 
-        print("Hidden states after position embedding:", hidden_states[0,:3,:3])
-        
         # TODO support output hidden states and/or attentions
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
@@ -1331,12 +1329,12 @@ class XClipModel(XClipPreTrainedModel):
         cls_features = image_embeds.view(batch_size, num_frames, -1)
 
         print("Shape of MIT input:", cls_features.shape)
-        print("Initial values of MIT input:", cls_features[0,:3,:3])
+        print("Initial values of MIT input:", cls_features[0, :3, :3])
 
         image_embeds = self.mit(cls_features)
 
         print("Shape of output of MIT:", image_embeds.shape)
-        print("First values of output of MIT:", image_embeds[0,:3])
+        print("First values of output of MIT:", image_embeds[0, :3])
 
         img_features = vision_outputs[0][:, 1:, :]
         img_features = self.prompts_visual_layernorm(img_features)
@@ -1351,7 +1349,7 @@ class XClipModel(XClipPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        
+
         text_embeds = text_outputs[1]
         text_embeds = self.text_projection(text_embeds)
 
