@@ -1453,7 +1453,7 @@ class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFQuestionAnswer
         >>> from datasets import load_dataset
 
         >>> tokenizer = AutoTokenizer.from_pretrained("impira/layoutlm-document-qa", add_prefix_space=True)
-        >>> model = TFLayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa", from_pt=True)
+        >>> model = TFLayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa")
 
         >>> dataset = load_dataset("nielsr/funsd", split="train")
         >>> example = dataset[0]
@@ -1480,7 +1480,7 @@ class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFQuestionAnswer
         >>> start_scores = outputs.start_logits
         >>> end_scores = outputs.end_logits
         >>> start, end = word_ids[tf.math.argmax(start_scores, -1)[0]], word_ids[tf.math.argmax(end_scores, -1)[0]]
-        >>> print(" ".join(words[start:end+1]))
+        >>> print(" ".join(words[start : end + 1]))
         M. Hamann P. Harper, P. Martinez
         ```"""
 

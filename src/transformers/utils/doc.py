@@ -171,7 +171,6 @@ PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
     >>> predicted_tokens_classes = [model.config.id2label[t.item()] for t in predicted_token_class_ids[0]]
     >>> predicted_tokens_classes
     {expected_output}
-
     ```
 
     ```python
@@ -179,7 +178,6 @@ PT_TOKEN_CLASSIFICATION_SAMPLE = r"""
     >>> loss = model(**inputs, labels=labels).loss
     >>> round(loss.item(), 2)
     {expected_loss}
-
     ```
 """
 
@@ -205,7 +203,6 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
     >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
     >>> tokenizer.decode(predict_answer_tokens)
     {expected_output}
-
     ```
 
     ```python
@@ -217,7 +214,6 @@ PT_QUESTION_ANSWERING_SAMPLE = r"""
     >>> loss = outputs.loss
     >>> round(loss.item(), 2)
     {expected_loss}
-
     ```
 """
 
@@ -239,7 +235,6 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> predicted_class_id = logits.argmax().item()
     >>> model.config.id2label[predicted_class_id]
     {expected_output}
-
     ```
 
     ```python
@@ -251,7 +246,6 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> loss = model(**inputs, labels=labels).loss
     >>> round(loss.item(), 2)
     {expected_loss}
-
     ```
 
     Example of multi-label classification:
@@ -271,7 +265,6 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> predicted_class_id = logits.argmax().item()
     >>> model.config.id2label[predicted_class_id]
     {expected_output}
-
     ```
 
     ```python
@@ -286,7 +279,6 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     ... )
     >>> loss = model(**inputs, labels=labels).loss
     >>> loss.backward()  # doctest: +IGNORE_RESULT
-
     ```
 """
 
@@ -311,7 +303,6 @@ PT_MASKED_LM_SAMPLE = r"""
     >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
     >>> tokenizer.decode(predicted_token_id)
     {expected_output}
-
     ```
 
     ```python
@@ -322,7 +313,6 @@ PT_MASKED_LM_SAMPLE = r"""
     >>> outputs = model(**inputs, labels=labels)
     >>> round(outputs.loss.item(), 2)
     {expected_loss}
-
     ```
 """
 
@@ -340,7 +330,6 @@ PT_BASE_MODEL_SAMPLE = r"""
     >>> outputs = model(**inputs)
 
     >>> last_hidden_states = outputs.last_hidden_state
-
     ```
 """
 
@@ -365,7 +354,6 @@ PT_MULTIPLE_CHOICE_SAMPLE = r"""
     >>> # the linear classifier still needs to be trained
     >>> loss = outputs.loss
     >>> logits = outputs.logits
-
     ```
 """
 
@@ -383,7 +371,6 @@ PT_CAUSAL_LM_SAMPLE = r"""
     >>> outputs = model(**inputs, labels=inputs["input_ids"])
     >>> loss = outputs.loss
     >>> logits = outputs.logits
-
     ```
 """
 
@@ -410,7 +397,6 @@ PT_SPEECH_BASE_MODEL_SAMPLE = r"""
     >>> last_hidden_states = outputs.last_hidden_state
     >>> list(last_hidden_states.shape)
     {expected_output}
-
     ```
 """
 
@@ -439,7 +425,6 @@ PT_SPEECH_CTC_SAMPLE = r"""
     >>> transcription = processor.batch_decode(predicted_ids)
     >>> transcription[0]
     {expected_output}
-
     ```
 
     ```python
@@ -449,7 +434,6 @@ PT_SPEECH_CTC_SAMPLE = r"""
     >>> loss = model(**inputs).loss
     >>> round(loss.item(), 2)
     {expected_loss}
-
     ```
 """
 
@@ -478,7 +462,6 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> predicted_label = model.config.id2label[predicted_class_ids]
     >>> predicted_label
     {expected_output}
-
     ```
 
     ```python
@@ -488,7 +471,6 @@ PT_SPEECH_SEQ_CLASS_SAMPLE = r"""
     >>> loss = model(**inputs).loss
     >>> round(loss.item(), 2)
     {expected_loss}
-
     ```
 """
 
@@ -518,7 +500,6 @@ PT_SPEECH_FRAME_CLASS_SAMPLE = r"""
     >>> labels = (probabilities > 0.5).long()
     >>> labels[0].tolist()
     {expected_output}
-
     ```
 """
 
@@ -555,7 +536,6 @@ PT_SPEECH_XVECTOR_SAMPLE = r"""
     ...     print("Speakers are not the same!")
     >>> round(similarity.item(), 2)
     {expected_output}
-
     ```
 """
 
@@ -581,7 +561,6 @@ PT_VISION_BASE_MODEL_SAMPLE = r"""
     >>> last_hidden_states = outputs.last_hidden_state
     >>> list(last_hidden_states.shape)
     {expected_output}
-
     ```
 """
 
@@ -608,7 +587,6 @@ PT_VISION_SEQ_CLASS_SAMPLE = r"""
     >>> predicted_label = logits.argmax(-1).item()
     >>> print(model.config.id2label[predicted_label])
     {expected_output}
-
     ```
 """
 
@@ -654,7 +632,6 @@ TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
     >>> predicted_tokens_classes = [model.config.id2label[t] for t in predicted_token_class_ids[0].numpy().tolist()]
     >>> predicted_tokens_classes
     {expected_output}
-
     ```
 
     ```python
@@ -662,7 +639,6 @@ TF_TOKEN_CLASSIFICATION_SAMPLE = r"""
     >>> loss = tf.math.reduce_mean(model(**inputs, labels=labels).loss)
     >>> round(float(loss), 2)
     {expected_loss}
-
     ```
 """
 
@@ -687,7 +663,6 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
     >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
     >>> tokenizer.decode(predict_answer_tokens)
     {expected_output}
-
     ```
 
     ```python
@@ -699,7 +674,6 @@ TF_QUESTION_ANSWERING_SAMPLE = r"""
     >>> loss = tf.math.reduce_mean(outputs.loss)
     >>> round(float(loss), 2)
     {expected_loss}
-
     ```
 """
 
@@ -720,7 +694,6 @@ TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> predicted_class_id = int(tf.math.argmax(logits, axis=-1)[0])
     >>> model.config.id2label[predicted_class_id]
     {expected_output}
-
     ```
 
     ```python
@@ -732,7 +705,6 @@ TF_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> loss = model(**inputs, labels=labels).loss
     >>> round(float(loss), 2)
     {expected_loss}
-
     ```
 """
 
@@ -756,7 +728,6 @@ TF_MASKED_LM_SAMPLE = r"""
     >>> predicted_token_id = tf.math.argmax(selected_logits, axis=-1)
     >>> tokenizer.decode(predicted_token_id)
     {expected_output}
-
     ```
 
     ```python
@@ -767,7 +738,6 @@ TF_MASKED_LM_SAMPLE = r"""
     >>> outputs = model(**inputs, labels=labels)
     >>> round(float(outputs.loss), 2)
     {expected_loss}
-
     ```
 """
 
@@ -785,7 +755,6 @@ TF_BASE_MODEL_SAMPLE = r"""
     >>> outputs = model(inputs)
 
     >>> last_hidden_states = outputs.last_hidden_state
-
     ```
 """
 
@@ -809,7 +778,6 @@ TF_MULTIPLE_CHOICE_SAMPLE = r"""
 
     >>> # the linear classifier still needs to be trained
     >>> logits = outputs.logits
-
     ```
 """
 
@@ -826,7 +794,6 @@ TF_CAUSAL_LM_SAMPLE = r"""
     >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="tf")
     >>> outputs = model(inputs)
     >>> logits = outputs.logits
-
     ```
 """
 
@@ -851,7 +818,6 @@ TF_SPEECH_BASE_MODEL_SAMPLE = r"""
     >>> last_hidden_states = outputs.last_hidden_state
     >>> list(last_hidden_states.shape)
     {expected_output}
-
     ```
 """
 
@@ -879,7 +845,6 @@ TF_SPEECH_CTC_SAMPLE = r"""
     >>> transcription = processor.batch_decode(predicted_ids)
     >>> transcription[0]
     {expected_output}
-
     ```
 
     ```python
@@ -889,7 +854,6 @@ TF_SPEECH_CTC_SAMPLE = r"""
     >>> loss = model(**inputs).loss
     >>> round(float(loss), 2)
     {expected_loss}
-
     ```
 """
 
@@ -912,7 +876,6 @@ TF_VISION_BASE_MODEL_SAMPLE = r"""
     >>> last_hidden_states = outputs.last_hidden_state
     >>> list(last_hidden_states.shape)
     {expected_output}
-
     ```
 """
 
@@ -937,7 +900,6 @@ TF_VISION_SEQ_CLASS_SAMPLE = r"""
     >>> predicted_label = int(tf.math.argmax(logits, axis=-1))
     >>> print(model.config.id2label[predicted_label])
     {expected_output}
-
     ```
 """
 
@@ -969,7 +931,6 @@ FLAX_TOKEN_CLASSIFICATION_SAMPLE = r"""
 
     >>> outputs = model(**inputs)
     >>> logits = outputs.logits
-
     ```
 """
 
@@ -988,7 +949,6 @@ FLAX_QUESTION_ANSWERING_SAMPLE = r"""
     >>> outputs = model(**inputs)
     >>> start_scores = outputs.start_logits
     >>> end_scores = outputs.end_logits
-
     ```
 """
 
@@ -1005,7 +965,6 @@ FLAX_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
 
     >>> outputs = model(**inputs)
     >>> logits = outputs.logits
-
     ```
 """
 
@@ -1022,7 +981,6 @@ FLAX_MASKED_LM_SAMPLE = r"""
 
     >>> outputs = model(**inputs)
     >>> logits = outputs.logits
-
     ```
 """
 
@@ -1039,7 +997,6 @@ FLAX_BASE_MODEL_SAMPLE = r"""
     >>> outputs = model(**inputs)
 
     >>> last_hidden_states = outputs.last_hidden_state
-
     ```
 """
 
@@ -1060,7 +1017,6 @@ FLAX_MULTIPLE_CHOICE_SAMPLE = r"""
     >>> outputs = model(**{{k: v[None, :] for k, v in encoding.items()}})
 
     >>> logits = outputs.logits
-
     ```
 """
 
@@ -1078,7 +1034,6 @@ FLAX_CAUSAL_LM_SAMPLE = r"""
 
     >>> # retrieve logts for next token
     >>> next_token_logits = outputs.logits[:, -1]
-
     ```
 """
 
