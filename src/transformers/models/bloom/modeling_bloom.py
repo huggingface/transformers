@@ -707,11 +707,14 @@ class BloomModel(BloomPreTrainedModel):
 
         alibi = build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
 
-        causal_mask = self._prepare_attn_mask(
-            attention_mask,
-            input_shape=(batch_size, seq_length),
-            past_key_values_length=past_key_values_length,
-        )
+        if hasattr(self, 'ds_inference'):
+            causal_mask = attention_mask
+        else:
+            causal_mask = self._prepare_attn_mask(
+                attention_mask,
+                input_shape=(batch_size, seq_length),
+                past_key_values_length=past_key_values_length,
+            )
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
 
