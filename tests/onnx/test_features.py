@@ -105,7 +105,7 @@ class DetermineFrameworkTest(TestCase):
             result = FeaturesManager.determine_framework(self.test_model)
             self.assertEqual(result, torch_str)
 
-        # Both not in enviornemnt -> raise error
+        # Both not in environment -> raise error
         mock_tf_available = MagicMock(return_value=False)
         mock_torch_available = MagicMock(return_value=False)
         with patch("transformers.onnx.features.is_tf_available", mock_tf_available), patch(
