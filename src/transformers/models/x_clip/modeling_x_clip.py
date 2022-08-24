@@ -391,7 +391,7 @@ class XClipVisionEncoderLayer(nn.Module):
 
     def __init__(self, config: XClipConfig):
         super().__init__()
-        self.T = config.num_frames
+        self.num_frames = config.num_frames
 
         self.embed_dim = config.hidden_size
 
@@ -423,15 +423,14 @@ class XClipVisionEncoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        # TODO improve variable names
-        bt, l, d = hidden_states.size()
-        b = bt // self.T
+        batch_time, seq_length, hidden_size = hidden_states.size()
+        batch_size = batch_time // self.num_frames
         msg_token = self.message_fc(hidden_states[:, 0, :])
-        msg_token = msg_token.view(b, self.T, d)
+        msg_token = msg_token.view(batch_size, self.num_frames, hidden_size)
 
         msg_token = msg_token + self.drop_path(self.message_attn(self.message_ln(msg_token))[0])
         # add dummy sequence dimension
-        msg_token = msg_token.view(-1, 1, d)
+        msg_token = msg_token.view(-1, 1, hidden_size)
 
         hidden_states = torch.cat([hidden_states, msg_token], dim=1)
 
@@ -446,7 +445,7 @@ class XClipVisionEncoderLayer(nn.Module):
         )
         hidden_states = residual + hidden_states
 
-        hidden_states = hidden_states[:, :l, :]
+        hidden_states = hidden_states[:, :seq_length, :]
 
         residual = hidden_states
         hidden_states = self.layer_norm2(hidden_states)
