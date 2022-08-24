@@ -2270,6 +2270,30 @@ class TFWav2Vec2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class TFXGLMForCausalLM(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFXGLMModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFXGLMPreTrainedModel(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
