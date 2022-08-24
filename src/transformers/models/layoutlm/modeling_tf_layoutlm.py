@@ -963,7 +963,6 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         ... )
 
         >>> last_hidden_states = outputs.last_hidden_state
-
         ```"""
 
         outputs = self.layoutlm(
@@ -1095,7 +1094,6 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
         ... )
 
         >>> loss = outputs.loss
-
         ```"""
 
         outputs = self.layoutlm(
@@ -1220,7 +1218,6 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
 
         >>> loss = outputs.loss
         >>> logits = outputs.logits
-
         ```"""
 
         outputs = self.layoutlm(
@@ -1350,7 +1347,6 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
 
         >>> loss = outputs.loss
         >>> logits = outputs.logits
-
         ```"""
 
         outputs = self.layoutlm(
@@ -1486,7 +1482,6 @@ class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFQuestionAnswer
         >>> start, end = word_ids[tf.math.argmax(start_scores, -1)[0]], word_ids[tf.math.argmax(end_scores, -1)[0]]
         >>> print(" ".join(words[start:end+1]))
         M. Hamann P. Harper, P. Martinez
-
         ```"""
 
         outputs = self.layoutlm(

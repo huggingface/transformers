@@ -776,7 +776,6 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         ...     input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids
         ... )
 
-        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -929,7 +928,6 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         ...     labels=labels,
         ... )
 
-        >>> loss = outputs.loss
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1051,7 +1049,6 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
         ... )
 
         >>> loss = outputs.loss
-        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1186,7 +1183,6 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         ... )
 
         >>> loss = outputs.loss
-        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1315,7 +1311,6 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         >>> start, end = word_ids[start_scores.argmax(-1)], word_ids[end_scores.argmax(-1)]
         >>> print(" ".join(words[start:end+1]))
         M. Hamann P. Harper, P. Martinez
-
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
