@@ -33,7 +33,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import stable_softmax
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -78,7 +78,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
-    src_len = tf.shape(mask)[1]
+    src_len = shape_list(mask)[1]
     tgt_len = tgt_len if tgt_len is not None else src_len
     one_cst = tf.constant(1.0)
     mask = tf.cast(mask, dtype=one_cst.dtype)
@@ -430,13 +430,12 @@ class TFGroupViTPatchEmbeddings(tf.keras.layers.Layer):
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
         if (
-            not interpolate_pos_encoding 
+            not interpolate_pos_encoding
             and tf.executing_eagerly()
             and (height != self.image_size[0] or width != self.image_size[1])
         ):
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model"
-                f" ({self.image_size[0]}*{self.image_size[1]})."
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
 
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
@@ -577,7 +576,7 @@ class TFGroupViTTextEmbeddings(tf.keras.layers.Layer):
         if inputs_embeds is None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
-        input_shape = tf.shape(inputs_embeds)[:-1]
+        input_shape = shape_list(inputs_embeds)[:-1]
 
         if position_ids is None:
             position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
@@ -1013,7 +1012,7 @@ class TFGroupViTTextTransformer(tf.keras.layers.Layer):
         return_dict: bool,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-        input_shape = tf.shape(input_ids)
+        input_shape = shape_list(input_ids)
 
         embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
@@ -1136,7 +1135,7 @@ class TFGroupViTTextMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value: tf.Variable):
         self.text_model.embeddings.weight = value
-        self.text_model.embeddings.vocab_size = tf.shape(value)[0]
+        self.text_model.embeddings.vocab_size = shape_list(value)[0]
 
     @unpack_inputs
     def call(
@@ -1152,7 +1151,7 @@ class TFGroupViTTextMainLayer(tf.keras.layers.Layer):
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
 
-        input_shape = tf.shape(input_ids)
+        input_shape = shape_list(input_ids)
 
         if attention_mask is None:
             attention_mask = tf.fill(dims=input_shape, value=1)
