@@ -70,11 +70,6 @@ TF_GROUPVIT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-################################################################################
-# Utility Functions
-################################################################################
-
-
 LARGE_NEGATIVE = -1e8
 
 
@@ -110,9 +105,6 @@ def groupvit_loss(similarity: tf.Tensor) -> tf.Tensor:
 
 
 def hard_softmax(logits: tf.Tensor, dim: int) -> tf.Tensor:
-    """
-    Reference: https://gist.github.com/ariG23498/08cdae21637b8b61bdd6d21d11719fb3
-    """
     y_soft = stable_softmax(logits, dim)
     # Straight through.
     index = tf.argmax(y_soft, dim)
@@ -121,7 +113,7 @@ def hard_softmax(logits: tf.Tensor, dim: int) -> tf.Tensor:
         depth=shape_list(logits)[dim],
         # TensorFlow expects axis to be -1 or between [0, 3).  But received: -2
         # This is why the following code snippet is used.
-        axis=range(len(shape_list(logits)))[dim],
+        axis=tf.rank(logits) - dim,
         dtype=y_soft.dtype,
     )
     ret = y_hard - tf.stop_gradient(y_soft) + y_soft
@@ -156,14 +148,14 @@ def gumbel_softmax(logits: tf.Tensor, tau: float = 1, hard: bool = False, dim: i
 
 
 def resize_attention_map(
-    attentions: tf.Tensor, height: int, width: int, align_corners: Optional[bool] = False
+    attentions: tf.Tensor, height: int, width: int, align_corners: bool = False
 ) -> tf.Tensor:
     """
     Args:
-    Refernece: https://gist.github.com/ariG23498/3777f8d9be25de8ae782256f5aacb2c5
-        attentions (`tf.Tensor`): attention map of shape [batch_size, groups, feat_height*feat_width] height (`int`):
-        height of the output attention map width (`int`): width of the output attention map align_corners (`bool`,
-        *optional*): the `align_corner` argument for `nn.functional.interpolate`.
+        attentions (`tf.Tensor`): attention map of shape [batch_size, groups, feat_height*feat_width]
+        height (`int`): height of the output attention map
+        width (`int`): width of the output attention map
+        align_corners (`bool`, *optional*): the `align_corner` argument for `nn.functional.interpolate`.
 
     Returns:
         `tf.Tensor`: resized attention map of shape [batch_size, groups, height, width]
@@ -220,7 +212,7 @@ def get_grouping_from_attentions(attentions: Tuple[tf.Tensor], hw_shape: Tuple[i
     # [batch_size, num_groups, height, width]
     final_grouping = attn_maps[-1]
 
-    return final_grouping
+    return tf.stop_gradient(final_grouping)
 
 
 @dataclass
@@ -274,11 +266,6 @@ class TFGroupViTModelOutput(ModelOutput):
         )
 
 
-################################################################################
-# Individual Layers
-################################################################################
-
-
 class TFGroupViTCrossAttentionLayer(tf.keras.layers.Layer):
     def __init__(self, config: GroupViTVisionConfig, **kwargs):
         super().__init__(**kwargs)
@@ -287,7 +274,7 @@ class TFGroupViTCrossAttentionLayer(tf.keras.layers.Layer):
         self.mlp = TFGroupViTMLP(config, name="mlp")
         self.norm_post = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="norm_post")
 
-    def call(self, query: tf.Tensor, key: tf.Tensor, training: Optional[bool] = False) -> tf.Tensor:
+    def call(self, query: tf.Tensor, key: tf.Tensor, training: bool = False) -> tf.Tensor:
         x = query
         x = x + self.attn(query, encoder_hidden_states=key)[0]
         x = x + self.mlp(self.norm2(x))
@@ -307,7 +294,7 @@ class TFGroupViTAssignAttention(tf.keras.layers.Layer):
         self.assign_eps = config.assign_eps
 
     def get_attn(
-        self, attn: tf.Tensor, gumbel: bool = True, hard: bool = True, training: Optional[bool] = False
+        self, attn: tf.Tensor, gumbel: bool = True, hard: bool = True, training: bool = False
     ) -> tf.Tensor:
 
         if gumbel and training:
@@ -320,7 +307,7 @@ class TFGroupViTAssignAttention(tf.keras.layers.Layer):
 
         return attn
 
-    def call(self, query: tf.Tensor, key: tf.Tensor, training: Optional[bool] = False):
+    def call(self, query: tf.Tensor, key: tf.Tensor, training: bool = False):
         value = key
         # [batch_size, query_length, channels]
         query = self.q_proj(query)
@@ -385,7 +372,7 @@ class TFGroupViTTokenAssign(tf.keras.layers.Layer):
         projected_group_tokens = self.norm_post_tokens(projected_group_tokens)
         return projected_group_tokens
 
-    def call(self, image_tokens: tf.Tensor, group_tokens: tf.Tensor, training: Optional[bool] = False):
+    def call(self, image_tokens: tf.Tensor, group_tokens: tf.Tensor, training: bool = False):
         """
         Args:
             image_tokens (`tf.Tensor`): image tokens, of shape [batch_size, input_length, channels]
@@ -442,7 +429,7 @@ class TFGroupViTPatchEmbeddings(tf.keras.layers.Layer):
         )
 
     def call(
-        self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: Optional[bool] = False
+        self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False
     ) -> tf.Tensor:
         batch_size, num_channels, height, width = shape_list(pixel_values)
         if tf.executing_eagerly() and num_channels != self.num_channels:
@@ -623,7 +610,6 @@ class TFGroupViTStage(tf.keras.layers.Layer):
         self.config = config
         self.depth = depth
         self.num_group_token = num_group_token
-        self.gradient_checkpointing = False
         self.layers = [TFGroupViTEncoderLayer(config, name=f"layers_._{i}") for i in range(depth)]
 
         if num_group_token > 0:
@@ -677,8 +663,8 @@ class TFGroupViTStage(tf.keras.layers.Layer):
         self,
         hidden_states: tf.Tensor,
         prev_group_token: Optional[tf.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        training: Optional[bool] = False,
+        output_attentions: bool = False,
+        training: bool = False,
     ) -> Tuple[tf.Tensor]:
         """
         Args:
@@ -741,7 +727,7 @@ class TFGroupViTMLP(tf.keras.layers.Layer):
         self.fc1 = tf.keras.layers.Dense(intermediate_size, name="fc1")
         self.fc2 = tf.keras.layers.Dense(output_size, name="fc2")
 
-    def call(self, hidden_states: tf.Tensor, training: Optional[bool] = False) -> tf.Tensor:
+    def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
         hidden_states = self.fc1(hidden_states)
         hidden_states = self.activation_fn(hidden_states)
         hidden_states = self.fc2(hidden_states)
@@ -749,7 +735,7 @@ class TFGroupViTMLP(tf.keras.layers.Layer):
 
 
 class TFGroupViTMixerMLP(TFGroupViTMLP):
-    def call(self, x, training: Optional[bool] = False):
+    def call(self, x, training: bool = False):
         x = super().call(hidden_states=tf.transpose(x, perm=(0, 2, 1)))
         return tf.transpose(x, perm=(0, 2, 1))
 
@@ -807,7 +793,7 @@ class TFGroupViTAttention(tf.keras.layers.Layer):
         causal_attention_mask: tf.Tensor = None,
         output_attentions: bool = None,
         encoder_hidden_states: tf.Tensor = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Tuple[tf.Tensor]:
         """Input shape: Batch x Time x Channel"""
 
@@ -860,11 +846,6 @@ class TFGroupViTAttention(tf.keras.layers.Layer):
         outputs = (attention_output, _attention_probs) if output_attentions else (attention_output,)
 
         return outputs
-
-
-################################################################################
-# Encoder Layers
-################################################################################
 
 
 # Copied from transformers.models.clip.modeling_tf_clip.TFCLIPEncoderLayer with CLIP->GroupViT
@@ -935,7 +916,7 @@ class TFGroupViTTextEncoder(tf.keras.layers.Layer):
         output_attentions: bool,
         output_hidden_states: bool,
         return_dict: bool,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[Tuple, TFBaseModelOutput]:
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -987,7 +968,7 @@ class TFGroupViTVisionEncoder(tf.keras.layers.Layer):
         output_hidden_states: bool,
         output_attentions: bool,
         return_dict: bool,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[tuple, TFBaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_groupings = () if output_attentions else None
@@ -1014,11 +995,6 @@ class TFGroupViTVisionEncoder(tf.keras.layers.Layer):
         return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_groupings
         )
-
-
-################################################################################
-# Transformer Architectures
-################################################################################
 
 
 # Copied from transformers.models.clip.modeling_tf_clip.TFCLIPTextTransformer with CLIPText->GroupViTText, CLIPEncoder->GroupViTTextEncoder
@@ -1121,7 +1097,7 @@ class TFGroupViTVisionTransformer(tf.keras.layers.Layer):
         output_attentions: bool,
         output_hidden_states: bool,
         return_dict: bool,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[Tuple, TFBaseModelOutputWithPooling]:
 
         embedding_output = self.embeddings(pixel_values)
@@ -1148,11 +1124,6 @@ class TFGroupViTVisionTransformer(tf.keras.layers.Layer):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
-
-
-################################################################################
-# Main Layers
-################################################################################
 
 
 @keras_serializable
@@ -1307,7 +1278,7 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> tf.Tensor:
 
         if input_ids is None:
@@ -1341,7 +1312,7 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> tf.Tensor:
 
         if pixel_values is None:
@@ -1373,7 +1344,7 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
         output_hidden_states: Optional[bool] = None,
         output_segmentation: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[TFGroupViTModelOutput, Tuple[tf.Tensor]]:
 
         if input_ids is None:
@@ -1493,11 +1464,6 @@ class TFGroupViTPreTrainedModel(TFPreTrainedModel):
 
     config_class = GroupViTConfig
     base_model_prefix = "groupvit"
-
-
-################################################################################
-# Docstrings for Models
-################################################################################
 
 
 GROUPVIT_START_DOCSTRING = r"""
@@ -1636,11 +1602,6 @@ GROUPVIT_INPUTS_DOCSTRING = r"""
 """
 
 
-################################################################################
-# Public Models
-################################################################################
-
-
 class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
     config_class = GroupViTTextConfig
     main_input_name = "input_ids"
@@ -1685,7 +1646,7 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         r"""
         Returns:
@@ -1778,7 +1739,7 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
         r"""
         Returns:
@@ -1790,7 +1751,7 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, TFGroupViTVisionModel
 
-        >>> processor = AutoPProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
+        >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
         >>> model = TFGroupViTVisionModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1879,7 +1840,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> tf.Tensor:
         r"""
         Returns:
@@ -1917,7 +1878,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> tf.Tensor:
         r"""
         Returns:
@@ -1965,7 +1926,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         output_segmentation: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = False,
+        training: bool = False,
     ) -> Union[TFGroupViTModelOutput, Tuple[tf.Tensor]]:
         r"""
         Returns:
