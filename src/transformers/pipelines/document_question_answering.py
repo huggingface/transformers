@@ -79,7 +79,7 @@ def apply_tesseract(image: "Image.Image", lang: Optional[str], tesseract_config:
 
 class ModelType(ExplicitEnum):
     LayoutLM = "layoutlm"
-    LayoutLMv2Plus = "layoutlmv2+"
+    LayoutLMv2Plus = "layoutlmv2+"  # Refers to LayoutLMv2 and LayoutLMv3
     Donut = "donut"
 
 
@@ -159,7 +159,8 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         """
         Answer the question(s) given as inputs by using the document(s). A document is defined as an image and an
         optional list of (word, box) tuples which represent the text in the document. If the `word_boxes` are not
-        provided, it will use the Tesseract OCR engine (if available) to extract the words and boxes automatically.
+        provided, it will use the Tesseract OCR engine (if available) to extract the words and boxes automatically for
+        LayoutLM-like models which require them as input. For Donut, no OCR is run.
 
         You can invoke the pipeline several ways:
 
@@ -182,9 +183,9 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
                 A question to ask of the document.
             word_boxes (`List[str, Tuple[float, float, float, float]]`, *optional*):
                 A list of words and bounding boxes (normalized 0->1000). If you provide this optional input, then the
-                pipeline will use these words and boxes instead of running OCR on the image to derive them. This allows
-                you to reuse OCR'd results across many invocations of the pipeline without having to re-run it each
-                time.
+                pipeline will use these words and boxes instead of running OCR on the image to derive them for models
+                that need them (e.g. LayoutLM). This allows you to reuse OCR'd results across many invocations of the
+                pipeline without having to re-run it each time.
             top_k (`int`, *optional*, defaults to 1):
                 The number of answers to return (will be chosen by order of likelihood). Note that we return less than
                 top_k answers if there are not enough options available within the context.
