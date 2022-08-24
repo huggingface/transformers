@@ -23,6 +23,7 @@ from pathlib import Path
 import datasets
 import numpy as np
 from datasets import load_dataset
+from packaging import version
 
 from transformers import AutoProcessor
 from transformers.models.wav2vec2 import Wav2Vec2CTCTokenizer, Wav2Vec2FeatureExtractor
@@ -411,7 +412,9 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
 
         # compare to filename `common_voice_en_100038.mp3` of dataset viewer on https://huggingface.co/datasets/common_voice/viewer/en/train
+        print("Out", np.sum(np.abs(sample["audio"]["array"])))
         input_values = processor(sample["audio"]["array"], return_tensors="pt").input_values
+        print("Out PT", input_values.abs().sum())
 
         with torch.no_grad():
             logits = model(input_values).logits.cpu().numpy()
@@ -439,19 +442,15 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         end_times = torch.tensor(self.get_from_offsets(word_time_stamps, "end_time"))
 
         # fmt: off
-        self.assertTrue(torch.allclose(
-            start_times,
-            torch.tensor([
-                1.42, 1.64, 2.12, 2.26, 2.54, 3.0, 3.24, 3.6, 3.8, 4.1, 4.26, 4.94, 5.28, 5.66, 5.78, 5.94, 6.32, 6.54, 6.66,
-            ]),
-            atol=0.01
-        ))
+        expected_start_tensor = torch.tensor([1.42, 1.64, 2.12, 2.26, 2.54, 3.0, 3.24, 3.6, 3.8, 4.1, 4.26, 4.94, 5.28, 5.66, 5.78, 5.94, 6.32, 6.54, 6.66])
 
-        self.assertTrue(torch.allclose(
-            end_times,
-            torch.tensor([
-                1.54, 1.88, 2.14, 2.46, 2.9, 3.18, 3.54, 3.72, 4.02, 4.18, 4.76, 5.16, 5.56, 5.7, 5.86, 6.2, 6.38, 6.62, 6.94,
-            ]),
-            atol=0.01
-        ))
+        # TODO(Patrick): This if-else version statement should be removed once
+        # https://github.com/huggingface/datasets/issues/4889 is resolved
+        if version.parse(torch.__version__) >= version.parse("1.12.0"):
+            expected_end_tensor = torch.tensor([1.54, 1.88, 2.14, 2.46, 2.9, 3.16, 3.54, 3.72, 4.02, 4.18, 4.76, 5.16, 5.56, 5.7, 5.86, 6.2, 6.38, 6.62, 6.94])
+        else:
+            expected_end_tensor = torch.tensor([1.54, 1.88, 2.14, 2.46, 2.9, 3.18, 3.54, 3.72, 4.02, 4.18, 4.76, 5.16, 5.56, 5.7, 5.86, 6.2, 6.38, 6.62, 6.94])
         # fmt: on
+
+        self.assertTrue(torch.allclose(start_times, expected_start_tensor, atol=0.01))
+        self.assertTrue(torch.allclose(end_times, expected_end_tensor, atol=0.01))
