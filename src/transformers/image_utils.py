@@ -112,6 +112,25 @@ def infer_channel_dimension_format(image: np.ndarray) -> ChannelDimension:
     raise ValueError("Unable to infer channel dimension format")
 
 
+def get_channel_dimension_axis(image: np.ndarray) -> int:
+    """
+    Returns the channel dimension axis of the image.
+
+    Args:
+        image (`np.ndarray`):
+            The image to get the channel dimension axis of.
+
+    Returns:
+        The channel dimension axis of the image.
+    """
+    channel_dim = infer_channel_dimension_format(image)
+    if channel_dim == ChannelDimension.FIRST:
+        return image.ndim - 3
+    elif channel_dim == ChannelDimension.LAST:
+        return image.ndim - 1
+    raise ValueError(f"Unsupported data format: {channel_dim}")
+
+
 def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> Tuple[int, int]:
     """
     Returns the (height, width) dimensions of the image.
