@@ -936,10 +936,10 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LayoutLMTokenizer, TFLayoutLMModel
+        >>> from transformers import AutoTokenizer, TFLayoutLMModel
         >>> import tensorflow as tf
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         >>> model = TFLayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "world"]
@@ -1061,10 +1061,10 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
         Examples:
 
         ```python
-        >>> from transformers import LayoutLMTokenizer, TFLayoutLMForMaskedLM
+        >>> from transformers import AutoTokenizer, TFLayoutLMForMaskedLM
         >>> import tensorflow as tf
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         >>> model = TFLayoutLMForMaskedLM.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "[MASK]"]
@@ -1185,10 +1185,10 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
         Examples:
 
         ```python
-        >>> from transformers import LayoutLMTokenizer, TFLayoutLMForSequenceClassification
+        >>> from transformers import AutoTokenizer, TFLayoutLMForSequenceClassification
         >>> import tensorflow as tf
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         >>> model = TFLayoutLMForSequenceClassification.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "world"]
@@ -1315,9 +1315,9 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import LayoutLMTokenizer, TFLayoutLMForTokenClassification
+        >>> from transformers import AutoTokenizer, TFLayoutLMForTokenClassification
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         >>> model = TFLayoutLMForTokenClassification.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "world"]

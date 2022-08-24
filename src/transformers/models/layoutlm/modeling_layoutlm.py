@@ -750,10 +750,10 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LayoutLMTokenizer, LayoutLMModel
+        >>> from transformers import AutoTokenizer, LayoutLMModel
         >>> import torch
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         >>> model = LayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "world"]
@@ -896,10 +896,10 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LayoutLMTokenizer, LayoutLMForMaskedLM
+        >>> from transformers import AutoTokenizer, LayoutLMForMaskedLM
         >>> import torch
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         >>> model = LayoutLMForMaskedLM.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "[MASK]"]
@@ -1017,10 +1017,10 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LayoutLMTokenizer, LayoutLMForSequenceClassification
+        >>> from transformers import AutoTokenizer, LayoutLMForSequenceClassification
         >>> import torch
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         >>> model = LayoutLMForSequenceClassification.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "world"]
@@ -1151,10 +1151,10 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LayoutLMTokenizer, LayoutLMForTokenClassification
+        >>> from transformers import AutoTokenizer, LayoutLMForTokenClassification
         >>> import torch
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         >>> model = LayoutLMForTokenClassification.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "world"]
