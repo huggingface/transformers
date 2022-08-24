@@ -65,6 +65,7 @@ class XClipVisionModelTester:
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
+        mit_hidden_size=64,
         dropout=0.1,
         attention_dropout=0.1,
         initializer_range=0.02,
@@ -81,6 +82,7 @@ class XClipVisionModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
+        self.mit_hidden_size = mit_hidden_size
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
@@ -106,6 +108,7 @@ class XClipVisionModelTester:
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
+            mit_hidden_size=self.mit_hidden_size,
             dropout=self.dropout,
             attention_dropout=self.attention_dropout,
             initializer_range=self.initializer_range,
@@ -400,9 +403,10 @@ class XClipTextModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class XClipModelTester:
-    def __init__(self, parent, num_frames=8, is_training=True):
+    def __init__(self, parent, projection_dim=64, mit_hidden_size=64, is_training=True):
         self.parent = parent
-        self.num_frames = num_frames
+        self.projection_dim = projection_dim
+        self.mit_hidden_size = mit_hidden_size
         self.text_model_tester = XClipTextModelTester(parent)
         self.vision_model_tester = XClipVisionModelTester(parent)
         self.is_training = is_training
@@ -413,7 +417,7 @@ class XClipModelTester:
         pixel_values = floats_tensor(
             [
                 self.vision_model_tester.batch_size,
-                self.num_frames,
+                self.vision_model_tester.num_frames,
                 self.vision_model_tester.num_channels,
                 self.vision_model_tester.image_size,
                 self.vision_model_tester.image_size,
@@ -426,7 +430,9 @@ class XClipModelTester:
 
     def get_config(self):
         return XClipConfig.from_text_vision_configs(
-            self.text_model_tester.get_config(), self.vision_model_tester.get_config(), projection_dim=64
+            self.text_model_tester.get_config(),
+            self.vision_model_tester.get_config(),
+            projection_dim=self.projection_dim,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
@@ -460,6 +466,7 @@ class XClipModelTest(ModelTesterMixin, unittest.TestCase):
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = XClipModelTester(self)
@@ -484,7 +491,7 @@ class XClipModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
-    # override as the `logit_scale` parameter initilization is different for X_CLIP
+    # override as the `logit_scale`, `prompts_generator.alpha` and `mit.position_embedding` parameters require special treatment
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -501,6 +508,8 @@ class XClipModelTest(ModelTesterMixin, unittest.TestCase):
                             delta=1e-3,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+                    elif name in ["prompts_generator.alpha", "mit.position_embedding"]:
+                        pass
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),

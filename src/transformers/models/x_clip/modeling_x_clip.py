@@ -499,20 +499,24 @@ class XClipPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, XClipModel):
+            factor = self.config.initializer_factor
             nn.init.normal_(
                 module.text_projection.weight,
-                std=module.text_embed_dim**-0.5 * self.config.initializer_factor,
+                std=module.text_embed_dim**-0.5 * factor,
             )
             nn.init.normal_(
                 module.visual_projection.weight,
-                std=module.vision_embed_dim**-0.5 * self.config.initializer_factor,
+                std=module.vision_embed_dim**-0.5 * factor,
             )
+            nn.init.normal_(module.prompts_visual_projection, mean=0.0, std=module.vision_embed_dim**-0.5 * factor)
 
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_factor)
+            if module.bias is not None:
+                module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (XClipEncoder, XClipVisionEncoder)):
@@ -1093,6 +1097,9 @@ class XClipMultiframeIntegrationTransformer(nn.Module):
     ) -> Union[Tuple, BaseModelOutput]:
         residual = hidden_states
 
+        print("Shape of hidden states:", hidden_states.shape)
+        print("Shape of position embedding:", self.position_embedding.data.shape)
+
         # add position embeddings
         hidden_states = hidden_states + self.position_embedding
 
@@ -1180,17 +1187,6 @@ class XClipPromptGenerator(nn.Module):
         self.layernorm = nn.LayerNorm(embed_dim)
         self.decoder = nn.ModuleList([PromptGeneratorLayer(config) for _ in range(config.prompt_layers)])
         self.alpha = nn.Parameter(torch.ones(embed_dim) * config.prompt_alpha)
-        # self.apply(self._init_weights)
-
-    # TODO do this in the init weights of XClipModel
-    # def _init_weights(self, m):
-    #     if isinstance(m, nn.Linear):
-    #         trunc_normal_(m.weight, std=.02)
-    #         if isinstance(m, nn.Linear) and m.bias is not None:
-    #             nn.init.constant_(m.bias, 0)
-    #     elif isinstance(m, nn.LayerNorm):
-    #         nn.init.constant_(m.bias, 0)
-    #         nn.init.constant_(m.weight, 1.0)
 
     def forward(self, text, visual):
         visual = self.layernorm(visual)
@@ -1411,20 +1407,22 @@ class XClipModel(XClipPreTrainedModel):
         )
 
         # TODO remove this assertion (vision pooler output)
-        assert torch.allclose(vision_outputs.pooler_output[0, :3], torch.tensor([-0.2987, 1.0489, 0.3702]), atol=1e-4)
+        # assert torch.allclose(vision_outputs.pooler_output[0, :3], torch.tensor([-0.2987, 1.0489, 0.3702]), atol=1e-4)
 
         image_embeds = vision_outputs[1]
         image_embeds = self.visual_projection(image_embeds)
 
         cls_features = image_embeds.view(batch_size, num_frames, -1)
 
-        print("Shape of MIT input:", cls_features.shape)
-        print("Initial values of MIT input:", cls_features[0, :3, :3])
+        # print("Shape of MIT input:", cls_features.shape)
+        # print("Initial values of MIT input:", cls_features[0, :3, :3])
 
         image_embeds = self.mit(cls_features)
 
-        print("Shape of output of MIT:", image_embeds.shape)
-        print("First values of output of MIT:", image_embeds[0, :3])
+        print("Shape of image embeds:", image_embeds.shape)
+
+        # print("Shape of output of MIT:", image_embeds.shape)
+        # print("First values of output of MIT:", image_embeds[0, :3])
 
         img_features = vision_outputs[0][:, 1:, :]
         img_features = self.prompts_visual_layernorm(img_features)
@@ -1445,8 +1443,8 @@ class XClipModel(XClipPreTrainedModel):
         text_embeds = self.text_projection(text_embeds)
 
         # TODO remove this assertion (text pooler output)
-        assert torch.allclose(text_embeds[0, :3], torch.tensor([-0.2870, -0.3504, 0.0417]), atol=1e-4)
-        print("Looks ok!")
+        # assert torch.allclose(text_embeds[0, :3], torch.tensor([-0.2870, -0.3504, 0.0417]), atol=1e-4)
+        # print("Looks ok!")
 
         text_embeds = text_embeds.unsqueeze(0).expand(batch_size, -1, -1)
         text_embeds = text_embeds + self.prompts_generator(text_embeds, img_features)
