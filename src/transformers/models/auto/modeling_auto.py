@@ -611,7 +611,6 @@ MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # TODO Uncomment after # 18407 lands
         # ("layoutlm", "LayoutLMForQuestionAnswering"),
-        ("donut-swin", "DonutSwinModel"),
         ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
         ("layoutlmv3", "LayoutLMv3ForQuestionAnswering"),
     ]
@@ -915,7 +914,7 @@ class AutoModelForDocumentQuestionAnswering(_BaseAutoModelClass):
 AutoModelForDocumentQuestionAnswering = auto_class_update(
     AutoModelForDocumentQuestionAnswering,
     head_doc="document question answering",
-    checkpoint_for_example="impira/layoutlm-doc-qa",
+    checkpoint_for_example="impira/layoutlm-document-qa",
 )
 
 

@@ -222,7 +222,7 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
         "tf": (),
         "default": {
-            "model": {"pt": ("dandelin/vilt-b32-finetuned-vqa", "4355f59")},  # TODO
+            "model": {"pt": ("impira/layoutlm-document-qa", "02daaaf")},  # TODO Update after # 18407 lands
         },
         "type": "multimodal",
     },
