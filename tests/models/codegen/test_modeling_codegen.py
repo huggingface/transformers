@@ -503,7 +503,7 @@ class CodeGenModelLanguageGenerationTest(unittest.TestCase):
         output_seq_tt_strs = tokenizer.batch_decode(output_seq_tt, skip_special_tokens=True)
 
         if torch_device == "cuda":
-            EXPECTED_OUTPUT_STR = 'def hello_world():\n    print("Hello World")\n\n#'
+            EXPECTED_OUTPUT_STR = 'def hello_world():\n    print("Hello World")\n    return True\n\nresult ='
         else:
             EXPECTED_OUTPUT_STR = "def hello_world():\r\n    print('Hello, World.')\r\n\r\n\r"
 

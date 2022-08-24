@@ -15,30 +15,43 @@
 import copy
 import importlib
 import logging
+import os
 import random
 import string
+import sys
+import tempfile
 import unittest
 from abc import abstractmethod
 from functools import lru_cache
+from pathlib import Path
 from unittest import skipIf
 
 import numpy as np
 
+from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from requests.exceptions import HTTPError
 from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     TOKENIZER_MAPPING,
     AutoFeatureExtractor,
+    AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
     IBertConfig,
     RobertaConfig,
     TextClassificationPipeline,
+    TFAutoModelForSequenceClassification,
     pipeline,
 )
-from transformers.pipelines import get_task
-from transformers.pipelines.base import _pad
+from transformers.pipelines import PIPELINE_REGISTRY, get_task
+from transformers.pipelines.base import Pipeline, _pad
 from transformers.testing_utils import (
+    TOKEN,
+    USER,
+    CaptureLogger,
+    RequestCounter,
     is_pipeline_test,
+    is_staging_test,
     nested_simplify,
     require_scatter,
     require_tensorflow_probability,
@@ -46,6 +59,13 @@ from transformers.testing_utils import (
     require_torch,
     slow,
 )
+from transformers.utils import is_tf_available, is_torch_available
+from transformers.utils import logging as transformers_logging
+
+
+sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
+
+from test_module.custom_pipeline import PairClassificationPipeline  # noqa E402
 
 
 logger = logging.getLogger(__name__)
@@ -746,3 +766,209 @@ class PipelineUtilsTest(unittest.TestCase):
                 models_are_equal = False
 
         return models_are_equal
+
+
+class CustomPipeline(Pipeline):
+    def _sanitize_parameters(self, **kwargs):
+        preprocess_kwargs = {}
+        if "maybe_arg" in kwargs:
+            preprocess_kwargs["maybe_arg"] = kwargs["maybe_arg"]
+        return preprocess_kwargs, {}, {}
+
+    def preprocess(self, text, maybe_arg=2):
+        input_ids = self.tokenizer(text, return_tensors="pt")
+        return input_ids
+
+    def _forward(self, model_inputs):
+        outputs = self.model(**model_inputs)
+        return outputs
+
+    def postprocess(self, model_outputs):
+        return model_outputs["logits"].softmax(-1).numpy()
+
+
+@is_pipeline_test
+class CustomPipelineTest(unittest.TestCase):
+    def test_warning_logs(self):
+        transformers_logging.set_verbosity_debug()
+        logger_ = transformers_logging.get_logger("transformers.pipelines.base")
+
+        alias = "text-classification"
+        # Get the original task, so we can restore it at the end.
+        # (otherwise the subsequential tests in `TextClassificationPipelineTests` will fail)
+        _, original_task, _ = PIPELINE_REGISTRY.check_task(alias)
+
+        try:
+            with CaptureLogger(logger_) as cm:
+                PIPELINE_REGISTRY.register_pipeline(alias, PairClassificationPipeline)
+            self.assertIn(f"{alias} is already registered", cm.out)
+        finally:
+            # restore
+            PIPELINE_REGISTRY.supported_tasks[alias] = original_task
+
+    def test_register_pipeline(self):
+        PIPELINE_REGISTRY.register_pipeline(
+            "custom-text-classification",
+            pipeline_class=PairClassificationPipeline,
+            pt_model=AutoModelForSequenceClassification if is_torch_available() else None,
+            tf_model=TFAutoModelForSequenceClassification if is_tf_available() else None,
+            default={"pt": "hf-internal-testing/tiny-random-distilbert"},
+            type="text",
+        )
+        assert "custom-text-classification" in PIPELINE_REGISTRY.get_supported_tasks()
+
+        _, task_def, _ = PIPELINE_REGISTRY.check_task("custom-text-classification")
+        self.assertEqual(task_def["pt"], (AutoModelForSequenceClassification,) if is_torch_available() else ())
+        self.assertEqual(task_def["tf"], (TFAutoModelForSequenceClassification,) if is_tf_available() else ())
+        self.assertEqual(task_def["type"], "text")
+        self.assertEqual(task_def["impl"], PairClassificationPipeline)
+        self.assertEqual(task_def["default"], {"model": {"pt": "hf-internal-testing/tiny-random-distilbert"}})
+
+        # Clean registry for next tests.
+        del PIPELINE_REGISTRY.supported_tasks["custom-text-classification"]
+
+    def test_dynamic_pipeline(self):
+        PIPELINE_REGISTRY.register_pipeline(
+            "pair-classification",
+            pipeline_class=PairClassificationPipeline,
+            pt_model=AutoModelForSequenceClassification if is_torch_available() else None,
+            tf_model=TFAutoModelForSequenceClassification if is_tf_available() else None,
+        )
+
+        classifier = pipeline("pair-classification", model="hf-internal-testing/tiny-random-bert")
+
+        # Clean registry as we won't need the pipeline to be in it for the rest to work.
+        del PIPELINE_REGISTRY.supported_tasks["pair-classification"]
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            classifier.save_pretrained(tmp_dir)
+            # checks
+            self.assertDictEqual(
+                classifier.model.config.custom_pipelines,
+                {
+                    "pair-classification": {
+                        "impl": "custom_pipeline.PairClassificationPipeline",
+                        "pt": ("AutoModelForSequenceClassification",) if is_torch_available() else (),
+                        "tf": ("TFAutoModelForSequenceClassification",) if is_tf_available() else (),
+                    }
+                },
+            )
+            # Fails if the user forget to pass along `trust_remote_code=True`
+            with self.assertRaises(ValueError):
+                _ = pipeline(model=tmp_dir)
+
+            new_classifier = pipeline(model=tmp_dir, trust_remote_code=True)
+            # Using trust_remote_code=False forces the traditional pipeline tag
+            old_classifier = pipeline("text-classification", model=tmp_dir, trust_remote_code=False)
+        # Can't make an isinstance check because the new_classifier is from the PairClassificationPipeline class of a
+        # dynamic module
+        self.assertEqual(new_classifier.__class__.__name__, "PairClassificationPipeline")
+        self.assertEqual(new_classifier.task, "pair-classification")
+        results = new_classifier("I hate you", second_text="I love you")
+        self.assertDictEqual(
+            nested_simplify(results),
+            {"label": "LABEL_0", "score": 0.505, "logits": [-0.003, -0.024]},
+        )
+
+        self.assertEqual(old_classifier.__class__.__name__, "TextClassificationPipeline")
+        self.assertEqual(old_classifier.task, "text-classification")
+        results = old_classifier("I hate you", text_pair="I love you")
+        self.assertListEqual(
+            nested_simplify(results),
+            [{"label": "LABEL_0", "score": 0.505}],
+        )
+
+    def test_cached_pipeline_has_minimum_calls_to_head(self):
+        # Make sure we have cached the pipeline.
+        _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
+        with RequestCounter() as counter:
+            _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
+            self.assertEqual(counter.get_request_count, 0)
+            # We still have one extra call because the model does not have a added_tokens.json file
+            self.assertEqual(counter.head_request_count, 2)
+            self.assertEqual(counter.other_request_count, 0)
+
+
+@require_torch
+@is_staging_test
+class DynamicPipelineTester(unittest.TestCase):
+    vocab_tokens = ["[UNK]", "[CLS]", "[SEP]", "[PAD]", "[MASK]", "I", "love", "hate", "you"]
+
+    @classmethod
+    def setUpClass(cls):
+        cls._token = TOKEN
+        set_access_token(TOKEN)
+        HfFolder.save_token(TOKEN)
+
+    @classmethod
+    def tearDownClass(cls):
+        try:
+            delete_repo(token=cls._token, repo_id="test-dynamic-pipeline")
+        except HTTPError:
+            pass
+
+    def test_push_to_hub_dynamic_pipeline(self):
+        from transformers import BertConfig, BertForSequenceClassification, BertTokenizer
+
+        PIPELINE_REGISTRY.register_pipeline(
+            "pair-classification",
+            pipeline_class=PairClassificationPipeline,
+            pt_model=AutoModelForSequenceClassification,
+        )
+
+        config = BertConfig(
+            vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+        )
+        model = BertForSequenceClassification(config).eval()
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-pipeline", use_auth_token=self._token)
+
+            vocab_file = os.path.join(tmp_dir, "vocab.txt")
+            with open(vocab_file, "w", encoding="utf-8") as vocab_writer:
+                vocab_writer.write("".join([x + "\n" for x in self.vocab_tokens]))
+            tokenizer = BertTokenizer(vocab_file)
+
+            classifier = pipeline("pair-classification", model=model, tokenizer=tokenizer)
+
+            # Clean registry as we won't need the pipeline to be in it for the rest to work.
+            del PIPELINE_REGISTRY.supported_tasks["pair-classification"]
+
+            classifier.save_pretrained(tmp_dir)
+            # checks
+            self.assertDictEqual(
+                classifier.model.config.custom_pipelines,
+                {
+                    "pair-classification": {
+                        "impl": "custom_pipeline.PairClassificationPipeline",
+                        "pt": ("AutoModelForSequenceClassification",),
+                        "tf": (),
+                    }
+                },
+            )
+
+            repo.push_to_hub()
+
+        # Fails if the user forget to pass along `trust_remote_code=True`
+        with self.assertRaises(ValueError):
+            _ = pipeline(model=f"{USER}/test-dynamic-pipeline")
+
+        new_classifier = pipeline(model=f"{USER}/test-dynamic-pipeline", trust_remote_code=True)
+        # Can't make an isinstance check because the new_classifier is from the PairClassificationPipeline class of a
+        # dynamic module
+        self.assertEqual(new_classifier.__class__.__name__, "PairClassificationPipeline")
+
+        results = classifier("I hate you", second_text="I love you")
+        new_results = new_classifier("I hate you", second_text="I love you")
+        self.assertDictEqual(nested_simplify(results), nested_simplify(new_results))
+
+        # Using trust_remote_code=False forces the traditional pipeline tag
+        old_classifier = pipeline(
+            "text-classification", model=f"{USER}/test-dynamic-pipeline", trust_remote_code=False
+        )
+        self.assertEqual(old_classifier.__class__.__name__, "TextClassificationPipeline")
+        self.assertEqual(old_classifier.task, "text-classification")
+        new_results = old_classifier("I hate you", text_pair="I love you")
+        self.assertListEqual(
+            nested_simplify([{"label": results["label"], "score": results["score"]}]), nested_simplify(new_results)
+        )

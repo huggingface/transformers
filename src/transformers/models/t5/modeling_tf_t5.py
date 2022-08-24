@@ -23,6 +23,7 @@ from typing import Optional, Tuple, Union
 
 import numpy as np
 import tensorflow as tf
+from tensorflow.compiler.tf2xla.python.xla import dynamic_slice
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import (
@@ -384,10 +385,19 @@ class TFT5Attention(tf.keras.layers.Layer):
             else:
                 position_bias = self.compute_bias(real_seq_length, key_length)
 
-            # if key and values are already calculated
-            # we want only the last query position bias
+            # if key and values are already calculated we want only the last query position bias
             if past_key_value is not None:
-                position_bias = position_bias[:, :, -seq_length:, :]
+                if not self.has_relative_attention_bias:
+                    position_bias = position_bias[:, :, -seq_length:, :]
+                else:
+                    # we might have a padded past structure, in which case we want to fetch the position bias slice
+                    # right after the most recently filled past index
+                    most_recently_filled_past_index = tf.reduce_max(tf.where(past_key_value[0][0, 0, :, 0] != 0.0))
+                    position_bias = dynamic_slice(
+                        position_bias,
+                        (0, 0, most_recently_filled_past_index + 1, 0),
+                        (1, self.n_heads, seq_length, real_seq_length),
+                    )
 
             if mask is not None:
                 position_bias = tf.cast(position_bias, dtype=mask.dtype)
@@ -998,14 +1008,14 @@ T5_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        head_mask: (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules in the encoder. Mask values selected in `[0,
             1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        decoder_head_mask: (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        decoder_head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
             1]`:
 
@@ -1074,7 +1084,7 @@ T5_ENCODER_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        head_mask: (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,

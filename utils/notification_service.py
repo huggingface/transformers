@@ -233,15 +233,11 @@ class Message:
                     individual_reports.append(key)
 
         header = "Single |  Multi | Category\n"
-        category_failures_report = header + "\n".join(sorted(individual_reports))
+        category_failures_report = prepare_reports(
+            title="The following modeling categories had failures", header=header, reports=individual_reports
+        )
 
-        return {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"The following modeling categories had failures:\n\n```\n{category_failures_report}\n```",
-            },
-        }
+        return {"type": "section", "text": {"type": "mrkdwn", "text": category_failures_report}}
 
     @property
     def model_failures(self) -> Dict:
@@ -302,21 +298,44 @@ class Message:
 
         model_header = "Single PT |  Multi PT | Single TF |  Multi TF |     Other | Category\n"
         sorted_model_reports = sorted(model_reports, key=lambda s: s.split("] ")[-1])
-        model_failures_report = model_header + "\n".join(sorted_model_reports)
+        model_failures_report = prepare_reports(
+            title="These following model modules had failures", header=model_header, reports=sorted_model_reports
+        )
 
         module_header = "Single |  Multi | Category\n"
         sorted_module_reports = sorted(other_module_reports, key=lambda s: s.split("] ")[-1])
-        module_failures_report = module_header + "\n".join(sorted_module_reports)
+        module_failures_report = prepare_reports(
+            title="The following non-model modules had failures", header=module_header, reports=sorted_module_reports
+        )
 
-        report = ""
+        model_failure_sections = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": model_failures_report}},
+            {"type": "section", "text": {"type": "mrkdwn", "text": module_failures_report}},
+        ]
 
-        if len(model_reports):
-            report += f"These following model modules had failures:\n```\n{model_failures_report}\n```\n\n"
+        # Save complete tables (for past CI) - to be uploaded as artifacts
+        if ci_event.startswith("Past CI"):
+            model_failures_report = prepare_reports(
+                title="These following model modules had failures",
+                header=model_header,
+                reports=sorted_model_reports,
+                to_truncate=False,
+            )
+            file_path = os.path.join(os.getcwd(), "test_failure_tables/model_failures_report.txt")
+            with open(file_path, "w", encoding="UTF-8") as fp:
+                fp.write(model_failures_report)
 
-        if len(other_module_reports):
-            report += f"The following non-model modules had failures:\n```\n{module_failures_report}\n```\n\n"
+            module_failures_report = prepare_reports(
+                title="The following non-model modules had failures",
+                header=module_header,
+                reports=sorted_module_reports,
+                to_truncate=False,
+            )
+            file_path = os.path.join(os.getcwd(), "test_failure_tables/module_failures_report.txt")
+            with open(file_path, "w", encoding="UTF-8") as fp:
+                fp.write(module_failures_report)
 
-        return {"type": "section", "text": {"type": "mrkdwn", "text": report}}
+        return model_failure_sections
 
     @property
     def additional_failures(self) -> Dict:
@@ -337,15 +356,11 @@ class Message:
                 individual_reports.append(report)
 
         header = "Single |  Multi | Category\n"
-        failures_report = header + "\n".join(sorted(individual_reports))
+        failures_report = prepare_reports(
+            title="The following non-modeling tests had failures", header=header, reports=individual_reports
+        )
 
-        return {
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"The following non-modeling tests had failures:\n```\n{failures_report}\n```",
-            },
-        }
+        return {"type": "section", "text": {"type": "mrkdwn", "text": failures_report}}
 
     @property
     def payload(self) -> str:
@@ -358,7 +373,10 @@ class Message:
             blocks.append(self.failures)
 
         if self.n_model_failures > 0:
-            blocks.extend([self.category_failures, self.model_failures])
+            blocks.append(self.category_failures)
+            for block in self.model_failures:
+                if block["text"]["text"]:
+                    blocks.append(block)
 
         if self.n_additional_failures > 0:
             blocks.append(self.additional_failures)
@@ -369,28 +387,52 @@ class Message:
         return json.dumps(blocks)
 
     @staticmethod
-    def error_out():
-        payload = [
-            {
-                "type": "section",
-                "text": {
-                    "type": "plain_text",
-                    "text": "There was an issue running the tests.",
-                },
-                "accessory": {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
-                    "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
-                },
-            }
-        ]
+    def error_out(title, ci_title="", setup_failed=False, runner_failed=False):
+
+        blocks = []
+        title_block = {"type": "header", "text": {"type": "plain_text", "text": title}}
+        blocks.append(title_block)
+
+        if ci_title:
+            ci_title_block = {"type": "section", "text": {"type": "mrkdwn", "text": ci_title}}
+            blocks.append(ci_title_block)
+
+        if setup_failed:
+            text = "💔 Setup job failed. Tests are not run. 😭"
+        elif runner_failed:
+            text = "💔 CI runners have problems! Tests are not run. 😭"
+        else:
+            text = "💔 There was an issue running the tests. 😭"
+
+        error_block_1 = {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": text,
+            },
+        }
+        error_block_2 = {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": "🙏 Let's fix it ASAP! 🙏",
+            },
+            "accessory": {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
+                "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+            },
+        }
+        blocks.extend([error_block_1, error_block_2])
+
+        payload = json.dumps(blocks)
 
         print("Sending the following payload")
-        print(json.dumps({"blocks": json.loads(payload)}))
+        print(json.dumps({"blocks": blocks}))
 
         client.chat_postMessage(
             channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
-            text="There was an issue running the tests.",
+            text=text,
             blocks=payload,
         )
 
@@ -430,7 +472,12 @@ class Message:
 
         content = {"type": "section", "text": {"type": "mrkdwn", "text": text}}
 
-        if job_result["job_link"] is not None:
+        # TODO: Make sure we always have a valid job link (or at least a way not to break the report sending)
+        # Currently we get the device from a job's artifact name.
+        # If a device is found, the job name should contain the device type, for example, `XXX (single-gpu)`.
+        # This could be done by adding `machine_type` in a job's `strategy`.
+        # (If `job_result["job_link"][device]` is `None`, we get an error: `... [ERROR] must provide a string ...`)
+        if job_result["job_link"] is not None and job_result["job_link"][device] is not None:
             content["accessory"] = {
                 "type": "button",
                 "text": {"type": "plain_text", "text": "GitHub Action job", "emoji": True},
@@ -582,7 +629,35 @@ def retrieve_available_artifacts():
     return _available_artifacts
 
 
+def prepare_reports(title, header, reports, to_truncate=True):
+    report = ""
+
+    MAX_ERROR_TEXT = 3000 - len("[Truncated]")
+    if not to_truncate:
+        MAX_ERROR_TEXT = float("inf")
+
+    if len(reports) > 0:
+        # `text` must be less than 3001 characters in Slack SDK
+        # keep some room for adding "[Truncated]" when necessary
+
+        for idx in range(len(reports)):
+            _report = header + "\n".join(reports[: idx + 1])
+            new_report = f"{title}:\n```\n{_report}\n```\n"
+            if len(new_report) > MAX_ERROR_TEXT:
+                # `report` here has length <= 3000
+                report = report + "[Truncated]"
+                break
+            report = new_report
+
+    return report
+
+
 if __name__ == "__main__":
+
+    setup_status = os.environ.get("SETUP_STATUS")
+    runner_status = os.environ.get("RUNNER_STATUS")
+    setup_failed = True if setup_status is not None and setup_status != "success" else False
+    runner_failed = True if runner_status is not None and runner_status != "success" else False
 
     org = "huggingface"
     repo = "transformers"
@@ -643,6 +718,10 @@ if __name__ == "__main__":
     else:
         ci_title = ""
 
+    if setup_failed or runner_failed:
+        Message.error_out(title, ci_title, setup_failed, runner_failed)
+        exit(0)
+
     arguments = sys.argv[1:][0]
     try:
         models = ast.literal_eval(arguments)
@@ -686,16 +765,24 @@ if __name__ == "__main__":
 
     unclassified_model_failures = []
 
+    # This prefix is used to get job links below. For past CI, we use `workflow_call`, which changes the job names from
+    # `Model tests (...)` to `PyTorch 1.5 / Model tests (...)` for example.
+    job_name_prefix = ""
+    if ci_event.startswith("Past CI - "):
+        framework, version = ci_event.replace("Past CI - ", "").split("-")
+        framework = "PyTorch" if framework == "pytorch" else "TensorFlow"
+        job_name_prefix = f"{framework} {version}"
+
     for model in model_results.keys():
         for artifact_path in available_artifacts[f"run_all_tests_gpu_{model}_test_reports"].paths:
             artifact = retrieve_artifact(artifact_path["name"], artifact_path["gpu"])
             if "stats" in artifact:
                 # Link to the GitHub Action job
-                model_results[model]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(
-                    # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
-                    f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
-                )
-
+                # The job names use `matrix.folder` which contain things like `models/bert` instead of `models_bert`
+                job_name = f"Model tests ({model.replace('models_', 'models/')}, {artifact_path['gpu']}-gpu)"
+                if job_name_prefix:
+                    job_name = f"{job_name_prefix} / {job_name}"
+                model_results[model]["job_link"][artifact_path["gpu"]] = github_actions_job_links.get(job_name)
                 failed, success, time_spent = handle_test_results(artifact["stats"])
                 model_results[model]["success"] += success
                 model_results[model]["time_spent"] += time_spent[1:-1] + ", "
@@ -809,7 +896,7 @@ if __name__ == "__main__":
 
     message = Message(title, ci_title, model_results, additional_results)
 
-    # send report only if there is any failure
-    if message.n_failures:
+    # send report only if there is any failure (for push CI)
+    if message.n_failures or ci_event != "push":
         message.post()
         message.post_reply()

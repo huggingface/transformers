@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch DeBERTa model."""
 
-import math
 from collections.abc import Sequence
 from typing import Optional, Tuple, Union
 
@@ -184,6 +183,23 @@ class XDropout(torch.autograd.Function):
             return grad_output.masked_fill(mask, 0) * ctx.scale, None
         else:
             return grad_output, None
+
+    @staticmethod
+    def symbolic(g: torch._C.Graph, input: torch._C.Value, local_ctx: Union[float, DropoutContext]) -> torch._C.Value:
+        from torch.onnx import symbolic_opset12
+
+        dropout_p = local_ctx
+        if isinstance(local_ctx, DropoutContext):
+            dropout_p = local_ctx.dropout
+        # StableDropout only calls this function when training.
+        train = True
+        # TODO: We should check if the opset_version being used to export
+        # is > 12 here, but there's no good way to do that. As-is, if the
+        # opset_version < 12, export will fail with a CheckerError.
+        # Once https://github.com/pytorch/pytorch/issues/78391 is fixed, do something like:
+        # if opset_version < 12:
+        #   return torch.onnx.symbolic_opset9.dropout(g, input, dropout_p, train)
+        return symbolic_opset12.dropout(g, input, dropout_p, train)
 
 
 class StableDropout(nn.Module):
@@ -623,8 +639,8 @@ class DisentangledSelfAttention(nn.Module):
             qkvw = [torch.cat([ws[i * 3 + k] for i in range(self.num_attention_heads)], dim=0) for k in range(3)]
             qkvb = [None] * 3
 
-            q = linear(qkvw[0], qkvb[0], query_states)
-            k, v = [linear(qkvw[i], qkvb[i], hidden_states) for i in range(1, 3)]
+            q = linear(qkvw[0], qkvb[0], torch.tensor(query_states, dtype=qkvw[0].dtype))
+            k, v = [linear(qkvw[i], qkvb[i], torch.tensor(hidden_states, dtype=qkvw[i].dtype)) for i in range(1, 3)]
             query_layer, key_layer, value_layer = [self.transpose_for_scores(x) for x in [q, k, v]]
 
         query_layer = query_layer + self.transpose_for_scores(self.q_bias[None, None, :])
@@ -633,8 +649,8 @@ class DisentangledSelfAttention(nn.Module):
         rel_att = None
         # Take the dot product between "query" and "key" to get the raw attention scores.
         scale_factor = 1 + len(self.pos_att_type)
-        scale = math.sqrt(query_layer.size(-1) * scale_factor)
-        query_layer = query_layer / scale
+        scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
+        query_layer = query_layer / torch.tensor(scale, dtype=query_layer.dtype)
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
@@ -694,13 +710,13 @@ class DisentangledSelfAttention(nn.Module):
         if "p2c" in self.pos_att_type:
             pos_query_layer = self.pos_q_proj(rel_embeddings)
             pos_query_layer = self.transpose_for_scores(pos_query_layer)
-            pos_query_layer /= math.sqrt(pos_query_layer.size(-1) * scale_factor)
+            pos_query_layer /= torch.sqrt(torch.tensor(pos_query_layer.size(-1), dtype=torch.float) * scale_factor)
             if query_layer.size(-2) != key_layer.size(-2):
                 r_pos = build_relative_position(key_layer.size(-2), key_layer.size(-2), query_layer.device)
             else:
                 r_pos = relative_pos
             p2c_pos = torch.clamp(-r_pos + att_span, 0, att_span * 2 - 1)
-            p2c_att = torch.matmul(key_layer, pos_query_layer.transpose(-1, -2))
+            p2c_att = torch.matmul(key_layer, torch.tensor(pos_query_layer.transpose(-1, -2), dtype=key_layer.dtype))
             p2c_att = torch.gather(
                 p2c_att, dim=-1, index=p2c_dynamic_expand(p2c_pos, query_layer, key_layer)
             ).transpose(-1, -2)
@@ -825,7 +841,7 @@ DEBERTA_START_DOCSTRING = r"""
 
     This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.```
+    and behavior.
 
 
     Parameters:

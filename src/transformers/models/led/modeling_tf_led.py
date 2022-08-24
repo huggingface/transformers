@@ -1991,7 +1991,7 @@ class TFLEDDecoder(tf.keras.layers.Layer):
                 Contains precomputed key and value hidden-states of the attention blocks. Can be used to speed up
                 decoding. If `past_key_values` are used, the user can optionally input only the last
                 `decoder_input_ids` (those that don't have their past key value states given to this model) of shape
-                `(batch_size, 1)` instead of all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`.
+                `(batch_size, 1)` instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
                 inputs_embeds (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
@@ -2330,7 +2330,7 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
         self.led = TFLEDMainLayer(config, name="led")
         self.use_cache = config.use_cache
-        # final_bias_logits is registered as a buffer in pytorch, so not trainable for the the sake of consistency.
+        # final_bias_logits is registered as a buffer in pytorch, so not trainable for the sake of consistency.
         self.final_logits_bias = self.add_weight(
             name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
@@ -2505,11 +2505,19 @@ class TFLEDForConditionalGeneration(TFLEDPreTrainedModel):
     def hf_compute_loss(self, labels, logits):
         """CrossEntropyLoss that ignores pad tokens"""
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True,
-            reduction=tf.keras.losses.Reduction.NONE,
+            from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-        melted_labels = tf.reshape(labels, (-1,))
-        active_loss = tf.not_equal(melted_labels, self.config.pad_token_id)
-        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
-        labels = tf.boolean_mask(melted_labels, active_loss)
-        return loss_fn(labels, reduced_logits)
+        if self.config.tf_legacy_loss:
+            melted_labels = tf.reshape(labels, (-1,))
+            active_loss = tf.not_equal(melted_labels, self.config.pad_token_id)
+            reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
+            labels = tf.boolean_mask(melted_labels, active_loss)
+            return loss_fn(labels, reduced_logits)
+
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_loss = loss_fn(tf.nn.relu(labels), logits)
+        # make sure only non-padding labels affect the loss
+        loss_mask = tf.cast(labels != self.config.pad_token_id, dtype=unmasked_loss.dtype)
+        masked_loss = unmasked_loss * loss_mask
+        reduced_masked_loss = tf.reduce_sum(masked_loss) / tf.reduce_sum(loss_mask)
+        return tf.reshape(reduced_masked_loss, (1,))
