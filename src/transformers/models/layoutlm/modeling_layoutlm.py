@@ -1314,8 +1314,9 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         >>> end_scores = outputs.end_logits
         >>> start, end = word_ids[start_scores.argmax(-1)], word_ids[end_scores.argmax(-1)]
         >>> print(" ".join(words[start:end+1]))
-        ```
-        """
+        M. Hamann P. Harper, P. Martinez
+
+        ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

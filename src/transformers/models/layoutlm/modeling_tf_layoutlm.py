@@ -963,6 +963,7 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         ... )
 
         >>> last_hidden_states = outputs.last_hidden_state
+
         ```"""
 
         outputs = self.layoutlm(
@@ -1094,6 +1095,7 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
         ... )
 
         >>> loss = outputs.loss
+
         ```"""
 
         outputs = self.layoutlm(
@@ -1218,6 +1220,7 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
 
         >>> loss = outputs.loss
         >>> logits = outputs.logits
+
         ```"""
 
         outputs = self.layoutlm(
@@ -1347,6 +1350,7 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
 
         >>> loss = outputs.loss
         >>> logits = outputs.logits
+
         ```"""
 
         outputs = self.layoutlm(
@@ -1452,8 +1456,8 @@ class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFQuestionAnswer
         >>> from transformers import AutoTokenizer, TFLayoutLMForQuestionAnswering
         >>> from datasets import load_dataset
 
-        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
-        >>> model = TFLayoutLMForQuestionAnswering.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("impira/layoutlm-document-qa", add_prefix_space=True)
+        >>> model = TFLayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa", from_pt=True)
 
         >>> dataset = load_dataset("nielsr/funsd", split="train")
         >>> example = dataset[0]
@@ -1474,10 +1478,15 @@ class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFQuestionAnswer
         ...         bbox.append([0] * 4)
         >>> encoding["bbox"] = tf.convert_to_tensor([bbox])
 
+        >>> word_ids = encoding.word_ids(0)
         >>> outputs = model(**encoding)
         >>> loss = outputs.loss
         >>> start_scores = outputs.start_logits
         >>> end_scores = outputs.end_logits
+        >>> start, end = word_ids[tf.math.argmax(start_scores, -1)[0]], word_ids[tf.math.argmax(end_scores, -1)[0]]
+        >>> print(" ".join(words[start:end+1]))
+        M. Hamann P. Harper, P. Martinez
+
         ```"""
 
         outputs = self.layoutlm(
