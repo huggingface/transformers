@@ -300,7 +300,6 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("funnel", "TFFunnelForQuestionAnswering"),
         ("gptj", "TFGPTJForQuestionAnswering"),
         ("layoutlmv3", "TFLayoutLMv3ForQuestionAnswering"),
-        ("layoutlm", "TFLayoutLMForQuestionAnswering"),
         ("longformer", "TFLongformerForQuestionAnswering"),
         ("mobilebert", "TFMobileBertForQuestionAnswering"),
         ("mpnet", "TFMPNetForQuestionAnswering"),
