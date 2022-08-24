@@ -162,7 +162,7 @@ def convert_state_dict(orig_state_dict, config):
     return orig_state_dict
 
 
-def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_path):
+def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_path=None, push_to_hub=False):
     config = get_xclip_config(model_name)
     model = XClipModel(config)
     model.eval()
@@ -203,6 +203,10 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_pat
         print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
         model.save_pretrained(pytorch_dump_folder_path)
 
+    if push_to_hub:
+        print("Pushing to the hub...")
+        model.push_to_hub(model_name, organization="nielsr")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -222,6 +226,9 @@ if __name__ == "__main__":
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
 
     args = parser.parse_args()
-    convert_xclip_checkpoint(args.checkpoint_url, args.model_name, args.pytorch_dump_folder_path)
+    convert_xclip_checkpoint(args.checkpoint_url, args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)

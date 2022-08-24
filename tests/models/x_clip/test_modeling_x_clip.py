@@ -440,10 +440,20 @@ class XClipModelTester:
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask)
         self.parent.assertEqual(
-            result.logits_per_image.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+            result.logits_per_image.shape,
+            (
+                self.vision_model_tester.batch_size,
+                self.text_model_tester.batch_size,
+                self.vision_model_tester.batch_size,
+            ),
         )
         self.parent.assertEqual(
-            result.logits_per_text.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size, self.vision_model_tester.batch_size)
+            result.logits_per_text.shape,
+            (
+                self.vision_model_tester.batch_size,
+                self.text_model_tester.batch_size,
+                self.vision_model_tester.batch_size,
+            ),
         )
 
     def prepare_config_and_inputs_for_common(self):
