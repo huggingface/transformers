@@ -531,7 +531,7 @@ class T5Attention(nn.Module):
         if self.pruned_heads:
             mask = torch.ones(position_bias.shape[1])
             mask[list(self.pruned_heads)] = 0
-            position_bias_masked = position_bias[:,mask.bool()]
+            position_bias_masked = position_bias[:, mask.bool()]
         else:
             position_bias_masked = position_bias
 
