@@ -413,7 +413,7 @@ Depending on your task, you'll typically pass the following parameters to [`Trai
 
         ```py
         >>> from transformers import AutoModelForSequenceClassification
-        
+
         >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
         ```
 
@@ -423,12 +423,12 @@ Depending on your task, you'll typically pass the following parameters to [`Trai
         >>> from transformers import TrainingArguments
 
         >>> training_args = TrainingArguments(
-                output_dir="path/to/local/model/",
-                learning_rate=2e-5,
-                per_device_train_batch_size=8,
-                per_device_eval_batch_size=8,
-                num_train_epochs=2,
-        )
+        ...     output_dir="path/to/local/model/",
+        ...     learning_rate=2e-5,
+        ...     per_device_train_batch_size=8,
+        ...     per_device_eval_batch_size=8,
+        ...     num_train_epochs=2,
+        ... )
         ```
 
 3. Your train and test datasets.
