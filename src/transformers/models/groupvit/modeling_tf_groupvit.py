@@ -147,9 +147,7 @@ def gumbel_softmax(logits: tf.Tensor, tau: float = 1, hard: bool = False, dim: i
     return ret
 
 
-def resize_attention_map(
-    attentions: tf.Tensor, height: int, width: int, align_corners: bool = False
-) -> tf.Tensor:
+def resize_attention_map(attentions: tf.Tensor, height: int, width: int, align_corners: bool = False) -> tf.Tensor:
     """
     Args:
         attentions (`tf.Tensor`): attention map of shape [batch_size, groups, feat_height*feat_width]
@@ -293,9 +291,7 @@ class TFGroupViTAssignAttention(tf.keras.layers.Layer):
         self.proj = tf.keras.layers.Dense(config.hidden_size, name="proj")
         self.assign_eps = config.assign_eps
 
-    def get_attn(
-        self, attn: tf.Tensor, gumbel: bool = True, hard: bool = True, training: bool = False
-    ) -> tf.Tensor:
+    def get_attn(self, attn: tf.Tensor, gumbel: bool = True, hard: bool = True, training: bool = False) -> tf.Tensor:
 
         if gumbel and training:
             attn = gumbel_softmax(attn, dim=-2, hard=hard)
