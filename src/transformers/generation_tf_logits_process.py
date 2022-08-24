@@ -262,9 +262,11 @@ class TFRepetitionPenaltyLogitsProcessor(TFLogitsProcessor):
 
         # Scatters the penalties
         token_penalties = tf.ones(logits.shape)
+        batch_size = input_ids.shape[0]
+        seq_len = tf.shape(input_ids)[1]  # the sequence length has dynamic size, hence the dynamic shape
         indexable_prev_input_ids = tf.concat(
             (
-                tf.expand_dims(tf.repeat(tf.range(input_ids.shape[0]), input_ids.shape[1]), axis=-1),
+                tf.expand_dims(tf.repeat(tf.range(batch_size), seq_len), axis=-1),
                 tf.expand_dims(tf.reshape(input_ids, [-1]), axis=-1),
             ),
             axis=1,
@@ -332,7 +334,7 @@ class TFNoBadWordsLogitsProcessor(TFLogitsProcessor):
             def _len_greater_than_cur_len():
                 # Otherwise, if the bad sequence is longer than the current length they can't ever match
                 return tf.cond(
-                    tf.math.greater(self.bad_word_seqs_len[bad_word_seq_number], row_input_ids.shape[0]),
+                    tf.math.greater(self.bad_word_seqs_len[bad_word_seq_number], tf.shape(row_input_ids)[0]),
                     lambda: tf.zeros((), dtype=tf.bool),
                     _match_found,
                 )

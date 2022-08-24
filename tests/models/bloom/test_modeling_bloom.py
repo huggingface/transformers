@@ -320,7 +320,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     )
 
     all_generative_model_classes = (BloomForCausalLM,) if is_torch_available() else ()
-    fx_compatible = False
+    fx_compatible = True
     test_missing_keys = False
     test_pruning = False
     test_torchscript = True  # torch.autograd functions seems to be not supported
@@ -379,27 +379,27 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_simple_generation(self):
         # This test is a bit flaky. For some GPU architectures, pytorch sets by default allow_fp16_reduced_precision_reduction = True and some operations
         # do not give the same results under this configuration, especially torch.baddmm and torch.bmm. https://pytorch.org/docs/stable/notes/numerical_accuracy.html#fp16-on-mi200
-        # As we leave the default value (True) for allow_fp16_reduced_precision_reduction , the tests failed when running in half-precision with smaller models (350m)
+        # As we leave the default value (True) for allow_fp16_reduced_precision_reduction , the tests failed when running in half-precision with smaller models (560m)
         # Please see: https://pytorch.org/docs/stable/notes/cuda.html#reduced-precision-reduction-in-fp16-gemms
         # This discrepancy is observed only when using small models and seems to be stable for larger models.
         # Our conclusion is that these operations are flaky for small inputs but seems to be stable for larger inputs (for the functions `baddmm` and `bmm`), and therefore for larger models.
 
         # Here is a summary of an ablation study of our observations
         # EXPECTED_OUTPUT = "I enjoy walking with my cute dog, and I love to watch the kids play. I am a very active person, and I am a very good listener. I am a very good person, and I am a very good person. I am a"
-        # 350m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
-        # 350m + allow_fp16_reduced_precision_reduction = False  + torch.baddm  ==> PASS
-        # 350m + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==> PASS
-        # 350m + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> FAIL
+        # 560m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
+        # 560m + allow_fp16_reduced_precision_reduction = False  + torch.baddm  ==> PASS
+        # 560m + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==> PASS
+        # 560m + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> FAIL
 
         # EXPECTED_OUTPUT = "I enjoy walking with my cute dog, but I also enjoy hiking, biking, and swimming. I love to cook and bake. I love to cook and bake. I love to cook and bake. I love to cook and bake. I love"
-        # >=760m + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==> PASS  (for use_cache=True and use_cache=False)
-        # >=760m + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> PASS
-        # >=760m + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
+        # >=1b1 + allow_fp16_reduced_precision_reduction = True  + torch.baddm  ==> PASS  (for use_cache=True and use_cache=False)
+        # >=1b1 + allow_fp16_reduced_precision_reduction = True  + torch.bmm  ==> PASS
+        # >=1b1 + allow_fp16_reduced_precision_reduction = False  + torch.bmm  ==> PASS
 
-        path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True, revision="gs555750").cuda()
+        path_560m = "bigscience/bloom-560m"
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").cuda()
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_350m)
+        tokenizer = BloomTokenizerFast.from_pretrained(path_560m)
 
         input_sentence = "I enjoy walking with my cute dog"
         # This output has been obtained using fp32 model on the huggingface DGX workstation - NVIDIA A100 GPU
@@ -416,10 +416,10 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @slow
     @require_torch_gpu
     def test_batch_generation(self):
-        path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True, revision="gs555750").cuda()
+        path_560m = "bigscience/bloom-560m"
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").cuda()
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
+        tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
 
         input_sentence = ["I enjoy walking with my cute dog", "I enjoy walking with my cute dog"]
 
@@ -437,10 +437,10 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @require_torch_gpu
     def test_batch_generation_padd(self):
 
-        path_350m = "bigscience/bloom-350m"
-        model = BloomForCausalLM.from_pretrained(path_350m, use_cache=True, revision="gs555750").cuda()
+        path_560m = "bigscience/bloom-560m"
+        model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").cuda()
         model = model.eval()
-        tokenizer = BloomTokenizerFast.from_pretrained(path_350m, padding_side="left")
+        tokenizer = BloomTokenizerFast.from_pretrained(path_560m, padding_side="left")
 
         input_sentence = ["I enjoy walking with my cute dog", "Hello my name is"]
         input_sentence_without_pad = "Hello my name is"

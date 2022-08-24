@@ -8,6 +8,7 @@ docs/source/en/model_doc/t5.mdx
 docs/source/en/model_doc/t5v1.1.mdx
 docs/source/en/model_doc/byt5.mdx
 docs/source/en/model_doc/tapex.mdx
+docs/source/en/model_doc/donut.mdx
 docs/source/en/model_doc/encoder-decoder.mdx
 src/transformers/generation_utils.py
 src/transformers/models/albert/modeling_albert.py
@@ -47,7 +48,7 @@ src/transformers/models/mobilebert/modeling_tf_mobilebert.py
 src/transformers/models/mobilevit/modeling_mobilevit.py
 src/transformers/models/opt/modeling_opt.py
 src/transformers/models/opt/modeling_tf_opt.py
-src/transformers/models/opt/modeling_flax_opt.py
+src/transformers/models/owlvit/modeling_owlvit.py
 src/transformers/models/pegasus/modeling_pegasus.py
 src/transformers/models/plbart/modeling_plbart.py
 src/transformers/models/poolformer/modeling_poolformer.py
@@ -70,6 +71,7 @@ src/transformers/models/trocr/modeling_trocr.py
 src/transformers/models/unispeech/modeling_unispeech.py
 src/transformers/models/unispeech_sat/modeling_unispeech_sat.py
 src/transformers/models/van/modeling_van.py
+src/transformers/models/videomae/modeling_videomae.py
 src/transformers/models/vilt/modeling_vilt.py
 src/transformers/models/vision_encoder_decoder/modeling_vision_encoder_decoder.py
 src/transformers/models/vit/modeling_vit.py

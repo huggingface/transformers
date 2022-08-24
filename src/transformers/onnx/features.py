@@ -25,6 +25,7 @@ if is_torch_available():
         AutoModelForMultipleChoice,
         AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
+        AutoModelForSemanticSegmentation,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
         AutoModelForTokenClassification,
@@ -36,6 +37,7 @@ if is_tf_available():
         TFAutoModelForMaskedLM,
         TFAutoModelForMultipleChoice,
         TFAutoModelForQuestionAnswering,
+        TFAutoModelForSemanticSegmentation,
         TFAutoModelForSeq2SeqLM,
         TFAutoModelForSequenceClassification,
         TFAutoModelForTokenClassification,
@@ -94,6 +96,7 @@ class FeaturesManager:
             "image-classification": AutoModelForImageClassification,
             "image-segmentation": AutoModelForImageSegmentation,
             "masked-im": AutoModelForMaskedImageModeling,
+            "semantic-segmentation": AutoModelForSemanticSegmentation,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -105,6 +108,7 @@ class FeaturesManager:
             "token-classification": TFAutoModelForTokenClassification,
             "multiple-choice": TFAutoModelForMultipleChoice,
             "question-answering": TFAutoModelForQuestionAnswering,
+            "semantic-segmentation": TFAutoModelForSemanticSegmentation,
         }
 
     # Set of model topologies we support associated to the features supported by each topology and the factory
@@ -201,6 +205,10 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.camembert.CamembertOnnxConfig",
         ),
+        "clip": supported_features_mapping(
+            "default",
+            onnx_config_cls="models.clip.CLIPOnnxConfig",
+        ),
         "codegen": supported_features_mapping(
             "default",
             "causal-lm",
@@ -228,6 +236,13 @@ class FeaturesManager:
             "token-classification",
             "question-answering",
             onnx_config_cls="models.data2vec.Data2VecTextOnnxConfig",
+        ),
+        "data2vec-vision": supported_features_mapping(
+            "default",
+            "image-classification",
+            # ONNX doesn't support `adaptive_avg_pool2d` yet
+            # "semantic-segmentation",
+            onnx_config_cls="models.data2vec.Data2VecVisionOnnxConfig",
         ),
         "deberta": supported_features_mapping(
             "default",
@@ -376,6 +391,13 @@ class FeaturesManager:
             "default",
             "image-classification",
             onnx_config_cls="models.mobilevit.MobileViTOnnxConfig",
+        ),
+        "mt5": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls="models.mt5.MT5OnnxConfig",
         ),
         "m2m-100": supported_features_mapping(
             "default",

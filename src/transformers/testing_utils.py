@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Iterator, List, Union
 from unittest import mock
 
+import huggingface_hub
 from transformers import logging as transformers_logging
 
 from .deepspeed import is_deepspeed_available
@@ -1285,7 +1286,6 @@ def pytest_terminal_summary_main(tr, id):
     there.
 
     Args:
-
     - tr: `terminalreporter` passed from `conftest.py`
     - id: unique id like `tests` or `examples` that will be incorporated into the final reports filenames - this is
       needed as some jobs have multiple runs of pytest, so we can't have them overwrite each other.
@@ -1386,9 +1386,13 @@ def pytest_terminal_summary_main(tr, id):
         tr.summary_warnings()  # final warnings
 
     tr.reportchars = "wPpsxXEf"  # emulate -rA (used in summary_passes() and short_test_summary())
-    with open(report_files["passes"], "w") as f:
-        tr._tw = create_terminal_writer(config, f)
-        tr.summary_passes()
+
+    # Skip the `passes` report, as it starts to take more than 5 minutes, and sometimes it timeouts on CircleCI if it
+    # takes > 10 minutes (as this part doesn't generate any output on the terminal).
+    # (also, it seems there is no useful information in this report, and we rarely need to read it)
+    # with open(report_files["passes"], "w") as f:
+    #     tr._tw = create_terminal_writer(config, f)
+    #     tr.summary_passes()
 
     with open(report_files["summary_short"], "w") as f:
         tr._tw = create_terminal_writer(config, f)
@@ -1584,3 +1588,30 @@ def run_command(command: List[str], return_stdout=False):
         raise SubprocessCallException(
             f"Command `{' '.join(command)}` failed with the following error:\n\n{e.output.decode()}"
         ) from e
+
+
+class RequestCounter:
+    """
+    Helper class that will count all requests made online.
+    """
+
+    def __enter__(self):
+        self.head_request_count = 0
+        self.get_request_count = 0
+        self.other_request_count = 0
+        self.old_request = huggingface_hub.file_download.requests.request
+        huggingface_hub.file_download.requests.request = self.new_request
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        huggingface_hub.file_download.requests.request = self.old_request
+
+    def new_request(self, method, **kwargs):
+        if method == "GET":
+            self.get_request_count += 1
+        elif method == "HEAD":
+            self.head_request_count += 1
+        else:
+            self.other_request_count += 1
+
+        return self.old_request(method=method, **kwargs)

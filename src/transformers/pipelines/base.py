@@ -630,7 +630,6 @@ class PipedPipelineDataFormat(PipelineDataFormat):
         for line in sys.stdin:
             # Split for multi-columns
             if "\t" in line:
-
                 line = line.split("\t")
                 if self.column:
                     # Dictionary to map arguments
@@ -705,7 +704,7 @@ PIPELINE_INIT_ARGS = r"""
             Reference to the object in charge of parsing supplied pipeline parameters.
         device (`int`, *optional*, defaults to -1):
             Device ordinal for CPU/GPU supports. Setting this to -1 will leverage CPU, a positive will run the model on
-            the associated CUDA device id. You can pass native `torch.device` too.
+            the associated CUDA device id. You can pass native `torch.device` or a `str` too.
         binary_output (`bool`, *optional*, defaults to `False`):
             Flag indicating if the output the pipeline should happen in a binary format (i.e., pickle) or as raw text.
 """
@@ -748,11 +747,10 @@ class Pipeline(_ScikitCompat):
         framework: Optional[str] = None,
         task: str = "",
         args_parser: ArgumentHandler = None,
-        device: int = -1,
+        device: Union[int, str, "torch.device"] = -1,
         binary_output: bool = False,
         **kwargs,
     ):
-
         if framework is None:
             framework, model = infer_framework_load_model(model, config=model.config)
 
@@ -762,14 +760,21 @@ class Pipeline(_ScikitCompat):
         self.feature_extractor = feature_extractor
         self.modelcard = modelcard
         self.framework = framework
-        if is_torch_available() and isinstance(device, torch.device):
-            self.device = device
+        if is_torch_available() and self.framework == "pt":
+            if isinstance(device, torch.device):
+                self.device = device
+            elif isinstance(device, str):
+                self.device = torch.device(device)
+            elif device < 0:
+                self.device = torch.device("cpu")
+            else:
+                self.device = torch.device(f"cuda:{device}")
         else:
-            self.device = device if framework == "tf" else torch.device("cpu" if device < 0 else f"cuda:{device}")
+            self.device = device
         self.binary_output = binary_output
 
         # Special handling
-        if self.framework == "pt" and self.device.type == "cuda":
+        if self.framework == "pt" and self.device.type != "cpu":
             self.model = self.model.to(self.device)
 
         # Update config with task specific parameters
@@ -967,7 +972,9 @@ class Pipeline(_ScikitCompat):
 
     def get_inference_context(self):
         inference_context = (
-            torch.inference_mode if version.parse(torch.__version__) >= version.parse("1.9.0") else torch.no_grad
+            torch.inference_mode
+            if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.9.0")
+            else torch.no_grad
         )
         return inference_context
 
@@ -1121,18 +1128,19 @@ class PipelineRegistry:
         supported_task.sort()
         return supported_task
 
-    def check_task(self, task: str) -> Tuple[Dict, Any]:
+    def check_task(self, task: str) -> Tuple[str, Dict, Any]:
         if task in self.task_aliases:
             task = self.task_aliases[task]
         if task in self.supported_tasks:
             targeted_task = self.supported_tasks[task]
-            return targeted_task, None
+            return task, targeted_task, None
 
         if task.startswith("translation"):
             tokens = task.split("_")
             if len(tokens) == 4 and tokens[0] == "translation" and tokens[2] == "to":
                 targeted_task = self.supported_tasks["translation"]
-                return targeted_task, (tokens[1], tokens[3])
+                task = "translation"
+                return task, targeted_task, (tokens[1], tokens[3])
             raise KeyError(f"Invalid translation task {task}, use 'translation_XX_to_YY' format")
 
         raise KeyError(
