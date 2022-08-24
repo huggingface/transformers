@@ -3,7 +3,14 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
-from ..utils import add_end_docstrings, is_pytesseract_available, is_torch_available, is_vision_available, logging
+from ..utils import (
+    ExplicitEnum,
+    add_end_docstrings,
+    is_pytesseract_available,
+    is_torch_available,
+    is_vision_available,
+    logging,
+)
 from .base import PIPELINE_INIT_ARGS, Pipeline
 from .question_answering import select_starts_ends
 
@@ -70,6 +77,12 @@ def apply_tesseract(image: "Image.Image", lang: Optional[str], tesseract_config:
     return words, normalized_boxes
 
 
+class ModelType(ExplicitEnum):
+    LayoutLM = "layoutlm"
+    LayoutLMv2Plus = "layoutlmv2+"
+    Donut = "donut"
+
+
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class DocumentQuestionAnsweringPipeline(Pipeline):
     # TODO: Update task_summary docs to include an example with document QA and then update the first sentence
@@ -89,8 +102,12 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         super().__init__(*args, **kwargs)
         self.check_model_type(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING)
 
-        # NOTE: As Donut evolves and other similar models emerge, we should generalize this
-        self.is_vision_encoder_decoder = self.model.config.__class__.__name__ == "VisionEncoderDecoderConfig"
+        if self.model.config.__class__.__name__ == "VisionEncoderDecoderConfig":
+            self.model_type = ModelType.Donut
+        elif self.model.config.__class__.__name__ == "LayoutLMConfig":
+            self.model_type = ModelType.LayoutLM
+        else:
+            self.model_type = ModelType.LayoutLMv2Plus
 
     def _sanitize_parameters(
         self,
@@ -234,17 +251,17 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             image = load_image(input["image"])
             if self.feature_extractor is not None:
                 image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
-            elif self.is_vision_encoder_decoder:
+            elif self.model_type == ModelType.Donut:
                 raise ValueError("If you are using a VisionEncoderDecoderModel, you must provide a feature extractor")
 
         words, boxes = None, None
-        if not self.is_vision_encoder_decoder:
+        if not self.model_type == ModelType.Donut:
             if "word_boxes" in input:
                 words = [x[0] for x in input["word_boxes"]]
                 boxes = [x[1] for x in input["word_boxes"]]
             elif "words" in image_features and "boxes" in image_features:
-                words = image_features.pop("words")
-                boxes = image_features.pop("boxes")
+                words = image_features.pop("words")[0]
+                boxes = image_features.pop("boxes")[0]
             elif image is not None:
                 if not TESSERACT_LOADED:
                     raise ValueError(
@@ -265,7 +282,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
                 f" {self.tokenizer.padding_side}"
             )
 
-        if self.is_vision_encoder_decoder:
+        if self.model_type == ModelType.Donut:
             task_prompt = f'<s_docvqa><s_question>{input["question"]}</s_question><s_answer>'
             # Adapted from https://huggingface.co/spaces/nielsr/donut-docvqa/blob/main/app.py
             encoding = {
@@ -286,23 +303,32 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             word_ids = None
             words = None
         else:
+            tokenizer_kwargs = {}
+            if self.model_type == ModelType.LayoutLM:
+                tokenizer_kwargs["text"] = input["question"].split()
+                tokenizer_kwargs["text_pair"] = words
+                tokenizer_kwargs["is_split_into_words"] = True
+            else:
+                tokenizer_kwargs["text"] = [input["question"]]
+                tokenizer_kwargs["text_pair"] = [words]
+                tokenizer_kwargs["boxes"] = [boxes]
+
             encoding = self.tokenizer(
-                text=input["question"].split(),
-                text_pair=words,
                 padding=padding,
                 max_length=max_seq_len,
                 stride=doc_stride,
                 return_token_type_ids=True,
-                is_split_into_words=True,
                 return_tensors=self.framework,
                 # TODO: In a future PR, use these feature to handle sequences whose length is longer than
                 # the maximum allowed by the model. Currently, the tokenizer will produce a sequence that
                 # may be too long for the model to handle.
                 # truncation="only_second",
                 # return_overflowing_tokens=True,
+                **tokenizer_kwargs,
             )
 
-            encoding.update(image_features)
+            if "pixel_values" in image_features:
+                encoding["image"] = image_features.pop("pixel_values")
 
             # TODO: For now, this should always be num_spans == 1 given the flags we've passed in above, but the
             # code is written to naturally handle multiple spans at the right time.
@@ -322,24 +348,25 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
 
             # For each span, place a bounding box [0,0,0,0] for question and CLS tokens, [1000,1000,1000,1000]
             # for SEP tokens, and the word's bounding box for words in the original document.
-            bbox = []
-            for batch_index in range(num_spans):
-                for i, s, w in zip(
-                    encoding.input_ids[batch_index],
-                    encoding.sequence_ids(batch_index),
-                    encoding.word_ids(batch_index),
-                ):
-                    if s == 1:
-                        bbox.append(boxes[w])
-                    elif i == self.tokenizer.sep_token_id:
-                        bbox.append([1000] * 4)
-                    else:
-                        bbox.append([0] * 4)
+            if "boxes" not in tokenizer_kwargs:
+                bbox = []
+                for batch_index in range(num_spans):
+                    for i, s, w in zip(
+                        encoding.input_ids[batch_index],
+                        encoding.sequence_ids(batch_index),
+                        encoding.word_ids(batch_index),
+                    ):
+                        if s == 1:
+                            bbox.append(boxes[w])
+                        elif i == self.tokenizer.sep_token_id:
+                            bbox.append([1000] * 4)
+                        else:
+                            bbox.append([0] * 4)
 
-            if self.framework == "tf":
-                raise ValueError("Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline")
-            elif self.framework == "pt":
-                encoding["bbox"] = torch.tensor([bbox])
+                if self.framework == "tf":
+                    raise ValueError("Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline")
+                elif self.framework == "pt":
+                    encoding["bbox"] = torch.tensor([bbox])
 
             word_ids = [encoding.word_ids(i) for i in range(num_spans)]
 
@@ -355,7 +382,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         word_ids = model_inputs.pop("word_ids", None)
         words = model_inputs.pop("words", None)
 
-        if self.is_vision_encoder_decoder:
+        if self.model_type == ModelType.Donut:
             model_outputs = self.model.generate(**model_inputs)
         else:
             model_outputs = self.model(**model_inputs)
@@ -367,7 +394,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         return model_outputs
 
     def postprocess(self, model_outputs, top_k=1, **kwargs):
-        if self.is_vision_encoder_decoder:
+        if self.model_type == ModelType.Donut:
             answers = self.postprocess_encoder_decoder(model_outputs)
         else:
             answers = self.postprocess_extractive_qa(model_outputs, top_k=top_k, **kwargs)
