@@ -155,9 +155,8 @@ def _run_torch_jit(in_queue, out_queue):
         model.eval()
 
         if model.config.is_encoder_decoder:
-            model.config.use_cache = (
-                False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
-            )
+            # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
+            model.config.use_cache = False
             labels = inputs.get("labels", None)
             input_names = [
                 "attention_mask",
