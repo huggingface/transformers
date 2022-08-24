@@ -17,14 +17,12 @@ class OPTTokenizationTest(unittest.TestCase):
 
         tokens_ids = tokenizer.encode(
             text,
-            return_tensors="pt",
-        ).tolist()
-        self.assertEqual(tokens_ids, [[2, 250, 1345, 9, 10, 4758]])
+        )
+        self.assertEqual(tokens_ids, [2, 250, 1345, 9, 10, 4758])
         tokenizer.save_pretrained("test_opt")
 
         tokenizer = AutoTokenizer.from_pretrained("./test_opt")
         tokens_ids = tokenizer.encode(
             text,
-            return_tensors="pt",
-        ).tolist()
-        self.assertEqual(tokens_ids, [[2, 250, 1345, 9, 10, 4758]])
+        )
+        self.assertEqual(tokens_ids, [2, 250, 1345, 9, 10, 4758])
