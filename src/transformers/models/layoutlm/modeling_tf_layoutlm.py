@@ -964,6 +964,7 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
 
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
+
         outputs = self.layoutlm(
             input_ids=input_ids,
             bbox=bbox,
@@ -1094,6 +1095,7 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
 
         >>> loss = outputs.loss
         ```"""
+
         outputs = self.layoutlm(
             input_ids=input_ids,
             bbox=bbox,
@@ -1217,6 +1219,7 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
         >>> loss = outputs.loss
         >>> logits = outputs.logits
         ```"""
+
         outputs = self.layoutlm(
             input_ids=input_ids,
             bbox=bbox,
@@ -1345,6 +1348,7 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
         >>> loss = outputs.loss
         >>> logits = outputs.logits
         ```"""
+
         outputs = self.layoutlm(
             input_ids=input_ids,
             bbox=bbox,
