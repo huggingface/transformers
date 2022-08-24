@@ -460,7 +460,6 @@ class XClipVisionEncoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPPreTrainedModel with CLIP->XClip,clip->x_clip
 class XClipPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -516,7 +515,7 @@ class XClipPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, XClipEncoder):
+        if isinstance(module, (XClipEncoder, XClipVisionEncoder)):
             module.gradient_checkpointing = value
 
 

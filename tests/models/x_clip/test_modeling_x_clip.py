@@ -59,6 +59,7 @@ class XClipVisionModelTester:
         image_size=30,
         patch_size=2,
         num_channels=3,
+        num_frames=6,  # important; the batch size * time must be divisible by the number of frames
         is_training=True,
         hidden_size=32,
         num_hidden_layers=5,
@@ -74,6 +75,7 @@ class XClipVisionModelTester:
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
+        self.num_frames = num_frames
         self.is_training = is_training
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -99,6 +101,7 @@ class XClipVisionModelTester:
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
+            num_frames=self.num_frames,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -198,6 +201,73 @@ class XClipVisionModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = XClipVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    def test_gradient_checkpointing_backward_compatibility(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if not model_class.supports_gradient_checkpointing:
+                continue
+
+            print("Model class:", model_class)
+
+            config.gradient_checkpointing = True
+            model = model_class(config)
+            self.assertTrue(model.is_gradient_checkpointing)
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        # we add 1 here due to the special message token in X-CLIP's vision encoder
+        seq_len = getattr(self.model_tester, "seq_length", None) + 1
+        encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            self.assertEqual(len(outputs.attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            self.assertEqual(len(outputs.attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(outputs.attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
+            )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            self.assertEqual(out_len + 1, len(outputs))
+
+            self_attentions = outputs.attentions
+
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
+            )
 
 
 class XClipTextModelTester:
