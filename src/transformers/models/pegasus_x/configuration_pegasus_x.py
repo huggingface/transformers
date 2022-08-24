@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021, Google and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022, Google and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -85,7 +85,7 @@ class PegasusXConfig(PretrainedConfig):
             `eos_token_id`.
         num_global_tokens (`int`, *optional*, defaults to 128):
             Number of global tokens to use for the encoder
-        block_size=512 (`int`, *optional*, defaults to 512):
+        block_size (`int`, *optional*, defaults to 512):
             Block size for encoder local attention. Sequence length should be an exact multiple of block size.
             block_size must be a multiple of 2 if stagger_local_block is True
         stagger_local_block (`bool`, *optional*, defaults to `True`):

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021, Google and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022, Google and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch PEGASUS model."""
+""" PyTorch PEGASUS-X model."""
 
 import dataclasses
 import math
@@ -61,15 +61,15 @@ PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = [
 class DimensionInfo:
     """Wrapper for dimension info."""
 
-    B: int  # batch size
-    T: int  # token length
-    K: int  # block size
-    H: int  # num heads
-    D: int  # hidden dim
-    F: int  # dim per head
-    N: int  # num blocks
-    G: int  # global length
-    P: int  # padded token seq length
+    batch_size: int  # batch size
+    seq_len: int  # token length
+    block_size: int  # block size
+    num_heads: int  # num heads
+    hidden_dim: int  # hidden dim
+    dim_per_head: int  # dim per head
+    num_blocks: int  # num blocks
+    global_len: int  # global length
+    padded_seq_len: int  # padded token seq length
 
     # Note: Compared to the original Flax implementation, we will pad the token representations to
     #       a multiple of block size at the start of the encoder layers, so T=P always.
@@ -288,8 +288,8 @@ class PegasusXAttention(nn.Module):
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
         attn_output = attn_output.transpose(1, 2)
 
-        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
-        # partitioned aross GPUs when using tensor-parallelism.
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output`
+        # can be partitioned aross GPUs when using tensor-parallelism.
         attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
 
         attn_output = self.out_proj(attn_output)
@@ -340,26 +340,50 @@ class PegasusXGlobalLocalAttention(nn.Module):
     ) -> Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
         dim = DimensionInfo(
-            B=token_hidden_states.shape[0],
-            T=token_hidden_states.shape[1],
-            K=self.block_size,
-            H=self.num_heads,
-            D=token_hidden_states.shape[2],
-            F=self.head_dim,
-            N=token_hidden_states.shape[1] // self.block_size,
-            G=global_hidden_states.shape[1],
-            P=token_hidden_states.shape[1],
+            batch_size=token_hidden_states.shape[0],
+            seq_len=token_hidden_states.shape[1],
+            block_size=self.block_size,
+            num_heads=self.num_heads,
+            hidden_dim=token_hidden_states.shape[2],
+            dim_per_head=self.head_dim,
+            num_blocks=token_hidden_states.shape[1] // self.block_size,
+            global_len=global_hidden_states.shape[1],
+            padded_seq_len=token_hidden_states.shape[1],
         )
 
-        # [B, H, P, F]
-        local_q = self._shape(self.q_proj(token_hidden_states) * self.scaling, seq_len=dim.P, bsz=dim.B)
-        local_k = self._shape(self.k_proj(token_hidden_states), seq_len=dim.P, bsz=dim.B)
-        local_v = self._shape(self.v_proj(token_hidden_states), seq_len=dim.P, bsz=dim.B)
+        # [batch_size, num_heads, padded_seq_len, dim_per_head]
+        local_q = self._shape(
+            self.q_proj(token_hidden_states) * self.scaling,
+            seq_len=dim.padded_seq_len,
+            bsz=dim.batch_size,
+        )
+        local_k = self._shape(
+            self.k_proj(token_hidden_states),
+            seq_len=dim.padded_seq_len,
+            bsz=dim.batch_size,
+        )
+        local_v = self._shape(
+            self.v_proj(token_hidden_states),
+            seq_len=dim.padded_seq_len,
+            bsz=dim.batch_size,
+        )
 
-        # [B, H, G, F]
-        global_q = self._shape(self.q_proj(global_hidden_states) * self.scaling, seq_len=dim.G, bsz=dim.B)
-        global_k = self._shape(self.k_proj(global_hidden_states), seq_len=dim.G, bsz=dim.B)
-        global_v = self._shape(self.v_proj(global_hidden_states), seq_len=dim.G, bsz=dim.B)
+        # [batch_size, num_heads, global_len, dim_per_head]
+        global_q = self._shape(
+            self.q_proj(global_hidden_states) * self.scaling,
+            seq_len=dim.global_len,
+            bsz=dim.batch_size,
+        )
+        global_k = self._shape(
+            self.k_proj(global_hidden_states),
+            seq_len=dim.global_len,
+            bsz=dim.batch_size,
+        )
+        global_v = self._shape(
+            self.v_proj(global_hidden_states),
+            seq_len=dim.global_len,
+            bsz=dim.batch_size,
+        )
 
         global_attn_output, global_attn_probs = self.compute_global_attention_representations(
             global_q=global_q,
@@ -380,15 +404,17 @@ class PegasusXGlobalLocalAttention(nn.Module):
             dim=dim,
         )
 
-        # [B, G, D]
-        global_attn_output = global_attn_output.transpose(1, 2).contiguous().view(dim.B, dim.G, dim.D)
-        # [B, G, D]
+        # [batch_size, global_len, hidden_dim]
+        global_attn_output = (
+            global_attn_output.transpose(1, 2).contiguous().view(dim.batch_size, dim.global_len, dim.hidden_dim)
+        )
+        # [batch_size, global_len, hidden_dim]
         global_attn_output = self.out_proj(global_attn_output)
-        # [B, N, K, H, F]
+        # [batch_size, num_heads, block_size, num_heads, dim_per_head]
         local_attn_output = local_attn_output.permute(0, 2, 3, 1, 4).contiguous()
-        # [B, P, D]
-        local_attn_output = local_attn_output.view(dim.B, dim.P, dim.D)
-        # [B, P, D]
+        # [batch_size, padded_seq_len, hidden_dim]
+        local_attn_output = local_attn_output.view(dim.batch_size, dim.padded_seq_len, dim.hidden_dim)
+        # [batch_size, padded_seq_len, hidden_dim]
         local_attn_output = self.out_proj(local_attn_output)
 
         if output_attentions:
@@ -407,32 +433,37 @@ class PegasusXGlobalLocalAttention(nn.Module):
         sequence tokens are arranged in blocks for local attention, we unblock them and compute attention.
 
         Args:
-            global_q (`torch.FloatTensor`) of shape [B, H, G, F]: query vectors from global tokens
-            global_k (`torch.FloatTensor`) of shape [B, H, G, F]: key vectors from global tokens
-            global_v (`torch.FloatTensor`) of shape [B, H, G, F]: value vectors from global tokens
-            local_k (`torch.FloatTensor`) of shape [B, H, P, F]: key vectors from local tokens
-            local_v (`torch.FloatTensor`) of shape [B, H, P, F]: value vectors from local tokens
-            mask (`torch.FloatTensor`) of shape [B, P]: attention mask
+            global_q (`torch.FloatTensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
+                query vectors from global tokens
+            global_k (`torch.FloatTensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
+                key vectors from global tokens
+            global_v (`torch.FloatTensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
+                value vectors from global tokens
+            local_k (`torch.FloatTensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
+                key vectors from local tokens
+            local_v (`torch.FloatTensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
+                value vectors from local tokens
+            mask (`torch.FloatTensor`) of shape [batch_size, padded_seq_len]: attention mask
             dim (DimensionInfo): DimensionInfo wrapper for dimensions
 
         Returns:
             output of shape `[batch_sizes, length, features]`. where length will be padded to a multiple of block_size
         """
-        # [B, H, G+P, F]
+        # [batch_size, num_heads, global_len+padded_seq_len, dim_per_head]
         global_and_local_k = torch.cat([global_k, local_k], dim=2)
-        # [B, H, G+P, F]
+        # [batch_size, num_heads, global_len+padded_seq_len, dim_per_head]
         global_and_local_v = torch.cat([global_v, local_v], dim=2)
 
-        # [B, G+P]
-        extended_mask = nn.functional.pad(mask, pad=(dim.G, 0), value=0)
+        # [batch_size, global_len+padded_seq_len]
+        extended_mask = nn.functional.pad(mask, pad=(dim.global_len, 0), value=0)
 
-        # [B, H, G, G+P]
+        # [batch_size, num_heads, global_len, global_len+padded_seq_len]
         attn_weights = torch.einsum("BHGF,BHXF->BHGX", global_q, global_and_local_k)
         attn_weights = attn_weights + extended_mask[:, None, None, :]
         attn_probs = nn.functional.softmax(attn_weights, dim=-1)
         attn_probs = nn.functional.dropout(attn_probs, p=self.dropout, training=self.training)
 
-        # [B, H, G, F]
+        # [batch_size, num_heads, global_len, F]
         attn_output = torch.einsum("BHGX,BHXF->BHGF", attn_probs, global_and_local_v)
         return attn_output, attn_probs
 
@@ -445,48 +476,57 @@ class PegasusXGlobalLocalAttention(nn.Module):
         we need to tile and concatenate the global tokens to every local block
 
         Args:
-            global_k (`torch.FloatTensor`) of shape [B, H, G, F]: key vectors from global tokens
-            global_v (`torch.FloatTensor`) of shape [B, H, G, F]: value vectors from global tokens
-            local_q (`torch.FloatTensor`) of shape [B, H, P, F]: query vectors from local tokens
-            local_k (`torch.FloatTensor`) of shape [B, H, P, F]: key vectors from local tokens
-            local_v (`torch.FloatTensor`) of shape [B, H, P, F]: value vectors from local tokens
-            mask (`torch.FloatTensor`) of shape [B, P]: attention mask
+            global_k (`torch.FloatTensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
+                key vectors from global tokens
+            global_v (`torch.FloatTensor`) of shape [batch_size, num_heads, global_len, dim_per_head]:
+                value vectors from global tokens
+            local_q (`torch.FloatTensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
+                query vectors from local tokens
+            local_k (`torch.FloatTensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
+                key vectors from local tokens
+            local_v (`torch.FloatTensor`) of shape [batch_size, num_heads, padded_seq_len, dim_per_head]:
+                value vectors from local tokens
+            mask (`torch.FloatTensor`) of shape [batch_size, padded_seq_len]: attention mask
             dim (DimensionInfo): DimensionInfo wrapper for dimensions
 
         Returns:
             output of shape `[batch_sizes, length, features]`. where length will be padded to a multiple of block_size
         """
-        # [B, H, N, K, F]
-        blocked_local_q = local_q.view(dim.B, dim.H, dim.N, dim.K, dim.F)
-        # [B, H, N, K, F]
-        blocked_local_k = local_k.view(dim.B, dim.H, dim.N, dim.K, dim.F)
-        # [B, H, N, K, F]
-        blocked_local_v = local_v.view(dim.B, dim.H, dim.N, dim.K, dim.F)
+        # [batch_size, num_heads, num_blocks, block_size, dim_per_head]
+        blocked_local_q = local_q.view(dim.batch_size, dim.num_heads, dim.num_blocks, dim.block_size, dim.dim_per_head)
+        # [batch_size, num_heads, num_blocks, block_size, dim_per_head]
+        blocked_local_k = local_k.view(dim.batch_size, dim.num_heads, dim.num_blocks, dim.block_size, dim.dim_per_head)
+        # [batch_size, num_heads, num_blocks, block_size, dim_per_head]
+        blocked_local_v = local_v.view(dim.batch_size, dim.num_heads, dim.num_blocks, dim.block_size, dim.dim_per_head)
 
-        # [B, N, G+K]
-        extended_mask = nn.functional.pad(mask.view(dim.B, dim.N, dim.K), pad=(dim.G, 0), value=0)
+        # [batch_size, num_blocks, global_len+block_size]
+        extended_mask = nn.functional.pad(
+            mask.view(dim.batch_size, dim.num_blocks, dim.block_size),
+            pad=(dim.global_len, 0),
+            value=0,
+        )
 
-        # [B, H, N, K, G]
+        # [batch_size, num_heads, num_blocks, block_size, global_len]
         blocked_local2global = torch.einsum("BHNKF,BHGF->BHNKG", blocked_local_q, global_k)
-        # [B, H, N, K, K]
+        # [batch_size, num_heads, num_blocks, block_size, block_size]
         blocked_local2local = torch.einsum("BHNKF,BHNXF->BHNKX", blocked_local_q, blocked_local_k)
 
-        # [B, H, N, K, G+K]
-        attn_weights = torch.cat([blocked_local2global, blocked_local2local], dim=4)
+        # [batch_size, num_heads, num_blocks, block_size, global_len+block_size]
+        attn_weights = torch.cat([blocked_local2global, blocked_local2local], dim=-1)
         attn_weights = attn_weights + extended_mask[:, None, :, None, :]
         attn_probs = nn.functional.softmax(attn_weights, dim=-1)
         attn_probs = nn.functional.dropout(attn_probs, p=self.dropout, training=self.training)
 
-        # [B, H, N, K, G]
-        local2global_attn_probs = attn_probs[:, :, :, :, : dim.G]
-        # [B, H, N, K, K]
-        local2local_attn_probs = attn_probs[:, :, :, :, dim.G :]
+        # [batch_size, num_heads, num_blocks, block_size, global_len]
+        local2global_attn_probs = attn_probs[:, :, :, :, : dim.global_len]
+        # [batch_size, num_heads, num_blocks, block_size, block_size]
+        local2local_attn_probs = attn_probs[:, :, :, :, dim.global_len :]
 
-        # [B, H, N, K, F]
+        # [batch_size, num_heads, num_blocks, block_size, dim_per_head]
         local2global_attn_output = torch.einsum("BHNKG,BHGF->BHNKF", local2global_attn_probs, global_v)
-        # [B, H, N, K, F]
+        # [batch_size, num_heads, num_blocks, block_size, dim_per_head]
         local2local_attn_output = torch.einsum("BHNKX,BHNXF->BHNKF", local2local_attn_probs, blocked_local_v)
-        # [B, H, N, K, F]
+        # [batch_size, num_heads, num_blocks, block_size, dim_per_head]
         attn_output = local2global_attn_output + local2local_attn_output
         return attn_output, attn_probs
 
@@ -576,15 +616,6 @@ class PegasusXEncoderLayer(nn.Module):
         global_hidden_states = self.fc2(global_hidden_states)
         global_hidden_states = nn.functional.dropout(global_hidden_states, p=self.dropout, training=self.training)
         global_hidden_states = global_residual + global_hidden_states
-
-        if hidden_states.dtype == torch.float16:
-            if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
-                clamp_value = torch.finfo(hidden_states.dtype).max - 1000
-                hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
-            if torch.isinf(global_hidden_states).any() or torch.isnan(global_hidden_states).any():
-                clamp_value = torch.finfo(global_hidden_states.dtype).max - 1000
-                global_hidden_states = torch.clamp(global_hidden_states, min=-clamp_value, max=clamp_value)
-
         outputs = (hidden_states, global_hidden_states)
 
         if output_attentions:
@@ -738,8 +769,6 @@ class PegasusXPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module, PegasusXSinusoidalPositionalEmbedding):
-            pass
         elif isinstance(module, nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
 
@@ -771,7 +800,7 @@ PEGASUS_X_GENERATION_EXAMPLE = r"""
     >>> from transformers import PegasusTokenizer, PegasusXForConditionalGeneration
 
     >>> model = PegasusXForConditionalGeneration.from_pretrained("zphang/pegasus-x-base")
-    >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
+    >>> tokenizer = PegasusTokenizer.from_pretrained("zphang/pegasus-x-large")
 
     >>> ARTICLE_TO_SUMMARIZE = (
     ...     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
@@ -797,6 +826,8 @@ PEGASUS_X_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1416,7 +1447,7 @@ class PegasusXModel(PegasusXPreTrainedModel):
         ```python
         >>> from transformers import PegasusTokenizer, PegasusModel
 
-        >>> tokenizer = PegasusTokenizer.from_pretrained("google/pegasus-large")
+        >>> tokenizer = PegasusTokenizer.from_pretrained("zphang/pegasus-x-large")
         >>> model = PegasusModel.from_pretrained("zphang/pegasus-x-large")
 
         >>> inputs = tokenizer("Studies have been shown that owning a dog is good for you", return_tensors="pt")

@@ -592,7 +592,7 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
 
     def test_seq_to_seq_generation(self):
         hf = PegasusXForConditionalGeneration.from_pretrained("zphang/pegasus-x-base").to(torch_device)
-        tok = PegasusTokenizer.from_pretrained("google/pegasus-large")
+        tok = PegasusTokenizer.from_pretrained("zphang/pegasus-x-large")
 
         batch_input = [
             "While large pretrained Transformer models have proven highly capable at tackling natural language tasks,"
