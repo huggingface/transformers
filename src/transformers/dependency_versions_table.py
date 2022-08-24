@@ -51,7 +51,7 @@ deps = {
     "requests": "requests",
     "resampy": "resampy<0.3.1",
     "rjieba": "rjieba",
-    "rouge-score": "rouge-score<0.0.7",
+    "rouge-score": "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses": "sacremoses",
     "sagemaker": "sagemaker>=2.31.0",
