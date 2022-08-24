@@ -33,7 +33,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list, stable_softmax
+from ...tf_utils import stable_softmax
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -78,7 +78,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
-    src_len = shape_list(mask)[1]
+    src_len = tf.shape(mask)[1]
     tgt_len = tgt_len if tgt_len is not None else src_len
     one_cst = tf.constant(1.0)
     mask = tf.cast(mask, dtype=one_cst.dtype)
@@ -92,7 +92,7 @@ def _expand_mask(mask: tf.Tensor, tgt_len: Optional[int] = None):
 def contrastive_loss(logits: tf.Tensor) -> tf.Tensor:
     return tf.math.reduce_mean(
         tf.keras.metrics.sparse_categorical_crossentropy(
-            y_true=tf.range(shape_list(logits)[0]), y_pred=logits, from_logits=True
+            y_true=tf.range(tf.shape(logits)[0]), y_pred=logits, from_logits=True
         )
     )
 
@@ -110,7 +110,7 @@ def hard_softmax(logits: tf.Tensor, dim: int) -> tf.Tensor:
     index = tf.argmax(y_soft, dim)
     y_hard = tf.one_hot(
         index,
-        depth=shape_list(logits)[dim],
+        depth=tf.shape(logits)[dim],
         # TensorFlow expects axis to be -1 or between [0, 3).  But received: -2
         # This is why the following code snippet is used.
         axis=tf.rank(logits) - dim,
@@ -123,10 +123,7 @@ def hard_softmax(logits: tf.Tensor, dim: int) -> tf.Tensor:
 
 def gumbel_softmax(logits: tf.Tensor, tau: float = 1, hard: bool = False, dim: int = -1) -> tf.Tensor:
     gumbel_dist = tfp.distributions.Gumbel(0.0, 1.0)
-    gumbels = gumbel_dist.sample(
-        shape_list(logits),
-        dtype=logits.dtype,
-    )
+    gumbels = gumbel_dist.sample(tf.shape(logits), dtype=logits.dtype)
 
     gumbels = (logits + gumbels) / tau  # ~Gumbel(logits,tau)
     y_soft = stable_softmax(gumbels, dim)
@@ -136,7 +133,7 @@ def gumbel_softmax(logits: tf.Tensor, tau: float = 1, hard: bool = False, dim: i
         index = tf.argmax(y_soft, dim)
         y_hard = tf.one_hot(
             index,
-            depth=shape_list(logits)[dim],
+            depth=tf.shape(logits)[dim],
             axis=dim,
             dtype=y_soft.dtype,
         )
@@ -162,13 +159,13 @@ def resize_attention_map(attentions: tf.Tensor, height: int, width: int, align_c
     scale = (height * width // attentions.shape[2]) ** 0.5
     if height > width:
         feat_width = int(np.round(width / scale))
-        feat_height = shape_list(attentions)[2] // feat_width
+        feat_height = tf.shape(attentions)[2] // feat_width
     else:
         feat_height = int(np.round(height / scale))
-        feat_width = shape_list(attentions)[2] // feat_height
+        feat_width = tf.shape(attentions)[2] // feat_height
 
-    batch_size = shape_list(attentions)[0]
-    groups = shape_list(attentions)[1]  # number of group token
+    batch_size = tf.shape(attentions)[0]
+    groups = tf.shape(attentions)[1]  # number of group token
     # [batch_size, groups, height x width, groups] -> [batch_size, groups, height, width]
     attentions = tf.reshape(attentions, (batch_size, groups, feat_height, feat_width))
     attentions = tf.transpose(attentions, perm=(0, 2, 3, 1))
@@ -427,18 +424,20 @@ class TFGroupViTPatchEmbeddings(tf.keras.layers.Layer):
     def call(
         self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False
     ) -> tf.Tensor:
-        batch_size, num_channels, height, width = shape_list(pixel_values)
+        batch_size, num_channels, height, width = tf.shape(pixel_values)
         if tf.executing_eagerly() and num_channels != self.num_channels:
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        if not interpolate_pos_encoding:
-            if tf.executing_eagerly():
-                if height != self.image_size[0] or width != self.image_size[1]:
-                    raise ValueError(
-                        f"Input image size ({height}*{width}) doesn't match model"
-                        f" ({self.image_size[0]}*{self.image_size[1]})."
-                    )
+        if (
+            not interpolate_pos_encoding 
+            and tf.executing_eagerly()
+            and (height != self.image_size[0] or width != self.image_size[1])
+        ):
+            raise ValueError(
+                f"Input image size ({height}*{width}) doesn't match model"
+                f" ({self.image_size[0]}*{self.image_size[1]})."
+            )
 
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
@@ -494,8 +493,8 @@ class TFGroupViTVisionEmbeddings(tf.keras.layers.Layer):
         https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
         """
 
-        batch_size, num_patches, dim = shape_list(embeddings)
-        num_positions = shape_list(self.position_embeddings)[1]
+        batch_size, num_patches, dim = tf.shape(embeddings)
+        num_positions = tf.shape(self.position_embeddings)[1]
 
         if num_patches == num_positions and height == width:
             return self.position_embeddings
@@ -515,7 +514,7 @@ class TFGroupViTVisionEmbeddings(tf.keras.layers.Layer):
     def call(
         self, pixel_values: tf.Tensor, interpolate_pos_encoding: bool = False, training: bool = False
     ) -> tf.Tensor:
-        _, _, height, width = shape_list(pixel_values)
+        _, _, height, width = tf.shape(pixel_values)
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
         embeddings = self.layernorm(embeddings)
 
@@ -578,7 +577,7 @@ class TFGroupViTTextEmbeddings(tf.keras.layers.Layer):
         if inputs_embeds is None:
             inputs_embeds = tf.gather(params=self.weight, indices=input_ids)
 
-        input_shape = shape_list(inputs_embeds)[:-1]
+        input_shape = tf.shape(inputs_embeds)[:-1]
 
         if position_ids is None:
             position_ids = tf.expand_dims(tf.range(start=0, limit=input_shape[-1]), axis=0)
@@ -672,7 +671,7 @@ class TFGroupViTStage(tf.keras.layers.Layer):
                 Whether or not to return the grouping tensors of Grouping block.
         """
         if self.with_group_token:
-            group_token = tf.tile(self.group_token, multiples=(shape_list(hidden_states)[0], 1, 1))
+            group_token = tf.tile(self.group_token, multiples=(tf.shape(hidden_states)[0], 1, 1))
             if self.group_projector is not None:
                 for layer in self.group_projector:
                     prev_group_token = layer(prev_group_token)
@@ -793,7 +792,7 @@ class TFGroupViTAttention(tf.keras.layers.Layer):
     ) -> Tuple[tf.Tensor]:
         """Input shape: Batch x Time x Channel"""
 
-        batch_size = shape_list(hidden_states)[0]
+        batch_size = tf.shape(hidden_states)[0]
         is_cross_attention = encoder_hidden_states is not None
 
         mixed_query_layer = self.q_proj(inputs=hidden_states)
@@ -1014,7 +1013,7 @@ class TFGroupViTTextTransformer(tf.keras.layers.Layer):
         return_dict: bool,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPooling, Tuple[tf.Tensor]]:
-        input_shape = shape_list(input_ids)
+        input_shape = tf.shape(input_ids)
 
         embedding_output = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
@@ -1137,7 +1136,7 @@ class TFGroupViTTextMainLayer(tf.keras.layers.Layer):
 
     def set_input_embeddings(self, value: tf.Variable):
         self.text_model.embeddings.weight = value
-        self.text_model.embeddings.vocab_size = shape_list(value)[0]
+        self.text_model.embeddings.vocab_size = tf.shape(value)[0]
 
     @unpack_inputs
     def call(
@@ -1153,7 +1152,7 @@ class TFGroupViTTextMainLayer(tf.keras.layers.Layer):
         if input_ids is None:
             raise ValueError("You have to specify input_ids")
 
-        input_shape = shape_list(input_ids)
+        input_shape = tf.shape(input_ids)
 
         if attention_mask is None:
             attention_mask = tf.fill(dims=input_shape, value=1)
@@ -1280,7 +1279,7 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
         if input_ids is None:
             raise ValueError("You have to specify either input_ids")
 
-        input_shape = shape_list(input_ids)
+        input_shape = tf.shape(input_ids)
 
         if attention_mask is None:
             attention_mask = tf.fill(dims=input_shape, value=1)
@@ -1348,7 +1347,7 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
-        input_shape = shape_list(input_ids)
+        input_shape = tf.shape(input_ids)
 
         if attention_mask is None:
             attention_mask = tf.fill(dims=input_shape, value=1)
@@ -1392,7 +1391,7 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
             # [batch_size_image, num_group, hidden_size]
             image_group_embeds = vision_outputs[0]
             # [batch_size_image*num_group, hidden_size]
-            image_group_embeds = tf.reshape(image_group_embeds, shape=(-1, shape_list(image_group_embeds)[-1]))
+            image_group_embeds = tf.reshape(image_group_embeds, shape=(-1, tf.shape(image_group_embeds)[-1]))
             for layer in self.visual_projection:
                 image_group_embeds = layer(image_group_embeds)
             if output_hidden_states:
@@ -1413,7 +1412,7 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
             logits_per_image_group = tf.transpose(logits_per_image_group, perm=(0, 2, 1))
 
             # [batch_size_image, batch_size_text, height x width]
-            flatten_grouping = tf.reshape(grouping, shape=(shape_list(grouping)[0], shape_list(grouping)[1], -1))
+            flatten_grouping = tf.reshape(grouping, shape=(tf.shape(grouping)[0], tf.shape(grouping)[1], -1))
 
             # [batch_size_image, batch_size_text, height, width]
             seg_logits = tf.matmul(logits_per_image_group, flatten_grouping) * logit_scale
@@ -1650,12 +1649,12 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, GroupViTTextModel
+        >>> from transformers import CLIPTokenizer, TFGroupViTTextModel
 
         >>> tokenizer = CLIPTokenizer.from_pretrained("nvidia/groupvit-gcc-yfcc")
-        >>> model = GroupViTTextModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
+        >>> model = TFGroupViTTextModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
-        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
+        >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="tf")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
@@ -1753,7 +1752,7 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, return_tensors="tf")
 
         >>> outputs = model(**inputs)
         >>> last_hidden_state = outputs.last_hidden_state
