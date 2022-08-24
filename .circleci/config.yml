@@ -888,7 +888,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_onnx $(cat test_list.txt) -k onnx | tee tests_output.txt
+                    python -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_onnx $(cat test_list.txt) -k onnx | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -918,7 +918,7 @@ jobs:
                   paths:
                       - '~/.cache/pip'
             - run: |
-                  python -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_onnx tests -k onnx | tee tests_output.txt
+                  python -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_onnx tests -k onnx | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
