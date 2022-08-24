@@ -377,7 +377,6 @@ class DistributedTensorGatherer:
     For some reason, that's not going to roll their boat. This class is there to solve that problem.
 
     Args:
-
         world_size (`int`):
             The number of processes used in the distributed training.
         num_samples (`int`):
