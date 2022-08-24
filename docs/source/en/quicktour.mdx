@@ -46,9 +46,25 @@ pip install tensorflow
 
 ## Pipeline
 
-The [`pipeline`] is the easiest way to use a pretrained model for inference. You can use the [`pipeline`] out-of-the-box for many tasks across different modalities. It supports common NLP tasks like sentiment analysis, text generation, named entity recognition, summarization and translation. But you can also use the [`pipeline`] for computer vision tasks such as image classification and semantic segmentation, and speech tasks like audio classification and automatic speech recognition.
-
 <Youtube id="tiZFewofSLM"/>
+
+The [`pipeline`] is the easiest way to use a pretrained model for inference. You can use the [`pipeline`] out-of-the-box for many tasks across different modalities. Take a look at the table below for some supported tasks:
+
+| **Task**                     | **Description**                                                                                              | **Modality**    | **Pipeline identifier**                       |
+|------------------------------|--------------------------------------------------------------------------------------------------------------|-----------------|-----------------------------------------------|
+| Text classification          | assign a label to a given sequence of text                                                                   | NLP             | pipeline(task="sentiment-analysis")           |
+| Text generation              | generate text that follows a given prompt                                                                    | NLP             | pipeline(task="text-generation")              |
+| Name entity recognition      | assign a label to each token in a sequence (people, organization, location, etc.)                            | NLP             | pipeline(task="ner")                          |
+| Question answering           | extract an answer from the text given some context and a question                                            | NLP             | pipeline(task="question-answering")           |
+| Fill-mask                    | predict the correct masked token in a sequence                                                               | NLP             | pipeline(task="fill-mask")                    |
+| Summarization                | generate a summary of a sequence of text or document                                                         | NLP             | pipeline(task="summarization")                |
+| Translation                  | translate text from one language into another                                                                | NLP             | pipeline(task="translation")                  |
+| Image classification         | assign a label to an image                                                                                   | Computer vision | pipeline(task="image-classification")         |
+| Image segmentation           | assign a label to each individual pixel of an image (supports semantic, panoptic, and instance segmentation) | Computer vision | pipeline(task="image-segmentation")           |
+| Object detection             | predict the bounding boxes and classes of objects in an image                                                | Computer vision | pipeline(task="object-detection")             |
+| Audio classification         | assign a label to an audio file                                                                              | Audio           | pipeline(task="audio-classification")         |
+| Automatic speech recognition | extract speech from an audio file into text                                                                  | Audio           | pipeline(task="automatic-speech-recognition") |
+| Visual question answering    | given an image and a question, correctly answer a question about the image                                   | Multimodal      | pipeline(task="vqa")                          |
 
 Start by creating an instance of [`pipeline`] and specifying a task you want to use it for. You can use the [`pipeline`] for any of the previously mentioned tasks, and for a complete list of supported tasks, take a look at the [pipeline API reference](./main_classes/pipelines). In this guide though, you'll use the [`pipeline`] for sentiment analysis as an example:
 
@@ -391,19 +407,54 @@ Take a look at the [Create a custom architecture](./create_a_model) guide for mo
 
 All models are a standard [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) or a [`tf.keras.Model`](https://www.tensorflow.org/api_docs/python/tf/keras/Model) so you can use them in any standard training loop. While you can write your own training loop, 🤗 Transformers provides a [`Trainer`] class for PyTorch, which contains the basic training loop and adds additional functionality for features like distributed training, mixed precision, and more.
 
-<Tip>
-
-For TensorFlow, use [`~TFPreTrainedModel.prepare_tf_dataset`] to prepare your dataset as a `tf.data.Dataset`. Then you can [`compile`](https://keras.io/api/models/model_training_apis/#compile-method) and [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) your model with the usual Keras methods. Take a look at the [finetuning tutorial](./training#convert-dataset-to-tensorflow-format) for more details.
-
-</Tip>
-
 Depending on your task, you'll typically pass the following parameters to [`Trainer`]:
 
 1. A [`PreTrainedModel`] or a [`torch.nn.Module`](https://pytorch.org/docs/stable/nn.html#torch.nn.Module).
+
+        ```py
+        >>> from transformers import AutoModelForSequenceClassification
+        
+        >>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+        ```
+
 2. [`TrainingArguments`] contains the model hyperparameters you can change like learning rate, batch size, and the number of epochs to train for. The default values are used if you don't specify any training arguments.
+
+        ```py
+        >>> from transformers import TrainingArguments
+
+        >>> training_args = TrainingArguments(
+                output_dir="path/to/local/model/",
+                learning_rate=2e-5,
+                per_device_train_batch_size=8,
+                per_device_eval_batch_size=8,
+                num_train_epochs=2,
+        )
+        ```
+
 3. Your train and test datasets.
+
+        ```py
+        >>> train_dataset = dataset["train"]
+        >>> eval_dataset = dataset["eval"]
+        ```
+
 4. A preprocessing class like a tokenizer, feature extractor, or processor.
+
+        ```py
+        >>> from transformers import AutoTokenizer
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+        ```
+
 5. A [`DataCollator`] to create a batch of examples from your dataset.
+
+        ```py
+        >>> from transformers import DefaultDataCollator
+
+        >>> data_collator = DefaultDataCollator()
+        ```
+
+Now gather all these classes in [`Trainer`]:
 
 ```py
 >>> from transformers import Trainer
@@ -426,7 +477,7 @@ When you're ready, call [`~Trainer.train`] to start training:
 
 <Tip>
 
-For tasks that use a sequence-to-sequence model like translation or summarization, use the [`Seq2SeqTrainer`] and [`Seq2SeqTrainingArguments`] classes instead.
+For tasks - like translation or summarization - that use a sequence-to-sequence model, use the [`Seq2SeqTrainer`] and [`Seq2SeqTrainingArguments`] classes instead.
 
 </Tip>
 
