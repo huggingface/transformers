@@ -412,9 +412,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         model = Wav2Vec2ForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
 
         # compare to filename `common_voice_en_100038.mp3` of dataset viewer on https://huggingface.co/datasets/common_voice/viewer/en/train
-        print("Out", np.sum(np.abs(sample["audio"]["array"])))
         input_values = processor(sample["audio"]["array"], return_tensors="pt").input_values
-        print("Out PT", input_values.abs().sum())
 
         with torch.no_grad():
             logits = model(input_values).logits.cpu().numpy()
