@@ -707,7 +707,7 @@ class BloomModel(BloomPreTrainedModel):
 
         alibi = build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
 
-        if hasattr(self, 'ds_inference'):
+        if hasattr(self, "ds_inference"):
             causal_mask = attention_mask
         else:
             causal_mask = self._prepare_attn_mask(
