@@ -2306,13 +2306,15 @@ class Trainer:
                 method. Will default to [`~trainer_utils.default_compute_objective`].
             n_trials (`int`, *optional*, defaults to 100):
                 The number of trial runs to test.
-            direction(`str`, *optional*, defaults to `"minimize"`):
+            direction (`str`, *optional*, defaults to `"minimize"`):
                 Whether to optimize greater or lower objects. Can be `"minimize"` or `"maximize"`, you should pick
                 `"minimize"` when optimizing the validation loss, `"maximize"` when optimizing one or several metrics.
-            backend(`str` or [`~training_utils.HPSearchBackend`], *optional*):
+            backend (`str` or [`~training_utils.HPSearchBackend`], *optional*):
                 The backend to use for hyperparameter search. Will default to optuna or Ray Tune or SigOpt, depending
                 on which one is installed. If all are installed, will default to optuna.
-            kwargs:
+            hp_name (`Callable[["optuna.Trial"], str]]`, *optional*):
+                A function that defines the trial/run name. Will default to None.
+            kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to `optuna.create_study` or `ray.tune.run`. For more
                 information see:
 
