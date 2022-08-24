@@ -1230,7 +1230,7 @@ class XClipModel(XClipPreTrainedModel):
         self.logit_scale = nn.Parameter(torch.ones([]) * self.config.logit_scale_init_value)
 
         self.prompts_visual_layernorm = nn.LayerNorm(self.vision_embed_dim)
-        self.prompts_visual_projection = nn.Parameter(torch.randn(self.vision_embed_dim, self.text_embed_dim))
+        self.prompts_visual_projection = nn.Parameter(torch.randn(self.vision_embed_dim, self.projection_dim))
 
         mit_config = copy(vision_config)
         mit_config.hidden_size = vision_config.mit_hidden_size
@@ -1442,6 +1442,8 @@ class XClipModel(XClipPreTrainedModel):
         text_embeds = text_outputs[1]
         text_embeds = self.text_projection(text_embeds)
 
+        print("Shape of inital text embeds:", text_embeds.shape)
+
         # TODO remove this assertion (text pooler output)
         # assert torch.allclose(text_embeds[0, :3], torch.tensor([-0.2870, -0.3504, 0.0417]), atol=1e-4)
         # print("Looks ok!")
@@ -1455,6 +1457,8 @@ class XClipModel(XClipPreTrainedModel):
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
+        print("Shape of text embeds:", text_embeds.shape)
+        print("Shape of image embeds:", image_embeds.shape)
         logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
         logits_per_image = logits_per_text.T
 

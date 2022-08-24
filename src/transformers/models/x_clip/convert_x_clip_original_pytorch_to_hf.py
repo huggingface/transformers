@@ -193,6 +193,7 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_pat
 
     # Verify outputs
     logits_per_image = outputs.logits_per_image
+    print("Shape of logits per image:", logits_per_image.shape)
     probs = logits_per_image.softmax(dim=1)
     expected_probs = torch.tensor([[[0.0019], [0.9951], [0.0030]]])
     assert torch.allclose(probs, expected_probs, atol=1e-3)
