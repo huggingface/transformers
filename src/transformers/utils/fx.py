@@ -548,7 +548,6 @@ class HFProxy(Proxy):
 
     def size(self, dim=None):
         if hasattr(self, "_metadata") and self._metadata is not None:
-            # print(self._metadata.size(), self._metadata)
             if dim is None:
                 return tuple(self.tracer.create_proxy("call_method", "size", (self, i), {}) for i,_ in enumerate(self._metadata.size()))
             else:
@@ -575,7 +574,6 @@ class HFProxy(Proxy):
     def __bool__(self):
         if hasattr(self, "_metadata") and self._metadata is not None:
             return self._metadata
-        # print(self, self.name, self.target, self.kind)
         return super().__bool__()
 
     def __iter__(self):
@@ -607,13 +605,9 @@ class HFProxy(Proxy):
 
 class HFModelAttribute(HFProxy):
     "Non tensor/module/parameter attributes"
-    def __getattribute__(self, item):
-        # print("__getattribute__", item)
-        return super().__getattribute__(item)
 
     def __getattr__(self, item) -> 'HFModelAttribute':
         # If typical HFProxy methods
-        # print("__getattr__", item)
         if item in set(HFProxy.__dict__) | {"__class__", "node", "tracer"}:
             return super().__getattribute__(item)
 
@@ -673,8 +667,6 @@ def _patch_fn_for_proxy(fn, tracer):
     def _apply_on_proxy(x):
         if isinstance(x, torch.fx.Proxy):
             if not (isinstance(x, HFProxy) and hasattr(x, "_metadata")):
-                # TODO @thomasw21: For reasons I don't understand, this is not a HFProxy but an Attribute ...
-                print(x, x.node.name, x.node.target, x.node.args, x.node.kwargs, x.__class__.__name__, isinstance(x, HFProxy))
                 raise RuntimeError(f"No metadata was found for {x}")
             new_metadata = fn(x._metadata)
             proxy = tracer.create_proxy("call_function", fn, (x,), {})
@@ -702,7 +694,7 @@ def _gen_constructor_wrapper(__o, target):
         else:
             return target(*args, **kwargs)
 
-    return wrapper, __o, target
+    return wrapper
 
 
 def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
@@ -714,23 +706,19 @@ def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Option
     return value
 
 class Patch:
-    def __init__(self, tracer, patched_methods):
+    def __init__(self, patched_methods):
         self.patched_methods = patched_methods
 
-        assert not hasattr(tracer, "orig_fns")
-        self.orig_fns = set()
-        setattr(tracer, "orig_fns", self.orig_fns)
-
     def __enter__(self):
-        for name, original_methods in self.patched_methods.items():
-            for (wrapper, __o, orig) in original_methods:
+        for _, original_methods in self.patched_methods.items():
+            for (__o, name, orig, wrapper) in original_methods:
                 setattr(__o, name, wrapper)
-                self.orig_fns.add(orig)
 
         return self
+
     def __exit__(self, exc_type, exc_val, exc_tb):
-        for name, original_methods in self.patched_methods.items():
-            for (_, __o, orig) in original_methods:
+        for _, original_methods in self.patched_methods.items():
+            for (__o, name, orig, wrapper) in original_methods:
                 setattr(__o, name, orig)
 
 
@@ -1098,11 +1086,15 @@ class HFTracer(Tracer):
             if param.kind == inspect.Parameter.VAR_KEYWORD and param.name not in input_names:
                 concrete_metas[f"**{param.name}"] = {}
         self.meta_args = concrete_metas
-        self.patched_torch_methods = {
-            target: [_gen_constructor_wrapper(torch, getattr(torch, target))] for target in self._TORCH_METHODS_TO_PATCH
+        self.orig_fns = set(getattr(torch, target) for target in self._TORCH_METHODS_TO_PATCH)
+
+        patched_torch_methods = {
+            f"torch.{target}": [
+                (torch, target, getattr(torch, target), _gen_constructor_wrapper(torch, getattr(torch, target)))
+            ] for target in self._TORCH_METHODS_TO_PATCH
         }
 
-        def create_wrapper():
+        def create_nn_module_getattribute_wrapper():
             torch_module_dict = {
                 **nn.Module.__dict__,
                 **nn.Module().__dict__,
@@ -1147,32 +1139,21 @@ class HFTracer(Tracer):
 
             return get_weird_attribute
 
-        self.patched_torch_methods["__getattribute__"] = [
-            (create_wrapper(), nn.Module, nn.Module.__getattribute__)
-        ]
+        patch_other_methods = {
+            "nn.Module.__getattribute__": [
+                (nn.Module, "__getattribute__", nn.Module.__getattribute__, create_nn_module_getattribute_wrapper())
+            ],
+            "math.log2":[(math, "log2", math.log2, _patch_fn_for_proxy(math.log2, self))],
+            "math.floor": [(math, "floor", math.floor, _patch_fn_for_proxy(math.floor, self))],
+            "torch.finfo": [(torch, "finfo", torch.finfo, _patch_fn_for_proxy(torch.finfo, self))]
+        }
 
-        # patch `math` functions
-        self.patched_torch_methods["log2"] = [
-            (_patch_fn_for_proxy(math.log2, self), math, math.log2)
-        ]
-        self.patched_torch_methods["floor"] = [
-            (_patch_fn_for_proxy(math.floor, self), math, math.floor)
-        ]
-        # TODO @thomasw21 this breaks `torch_arange` because we rely on this .....
-        # self.patched_torch_methods["float"] = [
-        #     (_patch_fn_for_proxy(builtins.float, self), builtins, builtins.float)
-        # ]
-        self.patched_torch_methods["finfo"] = [
-            (_patch_fn_for_proxy(torch.finfo, self), torch, torch.finfo)
-        ]
-
-        with Patch(self, self.patched_torch_methods):
-            print(concrete_args)
-            self.graph = super().trace(root, concrete_args=concrete_args)
+        with Patch({**patched_torch_methods, **patch_other_methods}):
+            graph = super().trace(root, concrete_args=concrete_args)
 
         # This is necessary because concrete args are added as input to the traced module since
         # https://github.com/pytorch/pytorch/pull/55888.
-        for node in self.graph.nodes:
+        for node in graph.nodes:
             if node.op == "placeholder":
                 # Removing default values for inputs as the forward pass will fail with them.
                 if node.target in input_names:
@@ -1190,14 +1171,14 @@ class HFTracer(Tracer):
                         to_visit += list(n.users.keys())
 
                     for user in reversed(to_delete.keys()):
-                        self.graph.erase_node(user)
+                        graph.erase_node(user)
 
             # TODO: solves GraphModule creation.
             # Without this, return type annotation "Tuple" is causing code execution failure.
             if node.op == "output":
                 node.type = None
 
-        return self.graph
+        return graph
 
     def _stateless_mod_instanciation_depends_on_proxies(self, mod: nn.Module) -> bool:
         """
