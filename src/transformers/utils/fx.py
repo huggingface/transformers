@@ -580,7 +580,14 @@ class HFProxy(Proxy):
 
     def __iter__(self):
         if hasattr(self, "_metadata") and self._metadata is not None:
-            return self._metadata.__iter__()
+            # Type that implement `__getitem__` TODO
+            if isinstance(self._metadata, (torch.Tensor, list, tuple)):
+                proxies =  tuple(self.tracer.create_proxy("call_function", operator.getitem, (self, i), {}) for i,metadata in enumerate(self._metadata.__iter__()))
+                for i, proxy in enumerate(proxies):
+                    proxy.install_metadata(self._metadata[i])
+                return proxies.__iter__()
+            else:
+                return self._metadata.__iter__()
         return super().__iter__()
 
     def __getattr__(self, k):
@@ -1160,6 +1167,7 @@ class HFTracer(Tracer):
         ]
 
         with Patch(self, self.patched_torch_methods):
+            print(concrete_args)
             self.graph = super().trace(root, concrete_args=concrete_args)
 
         # This is necessary because concrete args are added as input to the traced module since
