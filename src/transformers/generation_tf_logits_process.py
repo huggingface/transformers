@@ -397,49 +397,89 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
             raise ValueError(f"`ngram_size` has to be a strictly positive integer, but is {ngram_size}")
         self.ngram_size = ngram_size
 
-    def calc_banned_ngram_tokens(self, input_ids, num_hypos, cur_len):
-        # Copied from fairseq for no_repeat_ngram in beam_search
-        if cur_len + 1 < self.ngram_size:
-            # return no banned tokens if we haven't generated ngram_size tokens yet
-            return [[] for _ in range(num_hypos)]
-        generated_ngrams = [{} for _ in range(num_hypos)]
-        prev_input_ids = input_ids[:, :cur_len]
-        for idx in range(num_hypos):
-            gen_tokens = prev_input_ids[idx].numpy().tolist()
-            generated_ngram = generated_ngrams[idx]
-            for ngram in zip(*[gen_tokens[i:] for i in range(self.ngram_size)]):
-                prev_ngram_tuple = tuple(ngram[:-1])
-                generated_ngram[prev_ngram_tuple] = generated_ngram.get(prev_ngram_tuple, []) + [ngram[-1]]
+    def get_transition_tensor(self, input_ids: tf.Tensor, vocab_size: int) -> tf.Tensor:
+        """
+        Gets a transition tensor of shape [batch_size, ngram_size-1, vocab_size, vocab_size]. It is a tensor containing
+        booleans, which answers the question: if the k-th token in an n-gram is x, has it been followed by token y in a
+        previously seen n-gram? (indexed by [batch_idx, k, x, y]; 1 if it is True, 0 otherwise)
 
-        def _get_generated_ngrams(hypo_idx):
-            # Before decoding the next token, prevent decoding of ngrams that have already appeared
-            start_idx = cur_len + 1 - self.ngram_size
-            ngram_idx = tuple(prev_input_ids[hypo_idx, start_idx:cur_len].numpy().tolist())
-            return generated_ngrams[hypo_idx].get(ngram_idx, [])
+        It has to be recomputed each time the processor is called because a certain batch index is not guaranteed to
+        represent the same sequence from iteration to iteration (e.g. beam search).
+        """
+        batch_size, seq_len = input_ids.shape
+        transition_tensor = tf.zeros((batch_size, self.ngram_size - 1, vocab_size, vocab_size), dtype=tf.bool)
 
-        banned_tokens = [_get_generated_ngrams(hypo_idx) for hypo_idx in range(num_hypos)]
+        # if `input_ids` is padded this will do some useless computations, but that is fine (avoids XLA recompilation)
+        for i in range(seq_len - (self.ngram_size - 1)):
+            ngrams = input_ids[:, i:i + self.ngram_size]
 
-        return banned_tokens
+            # creates the indexing for the batch and the n-th member of the ngram
+            batch_indexing, ngram_indexing = tf.meshgrid(tf.range(ngrams.shape[0]), tf.range(ngrams.shape[1] - 1))
+            batch_indexing = tf.reshape(tf.transpose(batch_indexing), (-1,))
+            ngram_indexing = tf.reshape(tf.transpose(ngram_indexing), (-1,))
 
-    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+            # creates the indexing for the current -> next token pairs
+            curr_tokens = ngrams[:, :-1]
+            next_tokens = ngrams[:, 1:]
+            current_token_indexing = tf.reshape(curr_tokens, (-1,))
+            next_token_indexing = tf.reshape(next_tokens, (-1,))
 
-        # TODO (joao): enable XLA on this logits processor. See discussion and attempts in
-        # https://github.com/huggingface/transformers/pull/16974
-        if not tf.executing_eagerly():
-            raise NotImplementedError("TFNoRepeatNGramLogitsProcessor is only implemented for eager execution.")
-
-        batch_size, vocab_size = scores.shape
-        banned_tokens = self.calc_banned_ngram_tokens(input_ids, batch_size, cur_len)
-
-        # create banned_tokens boolean mask
-        banned_tokens_indices_mask = []
-        for banned_tokens_slice in banned_tokens:
-            banned_tokens_indices_mask.append(
-                [True if token in banned_tokens_slice else False for token in range(vocab_size)]
+            # scatters the observed ngrams into the transition tensor
+            update_indices = tf.stack(
+                (batch_indexing, ngram_indexing, current_token_indexing, next_token_indexing),
+                axis=1
+            )
+            transition_tensor = tf.tensor_scatter_nd_update(
+                tensor=transition_tensor,
+                indices=update_indices,
+                updates=tf.ones(update_indices.shape[0], dtype=tf.bool),
             )
 
-        scores = tf.where(tf.convert_to_tensor(banned_tokens_indices_mask, dtype=tf.bool), -float("inf"), scores)
+        return transition_tensor
 
+    def get_banned_tokens_mask(self, latest_tokens: tf.Tensor, transition_tensor: tf.Tensor) -> tf.Tensor:
+        """
+        Determines which tokens must be banned given latest tokens and the transition tensor (i.e. the previously
+        seen ngrams).
+
+        First gathers a boolean mask that depicts whether the latest sequence of tokens has seen before (for each
+        batch member). Then, for each batch member, finds which tokens have been generated after the last token.
+        Combining the two, we have the forbidden ngrams.
+        """
+        batch_size = latest_tokens.shape[0]
+
+        # 1. Get a mask that tell us whether `latest_tokens` has been generated yet. shape: [batch_size, 1]
+        # creates the indexing for the batch and the n-th member of the ngram
+        previously_generated_mask = tf.ones((batch_size, 1), dtype=tf.bool)
+        for i in range(self.ngram_size - 2):
+            gather_indices = tf.stack(
+                (tf.ones((batch_size), dtype=tf.int32) * i, latest_tokens[:, i], latest_tokens[:, i + 1]),
+                axis=1
+            )
+            # AND is equivalent to multiplying boolean masks
+            previously_generated_mask &= tf.expand_dims(
+                tf.gather_nd(params=transition_tensor, indices=gather_indices, batch_dims=1), axis=1
+            )
+
+        # 2. Get a mask that tells us whether a certain token was ever generated after for the last token in
+        # `latest_tokens`, in the last position of the ngram. shape: [batch_size, vocab_size]
+        gather_indices = tf.stack(
+            (tf.ones((batch_size), dtype=tf.int32) * self.ngram_size - 2, latest_tokens[:, -1]),
+            axis=1
+        )
+        next_forbidden_mask = tf.gather_nd(params=transition_tensor, indices=gather_indices, batch_dims=1)
+
+        # AND is equivalent to multiplying boolean masks
+        return previously_generated_mask & next_forbidden_mask
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        _, vocab_size = scores.shape
+        transition_tensor = self.get_transition_tensor(input_ids, vocab_size)
+
+        latest_tokens = input_ids[:, cur_len - self.ngram_size + 1 : cur_len]
+        banned_tokens_indices_mask = self.get_banned_tokens_mask(latest_tokens, transition_tensor)
+
+        scores = tf.where(banned_tokens_indices_mask, -float("inf"), scores)
         return scores
 
 

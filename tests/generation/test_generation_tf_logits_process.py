@@ -219,7 +219,8 @@ class TFLogitsProcessorTest(unittest.TestCase):
             tf.math.reduce_sum(tf.where(filtered_dist != 0.0, 1, 0), axis=-1).numpy().tolist(), [3, 2]
         )
 
-    def test_no_repeat_ngram_dist_processor(self):
+    @parameterized.expand([(False,), (True,)])
+    def test_no_repeat_ngram_dist_processor(self, use_xla):
         vocab_size = 3
         batch_size = 2
         cur_len = 4
@@ -231,6 +232,9 @@ class TFLogitsProcessorTest(unittest.TestCase):
 
         no_repeat_proc_2_gram = TFNoRepeatNGramLogitsProcessor(2)
         no_repeat_proc_3_gram = TFNoRepeatNGramLogitsProcessor(3)
+        if use_xla:
+            no_repeat_proc_2_gram = tf.function(no_repeat_proc_2_gram, jit_compile=True)
+            no_repeat_proc_3_gram = tf.function(no_repeat_proc_3_gram, jit_compile=True)
 
         filtered_scores_2_gram = no_repeat_proc_2_gram(input_ids, tf.identity(scores), cur_len)
         filtered_scores_3_gram = no_repeat_proc_3_gram(input_ids, tf.identity(scores), cur_len)
@@ -330,7 +334,6 @@ class TFLogitsProcessorTest(unittest.TestCase):
 
     @parameterized.expand([(False,), (True,)])
     def test_processor_list(self, use_xla):
-        # TODO (Joao): reintroduce TFNoRepeatNGramLogitsProcessor when it gets compatible with XLA
         batch_size = 4
         cur_len = 10
         vocab_size = 15
@@ -349,7 +352,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
         rep_penalty_proc = TFRepetitionPenaltyLogitsProcessor(penalty=2.0)
         top_k_warp = TFTopKLogitsWarper(3)
         top_p_warp = TFTopPLogitsWarper(0.8)
-        # no_repeat_proc = TFNoRepeatNGramLogitsProcessor(2)
+        no_repeat_proc = TFNoRepeatNGramLogitsProcessor(2)
         no_bad_words_dist_proc = TFNoBadWordsLogitsProcessor(bad_words_ids=[[1]], eos_token_id=eos_token_id)
         if use_xla:
             min_dist_proc = tf.function(min_dist_proc, jit_compile=True)
@@ -357,7 +360,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
             rep_penalty_proc = tf.function(rep_penalty_proc, jit_compile=True)
             top_k_warp = tf.function(top_k_warp, jit_compile=True)
             top_p_warp = tf.function(top_p_warp, jit_compile=True)
-            # no_repeat_proc = tf.function(no_repeat_proc, jit_compile=True)
+            no_repeat_proc = tf.function(no_repeat_proc, jit_compile=True)
             no_bad_words_dist_proc = tf.function(no_bad_words_dist_proc, jit_compile=True)
 
         # no processor list
@@ -366,7 +369,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
         scores = rep_penalty_proc(input_ids, scores, cur_len)
         scores = top_k_warp(input_ids, scores, cur_len)
         scores = top_p_warp(input_ids, scores, cur_len)
-        # scores = no_repeat_proc(input_ids, scores, cur_len)
+        scores = no_repeat_proc(input_ids, scores, cur_len)
         scores = no_bad_words_dist_proc(input_ids, scores, cur_len)
 
         # with processor list
@@ -377,7 +380,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
                 rep_penalty_proc,
                 top_k_warp,
                 top_p_warp,
-                # no_repeat_proc,
+                no_repeat_proc,
                 no_bad_words_dist_proc,
             ]
         )
