@@ -41,7 +41,8 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "microsoft/xclip-base-patch32"
 
 X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "microsoft/xclip-base-patch32",
+    # TODO update to appropriate organization
+    "nielsr/xclip-base-patch32",
     # See all X-CLIP models at https://huggingface.co/models?filter=x-clip
 ]
 
@@ -1448,8 +1449,8 @@ class XClipModel(XClipPreTrainedModel):
         image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
-        print("Shape of image embeds:", image_embeds.shape)
-        print("Shape of text embeds:", text_embeds.shape)
+        # print("Shape of image embeds:", image_embeds.shape)
+        # print("Shape of text embeds:", text_embeds.shape)
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
@@ -1461,7 +1462,7 @@ class XClipModel(XClipPreTrainedModel):
             loss = x_clip_loss(logits_per_text)
 
         if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_embeds, vision_outputs)
+            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
             return ((loss,) + output) if loss is not None else output
 
         return XClipOutput(

@@ -27,6 +27,7 @@ _import_structure = {
         "XClipTextConfig",
         "XClipVisionConfig",
     ],
+    "processing_x_clip": ["XClipProcessor"],
 }
 
 try:
@@ -50,6 +51,7 @@ if TYPE_CHECKING:
         XClipTextConfig,
         XClipVisionConfig,
     )
+    from .processing_x_clip import XClipProcessor
 
     try:
         if not is_torch_available():

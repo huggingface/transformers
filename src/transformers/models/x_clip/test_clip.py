@@ -1,6 +1,7 @@
-from transformers import CLIPProcessor, CLIPConfig, CLIPModel
 from PIL import Image
+
 import requests
+from transformers import CLIPConfig, CLIPModel, CLIPProcessor
 
 
 model = CLIPModel(CLIPConfig())

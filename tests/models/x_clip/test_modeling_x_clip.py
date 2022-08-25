@@ -24,7 +24,7 @@ import numpy as np
 
 import requests
 from transformers import XClipConfig, XClipTextConfig, XClipVisionConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -93,7 +93,9 @@ class XClipVisionModelTester:
         self.seq_length = num_patches + 1
 
     def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor(
+            [self.batch_size * self.num_frames, self.num_channels, self.image_size, self.image_size]
+        )
         config = self.get_config()
 
         return config, pixel_values
@@ -124,8 +126,10 @@ class XClipVisionModelTester:
         image_size = (self.image_size, self.image_size)
         patch_size = (self.patch_size, self.patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size * self.num_frames, num_patches + 1, self.hidden_size)
+        )
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size * self.num_frames, self.hidden_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -271,6 +275,37 @@ class XClipVisionModelTest(ModelTesterMixin, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
             )
+
+    @require_torch_multi_gpu
+    def test_multi_gpu_data_parallel_forward(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # some params shouldn't be scattered by nn.DataParallel
+        # so just remove them if they are present.
+        blacklist_non_batched_params = ["head_mask", "decoder_head_mask", "cross_attn_head_mask"]
+        for k in blacklist_non_batched_params:
+            inputs_dict.pop(k, None)
+
+        # move input tensors to cuda:O
+        for k, v in inputs_dict.items():
+            if torch.is_tensor(v):
+                inputs_dict[k] = v.to(0)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            model.to(0)
+            model.eval()
+
+            # Wrap model in nn.DataParallel
+            model = nn.DataParallel(model)
+            with torch.no_grad():
+                test = self._prepare_for_class(inputs_dict, model_class)
+                for k, v in test.items():
+                    if isinstance(v, torch.Tensor):
+                        print(k, v.shape)
+                    else:
+                        print(k, v)
+                _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
 
 class XClipTextModelTester:
@@ -611,7 +646,8 @@ def prepare_img():
 class XClipModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        model_name = "microsoft/xclip-base-patch32"
+        # TODO update organization
+        model_name = "nielsr/xclip-base-patch32"
         model = XClipModel.from_pretrained(model_name).to(torch_device)
         processor = CLIPProcessor.from_pretrained(model_name)
 

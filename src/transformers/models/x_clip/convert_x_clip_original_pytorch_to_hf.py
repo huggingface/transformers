@@ -18,7 +18,14 @@ import argparse
 import torch
 
 from huggingface_hub import hf_hub_download
-from transformers import AutoTokenizer, XClipConfig, XClipModel
+from transformers import (
+    CLIPTokenizer,
+    CLIPTokenizerFast,
+    VideoMAEFeatureExtractor,
+    XClipConfig,
+    XClipModel,
+    XClipProcessor,
+)
 
 
 def get_xclip_config(model_name):
@@ -175,6 +182,11 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_pat
     assert missing_keys == ["text_model.embeddings.position_ids", "vision_model.embeddings.position_ids"]
     model.eval()
 
+    feature_extractor = VideoMAEFeatureExtractor()
+    slow_tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+    fast_tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32")
+    processor = XClipProcessor(feature_extractor=feature_extractor, tokenizer=fast_tokenizer)
+
     file_path = hf_hub_download(
         repo_id="hf-internal-testing/spaghetti-video-8-frames", filename="pixel_values.pt", repo_type="dataset"
     )
@@ -183,8 +195,7 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_pat
     # feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/{}".format(model_name.replace("_", "-")))
     # inputs = feature_extractor(images=image, return_tensors="pt")
 
-    tokenizer = AutoTokenizer.from_pretrained("openai/clip-vit-base-patch32")
-    input_ids = tokenizer(
+    input_ids = fast_tokenizer(
         ["playing sports", "eating spaghetti", "go shopping"], padding="max_length", return_tensors="pt"
     ).input_ids
 
@@ -193,9 +204,7 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_pat
 
     # Verify outputs
     logits_per_image = outputs.logits_per_image
-    print("Shape of logits per image:", logits_per_image.shape)
     probs = logits_per_image.softmax(dim=1)
-    print("Probs:", probs)
     expected_probs = torch.tensor([[0.0019, 0.9951, 0.0030]])
     assert torch.allclose(probs, expected_probs, atol=1e-3)
     print("Looks ok!")
@@ -205,8 +214,10 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_pat
         model.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        print("Pushing to the hub...")
+        print("Pushing model, processor and slow tokenizer files to the hub...")
         model.push_to_hub(model_name, organization="nielsr")
+        processor.push_to_hub(model_name, organization="nielsr")
+        slow_tokenizer.push_to_hub(model_name, organization="nielsr")
 
 
 if __name__ == "__main__":

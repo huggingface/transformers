@@ -165,6 +165,7 @@ _import_structure = {
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPConfig",
+        "CLIPProcessor",
         "CLIPTextConfig",
         "CLIPTokenizer",
         "CLIPVisionConfig",
@@ -370,6 +371,7 @@ _import_structure = {
     "models.x_clip": [
         "X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "XClipConfig",
+        "XClipProcessor",
         "XClipTextConfig",
         "XClipVisionConfig",
     ],
@@ -644,7 +646,6 @@ else:
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
-    _import_structure["models.clip"].append("CLIPProcessor")
     _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
@@ -3003,6 +3004,7 @@ if TYPE_CHECKING:
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPConfig,
+        CLIPProcessor,
         CLIPTextConfig,
         CLIPTokenizer,
         CLIPVisionConfig,
@@ -3179,7 +3181,13 @@ if TYPE_CHECKING:
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
-    from .models.x_clip import X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP, XClipConfig, XClipTextConfig, XClipVisionConfig
+    from .models.x_clip import (
+        X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        XClipConfig,
+        XClipProcessor,
+        XClipTextConfig,
+        XClipVisionConfig,
+    )
     from .models.xglm import XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XGLMConfig
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
     from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
@@ -3417,7 +3425,7 @@ if TYPE_CHECKING:
     else:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
-        from .models.clip import CLIPFeatureExtractor, CLIPProcessor
+        from .models.clip import CLIPFeatureExtractor
         from .models.convnext import ConvNextFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
