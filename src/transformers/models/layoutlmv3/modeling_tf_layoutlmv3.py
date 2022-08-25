@@ -84,7 +84,7 @@ class TFLayoutLMv3PatchEmbeddings(tf.keras.layers.Layer):
         self.hidden_size = config.hidden_size
         self.num_patches = (config.input_size**2) // (patch_sizes[0] * patch_sizes[1])
 
-    def call(self, pixel_values) -> tf.Tensor:
+    def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
         # So change the input format from `NCHW` to `NHWC`.
         pixel_values = tf.transpose(pixel_values, perm=[0, 2, 3, 1])
@@ -951,12 +951,12 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
 
         if not return_dict:
             return (sequence_output,) + encoder_outputs[1:]
-        
+
         return TFBaseModelOutput(
             last_hidden_state=sequence_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-        )            
+        )
 
         return TFBaseModelOutput(
             last_hidden_state=sequence_output,
