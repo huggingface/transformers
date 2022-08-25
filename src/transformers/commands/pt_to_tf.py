@@ -59,7 +59,7 @@ def convert_command_factory(args: Namespace):
     return PTtoTFCommand(
         args.model_name,
         args.local_dir,
-        args.max_hidden_error,
+        args.max_error,
         args.new_weights,
         args.no_pr,
         args.push,
@@ -96,12 +96,11 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             help="Optional local directory of the model repository. Defaults to /tmp/{model_name}",
         )
         train_parser.add_argument(
-            "--max-hidden-error",
+            "--max-error",
             type=float,
             default=MAX_ERROR,
             help=(
-                f"Maximum error tolerance for hidden layer outputs. Defaults to {MAX_ERROR}. If you suspect the hidden"
-                " layers outputs will be used for downstream applications, avoid increasing this tolerance."
+                f"Maximum error tolerance. Defaults to {MAX_ERROR}. This flag should be avoided, use at your own risk."
             ),
         )
         train_parser.add_argument(
@@ -168,7 +167,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         self,
         model_name: str,
         local_dir: str,
-        max_hidden_error: float,
+        max_error: float,
         new_weights: bool,
         no_pr: bool,
         push: bool,
@@ -178,7 +177,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         self._logger = logging.get_logger("transformers-cli/pt_to_tf")
         self._model_name = model_name
         self._local_dir = local_dir if local_dir else os.path.join("/tmp", model_name)
-        self._max_hidden_error = max_hidden_error
+        self._max_error = max_error
         self._new_weights = new_weights
         self._no_pr = no_pr
         self._push = push
@@ -239,9 +238,10 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         return pt_input, tf_input
 
     def run(self):
-        if version.parse(huggingface_hub.__version__) < version.parse("0.8.1"):
+        # hub version 0.9.0 introduced the possibility of programmatically opening PRs with normal write tokens.
+        if version.parse(huggingface_hub.__version__) < version.parse("0.9.0"):
             raise ImportError(
-                "The huggingface_hub version must be >= 0.8.1 to use this command. Please update your huggingface_hub"
+                "The huggingface_hub version must be >= 0.9.0 to use this command. Please update your huggingface_hub"
                 " installation."
             )
         else:
@@ -293,13 +293,13 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             )
         max_crossload_output_diff = max(output_differences.values()) if output_differences else 0.0
         max_crossload_hidden_diff = max(hidden_differences.values())
-        if max_crossload_output_diff > MAX_ERROR or max_crossload_hidden_diff > self._max_hidden_error:
+        if max_crossload_output_diff > self._max_error or max_crossload_hidden_diff > self._max_error:
             raise ValueError(
                 "The cross-loaded TensorFlow model has different outputs, something went wrong!\n"
-                + f"\nList of maximum output differences above the threshold ({MAX_ERROR}):\n"
-                + "\n".join([f"{k}: {v:.3e}" for k, v in output_differences.items() if v > MAX_ERROR])
-                + f"\n\nList of maximum hidden layer differences above the threshold ({self._max_hidden_error}):\n"
-                + "\n".join([f"{k}: {v:.3e}" for k, v in hidden_differences.items() if v > self._max_hidden_error])
+                + f"\nList of maximum output differences above the threshold ({self._max_error}):\n"
+                + "\n".join([f"{k}: {v:.3e}" for k, v in output_differences.items() if v > self._max_error])
+                + f"\n\nList of maximum hidden layer differences above the threshold ({self._max_error}):\n"
+                + "\n".join([f"{k}: {v:.3e}" for k, v in hidden_differences.items() if v > self._max_error])
             )
 
         # Save the weights in a TF format (if needed) and confirms that the results are still good
@@ -322,13 +322,13 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             )
         max_conversion_output_diff = max(output_differences.values()) if output_differences else 0.0
         max_conversion_hidden_diff = max(hidden_differences.values())
-        if max_conversion_output_diff > MAX_ERROR or max_conversion_hidden_diff > self._max_hidden_error:
+        if max_conversion_output_diff > self._max_error or max_conversion_hidden_diff > self._max_error:
             raise ValueError(
                 "The converted TensorFlow model has different outputs, something went wrong!\n"
-                + f"\nList of maximum output differences above the threshold ({MAX_ERROR}):\n"
-                + "\n".join([f"{k}: {v:.3e}" for k, v in output_differences.items() if v > MAX_ERROR])
-                + f"\n\nList of maximum hidden layer differences above the threshold ({self._max_hidden_error}):\n"
-                + "\n".join([f"{k}: {v:.3e}" for k, v in hidden_differences.items() if v > self._max_hidden_error])
+                + f"\nList of maximum output differences above the threshold ({self._max_error}):\n"
+                + "\n".join([f"{k}: {v:.3e}" for k, v in output_differences.items() if v > self._max_error])
+                + f"\n\nList of maximum hidden layer differences above the threshold ({self._max_error}):\n"
+                + "\n".join([f"{k}: {v:.3e}" for k, v in hidden_differences.items() if v > self._max_error])
             )
 
         commit_message = "Update TF weights" if self._new_weights else "Add TF weights"
@@ -348,6 +348,10 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                 f"Maximum conversion output difference={max_conversion_output_diff:.3e}; "
                 f"Maximum conversion hidden layer difference={max_conversion_hidden_diff:.3e};\n"
             )
+            if self._max_error > MAX_ERROR:
+                commit_descrition += (
+                    f"\n\nCAUTION: The maximum admissible error was manually increased to {self._max_error}!"
+                )
             if self._extra_commit_description:
                 commit_descrition += "\n\n" + self._extra_commit_description
 
