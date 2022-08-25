@@ -138,7 +138,7 @@ class TFRegNetModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @unittest.skipIf(
         not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,
-        reason="TF (<=2.8) does not support backprop for grouped convolutions on CPU.",
+        reason="TF does not support backprop for grouped convolutions on CPU.",
     )
     def test_keras_fit(self):
         super().test_keras_fit()
