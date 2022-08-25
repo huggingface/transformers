@@ -1453,7 +1453,6 @@ class XClipModel(XClipPreTrainedModel):
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
-
         logits_per_image = torch.einsum("bd,bkd->bk", image_embeds, logit_scale * text_embeds)
         logits_per_text = logits_per_image.T
 
@@ -1471,6 +1470,6 @@ class XClipModel(XClipPreTrainedModel):
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
             image_embeds=image_embeds,
-            text_model_output=text_embeds,
+            text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )

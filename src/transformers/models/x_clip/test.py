@@ -22,7 +22,5 @@ input_ids = tokenizer(
 
 
 with torch.no_grad():
-    outputs = model(input_ids=input_ids, pixel_values=pixel_values)
-    logits_per_image = outputs.logits_per_image
-
-print("Shape of logits per image:", logits_per_image.shape)
+    outputs = model(input_ids=input_ids, pixel_values=pixel_values, return_loss=True)
+    print(outputs[0])

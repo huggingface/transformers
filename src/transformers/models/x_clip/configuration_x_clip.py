@@ -84,7 +84,7 @@ class XClipTextConfig(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
-    model_type = "x_clip_text_model"
+    model_type = "xclip_text_model"
 
     def __init__(
         self,
@@ -126,7 +126,7 @@ class XClipTextConfig(PretrainedConfig):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from XClipConfig
-        if config_dict.get("model_type") == "x_clip":
+        if config_dict.get("model_type") == "xclip":
             config_dict = config_dict["text_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
@@ -203,7 +203,7 @@ class XClipVisionConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "x_clip_vision_model"
+    model_type = "xclip_vision_model"
 
     def __init__(
         self,
@@ -256,7 +256,7 @@ class XClipVisionConfig(PretrainedConfig):
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from XClipConfig
-        if config_dict.get("model_type") == "x_clip":
+        if config_dict.get("model_type") == "xclip":
             config_dict = config_dict["vision_config"]
 
         if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
@@ -302,7 +302,7 @@ class XClipConfig(PretrainedConfig):
             Dictionary of keyword arguments.
     """
 
-    model_type = "x-clip"
+    model_type = "xclip"
     is_composition = True
 
     def __init__(
@@ -345,7 +345,7 @@ class XClipConfig(PretrainedConfig):
     @classmethod
     def from_text_vision_configs(cls, text_config: XClipTextConfig, vision_config: XClipVisionConfig, **kwargs):
         r"""
-        Instantiate a [`XClipConfig`] (or a derived class) from x_clip text model configuration and x_clip vision model
+        Instantiate a [`XClipConfig`] (or a derived class) from xclip text model configuration and xclip vision model
         configuration.
 
         Returns:

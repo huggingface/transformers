@@ -55,7 +55,7 @@ class XClipVisionModelTester:
     def __init__(
         self,
         parent,
-        batch_size=16,
+        batch_size=8,
         image_size=30,
         patch_size=2,
         num_channels=3,
@@ -277,7 +277,7 @@ class XClipTextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=12,
+        batch_size=8,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
@@ -475,6 +475,7 @@ class XClipModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
     test_torchscript = False
+    maxdiff = None
 
     def setUp(self):
         self.model_tester = XClipModelTester(self)
