@@ -881,6 +881,8 @@ class ModelTesterMixin:
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
     def _create_and_check_torch_fx_tracing(self, config, inputs_dict, output_loss=False):
+        # This method has memory leak issue (caused by methods in `torch.jit`), so let's run it in a subprocess.
+        # See https://github.com/huggingface/transformers/issues/18525
         if not is_torch_fx_available() or not self.fx_compatible:
             return
 
