@@ -22,6 +22,7 @@ import operator
 import os
 import random
 import warnings
+import traceback
 from typing import Any, Callable, Dict, List, Optional, Type, Union, Iterable
 
 import torch
@@ -610,10 +611,8 @@ class HFModelAttribute(HFProxy):
             return super().__getattribute__(item)
 
         try:
-            # import pdb; pdb.set_trace()
             _metadata = super().__getattribute__("_metadata")
         except AttributeError:
-            import pdb; pdb.set_trace()
             _metadata = None
         if _metadata is not None:
             return getattr(_metadata, item)
@@ -631,6 +630,7 @@ class HFModelAttribute(HFProxy):
 
 class HFAttribute(HFProxy):
     def __init__(self, root, attr: str):
+        assert attr != "_metadata"
         self.root = root
         self.attr = attr
         self.tracer = root.tracer
@@ -762,10 +762,10 @@ class HFTracer(Tracer):
 
         # Creating a random input shape to generate dummy inputs.
         batch_size = _generate_random_int()
-        if "past_key_values" in input_names:
-            sequence_length = 1
-        else:
-            sequence_length = _generate_random_int()
+        # if "past_key_values" in input_names:
+        #     sequence_length = 1
+        # else:
+        sequence_length = _generate_random_int()
 
         past_sequence_length = _generate_random_int()
         shape = [batch_size, sequence_length, past_sequence_length]
@@ -961,7 +961,7 @@ class HFTracer(Tracer):
             rv.install_metadata(meta_out)
         except Exception as e:
             if _IS_IN_DEBUG_MODE:
-                warnings.warn(f"Could not compute metadata for {kind} target {target}: {e}")
+                warnings.warn(f"Could not compute metadata for {kind} target {target} args {args} kwargs {kwargs}: {e}")
 
         return rv
 
@@ -1119,9 +1119,10 @@ class HFTracer(Tracer):
                 # if we're in a leaf module, let pytorch handle it:
                 patched_function = nn.Module.__getattribute__
                 nn.Module.__getattribute__ = orig_get_attribute
-                if self.is_leaf_module(module, self.path_of_module(module)):
-                    return attribute
+                is_leaf_module = self.is_leaf_module(module, self.path_of_module(module))
                 nn.Module.__getattribute__ = patched_function
+                if is_leaf_module:
+                    return attribute
 
                 if name not in torch_module_dict:
                     patched_function = nn.Module.__getattribute__
@@ -1129,7 +1130,8 @@ class HFTracer(Tracer):
                     # TODO @thomasw21: we might need to prepend `name` with the hierarchy of the module
                     prefix = self.path_of_module(module)
                     name = f"{prefix}.{name}" if prefix != "" else name
-                    proxy = self.create_proxy("get_attr", name, (), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, self))  # type: ignore[arg-type]
+                    # proxy = self.create_proxy("call_function", builtins.getattr, (module, name), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, self))  # type: ignore[arg-type]
+                    proxy = self.create_proxy("get_attr", name, (name,), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, self))  # type: ignore[arg-type]
                     proxy.install_metadata(attribute)
                     nn.Module.__getattribute__ = patched_function
                     return proxy
@@ -1148,6 +1150,13 @@ class HFTracer(Tracer):
         ]
         self.patched_torch_methods["floor"] = [
             (_patch_fn_for_proxy(math.floor, self), math, math.floor)
+        ]
+        # TODO @thomasw21 this breaks `torch_arange` because we rely on this .....
+        # self.patched_torch_methods["float"] = [
+        #     (_patch_fn_for_proxy(builtins.float, self), builtins, builtins.float)
+        # ]
+        self.patched_torch_methods["finfo"] = [
+            (_patch_fn_for_proxy(torch.finfo, self), torch, torch.finfo)
         ]
 
         with Patch(self, self.patched_torch_methods):
