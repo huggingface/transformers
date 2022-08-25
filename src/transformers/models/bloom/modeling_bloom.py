@@ -206,11 +206,6 @@ class BloomGelu(nn.Module):
         else:
             return bloom_gelu_forward(x)
 
-
-@torch.fx.wrap
-def minimum_value(dtype: torch.dtype):
-    return torch.finfo(dtype).min
-
 class BloomAttention(nn.Module):
     def __init__(self, config: BloomConfig):
         super().__init__()
@@ -331,12 +326,11 @@ class BloomAttention(nn.Module):
         attention_scores = matmul_result.view(batch_size, self.num_heads, q_length, kv_length)
 
         # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype - [batch_size, num_heads, q_length, kv_length]
-        # input_dtype = attention_scores.dtype
-        input_dtype = self.query_key_value.weight.dtype
+        input_dtype = attention_scores.dtype
         # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
         if input_dtype == torch.float16:
             attention_scores = attention_scores.to(torch.float)
-        attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min) # torch.finfo(attention_scores.dtype).min
+        attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min)
         attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
         # attention_probs = attention_probs * ~attention_mask # Prevent values to be too huge
 
@@ -673,7 +667,7 @@ class BloomModel(BloomPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
 
-        # use_cache = use_cache if use_cache is not None else self.config.use_cache
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:
