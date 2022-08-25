@@ -404,16 +404,17 @@ def main():
             desc="preprocess train dataset",
         )
 
-    # filter data that is shorter than min_input_length or longer than
+    # filter training data that is shorter than min_input_length or longer than
     # max_input_length
     def is_audio_in_length_range(length):
         return length > min_input_length and length < max_input_length
 
-    vectorized_datasets = vectorized_datasets.filter(
-        is_audio_in_length_range,
-        num_proc=num_workers,
-        input_columns=["input_length"],
-    )
+    if training_args.do_train:
+        vectorized_datasets["train"] = vectorized_datasets["train"].filter(
+            is_audio_in_length_range,
+            num_proc=num_workers,
+            input_columns=["input_length"],
+        )
 
     # for large datasets it is advised to run the preprocessing on a
     # single machine first with `args.preprocessing_only` since there will mostly likely
