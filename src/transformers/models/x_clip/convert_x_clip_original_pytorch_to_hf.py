@@ -15,6 +15,7 @@
 
 import argparse
 
+import numpy as np
 import torch
 
 from huggingface_hub import hf_hub_download
@@ -169,6 +170,14 @@ def convert_state_dict(orig_state_dict, config):
     return orig_state_dict
 
 
+def prepare_video():
+    file = hf_hub_download(
+        repo_id="datasets/hf-internal-testing/spaghetti-video", filename="eating_spaghetti_8_frames.npy"
+    )
+    video = np.load(file)
+    return list(video)
+
+
 def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_path=None, push_to_hub=False):
     config = get_xclip_config(model_name)
     model = XClipModel(config)
@@ -187,20 +196,13 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_pat
     fast_tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32")
     processor = XClipProcessor(feature_extractor=feature_extractor, tokenizer=fast_tokenizer)
 
-    file_path = hf_hub_download(
-        repo_id="hf-internal-testing/spaghetti-video-8-frames", filename="pixel_values.pt", repo_type="dataset"
+    video = prepare_video()
+    inputs = processor(
+        text=["playing sports", "eating spaghetti", "go shopping"], videos=video, return_tensors="pt", padding=True
     )
-    pixel_values = torch.load(file_path)
-
-    # feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/{}".format(model_name.replace("_", "-")))
-    # inputs = feature_extractor(images=image, return_tensors="pt")
-
-    input_ids = fast_tokenizer(
-        ["playing sports", "eating spaghetti", "go shopping"], padding="max_length", return_tensors="pt"
-    ).input_ids
 
     with torch.no_grad():
-        outputs = model(input_ids=input_ids, pixel_values=pixel_values)
+        outputs = model(**inputs)
 
     # Verify outputs
     logits_per_image = outputs.logits_per_image
