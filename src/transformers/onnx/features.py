@@ -358,6 +358,15 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.longt5.LongT5OnnxConfig",
         ),
+        "longformer": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "multiple-choice",
+            "question-answering",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls="models.longformer.LongformerOnnxConfig",
+        ),
         "marian": supported_features_mapping(
             "default",
             "default-with-past",
