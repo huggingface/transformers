@@ -1097,9 +1097,6 @@ class XClipMultiframeIntegrationTransformer(nn.Module):
     ) -> Union[Tuple, BaseModelOutput]:
         residual = hidden_states
 
-        print("Shape of hidden states:", hidden_states.shape)
-        print("Shape of position embedding:", self.position_embedding.data.shape)
-
         # add position embeddings
         hidden_states = hidden_states + self.position_embedding
 
@@ -1419,8 +1416,6 @@ class XClipModel(XClipPreTrainedModel):
 
         image_embeds = self.mit(cls_features)
 
-        print("Shape of image embeds:", image_embeds.shape)
-
         # print("Shape of output of MIT:", image_embeds.shape)
         # print("First values of output of MIT:", image_embeds[0, :3])
 
@@ -1442,8 +1437,6 @@ class XClipModel(XClipPreTrainedModel):
         text_embeds = text_outputs[1]
         text_embeds = self.text_projection(text_embeds)
 
-        print("Shape of inital text embeds:", text_embeds.shape)
-
         # TODO remove this assertion (text pooler output)
         # assert torch.allclose(text_embeds[0, :3], torch.tensor([-0.2870, -0.3504, 0.0417]), atol=1e-4)
         # print("Looks ok!")
@@ -1455,12 +1448,14 @@ class XClipModel(XClipPreTrainedModel):
         image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
+        print("Shape of image embeds:", image_embeds.shape)
+        print("Shape of text embeds:", text_embeds.shape)
+
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
-        print("Shape of text embeds:", text_embeds.shape)
-        print("Shape of image embeds:", image_embeds.shape)
-        logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
-        logits_per_image = logits_per_text.T
+
+        logits_per_image = torch.einsum("bd,bkd->bk", image_embeds, logit_scale * text_embeds)
+        logits_per_text = logits_per_image.T
 
         loss = None
         if return_loss:

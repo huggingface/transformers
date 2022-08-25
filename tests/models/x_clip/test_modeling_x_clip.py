@@ -444,13 +444,11 @@ class XClipModelTester:
             (
                 self.vision_model_tester.batch_size,
                 self.text_model_tester.batch_size,
-                self.vision_model_tester.batch_size,
             ),
         )
         self.parent.assertEqual(
             result.logits_per_text.shape,
             (
-                self.vision_model_tester.batch_size,
                 self.text_model_tester.batch_size,
                 self.vision_model_tester.batch_size,
             ),
