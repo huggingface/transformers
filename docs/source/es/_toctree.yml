@@ -3,8 +3,6 @@
     title: 🤗 Transformers
   - local: quicktour
     title: Tour rápido
-  - local: installation
-    title: Instalación
   title: Empezar
 - sections:
   - local: pipeline_tutorial
