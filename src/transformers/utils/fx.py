@@ -539,7 +539,7 @@ class HFProxy(Proxy):
 
     def install_metadata(self, metadata):
         if isinstance(metadata, torch.fx.Proxy):
-            raise ValueError("wtf")
+            raise ValueError(f"Invalid value, got torch.fx.Proxy as metadata for {self}. Expected concrete value and instead got {metadata}")
         self._metadata = metadata
 
     @property
@@ -623,15 +623,10 @@ class HFModelAttribute(HFProxy):
         return tracer.create_proxy("get_attr", item, (), {},
                                    proxy_factory_fn=lambda node: HFModelAttribute(node, tracer))
 
-    # def __getattr__(self, k) -> 'Attribute':
-    #     # note: not added to the graph yet, if this is a method call
-    #     # we peephole optimize to the method invocation
-    #     return Attribute(self, k)
-
 
 class HFAttribute(HFProxy):
     def __init__(self, root, attr: str):
-        assert attr != "_metadata"
+        assert attr != "_metadata", "`_metadata` is an invalid attribute for a proxy"
         self.root = root
         self.attr = attr
         self.tracer = root.tracer
@@ -676,7 +671,7 @@ def _patch_fn_for_proxy(fn, tracer):
     return _apply_on_proxy
 
 
-def _gen_constructor_wrapper(__o, target):
+def _gen_constructor_wrapper(target):
     @functools.wraps(target)
     def wrapper(*args, **kwargs):
         proxy = None
@@ -722,6 +717,45 @@ class Patch:
                 setattr(__o, name, orig)
 
 
+def create_nn_module_getattribute_wrapper(tracer):
+    torch_module_dict = {
+        **nn.Module.__dict__,
+        **nn.Module().__dict__,
+    }
+    orig_get_attribute = nn.Module.__getattribute__
+
+    def get_weird_attribute(module, name):
+        attribute = orig_get_attribute(module, name)
+
+        if name in ["__dict__", "__class__", "__module__"]:
+            return attribute
+
+        # Already handled internally by `torch.fx`
+        if isinstance(attribute, (nn.Module, torch.Tensor, nn.Parameter)):
+            return attribute
+
+        # usually this are methods we don''t really need to build proxies out of them, just call them
+        if callable(attribute):
+            return attribute
+
+        # if we're in a leaf module, let pytorch handle it:
+        with Patch({"nn.Module.__getattribute__": [(nn.Module, "__getattribute__", nn.Module.__getattribute__, orig_get_attribute)]}):
+            is_leaf_module = tracer.is_leaf_module(module, tracer.path_of_module(module))
+        if is_leaf_module:
+            return attribute
+
+        if name not in torch_module_dict:
+            with Patch({"nn.Module.__getattribute__": [(nn.Module, "__getattribute__", nn.Module.__getattribute__, orig_get_attribute)]}):
+                prefix = tracer.path_of_module(module)
+                name = f"{prefix}.{name}" if prefix != "" else name
+                # proxy = self.create_proxy("call_function", builtins.getattr, (module, name), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, self))  # type: ignore[arg-type]
+                proxy = tracer.create_proxy("get_attr", name, (name,), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, tracer))  # type: ignore[arg-type]
+                proxy.install_metadata(attribute)
+            return proxy
+
+        return attribute
+
+    return get_weird_attribute
 
 class HFTracer(Tracer):
     """
@@ -995,17 +1029,7 @@ class HFTracer(Tracer):
                 if maybe_buffer_proxy is not None:
                     return maybe_buffer_proxy
 
-            # else:
-            #     all_non_tensor_attributes =
-            #     maybe_buffer_proxy = maybe_get_proxy_for_attr(
-            #         attr_val, all_non_tensor_attributes, parameter_proxy_cache
-            #     )
-            #     if maybe_buffer_proxy is not None:
-            #         return maybe_buffer_proxy
-
-            # TODO @thomasw21 return proxy for attributes as well
             return attr_val
-            # return self.create_proxy("get_attr", )
 
     def call_module(self, m, forward, args, kwargs):
         self.orig_forward = forward
@@ -1020,6 +1044,7 @@ class HFTracer(Tracer):
         concrete_args: Optional[Dict[str, Any]] = None,
         dummy_inputs: Optional[Dict[str, Any]] = None,
         complete_concrete_args_with_inputs_not_in_dummy_inputs: bool = True,
+        trace_non_torch_object: bool = False
     ) -> Graph:
         """
         Traces `root` and returns the corresponding FX `torch.fx.Graph` representation. `root` can either be a
@@ -1040,6 +1065,9 @@ class HFTracer(Tracer):
             complete_concrete_args_with_inputs_not_in_dummy_inputs (`bool`, *optional*, defaults to `True`):
                 If `True`, and `dummy_inputs` is specified, every argument that `root` can take that is not in
                 `dummy_inputs` and not in `concrete_args` will be added to `concrete_args`, otherwise does nothing.
+            trace_non_torch_object (`bool`, *optional*, defaults to `False`):
+                `torch.fx` currently only traces only torch object using proxies. If `True` extend the proxy mechanism
+                to all kinds of inputs.
 
         Returns:
             `torch.fx.Graph`:
@@ -1090,65 +1118,25 @@ class HFTracer(Tracer):
 
         patched_torch_methods = {
             f"torch.{target}": [
-                (torch, target, getattr(torch, target), _gen_constructor_wrapper(torch, getattr(torch, target)))
+                (torch, target, getattr(torch, target), _gen_constructor_wrapper(getattr(torch, target)))
             ] for target in self._TORCH_METHODS_TO_PATCH
         }
 
-        def create_nn_module_getattribute_wrapper():
-            torch_module_dict = {
-                **nn.Module.__dict__,
-                **nn.Module().__dict__,
+        if trace_non_torch_object:
+            patched_methods = {
+                **patched_torch_methods,
+                "nn.Module.__getattribute__": [
+                    (nn.Module, "__getattribute__", nn.Module.__getattribute__, create_nn_module_getattribute_wrapper(self))
+                ],
+                "math.log2": [(math, "log2", math.log2, _patch_fn_for_proxy(math.log2, self))],
+                "math.floor": [(math, "floor", math.floor, _patch_fn_for_proxy(math.floor, self))],
+                "torch.finfo": [(torch, "finfo", torch.finfo, _patch_fn_for_proxy(torch.finfo, self))]
             }
-            orig_get_attribute = nn.Module.__getattribute__
+        else:
+            patched_methods = patched_torch_methods
 
-            def get_weird_attribute(module, name):
-                attribute = orig_get_attribute(module, name)
 
-                if name in ["__dict__", "__class__", "__module__"]:
-                    return attribute
-
-                # Already handled internally by `torch.fx`
-                if isinstance(attribute, (nn.Module, torch.Tensor, nn.Parameter)):
-                    return attribute
-
-                # usually this are methods we don''t really need to build proxies out of them, just call them
-                if callable(attribute):
-                    return attribute
-
-                # if we're in a leaf module, let pytorch handle it:
-                patched_function = nn.Module.__getattribute__
-                nn.Module.__getattribute__ = orig_get_attribute
-                is_leaf_module = self.is_leaf_module(module, self.path_of_module(module))
-                nn.Module.__getattribute__ = patched_function
-                if is_leaf_module:
-                    return attribute
-
-                if name not in torch_module_dict:
-                    patched_function = nn.Module.__getattribute__
-                    nn.Module.__getattribute__ = orig_get_attribute
-                    # TODO @thomasw21: we might need to prepend `name` with the hierarchy of the module
-                    prefix = self.path_of_module(module)
-                    name = f"{prefix}.{name}" if prefix != "" else name
-                    # proxy = self.create_proxy("call_function", builtins.getattr, (module, name), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, self))  # type: ignore[arg-type]
-                    proxy = self.create_proxy("get_attr", name, (name,), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, self))  # type: ignore[arg-type]
-                    proxy.install_metadata(attribute)
-                    nn.Module.__getattribute__ = patched_function
-                    return proxy
-
-                return attribute
-
-            return get_weird_attribute
-
-        patch_other_methods = {
-            "nn.Module.__getattribute__": [
-                (nn.Module, "__getattribute__", nn.Module.__getattribute__, create_nn_module_getattribute_wrapper())
-            ],
-            "math.log2":[(math, "log2", math.log2, _patch_fn_for_proxy(math.log2, self))],
-            "math.floor": [(math, "floor", math.floor, _patch_fn_for_proxy(math.floor, self))],
-            "torch.finfo": [(torch, "finfo", torch.finfo, _patch_fn_for_proxy(torch.finfo, self))]
-        }
-
-        with Patch({**patched_torch_methods, **patch_other_methods}):
+        with Patch(patched_methods):
             graph = super().trace(root, concrete_args=concrete_args)
 
         # This is necessary because concrete args are added as input to the traced module since
@@ -1260,6 +1248,7 @@ def symbolic_trace(
     model: PreTrainedModel,
     input_names: Optional[List[str]] = None,
     disable_check: bool = False,
+    **trace_kwargs
 ) -> GraphModule:
 
     """
@@ -1295,7 +1284,11 @@ def symbolic_trace(
 
     # Tracing.
     tracer = HFTracer()
-    traced_graph = tracer.trace(model, concrete_args=concrete_args)
+    traced_graph = tracer.trace(
+        model,
+        concrete_args=concrete_args,
+        **trace_kwargs
+    )
     traced = torch.fx.GraphModule(model, traced_graph)
 
     traced.config = model.config
