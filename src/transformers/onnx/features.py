@@ -1,10 +1,11 @@
+import os
 from functools import partial, reduce
 from typing import TYPE_CHECKING, Callable, Dict, Optional, Tuple, Type, Union
 
 import transformers
 
 from .. import PretrainedConfig, is_tf_available, is_torch_available
-from ..utils import logging
+from ..utils import TF2_WEIGHTS_NAME, WEIGHTS_NAME, logging
 from .config import OnnxConfig
 
 
@@ -567,8 +568,58 @@ class FeaturesManager:
         return task_to_automodel[task]
 
     @staticmethod
+    def determine_framework(model: str, framework: str = None) -> str:
+        """
+        Determines the framework to use for the export.
+
+        The priority is in the following order:
+            1. User input via `framework`.
+            2. If local checkpoint is provided, use the same framework as the checkpoint.
+            3. Available framework in environment, with priority given to PyTorch
+
+        Args:
+            model (`str`):
+                The name of the model to export.
+            framework (`str`, *optional*, defaults to `None`):
+                The framework to use for the export. See above for priority if none provided.
+
+        Returns:
+            The framework to use for the export.
+
+        """
+        if framework is not None:
+            return framework
+
+        framework_map = {"pt": "PyTorch", "tf": "TensorFlow"}
+        exporter_map = {"pt": "torch", "tf": "tf2onnx"}
+
+        if os.path.isdir(model):
+            if os.path.isfile(os.path.join(model, WEIGHTS_NAME)):
+                framework = "pt"
+            elif os.path.isfile(os.path.join(model, TF2_WEIGHTS_NAME)):
+                framework = "tf"
+            else:
+                raise FileNotFoundError(
+                    "Cannot determine framework from given checkpoint location."
+                    f" There should be a {WEIGHTS_NAME} for PyTorch"
+                    f" or {TF2_WEIGHTS_NAME} for TensorFlow."
+                )
+            logger.info(f"Local {framework_map[framework]} model found.")
+        else:
+            if is_torch_available():
+                framework = "pt"
+            elif is_tf_available():
+                framework = "tf"
+            else:
+                raise EnvironmentError("Neither PyTorch nor TensorFlow found in environment. Cannot export to ONNX.")
+
+        logger.info(f"Framework not requested. Using {exporter_map[framework]} to export to ONNX.")
+
+        return framework
+
+    @staticmethod
     def get_model_from_feature(
-        feature: str, model: str, framework: str = "pt", cache_dir: str = None
+        feature: str, model: str, framework: str = None, cache_dir: str = None
     ) -> Union["PreTrainedModel", "TFPreTrainedModel"]:
         """
         Attempts to retrieve a model from a model's name and the feature to be enabled.
@@ -578,20 +629,24 @@ class FeaturesManager:
                 The feature required.
             model (`str`):
                 The name of the model to export.
-            framework (`str`, *optional*, defaults to `"pt"`):
-                The framework to use for the export.
+            framework (`str`, *optional*, defaults to `None`):
+                The framework to use for the export. See `FeaturesManager.determine_framework` for the priority should
+                none be provided.
 
         Returns:
             The instance of the model.
 
         """
+        framework = FeaturesManager.determine_framework(model, framework)
         model_class = FeaturesManager.get_model_class_for_feature(feature, framework)
         try:
             model = model_class.from_pretrained(model, cache_dir=cache_dir)
         except OSError:
             if framework == "pt":
+                logger.info("Loading TensorFlow model in PyTorch before exporting to ONNX.")
                 model = model_class.from_pretrained(model, from_tf=True, cache_dir=cache_dir)
             else:
+                logger.info("Loading PyTorch model in TensorFlow before exporting to ONNX.")
                 model = model_class.from_pretrained(model, from_pt=True, cache_dir=cache_dir)
         return model
 
