@@ -400,8 +400,8 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
     def get_transition_tensor(self, input_ids: tf.Tensor, vocab_size: int) -> tf.Tensor:
         """
         Gets a transition tensor of shape [batch_size, ngram_size-1, vocab_size, vocab_size]. It is a tensor containing
-        booleans, which answers the question: if the k-th token in an n-gram is x, has it been followed by token y in a
-        previously seen n-gram? (indexed by [batch_idx, k, x, y]; 1 if it is True, 0 otherwise)
+        booleans, which answers the question: if the k-th token in an ngram is x, has it been followed by token y in a
+        previously seen ngram? (indexed by [batch_idx, k, x, y]; 1 if it is True, 0 otherwise)
 
         It has to be recomputed each time the processor is called because a certain batch index is not guaranteed to
         represent the same sequence from iteration to iteration (e.g. beam search).
@@ -411,7 +411,7 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
 
         # if `input_ids` is padded this will do some useless computations, but that is fine (avoids XLA recompilation)
         for i in range(seq_len - (self.ngram_size - 1)):
-            ngrams = input_ids[:, i:i + self.ngram_size]
+            ngrams = input_ids[:, i : i + self.ngram_size]
 
             # creates the indexing for the batch and the n-th member of the ngram
             batch_indexing, ngram_indexing = tf.meshgrid(tf.range(ngrams.shape[0]), tf.range(ngrams.shape[1] - 1))
@@ -426,8 +426,7 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
 
             # scatters the observed ngrams into the transition tensor
             update_indices = tf.stack(
-                (batch_indexing, ngram_indexing, current_token_indexing, next_token_indexing),
-                axis=1
+                (batch_indexing, ngram_indexing, current_token_indexing, next_token_indexing), axis=1
             )
             transition_tensor = tf.tensor_scatter_nd_update(
                 tensor=transition_tensor,
@@ -439,12 +438,12 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
 
     def get_banned_tokens_mask(self, latest_tokens: tf.Tensor, transition_tensor: tf.Tensor) -> tf.Tensor:
         """
-        Determines which tokens must be banned given latest tokens and the transition tensor (i.e. the previously
-        seen ngrams).
+        Determines which tokens must be banned given latest tokens and the transition tensor (i.e. the previously seen
+        ngrams).
 
-        First gathers a boolean mask that depicts whether the latest sequence of tokens has seen before (for each
-        batch member). Then, for each batch member, finds which tokens have been generated after the last token.
-        Combining the two, we have the forbidden ngrams.
+        First gathers a boolean mask that depicts whether the latest sequence of tokens has seen before (for each batch
+        member). Then, for each batch member, finds which tokens have been generated after the last token. Combining
+        the two, we have the forbidden ngrams.
         """
         batch_size = latest_tokens.shape[0]
 
@@ -453,8 +452,7 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
         previously_generated_mask = tf.ones((batch_size, 1), dtype=tf.bool)
         for i in range(self.ngram_size - 2):
             gather_indices = tf.stack(
-                (tf.ones((batch_size), dtype=tf.int32) * i, latest_tokens[:, i], latest_tokens[:, i + 1]),
-                axis=1
+                (tf.ones((batch_size), dtype=tf.int32) * i, latest_tokens[:, i], latest_tokens[:, i + 1]), axis=1
             )
             # AND is equivalent to multiplying boolean masks
             previously_generated_mask &= tf.expand_dims(
@@ -464,8 +462,7 @@ class TFNoRepeatNGramLogitsProcessor(TFLogitsProcessor):
         # 2. Get a mask that tells us whether a certain token was ever generated after for the last token in
         # `latest_tokens`, in the last position of the ngram. shape: [batch_size, vocab_size]
         gather_indices = tf.stack(
-            (tf.ones((batch_size), dtype=tf.int32) * self.ngram_size - 2, latest_tokens[:, -1]),
-            axis=1
+            (tf.ones((batch_size), dtype=tf.int32) * self.ngram_size - 2, latest_tokens[:, -1]), axis=1
         )
         next_forbidden_mask = tf.gather_nd(params=transition_tensor, indices=gather_indices, batch_dims=1)
 
