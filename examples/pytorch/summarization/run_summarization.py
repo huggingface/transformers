@@ -512,7 +512,6 @@ def main():
         )
 
     def preprocess_function(examples):
-        warned_about_empty = False
         inputs, targets = [], []
         for i in range(len(examples[text_column])):
             if examples[text_column][i]:
@@ -539,6 +538,9 @@ def main():
 
         model_inputs["labels"] = labels["input_ids"]
         return model_inputs
+
+    # A flag to determine whether we have already warned about empty summaries.
+    warned_about_empty = False
 
     if training_args.do_train:
         if "train" not in raw_datasets:
