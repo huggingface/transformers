@@ -208,14 +208,14 @@ class DataTrainingArguments:
     max_duration_in_seconds: float = field(
         default=20.0,
         metadata={
-            "help": (
-                "Filter audio files that are longer than `max_duration_in_seconds` seconds to"
-                " 'max_duration_in_seconds`"
-            )
+            "help": "Filter audio files in the training set that are longer than `max_duration_in_seconds` seconds"
         },
     )
     min_duration_in_seconds: float = field(
-        default=0.0, metadata={"help": "Filter audio files that are shorter than `min_duration_in_seconds` seconds"}
+        default=0.0,
+        metadata={
+            "help": "Filter audio files in the training set that are shorter than `min_duration_in_seconds` seconds"
+        },
     )
     preprocessing_only: bool = field(
         default=False,
