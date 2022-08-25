@@ -78,6 +78,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("vit", "TFViTModel"),
         ("vit_mae", "TFViTMAEModel"),
         ("wav2vec2", "TFWav2Vec2Model"),
+        ("xglm", "TFXGLMModel"),
         ("xlm", "TFXLMModel"),
         ("xlm-roberta", "TFXLMRobertaModel"),
         ("xlnet", "TFXLNetModel"),
@@ -162,6 +163,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("roberta", "TFRobertaForCausalLM"),
         ("roformer", "TFRoFormerForCausalLM"),
         ("transfo-xl", "TFTransfoXLLMHeadModel"),
+        ("xglm", "TFXGLMForCausalLM"),
         ("xlm", "TFXLMWithLMHeadModel"),
         ("xlnet", "TFXLNetLMHeadModel"),
     ]

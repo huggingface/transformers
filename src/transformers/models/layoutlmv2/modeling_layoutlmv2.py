@@ -43,26 +43,12 @@ from ...utils import (
 from .configuration_layoutlmv2 import LayoutLMv2Config
 
 
-logger = logging.get_logger(__name__)
-
-
 # soft dependency
 if is_detectron2_available():
     import detectron2
+    from detectron2.modeling import META_ARCH_REGISTRY
 
-    try:
-        from detectron2.modeling import META_ARCH_REGISTRY
-    except ImportError:
-        # NOTE: This is a temporary fix because currently there are
-        # import problems when using detectron2 from master (see issues below)
-        # it's better to have a silent error here in case someone imports this file
-        # without using the model which without this hack would break.
-        logger.warning(
-            "The detectron2 import seems to be broken. See:"
-            "https://github.com/facebookresearch/detectron2/issues/4489 or"
-            "https://github.com/facebookresearch/detectron2/issues/4487"
-        )
-        pass
+logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/layoutlmv2-base-uncased"
 _CONFIG_FOR_DOC = "LayoutLMv2Config"
