@@ -22,7 +22,7 @@ import unittest
 
 import numpy as np
 
-import requests
+from huggingface_hub import hf_hub_download
 from transformers import XClipConfig, XClipTextConfig, XClipVisionConfig
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
@@ -46,9 +46,7 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
-
-    from transformers import CLIPProcessor
+    from transformers import XClipProcessor
 
 
 class XClipVisionModelTester:
@@ -634,11 +632,13 @@ class XClipModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsNotNone(model)
 
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+# We will verify our results on a spaghetti video
+def prepare_video():
+    file = hf_hub_download(
+        repo_id="datasets/hf-internal-testing/spaghetti-video", filename="eating_spaghetti_8_frames.npy"
+    )
+    video = np.load(file)
+    return list(video)
 
 
 @require_vision
@@ -649,11 +649,11 @@ class XClipModelIntegrationTest(unittest.TestCase):
         # TODO update organization
         model_name = "nielsr/xclip-base-patch32"
         model = XClipModel.from_pretrained(model_name).to(torch_device)
-        processor = CLIPProcessor.from_pretrained(model_name)
+        processor = XClipProcessor.from_pretrained(model_name)
 
-        image = prepare_img()
+        video = prepare_video()
         inputs = processor(
-            text=["a photo of a cat", "a photo of a dog"], images=image, padding=True, return_tensors="pt"
+            text=["playing sports", "eating spaghetti", "go shopping"], videos=video, return_tensors="pt", padding=True
         ).to(torch_device)
 
         # forward pass
@@ -670,6 +670,6 @@ class XClipModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)
+        expected_logits = torch.tensor([[14.3819, 20.6031, 15.0526]], device=torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
