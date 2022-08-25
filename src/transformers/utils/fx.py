@@ -578,7 +578,7 @@ class HFProxy(Proxy):
 
     def __iter__(self):
         if hasattr(self, "_metadata") and self._metadata is not None:
-            # Type that implement `__getitem__` TODO
+            # TODO @thomasw21: figure out who implements `__getitem__`
             if isinstance(self._metadata, (torch.Tensor, list, tuple)):
                 proxies =  tuple(self.tracer.create_proxy("call_function", operator.getitem, (self, i), {}) for i,metadata in enumerate(self._metadata.__iter__()))
                 for i, proxy in enumerate(proxies):
@@ -590,7 +590,8 @@ class HFProxy(Proxy):
 
     def __getattr__(self, k):
         if k == "_metadata":
-            return super().__getattr__(k)
+            return super().__getattribute__(k)
+
         # note: not added to the graph yet, if this is a method call
         # we peephole optimize to the method invocation
         return HFAttribute(self, k)
@@ -612,14 +613,14 @@ class HFModelAttribute(HFProxy):
             return super().__getattribute__(item)
 
         try:
-            _metadata = super().__getattribute__("_metadata")
+            _metadata = self._metadata
         except AttributeError:
             _metadata = None
         if _metadata is not None:
             return getattr(_metadata, item)
 
         # TODO @thomasw21 probably something weird to do about this.
-        tracer = super().__getattribute__("tracer")
+        tracer = self.tracer
         return tracer.create_proxy("get_attr", item, (), {},
                                    proxy_factory_fn=lambda node: HFModelAttribute(node, tracer))
 
@@ -791,13 +792,10 @@ class HFTracer(Tracer):
 
         # Creating a random input shape to generate dummy inputs.
         batch_size = _generate_random_int()
-        # if "past_key_values" in input_names:
-        #     sequence_length = 1
-        # else:
         sequence_length = _generate_random_int()
-
         past_sequence_length = _generate_random_int()
-        shape = [batch_size, sequence_length, past_sequence_length]
+        shape = [batch_size, sequence_length]
+        print(model.__class__.__name__, batch_size, sequence_length, past_sequence_length)
 
         if model.__class__.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
             num_choices = _generate_random_int(low=2, high=5)
@@ -858,7 +856,6 @@ class HFTracer(Tracer):
                         f"Generating the dummy input named {input_name} for {model_class_name} is not supported yet."
                     )
             elif "pixel_values" in input_name:
-                batch_size = shape[0]
                 image_size = getattr(model.config, "image_size", None)
                 if image_size is None:
                     if hasattr(model.config, "vision_config"):
@@ -901,24 +898,21 @@ class HFTracer(Tracer):
                     device=device,
                 )
             elif "inputs" in input_name:
-                inputs_dict[input_name] = torch.zeros(*shape[:2], dtype=torch.float, device=device)
+                inputs_dict[input_name] = torch.zeros(*shape, dtype=torch.float, device=device)
             elif "input_values" in input_name:
-                batch_size, _, _ = shape
                 # Generating big sequence length for audio inputs.
-                seq_length = _generate_random_int(low=10000, high=20000)
-                inputs_dict[input_name] = torch.zeros(batch_size, seq_length, dtype=torch.float, device=device)
+                long_seq_length = _generate_random_int(low=10000, high=20000)
+                inputs_dict[input_name] = torch.zeros(batch_size, long_seq_length, dtype=torch.float, device=device)
             elif "mask" in input_name or "ids" in input_name:
-                batch_size, seq_length, past_seq_length = shape
                 if "mask" in input_name and "past_key_values" in input_names:
-                    inputs_dict[input_name] = torch.zeros(batch_size, past_seq_length + seq_length, dtype=torch.long, device=device)
+                    inputs_dict[input_name] = torch.zeros(batch_size, past_sequence_length + sequence_length, dtype=torch.long, device=device)
                 else:
-                    inputs_dict[input_name] = torch.zeros(batch_size, seq_length, dtype=torch.long, device=device)
+                    inputs_dict[input_name] = torch.zeros(batch_size, sequence_length, dtype=torch.long, device=device)
             elif "past_key_values" == input_name:
-                batch_size, _, past_seq_length = shape
                 if isinstance(model, BloomForCausalLM):
                     head_dim = model.config.hidden_size // model.config.n_head
-                    past_key = torch.zeros(batch_size * model.config.n_head, head_dim, past_seq_length, dtype=torch.float, device=device)
-                    past_value = torch.zeros(batch_size * model.config.n_head, past_seq_length, head_dim, dtype=torch.float, device=device)
+                    past_key = torch.zeros(batch_size * model.config.n_head, head_dim, past_sequence_length, dtype=torch.float, device=device)
+                    past_value = torch.zeros(batch_size * model.config.n_head, past_sequence_length, head_dim, dtype=torch.float, device=device)
                 else:
                     raise NotImplementedError(f"Unsupported input_name for creating dummy input for {model.__class__.__name__}: {input_name}")
                 inputs_dict[input_name] = [(past_key, past_value) for _ in range(model.config.n_layer)]
