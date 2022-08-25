@@ -141,7 +141,7 @@ class TFRegNetModelTest(TFModelTesterMixin, unittest.TestCase):
         reason="TF (<=2.8) does not support backprop for grouped convolutions on CPU.",
     )
     def test_keras_fit(self):
-        pass
+        super().test_keras_fit()
 
     @unittest.skip(reason="RegNet does not support input and output embeddings")
     def test_model_common_attributes(self):
