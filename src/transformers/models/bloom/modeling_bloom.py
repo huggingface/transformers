@@ -19,6 +19,7 @@ import warnings
 from typing import Optional, Tuple, Union
 
 import torch
+import torch.fx
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
@@ -65,8 +66,7 @@ def _make_causal_mask(
     seq_ids = torch.arange(target_length, device=device)
     mask[:, past_key_values_length:] = seq_ids[:, None] < seq_ids[None, :]
 
-    if past_key_values_length > 0:
-        mask[:, :past_key_values_length] = False
+    mask[:, :past_key_values_length] = False
 
     expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
     return expanded_mask
@@ -207,6 +207,10 @@ class BloomGelu(nn.Module):
             return bloom_gelu_forward(x)
 
 
+@torch.fx.wrap
+def minimum_value(dtype: torch.dtype):
+    return torch.finfo(dtype).min
+
 class BloomAttention(nn.Module):
     def __init__(self, config: BloomConfig):
         super().__init__()
@@ -218,15 +222,15 @@ class BloomAttention(nn.Module):
             self.slice_size = config.hidden_size // self.pretraining_tp
 
         self.hidden_size = config.hidden_size
-        num_heads = config.n_head
-        self.head_dim = self.hidden_size // num_heads
+        self.num_heads = config.n_head
+        self.head_dim = self.hidden_size // self.num_heads
         self.split_size = self.hidden_size
         self.hidden_dropout = config.hidden_dropout
 
-        if self.head_dim * num_heads != self.hidden_size:
+        if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
                 f"`hidden_size` must be divisible by num_heads (got `hidden_size`: {self.hidden_size} and `num_heads`:"
-                f" {num_heads})."
+                f" {self.num_heads})."
             )
 
         # Layer-wise attention scaling
@@ -249,13 +253,11 @@ class BloomAttention(nn.Module):
             query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim]
             value: [batch_size, seq_length, num_heads, head_dim]
         """
-        batch_size = fused_qkv.size(0)
-        seq_length = fused_qkv.size(1)
-        three_times_hidden_size = fused_qkv.size(2)
-        fused_qkv = fused_qkv.view(batch_size, seq_length, -1, 3, self.head_dim)
+        batch_size, seq_length, three_times_hidden_size = fused_qkv.size()
+        fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
         return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
 
-    def _merge_heads(self, x: torch.Tensor, batch_size: int) -> torch.Tensor:
+    def _merge_heads(self, x: torch.Tensor) -> torch.Tensor:
         """
         Merge heads together over the last dimenstion
 
@@ -267,17 +269,18 @@ class BloomAttention(nn.Module):
         """
         # What we want to achieve is:
         # batch_size * num_heads, seq_length, head_dim -> batch_size, seq_length, num_heads * head_dim
-        seq_length = x.size(1)
+        batch_size_and_num_heads, seq_length, _ = x.shape
+        batch_size = batch_size_and_num_heads // self.num_heads
 
         # First view to decompose the batch size
         # batch_size * num_heads, seq_length, head_dim -> batch_size, num_heads, seq_length, head_dim
-        x = x.view(batch_size, -1, seq_length, self.head_dim)
+        x = x.view(batch_size, self.num_heads, seq_length, self.head_dim)
 
         # batch_size, num_heads, seq_length, head_dim -> batch_size, seq_length, num_heads, head_dim
         x = x.permute(0, 2, 1, 3)
 
         # batch_size, seq_length, num_heads, head_dim -> batch_size, seq_length, num_heads * head_dim
-        return x.reshape(batch_size, seq_length, -1)
+        return x.reshape(batch_size, seq_length, self.num_heads * self.head_dim)
 
     def forward(
         self,
@@ -295,12 +298,11 @@ class BloomAttention(nn.Module):
         # 3 x [batch_size, seq_length, num_heads, head_dim]
         (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
 
-        batch_size = query_layer.size(0)
-        q_length = query_layer.size(1)
+        batch_size, q_length, _, _ = query_layer.size()
 
-        query_layer = query_layer.transpose(1, 2).reshape(-1, q_length, self.head_dim)
-        key_layer = key_layer.permute(0, 2, 3, 1).reshape(-1, self.head_dim, q_length)
-        value_layer = value_layer.transpose(1, 2).reshape(-1, q_length, self.head_dim)
+        query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
+        key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, q_length)
+        value_layer = value_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
         if layer_past is not None:
             past_key, past_value = layer_past
             # concatenate along seq_length dimension:
@@ -326,7 +328,7 @@ class BloomAttention(nn.Module):
         )
 
         # change view to [batch_size, num_heads, q_length, kv_length]
-        attention_scores = matmul_result.view(batch_size, -1, q_length, kv_length)
+        attention_scores = matmul_result.view(batch_size, self.num_heads, q_length, kv_length)
 
         # cast attention scores to fp32, compute scaled softmax and cast back to initial dtype - [batch_size, num_heads, q_length, kv_length]
         # input_dtype = attention_scores.dtype
@@ -334,7 +336,7 @@ class BloomAttention(nn.Module):
         # `float16` has a minimum value of -65504.0, whereas `bfloat16` and `float32` have a minimum value of `-3.4e+38`
         if input_dtype == torch.float16:
             attention_scores = attention_scores.to(torch.float)
-        attn_weights = torch.masked_fill(attention_scores, attention_mask, -3e34) # torch.finfo(attention_scores.dtype).min
+        attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min) # torch.finfo(attention_scores.dtype).min
         attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
         # attention_probs = attention_probs * ~attention_mask # Prevent values to be too huge
 
@@ -345,13 +347,13 @@ class BloomAttention(nn.Module):
             attention_probs = attention_probs * head_mask
 
         # change view [batch_size x num_heads, q_length, kv_length]
-        attention_probs_reshaped = attention_probs.view(-1, q_length, kv_length)
+        attention_probs_reshaped = attention_probs.view(batch_size * self.num_heads, q_length, kv_length)
 
         # matmul: [batch_size * num_heads, q_length, head_dim]
         context_layer = torch.bmm(attention_probs_reshaped, value_layer)
 
         # change view [batch_size, num_heads, q_length, head_dim]
-        context_layer = self._merge_heads(context_layer, batch_size)
+        context_layer = self._merge_heads(context_layer)
 
         # aggregate results across tp ranks. See here: https://github.com/pytorch/pytorch/issues/76232
         if self.pretraining_tp > 1 and self.slow_but_exact:
@@ -621,10 +623,9 @@ class BloomModel(BloomPreTrainedModel):
         device = attention_mask.device
         _, src_length = input_shape
 
-        if src_length > 1:
-            combined_attention_mask = _make_causal_mask(
-                input_shape, device=device, past_key_values_length=past_key_values_length
-            )
+        combined_attention_mask = _make_causal_mask(
+            input_shape, device=device, past_key_values_length=past_key_values_length
+        )
 
         # [batch_size, seq_length] -> [batch_size, 1, tgt_length, src_length]
         expanded_attn_mask = _expand_mask(attention_mask, tgt_length=src_length)
@@ -671,7 +672,8 @@ class BloomModel(BloomPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+
+        # use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if input_ids is not None and inputs_embeds is not None:

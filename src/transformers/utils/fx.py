@@ -22,7 +22,7 @@ import operator
 import os
 import random
 import warnings
-from typing import Any, Callable, Dict, List, Optional, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Type, Union, Iterable
 
 import torch
 from packaging import version
@@ -537,13 +537,22 @@ class HFProxy(Proxy):
     """
 
     def install_metadata(self, metadata):
+        if isinstance(metadata, torch.fx.Proxy):
+            raise ValueError("wtf")
         self._metadata = metadata
 
     @property
     def shape(self):
+        return self.size()
+
+    def size(self, dim=None):
         if hasattr(self, "_metadata") and self._metadata is not None:
-            return self._metadata.shape
-        return self.tracer.create_proxy("call_method", "size", (self,), {})
+            # print(self._metadata.size(), self._metadata)
+            if dim is None:
+                return tuple(self.tracer.create_proxy("call_method", "size", (self, i), {}) for i,_ in enumerate(self._metadata.size()))
+            else:
+                return self.tracer.create_proxy("call_method", "size", (self, dim), {})
+        return self.tracer.create_proxy("call_method", "size", (self, dim), {})
 
     @property
     def dtype(self):
@@ -565,6 +574,7 @@ class HFProxy(Proxy):
     def __bool__(self):
         if hasattr(self, "_metadata") and self._metadata is not None:
             return self._metadata
+        # print(self, self.name, self.target, self.kind)
         return super().__bool__()
 
     def __iter__(self):
@@ -574,7 +584,7 @@ class HFProxy(Proxy):
 
     def __getattr__(self, k):
         if k == "_metadata":
-            return self.__getattribute__(k)
+            return super().__getattr__(k)
         # note: not added to the graph yet, if this is a method call
         # we peephole optimize to the method invocation
         return HFAttribute(self, k)
@@ -586,6 +596,37 @@ class HFProxy(Proxy):
         if hasattr(self, "_metadata") and self._metadata is not None:
             return key in self._metadata
         return super().__contains__(key)
+
+class HFModelAttribute(HFProxy):
+    "Non tensor/module/parameter attributes"
+    def __getattribute__(self, item):
+        # print("__getattribute__", item)
+        return super().__getattribute__(item)
+
+    def __getattr__(self, item) -> 'HFModelAttribute':
+        # If typical HFProxy methods
+        # print("__getattr__", item)
+        if item in set(HFProxy.__dict__) | {"__class__", "node", "tracer"}:
+            return super().__getattribute__(item)
+
+        try:
+            # import pdb; pdb.set_trace()
+            _metadata = super().__getattribute__("_metadata")
+        except AttributeError:
+            import pdb; pdb.set_trace()
+            _metadata = None
+        if _metadata is not None:
+            return getattr(_metadata, item)
+
+        # TODO @thomasw21 probably something weird to do about this.
+        tracer = super().__getattribute__("tracer")
+        return tracer.create_proxy("get_attr", item, (), {},
+                                   proxy_factory_fn=lambda node: HFModelAttribute(node, tracer))
+
+    # def __getattr__(self, k) -> 'Attribute':
+    #     # note: not added to the graph yet, if this is a method call
+    #     # we peephole optimize to the method invocation
+    #     return Attribute(self, k)
 
 
 class HFAttribute(HFProxy):
@@ -621,8 +662,22 @@ def _proxies_to_metas(v):
         return v._metadata
     return v
 
+def _patch_fn_for_proxy(fn, tracer):
+    def _apply_on_proxy(x):
+        if isinstance(x, torch.fx.Proxy):
+            if not (isinstance(x, HFProxy) and hasattr(x, "_metadata")):
+                # TODO @thomasw21: For reasons I don't understand, this is not a HFProxy but an Attribute ...
+                print(x, x.node.name, x.node.target, x.node.args, x.node.kwargs, x.__class__.__name__, isinstance(x, HFProxy))
+                raise RuntimeError(f"No metadata was found for {x}")
+            new_metadata = fn(x._metadata)
+            proxy = tracer.create_proxy("call_function", fn, (x,), {})
+            proxy.install_metadata(new_metadata)
+            return proxy
+        return fn(x)
+    return _apply_on_proxy
 
-def _gen_constructor_wrapper(target):
+
+def _gen_constructor_wrapper(__o, target):
     @functools.wraps(target)
     def wrapper(*args, **kwargs):
         proxy = None
@@ -640,7 +695,7 @@ def _gen_constructor_wrapper(target):
         else:
             return target(*args, **kwargs)
 
-    return wrapper, target
+    return wrapper, __o, target
 
 
 def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
@@ -650,6 +705,27 @@ def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Option
     while value in forbidden_values:
         value = random.randint(low, high)
     return value
+
+class Patch:
+    def __init__(self, tracer, patched_methods):
+        self.patched_methods = patched_methods
+
+        assert not hasattr(tracer, "orig_fns")
+        self.orig_fns = set()
+        setattr(tracer, "orig_fns", self.orig_fns)
+
+    def __enter__(self):
+        for name, original_methods in self.patched_methods.items():
+            for (wrapper, __o, orig) in original_methods:
+                setattr(__o, name, wrapper)
+                self.orig_fns.add(orig)
+
+        return self
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        for name, original_methods in self.patched_methods.items():
+            for (_, __o, orig) in original_methods:
+                setattr(__o, name, orig)
+
 
 
 class HFTracer(Tracer):
@@ -675,7 +751,7 @@ class HFTracer(Tracer):
             )
 
     def _generate_dummy_input(
-        self, model: PreTrainedModel, input_name: str, shape: List[int]
+        self, model: PreTrainedModel, input_names: Iterable[str]
     ) -> Dict[str, torch.Tensor]:
         """Generates dummy input for model inference recording."""
         # Retrieving the model class, either from the "class_for_deserialization" attribute if the model was restored
@@ -684,125 +760,142 @@ class HFTracer(Tracer):
         device = model.device
         inputs_dict = {}
 
-        if input_name in ["labels", "start_positions", "end_positions"]:
-
-            batch_size = shape[0]
-            if model_class_name in [
-                *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
-                *get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES),
-                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
-                *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES),
-            ]:
-                inputs_dict["labels"] = torch.zeros(batch_size, dtype=torch.long, device=device)
-            elif model_class_name in [
-                *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES),
-                "XLNetForQuestionAnswering",
-            ]:
-                inputs_dict["start_positions"] = torch.zeros(batch_size, dtype=torch.long, device=device)
-                inputs_dict["end_positions"] = torch.zeros(batch_size, dtype=torch.long, device=device)
-            elif model_class_name in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES):
-                if not hasattr(model.config, "problem_type") or model.config.problem_type is None:
-                    raise ValueError(
-                        "Could not retrieve the problem type for the sequence classification task, please set "
-                        'model.config.problem_type to one of the following values: "regression", '
-                        '"single_label_classification", or "multi_label_classification".'
-                    )
-
-                if model.config.problem_type == "regression":
-                    labels_shape = (batch_size, model.config.num_labels)
-                    labels_dtype = torch.float32
-                elif model.config.problem_type == "single_label_classification":
-                    labels_shape = (batch_size,)
-                    labels_dtype = torch.long
-                elif model.config.problem_type == "multi_label_classification":
-                    labels_shape = (batch_size, model.config.num_labels)
-                    labels_dtype = torch.float32
-                else:
-                    raise ValueError(
-                        'Expected model.config.problem_type to be either: "regression", "single_label_classification"'
-                        f', or "multi_label_classification", but "{model.config.problem_type}" was provided.'
-                    )
-                inputs_dict["labels"] = torch.zeros(*labels_shape, dtype=labels_dtype, device=device)
-
-            elif model_class_name in [
-                *get_values(MODEL_FOR_PRETRAINING_MAPPING_NAMES),
-                *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES),
-                *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
-                *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
-                *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
-                "GPT2DoubleHeadsModel",
-            ]:
-                inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
-            else:
-                raise NotImplementedError(
-                    f"Generating the dummy input named {input_name} for {model_class_name} is not supported yet."
-                )
-        elif "pixel_values" in input_name:
-            batch_size = shape[0]
-            image_size = getattr(model.config, "image_size", None)
-            if image_size is None:
-                if hasattr(model.config, "vision_config"):
-                    image_size = model.config.vision_config.image_size
-                elif hasattr(model.config, "encoder"):
-                    image_size = model.config.encoder.image_size
-                else:
-                    raise AttributeError('Could not find the "image_size" field in the model config')
-
-            # If no num_channels is in the config, use some arbitrary value.
-            num_channels = getattr(model.config, "num_channels", 3)
-            if not isinstance(image_size, collections.abc.Iterable):
-                image_size = (image_size, image_size)
-            height, width = image_size
-            inputs_dict[input_name] = torch.zeros(
-                batch_size, num_channels, height, width, dtype=torch.float32, device=device
-            )
-        elif "bbox" in input_name:
-            inputs_dict[input_name] = torch.zeros(*shape, 4, dtype=torch.float, device=device)
-        elif "input_features" in input_name:
-            inputs_dict[input_name] = torch.zeros(
-                *shape, model.config.input_feat_per_channel, dtype=torch.float, device=device
-            )
-        elif "visual_feats" in input_name:
-            inputs_dict[input_name] = torch.zeros(
-                shape
-                + [
-                    model.config.visual_feat_dim,
-                ],
-                dtype=torch.float,
-                device=device,
-            )
-        elif "visual_pos" in input_name:
-            inputs_dict[input_name] = torch.zeros(
-                shape
-                + [
-                    model.config.visual_pos_dim,
-                ],
-                dtype=torch.float,
-                device=device,
-            )
-        elif "inputs" in input_name:
-            inputs_dict[input_name] = torch.zeros(*shape, dtype=torch.float, device=device)
-        elif "input_values" in input_name:
-            batch_size, _ = shape
-            # Generating big sequence length for audio inputs.
-            seq_length = _generate_random_int(low=10000, high=20000)
-            inputs_dict[input_name] = torch.zeros(batch_size, seq_length, dtype=torch.float, device=device)
-        elif "mask" in input_name or "ids" in input_name:
-            inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
-        elif "past_key_values" == input_name:
-            batch_size, _ = shape
-            # Generating big sequence length for audio inputs.
-            past_seq_length = _generate_random_int()
-            if isinstance(model, BloomForCausalLM):
-                head_dim = model.config.hidden_size // model.config.n_head
-                past_key = torch.zeros(batch_size * model.config.n_head, head_dim, past_seq_length, dtype=torch.float, device=device)
-                past_value = torch.zeros(batch_size * model.config.n_head, past_seq_length, head_dim, dtype=torch.float, device=device)
-            else:
-                raise NotImplementedError(f"Unsupported input_name for creating dummy input for {model.__class__.__name__}: {input_name}")
-            inputs_dict[input_name] = [(past_key, past_value) for _ in range(model.config.n_layer)]
+        # Creating a random input shape to generate dummy inputs.
+        batch_size = _generate_random_int()
+        if "past_key_values" in input_names:
+            sequence_length = 1
         else:
-            shape_with_hidden_size = shape + [model.config.hidden_size]
-            inputs_dict[input_name] = torch.zeros(shape_with_hidden_size, dtype=torch.float, device=device)
+            sequence_length = _generate_random_int()
+
+        past_sequence_length = _generate_random_int()
+        shape = [batch_size, sequence_length, past_sequence_length]
+
+        if model.__class__.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
+            num_choices = _generate_random_int(low=2, high=5)
+            shape.insert(1, num_choices)
+
+        for input_name in input_names:
+            if input_name in ["labels", "start_positions", "end_positions"]:
+
+                batch_size = shape[0]
+                if model_class_name in [
+                    *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES),
+                ]:
+                    inputs_dict["labels"] = torch.zeros(batch_size, dtype=torch.long, device=device)
+                elif model_class_name in [
+                    *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES),
+                    "XLNetForQuestionAnswering",
+                ]:
+                    inputs_dict["start_positions"] = torch.zeros(batch_size, dtype=torch.long, device=device)
+                    inputs_dict["end_positions"] = torch.zeros(batch_size, dtype=torch.long, device=device)
+                elif model_class_name in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES):
+                    if not hasattr(model.config, "problem_type") or model.config.problem_type is None:
+                        raise ValueError(
+                            "Could not retrieve the problem type for the sequence classification task, please set "
+                            'model.config.problem_type to one of the following values: "regression", '
+                            '"single_label_classification", or "multi_label_classification".'
+                        )
+
+                    if model.config.problem_type == "regression":
+                        labels_shape = (batch_size, model.config.num_labels)
+                        labels_dtype = torch.float32
+                    elif model.config.problem_type == "single_label_classification":
+                        labels_shape = (batch_size,)
+                        labels_dtype = torch.long
+                    elif model.config.problem_type == "multi_label_classification":
+                        labels_shape = (batch_size, model.config.num_labels)
+                        labels_dtype = torch.float32
+                    else:
+                        raise ValueError(
+                            'Expected model.config.problem_type to be either: "regression", "single_label_classification"'
+                            f', or "multi_label_classification", but "{model.config.problem_type}" was provided.'
+                        )
+                    inputs_dict["labels"] = torch.zeros(*labels_shape, dtype=labels_dtype, device=device)
+
+                elif model_class_name in [
+                    *get_values(MODEL_FOR_PRETRAINING_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
+                    *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
+                    "GPT2DoubleHeadsModel",
+                ]:
+                    inputs_dict["labels"] = torch.zeros(shape, dtype=torch.long, device=device)
+                else:
+                    raise NotImplementedError(
+                        f"Generating the dummy input named {input_name} for {model_class_name} is not supported yet."
+                    )
+            elif "pixel_values" in input_name:
+                batch_size = shape[0]
+                image_size = getattr(model.config, "image_size", None)
+                if image_size is None:
+                    if hasattr(model.config, "vision_config"):
+                        image_size = model.config.vision_config.image_size
+                    elif hasattr(model.config, "encoder"):
+                        image_size = model.config.encoder.image_size
+                    else:
+                        raise AttributeError('Could not find the "image_size" field in the model config')
+
+                # If no num_channels is in the config, use some arbitrary value.
+                num_channels = getattr(model.config, "num_channels", 3)
+                if not isinstance(image_size, collections.abc.Iterable):
+                    image_size = (image_size, image_size)
+                height, width = image_size
+                inputs_dict[input_name] = torch.zeros(
+                    batch_size, num_channels, height, width, dtype=torch.float32, device=device
+                )
+            elif "bbox" in input_name:
+                inputs_dict[input_name] = torch.zeros(*shape, 4, dtype=torch.float, device=device)
+            elif "input_features" in input_name:
+                inputs_dict[input_name] = torch.zeros(
+                    *shape, model.config.input_feat_per_channel, dtype=torch.float, device=device
+                )
+            elif "visual_feats" in input_name:
+                inputs_dict[input_name] = torch.zeros(
+                    shape
+                    + [
+                        model.config.visual_feat_dim,
+                    ],
+                    dtype=torch.float,
+                    device=device,
+                )
+            elif "visual_pos" in input_name:
+                inputs_dict[input_name] = torch.zeros(
+                    shape
+                    + [
+                        model.config.visual_pos_dim,
+                    ],
+                    dtype=torch.float,
+                    device=device,
+                )
+            elif "inputs" in input_name:
+                inputs_dict[input_name] = torch.zeros(*shape[:2], dtype=torch.float, device=device)
+            elif "input_values" in input_name:
+                batch_size, _, _ = shape
+                # Generating big sequence length for audio inputs.
+                seq_length = _generate_random_int(low=10000, high=20000)
+                inputs_dict[input_name] = torch.zeros(batch_size, seq_length, dtype=torch.float, device=device)
+            elif "mask" in input_name or "ids" in input_name:
+                batch_size, seq_length, past_seq_length = shape
+                if "mask" in input_name and "past_key_values" in input_names:
+                    inputs_dict[input_name] = torch.zeros(batch_size, past_seq_length + seq_length, dtype=torch.long, device=device)
+                else:
+                    inputs_dict[input_name] = torch.zeros(batch_size, seq_length, dtype=torch.long, device=device)
+            elif "past_key_values" == input_name:
+                batch_size, _, past_seq_length = shape
+                if isinstance(model, BloomForCausalLM):
+                    head_dim = model.config.hidden_size // model.config.n_head
+                    past_key = torch.zeros(batch_size * model.config.n_head, head_dim, past_seq_length, dtype=torch.float, device=device)
+                    past_value = torch.zeros(batch_size * model.config.n_head, past_seq_length, head_dim, dtype=torch.float, device=device)
+                else:
+                    raise NotImplementedError(f"Unsupported input_name for creating dummy input for {model.__class__.__name__}: {input_name}")
+                inputs_dict[input_name] = [(past_key, past_value) for _ in range(model.config.n_layer)]
+            else:
+                shape_with_hidden_size = shape + [model.config.hidden_size]
+                inputs_dict[input_name] = torch.zeros(shape_with_hidden_size, dtype=torch.float, device=device)
 
         return inputs_dict
 
@@ -825,7 +918,6 @@ class HFTracer(Tracer):
         try:
             args_metas = torch.fx.node.map_aggregate(args, _proxies_to_metas)
             kwargs_metas = torch.fx.node.map_aggregate(kwargs, _proxies_to_metas)
-
             if kind == "call_function":
                 meta_target = _MANUAL_META_OVERRIDES.get(target, target)
                 meta_out = meta_target(*args_metas, **kwargs_metas)
@@ -901,14 +993,24 @@ class HFTracer(Tracer):
                 if maybe_parameter_proxy is not None:
                     return maybe_parameter_proxy
 
-            if self.proxy_buffer_attributes and isinstance(attr_val, torch.Tensor):
+            elif self.proxy_buffer_attributes and isinstance(attr_val, torch.Tensor):
                 maybe_buffer_proxy = maybe_get_proxy_for_attr(
                     attr_val, self.root.named_buffers(), parameter_proxy_cache
                 )
                 if maybe_buffer_proxy is not None:
                     return maybe_buffer_proxy
 
+            # else:
+            #     all_non_tensor_attributes =
+            #     maybe_buffer_proxy = maybe_get_proxy_for_attr(
+            #         attr_val, all_non_tensor_attributes, parameter_proxy_cache
+            #     )
+            #     if maybe_buffer_proxy is not None:
+            #         return maybe_buffer_proxy
+
+            # TODO @thomasw21 return proxy for attributes as well
             return attr_val
+            # return self.create_proxy("get_attr", )
 
     def call_module(self, m, forward, args, kwargs):
         self.orig_forward = forward
@@ -964,28 +1066,22 @@ class HFTracer(Tracer):
 
         input_names = sig.parameters.keys() - concrete_args.keys()
 
-        # Creating a random input shape to generate dummy inputs.
-        batch_size = _generate_random_int()
-        sequence_length = _generate_random_int()
-        shape = [batch_size, sequence_length]
-
-        if root.__class__.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
-            num_choices = _generate_random_int(low=2, high=5)
-            shape.insert(1, num_choices)
-
         inputs = dict(dummy_inputs) if dummy_inputs is not None else {}
-        for input_name in input_names:
-            if input_name in inputs:
-                continue
+        input_names_to_generate_dummies = set(input_name for input_name in input_names if input_name not in inputs)
+
+        # sanity check
+        for input_name in input_names_to_generate_dummies:
             # We enforce that root must either be a PreTrainedModel or deserialized from a serialized traced model to
             # be able to use HFTracer._generate_dummy_input.
             if isinstance(root, PreTrainedModel) or type(root).__qualname__.startswith("_deserialize_graph_module"):
-                inputs.update(self._generate_dummy_input(root, input_name, shape))
+                continue
             else:
                 raise RuntimeError(
                     f"Could not generate input named {input_name} for because root is not a"
                     " transformers.PreTrainedModel."
                 )
+
+        inputs.update(self._generate_dummy_input(root, input_names))
 
         concrete_metas = {
             input_name: input_.to("meta") if isinstance(input_, torch.Tensor) else input_
@@ -996,19 +1092,66 @@ class HFTracer(Tracer):
                 concrete_metas[f"**{param.name}"] = {}
         self.meta_args = concrete_metas
         self.patched_torch_methods = {
-            target: _gen_constructor_wrapper(getattr(torch, target)) for target in self._TORCH_METHODS_TO_PATCH
+            target: [_gen_constructor_wrapper(torch, getattr(torch, target))] for target in self._TORCH_METHODS_TO_PATCH
         }
-        self.orig_fns = set()
 
-        for name, (wrapper, orig) in self.patched_torch_methods.items():
-            setattr(torch, name, wrapper)
-            self.orig_fns.add(orig)
+        def create_wrapper():
+            torch_module_dict = {
+                **nn.Module.__dict__,
+                **nn.Module().__dict__,
+            }
+            orig_get_attribute = nn.Module.__getattribute__
 
-        try:
+            def get_weird_attribute(module, name):
+                attribute = orig_get_attribute(module, name)
+
+                if name in ["__dict__", "__class__", "__module__"]:
+                    return attribute
+
+                # Already handled internally by `torch.fx`
+                if isinstance(attribute, (nn.Module, torch.Tensor, nn.Parameter)):
+                    return attribute
+
+                # usually this are methods we don''t really need to build proxies out of them, just call them
+                if callable(attribute):
+                    return attribute
+
+                # if we're in a leaf module, let pytorch handle it:
+                patched_function = nn.Module.__getattribute__
+                nn.Module.__getattribute__ = orig_get_attribute
+                if self.is_leaf_module(module, self.path_of_module(module)):
+                    return attribute
+                nn.Module.__getattribute__ = patched_function
+
+                if name not in torch_module_dict:
+                    patched_function = nn.Module.__getattribute__
+                    nn.Module.__getattribute__ = orig_get_attribute
+                    # TODO @thomasw21: we might need to prepend `name` with the hierarchy of the module
+                    prefix = self.path_of_module(module)
+                    name = f"{prefix}.{name}" if prefix != "" else name
+                    proxy = self.create_proxy("get_attr", name, (), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, self))  # type: ignore[arg-type]
+                    proxy.install_metadata(attribute)
+                    nn.Module.__getattribute__ = patched_function
+                    return proxy
+
+                return attribute
+
+            return get_weird_attribute
+
+        self.patched_torch_methods["__getattribute__"] = [
+            (create_wrapper(), nn.Module, nn.Module.__getattribute__)
+        ]
+
+        # patch `math` functions
+        self.patched_torch_methods["log2"] = [
+            (_patch_fn_for_proxy(math.log2, self), math, math.log2)
+        ]
+        self.patched_torch_methods["floor"] = [
+            (_patch_fn_for_proxy(math.floor, self), math, math.floor)
+        ]
+
+        with Patch(self, self.patched_torch_methods):
             self.graph = super().trace(root, concrete_args=concrete_args)
-        finally:
-            for name, (_, orig) in self.patched_torch_methods.items():
-                setattr(torch, name, orig)
 
         # This is necessary because concrete args are added as input to the traced module since
         # https://github.com/pytorch/pytorch/pull/55888.
