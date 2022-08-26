@@ -581,13 +581,10 @@ class HFProxy(Proxy):
         if hasattr(self, "_metadata") and self._metadata is not None:
             # TODO @thomasw21: figure out who implements `__getitem__`
             if isinstance(self._metadata, (torch.Tensor, list, tuple)):
-                proxies = tuple(
+                return tuple(
                     self.tracer.create_proxy("call_function", operator.getitem, (self, i), {})
                     for i, metadata in enumerate(self._metadata.__iter__())
-                )
-                for i, proxy in enumerate(proxies):
-                    proxy.install_metadata(self._metadata[i])
-                return proxies.__iter__()
+                ).__iter__()
             else:
                 return self._metadata.__iter__()
         return super().__iter__()
@@ -665,7 +662,6 @@ def _proxies_to_metas(v):
         return "meta"
     if isinstance(v, torch.fx.Proxy):
         if not (isinstance(v, HFProxy) and hasattr(v, "_metadata")):
-            print("failed querying metadata", id(v), v, v.node.name, v.node.op, v.node.target, v.node.args)
             raise RuntimeError(
                 f"No metadata was found for {v}, {isinstance(v, HFProxy)} and {hasattr(v, '_metadata')}"
             )
@@ -768,7 +764,9 @@ def create_nn_module_getattribute_wrapper(tracer):
             with Patch([(nn.Module, "__getattribute__", orig_get_attribute)]):
                 prefix = tracer.path_of_module(module)
                 name = f"{prefix}.{name}" if prefix != "" else name
-                proxy = tracer.create_proxy("get_attr", name, (), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, tracer))
+                proxy = tracer.create_proxy(
+                    "get_attr", name, (), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, tracer)
+                )
                 proxy.install_metadata(attribute)
             return proxy
 
