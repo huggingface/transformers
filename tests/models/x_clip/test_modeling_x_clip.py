@@ -533,6 +533,10 @@ class XClipModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_common_attributes(self):
         pass
 
+    @unittest.skip(reason="XClipModel does not support feedforward chunking")
+    def test_feed_forward_chunking(self):
+        pass
+
     # override as the `logit_scale`, `prompts_generator.alpha` and `mit.position_embedding` parameters require special treatment
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
