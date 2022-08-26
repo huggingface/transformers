@@ -41,7 +41,6 @@ from .configuration_layoutlm import LayoutLMConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LayoutLMConfig"
-_TOKENIZER_FOR_DOC = "LayoutLMTokenizer"
 _CHECKPOINT_FOR_DOC = "microsoft/layoutlm-base-uncased"
 
 LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -775,6 +774,8 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         >>> outputs = model(
         ...     input_ids=input_ids, bbox=bbox, attention_mask=attention_mask, token_type_ids=token_type_ids
         ... )
+
+        >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -926,6 +927,8 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         ...     token_type_ids=token_type_ids,
         ...     labels=labels,
         ... )
+
+        >>> loss = outputs.loss
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1047,6 +1050,7 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
         ... )
 
         >>> loss = outputs.loss
+        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1181,6 +1185,7 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         ... )
 
         >>> loss = outputs.loss
+        >>> logits = outputs.logits
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

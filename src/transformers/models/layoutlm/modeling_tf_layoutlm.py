@@ -49,7 +49,6 @@ from .configuration_layoutlm import LayoutLMConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LayoutLMConfig"
-_TOKENIZER_FOR_DOC = "LayoutLMTokenizer"
 
 TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/layoutlm-base-uncased",
@@ -1094,7 +1093,6 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
 
         >>> loss = outputs.loss
         ```"""
-
         outputs = self.layoutlm(
             input_ids=input_ids,
             bbox=bbox,
