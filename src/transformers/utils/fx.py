@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import builtins
 import collections
 import functools
 import inspect
@@ -643,7 +642,7 @@ class HFAttribute(HFProxy):
         # the node for attributes is added lazily, since most will just be method calls
         # which do not rely on the getitem call
         if self._node is None:
-            proxy = self.tracer.create_proxy(
+            self.tracer.create_proxy(
                 "call_function", getattr, (self.root, self.attr), {}, proxy_factory_fn=self.set_node
             )
         return self._node
@@ -745,7 +744,7 @@ def create_nn_module_getattribute_wrapper(tracer):
     }
     orig_get_attribute = nn.Module.__getattribute__
 
-    def get_weird_attribute(module, name):
+    def get_attribute_wrapper(module, name):
         attribute = orig_get_attribute(module, name)
 
         if name in ["__dict__", "__class__", "__module__"]:
@@ -769,13 +768,13 @@ def create_nn_module_getattribute_wrapper(tracer):
             with Patch([(nn.Module, "__getattribute__", orig_get_attribute)]):
                 prefix = tracer.path_of_module(module)
                 name = f"{prefix}.{name}" if prefix != "" else name
-                proxy = tracer.create_proxy("get_attr", name, (name,), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, tracer))  # type: ignore[arg-type]
+                proxy = tracer.create_proxy("get_attr", name, (), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, tracer))
                 proxy.install_metadata(attribute)
             return proxy
 
         return attribute
 
-    return get_weird_attribute
+    return get_attribute_wrapper
 
 
 class HFTracer(Tracer):
