@@ -760,25 +760,13 @@ def create_nn_module_getattribute_wrapper(tracer):
             return attribute
 
         # If we're in a leaf module, let torch handle it:
-        with Patch(
-            {
-                "nn.Module.__getattribute__": [
-                    (nn.Module, "__getattribute__", nn.Module.__getattribute__, orig_get_attribute)
-                ]
-            }
-        ):
+        with Patch([(nn.Module, "__getattribute__", orig_get_attribute)]):
             is_leaf_module = tracer.is_leaf_module(module, tracer.path_of_module(module))
         if is_leaf_module:
             return attribute
 
         if name not in torch_module_dict:
-            with Patch(
-                {
-                    "nn.Module.__getattribute__": [
-                        (nn.Module, "__getattribute__", nn.Module.__getattribute__, orig_get_attribute)
-                    ]
-                }
-            ):
+            with Patch([(nn.Module, "__getattribute__", orig_get_attribute)]):
                 prefix = tracer.path_of_module(module)
                 name = f"{prefix}.{name}" if prefix != "" else name
                 proxy = tracer.create_proxy("get_attr", name, (name,), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, tracer))  # type: ignore[arg-type]
