@@ -444,7 +444,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         # TODO(Patrick): This if-else version statement should be removed once
         # https://github.com/huggingface/datasets/issues/4889 is resolved
-        if version.parse(version.parse(torch.__version__).base_version >= version.parse("1.12.0"):
+        if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.12.0"):
             expected_end_tensor = torch.tensor([1.54, 1.88, 2.14, 2.46, 2.9, 3.16, 3.54, 3.72, 4.02, 4.18, 4.76, 5.16, 5.56, 5.7, 5.86, 6.2, 6.38, 6.62, 6.94])
         else:
             expected_end_tensor = torch.tensor([1.54, 1.88, 2.14, 2.46, 2.9, 3.18, 3.54, 3.72, 4.02, 4.18, 4.76, 5.16, 5.56, 5.7, 5.86, 6.2, 6.38, 6.62, 6.94])
