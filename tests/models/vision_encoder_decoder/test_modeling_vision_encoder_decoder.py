@@ -324,6 +324,27 @@ class EncoderDecoderMixin:
         input_ids_dict = self.prepare_config_and_inputs()
         self.check_encoder_decoder_model_generate(**input_ids_dict)
 
+    def test_training_gradient_checkpointing(self):
+        inputs_dict = self.prepare_config_and_inputs()
+        encoder_model, decoder_model = self.get_encoder_decoder_model(
+            inputs_dict["config"], inputs_dict["decoder_config"]
+        )
+
+        model = VisionEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        model.train()
+        model.gradient_checkpointing_enable()
+        model.config.decoder_start_token_id = 0
+        model.config.pad_token_id = 0
+
+        model_inputs = {
+            "pixel_values": inputs_dict["pixel_values"],
+            "labels": inputs_dict["labels"],
+            "decoder_input_ids": inputs_dict["decoder_input_ids"],
+        }
+
+        loss = model(**model_inputs).loss
+        loss.backward()
+
     @slow
     def test_real_model_save_load_from_pretrained(self):
         model_2, inputs = self.get_pretrained_model_and_inputs()
@@ -547,6 +568,7 @@ class Swin2BartModelTest(EncoderDecoderMixin, unittest.TestCase):
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
         config, pixel_values, _ = encoder_config_and_inputs
         decoder_config, decoder_inputs_dict = decoder_config_and_inputs
+        decoder_inputs_dict["labels"] = decoder_inputs_dict["decoder_input_ids"]
 
         # make sure that cross attention layers are added
         decoder_config.add_cross_attention = True
@@ -644,6 +666,7 @@ class ViT2TrOCR(EncoderDecoderMixin, unittest.TestCase):
             "decoder_config": decoder_config,
             "decoder_input_ids": decoder_input_ids,
             "decoder_attention_mask": decoder_attention_mask,
+            "labels": decoder_input_ids,
         }
 
     # there are no published pretrained TrOCR checkpoints for now

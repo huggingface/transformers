@@ -878,7 +878,7 @@ jobs:
                       - v0.5-torch-{{ checksum "setup.py" }}
                       - v0.5-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision,rjieba]
+            - run: pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]
             - save_cache:
                   key: v0.5-onnx-{{ checksum "setup.py" }}
                   paths:
@@ -912,7 +912,7 @@ jobs:
                       - v0.5-torch-{{ checksum "setup.py" }}
                       - v0.5-{{ checksum "setup.py" }}
             - run: pip install --upgrade pip
-            - run: pip install .[torch,testing,sentencepiece,onnxruntime,vision]
+            - run: pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision]
             - save_cache:
                   key: v0.5-onnx-{{ checksum "setup.py" }}
                   paths:
