@@ -136,7 +136,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
         training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
-        kwargs: (*optional*) Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
+        kwargs (*optional*): Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
 
             - Without a prefix which will be input as `**encoder_kwargs` for the encoder forward function.
             - With a *decoder_* prefix which will be input as `**decoder_kwargs` for the decoder forward function.

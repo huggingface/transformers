@@ -434,7 +434,7 @@ def module_to_test_file(module_fname):
         return "tests/utils/test_cli.py"
     # Special case for onnx submodules
     elif len(splits) >= 2 and splits[-2] == "onnx":
-        return ["tests/onnx/test_onnx.py", "tests/onnx/test_onnx_v2.py"]
+        return ["tests/onnx/test_features.py", "tests/onnx/test_onnx.py", "tests/onnx/test_onnx_v2.py"]
     # Special case for utils (not the one in src/transformers, the ones at the root of the repo).
     elif len(splits) > 0 and splits[0] == "utils":
         default_test_file = f"tests/utils/test_utils_{module_name}"
