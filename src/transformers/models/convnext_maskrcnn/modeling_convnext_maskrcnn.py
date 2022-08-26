@@ -118,15 +118,10 @@ def multi_apply(func, *args, **kwargs):
 
 
 def unmap(data, count, inds, fill=0):
-    """Unmap a subset of item (data) back to the original set of items (of size
-    count)"""
-    if data.dim() == 1:
-        ret = data.new_full((count,), fill)
-        ret[inds.type(torch.bool)] = data
-    else:
-        new_size = (count,) + data.size()[1:]
-        ret = data.new_full(new_size, fill)
-        ret[inds.type(torch.bool), :] = data
+    """Unmap a subset of item (data) back to the original set of items (of size count)"""
+    new_size = (count,) + data.size()[1:]
+    ret = data.new_full(new_size, fill)
+    ret[inds.type(torch.bool)] = data
     return ret
 
 
@@ -197,32 +192,40 @@ def anchor_inside_flags(flat_anchors, valid_flags, img_shape, allowed_border=0):
     return inside_flags
 
 
-def bbox2delta(proposals, gt, means=(0.0, 0.0, 0.0, 0.0), stds=(1.0, 1.0, 1.0, 1.0)):
-    """Compute deltas of proposals w.r.t. gt.
-    Args:
+def bbox2delta(proposals, ground_truth, means=(0.0, 0.0, 0.0, 0.0), stds=(1.0, 1.0, 1.0, 1.0)):
+    """Compute deltas of proposals w.r.t. ground truth.
+
     We usually compute the deltas of x, y, w, h of proposals w.r.t ground truth bboxes to get regression target. This
     is the inverse function of [`delta2bbox`].
-        proposals (Tensor): Boxes to be transformed, shape (N, ..., 4) gt (Tensor): Gt bboxes to be used as base, shape
-        (N, ..., 4) means (Sequence[float]): Denormalizing means for delta coordinates stds (Sequence[float]):
-        Denormalizing standard deviation for delta
-            coordinates
+
+    Args:
+        proposals (Tensor):
+            Boxes to be transformed, shape (N, ..., 4)
+        ground_truth (Tensor):
+            Gt bboxes to be used as base, shape (N, ..., 4)
+        means (Sequence[float]):
+            Denormalizing means for delta coordinates
+        stds (Sequence[float]):
+            Denormalizing standard deviation for delta coordinates
+
+
     Returns:
         Tensor: deltas with shape (N, 4), where columns represent dx, dy,
             dw, dh.
     """
-    assert proposals.size() == gt.size()
+    assert proposals.size() == ground_truth.size()
 
     proposals = proposals.float()
-    gt = gt.float()
+    ground_truth = ground_truth.float()
     px = (proposals[..., 0] + proposals[..., 2]) * 0.5
     py = (proposals[..., 1] + proposals[..., 3]) * 0.5
     pw = proposals[..., 2] - proposals[..., 0]
     ph = proposals[..., 3] - proposals[..., 1]
 
-    gx = (gt[..., 0] + gt[..., 2]) * 0.5
-    gy = (gt[..., 1] + gt[..., 3]) * 0.5
-    gw = gt[..., 2] - gt[..., 0]
-    gh = gt[..., 3] - gt[..., 1]
+    gx = (ground_truth[..., 0] + ground_truth[..., 2]) * 0.5
+    gy = (ground_truth[..., 1] + ground_truth[..., 3]) * 0.5
+    gw = ground_truth[..., 2] - ground_truth[..., 0]
+    gh = ground_truth[..., 3] - ground_truth[..., 1]
 
     dx = (gx - px) / pw
     dy = (gy - py) / ph
@@ -322,17 +325,17 @@ def delta2bbox(
     return bboxes
 
 
-array_like_type = Union[torch.Tensor, np.ndarray]
+ArrayType = Union[torch.Tensor, np.ndarray]
 
 
 def nms(
-    boxes: array_like_type,
-    scores: array_like_type,
+    boxes: ArrayType,
+    scores: ArrayType,
     iou_threshold: float,
     offset: int = 0,
     score_threshold: float = 0,
     max_num: int = -1,
-) -> Tuple[array_like_type, array_like_type]:
+) -> Tuple[ArrayType, ArrayType]:
     """Dispatch to either CPU or GPU NMS implementations.
     Arguments:
     The input can be either torch tensor or numpy array. GPU NMS will be used if the input is gpu tensor, otherwise CPU:
@@ -587,11 +590,10 @@ def bbox2result(bboxes, labels, num_classes):
     """
     if bboxes.shape[0] == 0:
         return [np.zeros((0, 5), dtype=np.float32) for i in range(num_classes)]
-    else:
-        if isinstance(bboxes, torch.Tensor):
-            bboxes = bboxes.detach().cpu().numpy()
-            labels = labels.detach().cpu().numpy()
-        return [bboxes[labels == i, :] for i in range(num_classes)]
+    if isinstance(bboxes, torch.Tensor):
+        bboxes = bboxes.detach().cpu().numpy()
+        labels = labels.detach().cpu().numpy()
+    return [bboxes[labels == i, :] for i in range(num_classes)]
 
 
 def _do_paste_mask(masks, boxes, img_h, img_w, skip_empty=True):
@@ -2067,7 +2069,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
 
         return res + tuple(rest_results)
 
-    def loss_single(
+    def loss_single_scale_level(
         self, cls_score, bbox_pred, anchors, labels, label_weights, bbox_targets, bbox_weights, num_total_samples
     ):
         """Compute loss of a single scale level.
@@ -2170,7 +2172,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
         all_anchor_list = images_to_levels(concat_anchor_list, num_level_anchors)
 
         losses_cls, losses_bbox = multi_apply(
-            self.loss_single,
+            self.loss_single_scale_level,
             cls_scores,
             bbox_preds,
             all_anchor_list,
