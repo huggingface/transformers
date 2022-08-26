@@ -473,7 +473,7 @@ class XClipModelTester:
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask)
         self.parent.assertEqual(
-            result.logits_per_image.shape,
+            result.logits_per_video.shape,
             (
                 self.vision_model_tester.batch_size,
                 self.text_model_tester.batch_size,
@@ -666,7 +666,7 @@ class XClipModelIntegrationTest(unittest.TestCase):
 
         # verify the logits
         self.assertEqual(
-            outputs.logits_per_image.shape,
+            outputs.logits_per_video.shape,
             torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
         )
         self.assertEqual(
@@ -676,4 +676,4 @@ class XClipModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor([[14.3819, 20.6031, 15.0526]], device=torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))
+        self.assertTrue(torch.allclose(outputs.logits_per_video, expected_logits, atol=1e-3))

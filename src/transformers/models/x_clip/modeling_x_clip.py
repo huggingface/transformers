@@ -80,17 +80,17 @@ class XClipOutput(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
-            Contrastive loss for image-text similarity.
-        logits_per_image:(`torch.FloatTensor` of shape `(image_batch_size, text_batch_size)`):
-            The scaled dot product scores between `image_embeds` and `text_embeds`. This represents the image-text
+            Contrastive loss for video-text similarity.
+        logits_per_video (`torch.FloatTensor` of shape `(video_batch_size, text_batch_size)`):
+            The scaled dot product scores between `video_embeds` and `text_embeds`. This represents the video-text
             similarity scores.
-        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, image_batch_size)`):
-            The scaled dot product scores between `text_embeds` and `image_embeds`. This represents the text-image
+        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, video_batch_size)`):
+            The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
             similarity scores.
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`XClipTextModel`].
-        image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The image embeddings obtained by applying the projection layer to the pooled output of
+        video_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+            The video embeddings obtained by applying the projection layer to the pooled output of
             [`XClipVisionModel`].
         text_model_output (`BaseModelOutputWithPooling`):
             The output of the [`XClipTextModel`].
@@ -101,10 +101,10 @@ class XClipOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits_per_image: torch.FloatTensor = None
+    logits_per_video: torch.FloatTensor = None
     logits_per_text: torch.FloatTensor = None
     text_embeds: torch.FloatTensor = None
-    image_embeds: torch.FloatTensor = None
+    video_embeds: torch.FloatTensor = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
     mit_output: BaseModelOutputWithPooling = None
@@ -1397,8 +1397,8 @@ class XClipModel(XClipPreTrainedModel):
         ... )
 
         >>> outputs = model(**inputs)
-        >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
-        >>> probs = logits_per_image.softmax(dim=1)  # we can take the softmax to get the label probabilities
+        >>> logits_per_video = outputs.logits_per_video  # this is the video-text similarity score
+        >>> probs = logits_per_video.softmax(dim=1)  # we can take the softmax to get the label probabilities
         ```"""
         # Use X_CLIP model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1420,10 +1420,10 @@ class XClipModel(XClipPreTrainedModel):
         # TODO remove this assertion (vision pooler output)
         # assert torch.allclose(vision_outputs.pooler_output[0, :3], torch.tensor([-0.2987, 1.0489, 0.3702]), atol=1e-4)
 
-        image_embeds = vision_outputs[1]
-        image_embeds = self.visual_projection(image_embeds)
+        video_embeds = vision_outputs[1]
+        video_embeds = self.visual_projection(video_embeds)
 
-        cls_features = image_embeds.view(batch_size, num_frames, -1)
+        cls_features = video_embeds.view(batch_size, num_frames, -1)
 
         mit_outputs = self.mit(
             cls_features,
@@ -1431,12 +1431,12 @@ class XClipModel(XClipPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        image_embeds = mit_outputs[1]
+        video_embeds = mit_outputs[1]
 
         img_features = vision_outputs[0][:, 1:, :]
         img_features = self.prompts_visual_layernorm(img_features)
         img_features = img_features @ self.prompts_visual_projection
-        img_features = img_features.view(batch_size, num_frames, -1, image_embeds.shape[-1])
+        img_features = img_features.view(batch_size, num_frames, -1, video_embeds.shape[-1])
         img_features = img_features.mean(dim=1, keepdim=False)
 
         text_outputs = self.text_model(
@@ -1458,28 +1458,28 @@ class XClipModel(XClipPreTrainedModel):
         text_embeds = text_embeds + self.prompts_generator(text_embeds, img_features)
 
         # normalized features
-        image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
+        video_embeds = video_embeds / video_embeds.norm(p=2, dim=-1, keepdim=True)
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
-        logits_per_image = torch.einsum("bd,bkd->bk", image_embeds, logit_scale * text_embeds)
-        logits_per_text = logits_per_image.T
+        logits_per_video = torch.einsum("bd,bkd->bk", video_embeds, logit_scale * text_embeds)
+        logits_per_text = logits_per_video.T
 
         loss = None
         if return_loss:
             loss = x_clip_loss(logits_per_text)
 
         if not return_dict:
-            output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
+            output = (logits_per_video, logits_per_text, text_embeds, video_embeds, text_outputs, vision_outputs)
             return ((loss,) + output) if loss is not None else output
 
         return XClipOutput(
             loss=loss,
-            logits_per_image=logits_per_image,
+            logits_per_video=logits_per_video,
             logits_per_text=logits_per_text,
             text_embeds=text_embeds,
-            image_embeds=image_embeds,
+            video_embeds=video_embeds,
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
             mit_output=mit_outputs,
