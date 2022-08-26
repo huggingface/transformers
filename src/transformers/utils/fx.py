@@ -803,8 +803,6 @@ class HFTracer(Tracer):
 
         for input_name in input_names:
             if input_name in ["labels", "start_positions", "end_positions"]:
-
-                batch_size = shape[0]
                 if model_class_name in [
                     *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES),
                     *get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES),
@@ -907,7 +905,7 @@ class HFTracer(Tracer):
                 if "mask" in input_name and "past_key_values" in input_names:
                     inputs_dict[input_name] = torch.zeros(batch_size, past_sequence_length + sequence_length, dtype=torch.long, device=device)
                 else:
-                    inputs_dict[input_name] = torch.zeros(batch_size, sequence_length, dtype=torch.long, device=device)
+                    inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
             elif "past_key_values" == input_name:
                 if isinstance(model, BloomForCausalLM):
                     head_dim = model.config.hidden_size // model.config.n_head
