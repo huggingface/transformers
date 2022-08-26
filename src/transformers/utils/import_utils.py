@@ -414,7 +414,7 @@ def is_ftfy_available():
     return _ftfy_available
 
 
-@lru_cache()
+@lru_cache(max_size=2)
 def is_torch_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     if not _torch_available:
