@@ -795,7 +795,6 @@ class HFTracer(Tracer):
         sequence_length = _generate_random_int()
         past_sequence_length = _generate_random_int()
         shape = [batch_size, sequence_length]
-        print(model.__class__.__name__, batch_size, sequence_length, past_sequence_length)
 
         if model.__class__.__name__ in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES):
             num_choices = _generate_random_int(low=2, high=5)

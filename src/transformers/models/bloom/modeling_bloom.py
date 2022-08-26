@@ -19,7 +19,6 @@ import warnings
 from typing import Optional, Tuple, Union
 
 import torch
-import torch.fx
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, LayerNorm, MSELoss
@@ -65,7 +64,6 @@ def _make_causal_mask(
     # ONNX doesn't support `torch.Tensor.triu` properly, thus we use this workaround
     seq_ids = torch.arange(target_length, device=device)
     mask[:, past_key_values_length:] = seq_ids[:, None] < seq_ids[None, :]
-
     mask[:, :past_key_values_length] = False
 
     expanded_mask = mask[None, None, :, :].expand(batch_size, 1, target_length, target_length + past_key_values_length)
@@ -101,18 +99,19 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int, dtype: torc
             dtype of the output tensor
     """
     batch_size, seq_length = attention_mask.shape
-    device = attention_mask.device
     closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
-    base = torch.tensor(2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=device, dtype=torch.float32)
-    powers = torch.arange(1, 1 + closest_power_of_2, device=device, dtype=torch.int32)
+    base = torch.tensor(
+        2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
+    )
+    powers = torch.arange(1, 1 + closest_power_of_2, device=attention_mask.device, dtype=torch.int32)
     slopes = torch.pow(base, powers)
 
     if closest_power_of_2 != num_heads:
         extra_base = torch.tensor(
-            2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), device=device, dtype=torch.float32
+            2 ** (-(2 ** -(math.log2(2 * closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
         )
         num_remaining_heads = min(closest_power_of_2, num_heads - closest_power_of_2)
-        extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=device, dtype=torch.int32)
+        extra_powers = torch.arange(1, 1 + 2 * num_remaining_heads, 2, device=attention_mask.device, dtype=torch.int32)
         slopes = torch.cat([slopes, torch.pow(extra_base, extra_powers)], dim=0)
 
     # Note: alibi will added to the attention bias that will be applied to the query, key product of attention
@@ -206,15 +205,13 @@ class BloomGelu(nn.Module):
         else:
             return bloom_gelu_forward(x)
 
+
 class BloomAttention(nn.Module):
     def __init__(self, config: BloomConfig):
         super().__init__()
 
         self.pretraining_tp = config.pretraining_tp
         self.slow_but_exact = config.slow_but_exact
-        if self.slow_but_exact and self.pretraining_tp > 1:
-            assert config.hidden_size % self.pretraining_tp == 0
-            self.slice_size = config.hidden_size // self.pretraining_tp
 
         self.hidden_size = config.hidden_size
         self.num_heads = config.n_head
@@ -248,7 +245,7 @@ class BloomAttention(nn.Module):
             query: [batch_size, seq_length, num_heads, head_dim] key: [batch_size, seq_length, num_heads, head_dim]
             value: [batch_size, seq_length, num_heads, head_dim]
         """
-        batch_size, seq_length, three_times_hidden_size = fused_qkv.size()
+        batch_size, seq_length, three_times_hidden_size = fused_qkv.shape
         fused_qkv = fused_qkv.view(batch_size, seq_length, self.num_heads, 3, self.head_dim)
         return fused_qkv[..., 0, :], fused_qkv[..., 1, :], fused_qkv[..., 2, :]
 
@@ -293,7 +290,7 @@ class BloomAttention(nn.Module):
         # 3 x [batch_size, seq_length, num_heads, head_dim]
         (query_layer, key_layer, value_layer) = self._split_heads(fused_qkv)
 
-        batch_size, q_length, _, _ = query_layer.size()
+        batch_size, q_length, _, _ = query_layer.shape
 
         query_layer = query_layer.transpose(1, 2).reshape(batch_size * self.num_heads, q_length, self.head_dim)
         key_layer = key_layer.permute(0, 2, 3, 1).reshape(batch_size * self.num_heads, self.head_dim, q_length)
@@ -306,7 +303,7 @@ class BloomAttention(nn.Module):
             key_layer = torch.cat((past_key, key_layer), dim=2)
             value_layer = torch.cat((past_value, value_layer), dim=1)
 
-        kv_length = key_layer.size(2)
+        _, _, kv_length = key_layer.shape
 
         if use_cache is True:
             present = (key_layer, value_layer)
@@ -332,7 +329,6 @@ class BloomAttention(nn.Module):
             attention_scores = attention_scores.to(torch.float)
         attn_weights = torch.masked_fill(attention_scores, attention_mask, torch.finfo(attention_scores.dtype).min)
         attention_probs = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(input_dtype)
-        # attention_probs = attention_probs * ~attention_mask # Prevent values to be too huge
 
         # [batch_size, num_heads, q_length, kv_length]
         attention_probs = self.attention_dropout(attention_probs)
@@ -351,11 +347,12 @@ class BloomAttention(nn.Module):
 
         # aggregate results across tp ranks. See here: https://github.com/pytorch/pytorch/issues/76232
         if self.pretraining_tp > 1 and self.slow_but_exact:
-            output_tensor = torch.zeros_like(context_layer) + self.dense.bias[None, None, :]
+            slices = self.hidden_size / self.pretraining_tp
+            output_tensor = torch.zeros_like(context_layer)
             for i in range(self.pretraining_tp):
                 output_tensor = output_tensor + F.linear(
-                    context_layer[:, :, i * self.slice_size : (i + 1) * self.slice_size],
-                    self.dense.weight[:, i * self.slice_size : (i + 1) * self.slice_size]
+                    context_layer[:, :, int(i * slices) : int((i + 1) * slices)],
+                    self.dense.weight[:, int(i * slices) : int((i + 1) * slices)],
                 )
         else:
             output_tensor = self.dense(context_layer)
@@ -380,19 +377,17 @@ class BloomMLP(nn.Module):
         self.gelu_impl = BloomGelu()
         self.dense_4h_to_h = nn.Linear(4 * hidden_size, hidden_size)
         self.hidden_dropout = config.hidden_dropout
-        if self.slow_but_exact and self.pretraining_tp > 1:
-            assert (4 * hidden_size) % self.pretraining_tp == 0
-            self.slice_size = (4 * hidden_size) // self.pretraining_tp
 
     def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor) -> torch.Tensor:
         hidden_states = self.gelu_impl(self.dense_h_to_4h(hidden_states))
 
         if self.pretraining_tp > 1 and self.slow_but_exact:
-            intermediate_output = torch.zeros_like(residual) + self.dense_4h_to_h.bias[None, None, :]
+            intermediate_output = torch.zeros_like(residual)
+            slices = self.dense_4h_to_h.weight.shape[-1] / self.pretraining_tp
             for i in range(self.pretraining_tp):
                 intermediate_output = intermediate_output + F.linear(
-                    hidden_states[:, :, i * self.slice_size : (i + 1) * self.slice_size],
-                    self.dense_4h_to_h.weight[:, i * self.slice_size : (i + 1) * self.slice_size],
+                    hidden_states[:, :, int(i * slices) : int((i + 1) * slices)],
+                    self.dense_4h_to_h.weight[:, int(i * slices) : int((i + 1) * slices)],
                 )
         else:
             intermediate_output = self.dense_4h_to_h(hidden_states)
@@ -666,7 +661,6 @@ class BloomModel(BloomPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -23,7 +23,6 @@ import pickle
 import random
 import sys
 import tempfile
-import traceback
 import unittest
 import unittest.mock as mock
 import warnings
@@ -803,8 +802,7 @@ class ModelTesterMixin:
                     traced_output = traced_model(**filtered_inputs)
 
             except Exception as e:
-                exception_string = "\n".join(traceback.format_stack())
-                self.fail(f"Couldn't trace module: {e}\n{exception_string}")
+                self.fail(f"Couldn't trace module: {e}")
 
             def flatten_output(output):
                 flatten = []
