@@ -1550,7 +1550,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     del state_dict[ignore_key]
 
         # Shard the model if it is too big.
-        shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size)
+        if is_sagemaker_mp_enabled():
+            # Don't shard if SageMaker Model Parallel is enabled.
+            # SMMP does not support loading these sharded model checkpoints.
+            shards = {WEIGHTS_NAME: state_dict}
+            index = None
+        else:
+            shards, index = shard_checkpoint(state_dict, max_shard_size=max_shard_size)
 
         # Clean the folder from a previous save
         for filename in os.listdir(save_directory):
