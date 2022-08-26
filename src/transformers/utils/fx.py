@@ -21,9 +21,9 @@ import math
 import operator
 import os
 import random
-import warnings
 import traceback
-from typing import Any, Callable, Dict, List, Optional, Type, Union, Iterable
+import warnings
+from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 
 import torch
 from packaging import version
@@ -31,7 +31,7 @@ from torch import nn
 from torch.fx import Graph, GraphModule, Proxy, Tracer
 from torch.fx.proxy import ParameterProxy
 
-from .. import PretrainedConfig, PreTrainedModel, logging, BloomForCausalLM
+from .. import BloomForCausalLM, PretrainedConfig, PreTrainedModel, logging
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -52,6 +52,7 @@ from ..models.auto.modeling_auto import (
 )
 from ..utils import ENV_VARS_TRUE_VALUES, TORCH_FX_REQUIRED_VERSION, is_torch_fx_available
 from ..utils.versions import importlib_metadata
+
 
 logger = logging.get_logger(__name__)
 _IS_IN_DEBUG_MODE = os.environ.get("FX_DEBUG_MODE", "").upper() in ENV_VARS_TRUE_VALUES
@@ -539,7 +540,10 @@ class HFProxy(Proxy):
 
     def install_metadata(self, metadata):
         if isinstance(metadata, torch.fx.Proxy):
-            raise ValueError(f"Invalid value, got torch.fx.Proxy as metadata for {self}. Expected concrete value and instead got {metadata}")
+            raise ValueError(
+                f"Invalid value, got torch.fx.Proxy as metadata for {self}. Expected concrete value and instead got"
+                f" {metadata}"
+            )
         self._metadata = metadata
 
     @property
@@ -549,7 +553,10 @@ class HFProxy(Proxy):
     def size(self, dim=None):
         if hasattr(self, "_metadata") and self._metadata is not None:
             if dim is None:
-                return tuple(self.tracer.create_proxy("call_method", "size", (self, i), {}) for i,_ in enumerate(self._metadata.size()))
+                return tuple(
+                    self.tracer.create_proxy("call_method", "size", (self, i), {})
+                    for i, _ in enumerate(self._metadata.size())
+                )
             else:
                 return self.tracer.create_proxy("call_method", "size", (self, dim), {})
         return self.tracer.create_proxy("call_method", "size", (self, dim), {})
@@ -580,7 +587,10 @@ class HFProxy(Proxy):
         if hasattr(self, "_metadata") and self._metadata is not None:
             # TODO @thomasw21: figure out who implements `__getitem__`
             if isinstance(self._metadata, (torch.Tensor, list, tuple)):
-                proxies =  tuple(self.tracer.create_proxy("call_function", operator.getitem, (self, i), {}) for i,metadata in enumerate(self._metadata.__iter__()))
+                proxies = tuple(
+                    self.tracer.create_proxy("call_function", operator.getitem, (self, i), {})
+                    for i, metadata in enumerate(self._metadata.__iter__())
+                )
                 for i, proxy in enumerate(proxies):
                     proxy.install_metadata(self._metadata[i])
                 return proxies.__iter__()
@@ -604,10 +614,11 @@ class HFProxy(Proxy):
             return key in self._metadata
         return super().__contains__(key)
 
+
 class HFModelAttribute(HFProxy):
     "Non tensor/module/parameter attributes"
 
-    def __getattr__(self, item) -> 'HFModelAttribute':
+    def __getattr__(self, item) -> "HFModelAttribute":
         # If `item` is a typical HFProxy attribute, `node` and `tracer` have to be manually added as they are only here in HFProxy instances
         if item in set(HFProxy.__dict__) | {"node", "tracer"}:
             return super().__getattribute__(item)
@@ -621,8 +632,9 @@ class HFModelAttribute(HFProxy):
             return getattr(_metadata, item)
 
         # Without `_metadata` we create a proxy to get such an element.
-        return self.tracer.create_proxy("get_attr", item, (), {},
-                                   proxy_factory_fn=lambda node: HFModelAttribute(node, tracer))
+        return self.tracer.create_proxy(
+            "get_attr", item, (), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, tracer)
+        )
 
 
 class HFAttribute(HFProxy):
@@ -659,6 +671,7 @@ def _proxies_to_metas(v):
         return v._metadata
     return v
 
+
 def _patch_fn_for_proxy(fn, tracer):
     def _apply_on_proxy(x):
         if isinstance(x, torch.fx.Proxy):
@@ -669,6 +682,7 @@ def _patch_fn_for_proxy(fn, tracer):
             proxy.install_metadata(new_metadata)
             return proxy
         return fn(x)
+
     return _apply_on_proxy
 
 
@@ -701,20 +715,21 @@ def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Option
         value = random.randint(low, high)
     return value
 
+
 class Patch:
     def __init__(self, patched_methods):
         self.patched_methods = patched_methods
 
     def __enter__(self):
         for _, original_methods in self.patched_methods.items():
-            for (__o, name, orig, wrapper) in original_methods:
+            for __o, name, orig, wrapper in original_methods:
                 setattr(__o, name, wrapper)
 
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         for _, original_methods in self.patched_methods.items():
-            for (__o, name, orig, wrapper) in original_methods:
+            for __o, name, orig, wrapper in original_methods:
                 setattr(__o, name, orig)
 
 
@@ -740,13 +755,25 @@ def create_nn_module_getattribute_wrapper(tracer):
             return attribute
 
         # If we're in a leaf module, let torch handle it:
-        with Patch({"nn.Module.__getattribute__": [(nn.Module, "__getattribute__", nn.Module.__getattribute__, orig_get_attribute)]}):
+        with Patch(
+            {
+                "nn.Module.__getattribute__": [
+                    (nn.Module, "__getattribute__", nn.Module.__getattribute__, orig_get_attribute)
+                ]
+            }
+        ):
             is_leaf_module = tracer.is_leaf_module(module, tracer.path_of_module(module))
         if is_leaf_module:
             return attribute
 
         if name not in torch_module_dict:
-            with Patch({"nn.Module.__getattribute__": [(nn.Module, "__getattribute__", nn.Module.__getattribute__, orig_get_attribute)]}):
+            with Patch(
+                {
+                    "nn.Module.__getattribute__": [
+                        (nn.Module, "__getattribute__", nn.Module.__getattribute__, orig_get_attribute)
+                    ]
+                }
+            ):
                 prefix = tracer.path_of_module(module)
                 name = f"{prefix}.{name}" if prefix != "" else name
                 proxy = tracer.create_proxy("get_attr", name, (name,), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, tracer))  # type: ignore[arg-type]
@@ -756,6 +783,7 @@ def create_nn_module_getattribute_wrapper(tracer):
         return attribute
 
     return get_weird_attribute
+
 
 class HFTracer(Tracer):
     """
@@ -779,9 +807,7 @@ class HFTracer(Tracer):
                 f"{TORCH_FX_REQUIRED_VERSION} is supported."
             )
 
-    def _generate_dummy_input(
-        self, model: PreTrainedModel, input_names: Iterable[str]
-    ) -> Dict[str, torch.Tensor]:
+    def _generate_dummy_input(self, model: PreTrainedModel, input_names: Iterable[str]) -> Dict[str, torch.Tensor]:
         """Generates dummy input for model inference recording."""
         # Retrieving the model class, either from the "class_for_deserialization" attribute if the model was restored
         # from pickle, or from the "__class__" attribute in the general case.
@@ -833,8 +859,9 @@ class HFTracer(Tracer):
                         labels_dtype = torch.float32
                     else:
                         raise ValueError(
-                            'Expected model.config.problem_type to be either: "regression", "single_label_classification"'
-                            f', or "multi_label_classification", but "{model.config.problem_type}" was provided.'
+                            'Expected model.config.problem_type to be either: "regression",'
+                            ' "single_label_classification", or "multi_label_classification", but'
+                            f' "{model.config.problem_type}" was provided.'
                         )
                     inputs_dict["labels"] = torch.zeros(*labels_shape, dtype=labels_dtype, device=device)
 
@@ -901,16 +928,32 @@ class HFTracer(Tracer):
                 inputs_dict[input_name] = torch.zeros(batch_size, long_seq_length, dtype=torch.float, device=device)
             elif "mask" in input_name or "ids" in input_name:
                 if "mask" in input_name and "past_key_values" in input_names:
-                    inputs_dict[input_name] = torch.zeros(batch_size, past_sequence_length + sequence_length, dtype=torch.long, device=device)
+                    inputs_dict[input_name] = torch.zeros(
+                        batch_size, past_sequence_length + sequence_length, dtype=torch.long, device=device
+                    )
                 else:
                     inputs_dict[input_name] = torch.zeros(shape, dtype=torch.long, device=device)
             elif "past_key_values" == input_name:
                 if isinstance(model, BloomForCausalLM):
                     head_dim = model.config.hidden_size // model.config.n_head
-                    past_key = torch.zeros(batch_size * model.config.n_head, head_dim, past_sequence_length, dtype=torch.float, device=device)
-                    past_value = torch.zeros(batch_size * model.config.n_head, past_sequence_length, head_dim, dtype=torch.float, device=device)
+                    past_key = torch.zeros(
+                        batch_size * model.config.n_head,
+                        head_dim,
+                        past_sequence_length,
+                        dtype=torch.float,
+                        device=device,
+                    )
+                    past_value = torch.zeros(
+                        batch_size * model.config.n_head,
+                        past_sequence_length,
+                        head_dim,
+                        dtype=torch.float,
+                        device=device,
+                    )
                 else:
-                    raise NotImplementedError(f"Unsupported input_name for creating dummy input for {model.__class__.__name__}: {input_name}")
+                    raise NotImplementedError(
+                        f"Unsupported input_name for creating dummy input for {model.__class__.__name__}: {input_name}"
+                    )
                 inputs_dict[input_name] = [(past_key, past_value) for _ in range(model.config.n_layer)]
             else:
                 shape_with_hidden_size = shape + [model.config.hidden_size]
@@ -980,7 +1023,9 @@ class HFTracer(Tracer):
             rv.install_metadata(meta_out)
         except Exception as e:
             if _IS_IN_DEBUG_MODE:
-                warnings.warn(f"Could not compute metadata for {kind} target {target} args {args} kwargs {kwargs}: {e}")
+                warnings.warn(
+                    f"Could not compute metadata for {kind} target {target} args {args} kwargs {kwargs}: {e}"
+                )
 
         return rv
 
@@ -1034,7 +1079,7 @@ class HFTracer(Tracer):
         concrete_args: Optional[Dict[str, Any]] = None,
         dummy_inputs: Optional[Dict[str, Any]] = None,
         complete_concrete_args_with_inputs_not_in_dummy_inputs: bool = True,
-        trace_non_torch_object: bool = False
+        trace_non_torch_object: bool = False,
     ) -> Graph:
         """
         Traces `root` and returns the corresponding FX `torch.fx.Graph` representation. `root` can either be a
@@ -1109,22 +1154,27 @@ class HFTracer(Tracer):
         patched_torch_methods = {
             f"torch.{target}": [
                 (torch, target, getattr(torch, target), _gen_constructor_wrapper(getattr(torch, target)))
-            ] for target in self._TORCH_METHODS_TO_PATCH
+            ]
+            for target in self._TORCH_METHODS_TO_PATCH
         }
 
         if trace_non_torch_object:
             patched_methods = {
                 **patched_torch_methods,
                 "nn.Module.__getattribute__": [
-                    (nn.Module, "__getattribute__", nn.Module.__getattribute__, create_nn_module_getattribute_wrapper(self))
+                    (
+                        nn.Module,
+                        "__getattribute__",
+                        nn.Module.__getattribute__,
+                        create_nn_module_getattribute_wrapper(self),
+                    )
                 ],
                 "math.log2": [(math, "log2", math.log2, _patch_fn_for_proxy(math.log2, self))],
                 "math.floor": [(math, "floor", math.floor, _patch_fn_for_proxy(math.floor, self))],
-                "torch.finfo": [(torch, "finfo", torch.finfo, _patch_fn_for_proxy(torch.finfo, self))]
+                "torch.finfo": [(torch, "finfo", torch.finfo, _patch_fn_for_proxy(torch.finfo, self))],
             }
         else:
             patched_methods = patched_torch_methods
-
 
         with Patch(patched_methods):
             graph = super().trace(root, concrete_args=concrete_args)
@@ -1235,10 +1285,7 @@ def check_if_model_is_supported(model: PreTrainedModel):
 
 
 def symbolic_trace(
-    model: PreTrainedModel,
-    input_names: Optional[List[str]] = None,
-    disable_check: bool = False,
-    **trace_kwargs
+    model: PreTrainedModel, input_names: Optional[List[str]] = None, disable_check: bool = False, **trace_kwargs
 ) -> GraphModule:
 
     """
@@ -1274,11 +1321,7 @@ def symbolic_trace(
 
     # Tracing.
     tracer = HFTracer()
-    traced_graph = tracer.trace(
-        model,
-        concrete_args=concrete_args,
-        **trace_kwargs
-    )
+    traced_graph = tracer.trace(model, concrete_args=concrete_args, **trace_kwargs)
     traced = torch.fx.GraphModule(model, traced_graph)
 
     traced.config = model.config
