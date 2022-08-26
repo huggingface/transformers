@@ -31,7 +31,7 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutput,
     TFBaseModelOutputWithPooling,
     TFImageClassifierOutputWithNoAttention,
-    TFSemanticSegmenterOutput,
+    TFSemanticSegmenterOutputWithNoAttention,
 )
 from ...modeling_tf_utils import TFPreTrainedModel, TFSequenceClassificationLoss, keras_serializable, unpack_inputs
 from ...tf_utils import shape_list, stable_softmax
@@ -243,12 +243,12 @@ class TFMobileViTSelfAttention(tf.keras.layers.Layer):
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
 
     def transpose_for_scores(self, x: tf.Tensor) -> tf.Tensor:
-        batch_size = shape_list(x)[0]
+        batch_size = tf.shape(x)[0]
         x = tf.reshape(x, shape=(batch_size, -1, self.num_attention_heads, self.attention_head_size))
         return tf.transpose(x, perm=[0, 2, 1, 3])
 
     def call(self, hidden_states: tf.Tensor, training: bool = False) -> tf.Tensor:
-        batch_size = shape_list(hidden_states)[0]
+        batch_size = tf.shape(hidden_states)[0]
 
         key_layer = self.transpose_for_scores(self.key(hidden_states))
         value_layer = self.transpose_for_scores(self.value(hidden_states))
@@ -440,7 +440,10 @@ class TFMobileViTLayer(tf.keras.layers.Layer):
         patch_width, patch_height = self.patch_width, self.patch_height
         patch_area = tf.cast(patch_width * patch_height, "int32")
 
-        batch_size, orig_height, orig_width, channels = shape_list(features)
+        batch_size = tf.shape(features)[0]
+        orig_height = tf.shape(features)[1]
+        orig_width = tf.shape(features)[2]
+        channels = tf.shape(features)[3]
 
         new_height = tf.cast(tf.math.ceil(orig_height / patch_height) * patch_height, "int32")
         new_width = tf.cast(tf.math.ceil(orig_width / patch_width) * patch_width, "int32")
@@ -750,12 +753,7 @@ class TFMobileViTPreTrainedModel(TFPreTrainedModel):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(
-                3,
-                self.config.num_channels,
-                self.config.image_size,
-                self.config.image_size,
-            ),
+            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
             dtype=tf.float32,
         )
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
@@ -1086,7 +1084,7 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MOBILEVIT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TFSemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=TFSemanticSegmenterOutputWithNoAttention, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
         pixel_values: Optional[tf.Tensor] = None,
@@ -1094,7 +1092,7 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[tuple, TFSemanticSegmenterOutput]:
+    ) -> Union[tuple, TFSemanticSegmenterOutputWithNoAttention]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
@@ -1156,13 +1154,13 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
                 output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return TFSemanticSegmenterOutput(
+        return TFSemanticSegmenterOutputWithNoAttention(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=None,
         )
 
-    def serving_output(self, output: TFSemanticSegmenterOutput) -> TFSemanticSegmenterOutput:
-        # hidden_states and attention not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
-        return TFSemanticSegmenterOutput(logits=output.logits, hidden_states=output.hidden_states, attentions=None)
+    def serving_output(
+        self, output: TFSemanticSegmenterOutputWithNoAttention
+    ) -> TFSemanticSegmenterOutputWithNoAttention:
+        return TFSemanticSegmenterOutputWithNoAttention(logits=output.logits, hidden_states=output.hidden_states)
