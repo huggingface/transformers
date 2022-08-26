@@ -142,25 +142,24 @@ def convert_convnext_maskrcnn_checkpoint(checkpoint_path, pytorch_dump_folder_pa
 
     outputs = model(pixel_values, img_metas=img_metas, output_hidden_states=True)
 
+    # verify hidden states
     expected_slice = torch.tensor(
         [[-0.0836, -0.1298, -0.1237], [-0.0743, -0.1090, -0.0873], [-0.0231, 0.0851, 0.0792]]
     )
     assert torch.allclose(outputs.hidden_states[-1][0, 0, :3, :3], expected_slice, atol=1e-3)
 
-    # filter results
+    # verify bbox_results
     bbox_results = outputs.results[0][0]
-    detections = []
-    for label in range(len(bbox_results)):
-        if len(bbox_results[label]) > 0:
-            for detection in bbox_results[label]:
-                detections.append((label, detection))
+    assert len(bbox_results) == 80
 
-    predicted_classes = [det[0] for det in detections]
-    assert predicted_classes == [15, 15, 57, 57, 59, 65, 65, 79]
-    predicted_bbox = detections[0][1]
-    assert np.allclose(
-        predicted_bbox, np.array([17.905708, 55.41647, 318.95575, 470.25925, 0.9981325], dtype=np.float32), atol=10
+    expected_slice = np.array(
+        [
+            [17.905682, 55.41647, 318.95575, 470.2593, 0.9981325],
+            [336.97797, 18.415943, 632.41956, 381.94666, 0.99591476],
+        ],
+        dtype=np.float32,
     )
+    assert np.allclose(bbox_results[15], expected_slice, atol=1e-4)
     print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:

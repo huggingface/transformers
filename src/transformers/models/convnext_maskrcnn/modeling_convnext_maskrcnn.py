@@ -174,7 +174,7 @@ def images_to_levels(target, num_levels):
 def anchor_inside_flags(flat_anchors, valid_flags, img_shape, allowed_border=0):
     """Check whether the anchors are inside the border.
     Args:
-        flat_anchors (torch.Tensor): Flatten anchors, shape (n, 4).
+        flat_anchors (torch.Tensor): Flattened anchors, shape (n, 4).
         valid_flags (torch.Tensor): An existing valid flags of anchors.
         img_shape (tuple(int)): Shape of current image.
         allowed_border (int, optional): The border to allow the valid anchor.
@@ -651,7 +651,7 @@ def _do_paste_mask(masks, boxes, img_h, img_w, skip_empty=True):
         return img_masks[:, 0], ()
 
 
-# Copied from transformers.models.beit.modeling_beit.drop_path
+# Copied from transformers.models.convnext.modeling_convnext.drop_path
 def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
@@ -672,7 +672,7 @@ def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->ConvNextMaskRCNN
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextDropPath with ConvNext->ConvNextMaskRCNN
 class ConvNextMaskRCNNDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
@@ -817,11 +817,8 @@ class ConvNextMaskRCNNStage(nn.Module):
         return hidden_states
 
 
+# this class isn't copied from modeling_convnext.py as layernorms are added
 class ConvNextMaskRCNNEncoder(nn.Module):
-    """
-    This class isn't copied from modeling_convnext.py as layernorms are added.
-    """
-
     def __init__(self, config):
         super().__init__()
         self.stages = nn.ModuleList()
