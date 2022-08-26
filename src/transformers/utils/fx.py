@@ -608,10 +608,11 @@ class HFModelAttribute(HFProxy):
     "Non tensor/module/parameter attributes"
 
     def __getattr__(self, item) -> 'HFModelAttribute':
-        # If typical HFProxy methods
-        if item in set(HFProxy.__dict__) | {"__class__", "node", "tracer"}:
+        # If `item` is a typical HFProxy attribute, `node` and `tracer` have to be manually added as they are only here in HFProxy instances
+        if item in set(HFProxy.__dict__) | {"node", "tracer"}:
             return super().__getattribute__(item)
 
+        # Otherwise we attempt to obtain `_metadata` is available and get `item` there
         try:
             _metadata = self._metadata
         except AttributeError:
@@ -619,9 +620,8 @@ class HFModelAttribute(HFProxy):
         if _metadata is not None:
             return getattr(_metadata, item)
 
-        # TODO @thomasw21 probably something weird to do about this.
-        tracer = self.tracer
-        return tracer.create_proxy("get_attr", item, (), {},
+        # Without `_metadata` we create a proxy to get such an element.
+        return self.tracer.create_proxy("get_attr", item, (), {},
                                    proxy_factory_fn=lambda node: HFModelAttribute(node, tracer))
 
 
@@ -735,11 +735,11 @@ def create_nn_module_getattribute_wrapper(tracer):
         if isinstance(attribute, (nn.Module, torch.Tensor, nn.Parameter)):
             return attribute
 
-        # usually this are methods we don''t really need to build proxies out of them, just call them
+        # We can just get the methods instead of creating a proxy for getting it.
         if callable(attribute):
             return attribute
 
-        # if we're in a leaf module, let pytorch handle it:
+        # If we're in a leaf module, let torch handle it:
         with Patch({"nn.Module.__getattribute__": [(nn.Module, "__getattribute__", nn.Module.__getattribute__, orig_get_attribute)]}):
             is_leaf_module = tracer.is_leaf_module(module, tracer.path_of_module(module))
         if is_leaf_module:
@@ -749,7 +749,6 @@ def create_nn_module_getattribute_wrapper(tracer):
             with Patch({"nn.Module.__getattribute__": [(nn.Module, "__getattribute__", nn.Module.__getattribute__, orig_get_attribute)]}):
                 prefix = tracer.path_of_module(module)
                 name = f"{prefix}.{name}" if prefix != "" else name
-                # proxy = self.create_proxy("call_function", builtins.getattr, (module, name), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, self))  # type: ignore[arg-type]
                 proxy = tracer.create_proxy("get_attr", name, (name,), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, tracer))  # type: ignore[arg-type]
                 proxy.install_metadata(attribute)
             return proxy
