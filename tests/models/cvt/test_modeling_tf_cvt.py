@@ -173,6 +173,13 @@ class TFCvtModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_dataset_conversion(self):
         super().test_dataset_conversion()
 
+    @unittest.skipIf(
+        not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,
+        reason="TF (<=2.8) does not support backprop for grouped convolutions on CPU.",
+    )
+    def test_keras_fit(self):
+        super().test_keras_fit()
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
