@@ -213,3 +213,71 @@ For a more in-depth example of how to fine-tune a model for text classification,
 or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/text_classification-tf.ipynb).
 
 </Tip>
+
+## Inference
+
+Great, now that you've finetuned a model, you can use it for inference!
+
+Grab some text you'd like to run inference on:
+
+```py
+>>> text = "This was a masterpiece. Not completely faithful to the books, but enthralling from beginning to end. Might be my favorite of the three."
+```
+
+<frameworkcontent>
+<pt>
+Tokenize the text and return PyTorch tensors (you can use the model you just finetuned or a pretrained model for sentiment analysis):
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+>>> inputs = tokenizer(text, return_tensors="pt")
+```
+
+Pass your inputs to the model and return the `logits`:
+
+```py
+>>> from transformers import AutoModelForSequenceClassification
+
+>>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+>>> with torch.no_grad():
+...     logits = model(**inputs).logits
+```
+
+Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a label:
+
+```py
+>>> predicted_class_id = logits.argmax().item()
+>>> model.config.id2label[predicted_class_id]
+'POSITIVE'
+```
+</pt>
+<tf>
+Tokenize the text and return TensorFlow tensors (you can use the model you just finetuned or a pretrained model for sentiment analysis):
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+>>> inputs = tokenizer(text, return_tensors="tf")
+```
+
+Pass your inputs to the model and return the `logits`:
+
+```py
+>>> from transformers import TFAutoModelForSequenceClassification
+
+>>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased-finetuned-sst-2-english")
+>>> logits = model(**inputs).logits
+```
+
+Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a label:
+
+```py
+>>> predicted_class_id = int(tf.math.argmax(logits, axis=-1)[0])
+>>> model.config.id2label[predicted_class_id]
+'POSITIVE'
+```
+</tf>
+</frameworkcontent>

@@ -301,6 +301,71 @@ Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to fin
 </tf>
 </frameworkcontent>
 
+## Inference
+
+Great, now that you've finetuned a model, you can use it for inference!
+
+Come up with a prompt you'd like to generate text from:
+
+```py
+>>> prompt = "Somatic hypermutation allows the immune system to"
+```
+
+<frameworkcontent>
+<pt>
+Tokenize the text and return the `input_ids` as PyTorch tensors (you can use the model you just finetuned or a pretrained model for causal language modeling):
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+>>> inputs = tokenizer(prompt, return_tensors="pt").input_ids
+```
+
+Use the [`~transformers.generation_utils.GenerationMixin.generate`] method to generate text. Check out the [Generation](./main_classes/text_generation) to learn more about the different text generation strategies, and parameters for controlling generation.
+
+```py
+>>> from transformers import AutoModelForCausalLM
+
+>>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+>>> outputs = model.generate(inputs, max_new_tokens=100, do_sample=True, top_k=50, top_p=0.95)
+```
+
+Decode the generated token ids back into text:
+
+```py
+>>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+["Somatic hypermutation allows the immune system to react to drugs with the ability to adapt to a different environmental situation. In other words, a system of 'hypermutation' can help the immune system to adapt to a different environmental situation or in some cases even a single life. In contrast, researchers at the University of Massachusetts-Boston have found that 'hypermutation' is much stronger in mice than in humans but can be found in humans, and that it's not completely unknown to the immune system. A study on how the immune system"]
+```
+</pt>
+<tf>
+Tokenize the text and return the `input_ids` as TensorFlow tensors (you can use the model you just finetuned or a pretrained model for causal language modeling):
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilgpt2")
+>>> inputs = tokenizer(prompt, return_tensors="pt").input_ids
+```
+
+Use the [`~transformers.generation_tf_utils.TFGenerationMixin`] method to generate text. Check out the [Generation](./main_classes/text_generation) to learn more about the different text generation strategies, and parameters for controlling generation.
+
+```py
+>>> from transformers import AutoModelForCausalLM
+
+>>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
+>>> outputs = model.generate(input_ids=inputs, max_new_tokens=100, do_sample=True, top_k=50, top_p=0.95) 
+```
+
+Decode the generated token ids back into text:
+
+```py
+>>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+['Somatic hypermutation allows the immune system to detect the presence of other viruses as they become more prevalent. Therefore, researchers have identified a high proportion of human viruses. The proportion of virus-associated viruses in our study increases with age. Therefore, we propose a simple algorithm to detect the presence of these new viruses in our samples as a sign of improved immunity. A first study based on this algorithm, which will be published in Science on Friday, aims to show that this finding could translate into the development of a better vaccine that is more effective for']
+```
+</tf>
+</frameworkcontent>
+
 ## Masked language modeling
 
 Masked language modeling is also known as a fill-mask task because it predicts a masked token in a sequence. Models for masked language modeling require a good contextual understanding of an entire sequence instead of only the left context. This section shows you how to fine-tune [DistilRoBERTa](https://huggingface.co/distilroberta-base) to predict a masked word.
@@ -413,3 +478,80 @@ For a more in-depth example of how to fine-tune a model for causal language mode
 or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/language_modeling-tf.ipynb).
 
 </Tip>
+
+## Inference
+
+Great, now that you've finetuned a model, you can use it for inference!
+
+Come up with some text you'd like the model to fill in the blank with. Use the special `[MASK]` token to indicate the blank:
+
+```py
+>>> text = "The Milky Way is a [MASK] galaxy."
+```
+
+<frameworkcontent>
+<pt>
+Tokenize the text and return the `input_ids` as PyTorch tensors (you can use the model you just finetuned or a pretrained model for masked language modeling). You'll also need to specify the position of the `[MASK]` token:
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> inputs = tokenizer(text, return_tensors="pt")
+>>> mask_token_index = torch.where(inputs["input_ids"] == tokenizer.mask_token_id)[1]
+```
+
+Pass your inputs to the model and return the `logits` of the masked token:
+
+```py
+>>> logits = model(**inputs).logits
+>>> mask_token_logits = logits[0, mask_token_index, :]
+```
+
+Then return the five masked tokens with the highest probability and print them out:
+
+```py
+>>> top_5_tokens = torch.topk(mask_token_logits, 5, dim=1).indices[0].tolist()
+
+>>> for token in top_5_tokens:
+...    print(text.replace(tokenizer.mask_token, tokenizer.decode([token])))
+The Milky Way is a spiral galaxy.
+The Milky Way is a binary galaxy.
+The Milky Way is a dwarf galaxy.
+The Milky Way is a barred galaxy.
+The Milky Way is a milky galaxy.
+```
+</pt>
+<tf>
+Tokenize the text and return the `input_ids` as TensorFlow tensors (you can use the model you just finetuned or a pretrained model for masked language modeling). You'll also need to specify the position of the `[MASK]` token:
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
+>>> inputs = tokenizer(text, return_tensors="tf")
+>>> mask_token_index = tf.where(inputs["input_ids"] == tokenizer.mask_token_id)[0, 1]
+```
+
+Pass your inputs to the model and return the `logits` of the masked token:
+
+```py
+>>> logits = model(**inputs).logits
+>>> mask_token_logits = logits[0, mask_token_index, :]
+```
+
+Then return the five masked tokens with the highest probability and print them out:
+
+```py
+>>> top_5_tokens = tf.math.top_k(mask_token_logits, 5).indices.numpy()
+
+>>> for token in top_5_tokens:
+...    print(text.replace(tokenizer.mask_token, tokenizer.decode([token])))
+The Milky Way is a spiral galaxy.
+The Milky Way is a binary galaxy.
+The Milky Way is a dwarf galaxy.
+The Milky Way is a barred galaxy.
+The Milky Way is a milky galaxy.
+```
+</tf>
+</frameworkcontent>

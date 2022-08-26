@@ -270,3 +270,105 @@ For a more in-depth example of how to fine-tune a model for token classification
 or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
 
 </Tip>
+
+## Inference
+
+Great, now that you've finetuned a model, you can use it for inference!
+
+Grab some text you'd like to run inference on:
+
+```py
+>>> text = "The Golden State Warriors are an American professional basketball team based in San Francisco."
+```
+
+<frameworkcontent>
+<pt>
+Tokenize the text and return PyTorch tensors (you can use the model you just finetuned or a pretrained model for NER):
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("philschmid/distilroberta-base-ner-conll2003")
+>>> inputs = tokenizer(text, return_tensors="pt")
+```
+
+Pass your inputs to the model and return the `logits`:
+
+```py
+>>> from transformers import AutoModelForTokenClassification
+
+>>> model = AutoModelForTokenClassification.from_pretrained("philschmid/distilroberta-base-ner-conll2003")
+>>> with torch.no_grad():
+...     logits = model(**inputs).logits
+```
+
+Get the class with the highest probability for each token, and use the model's `id2label` mapping to convert it to a label:
+
+```py
+>>> predictions = torch.argmax(logits, dim=2)
+>>> predicted_token_class = [model.config.id2label[t.item()] for t in predictions[0]]
+>>> predicted_token_class
+['O',
+ 'O',
+ 'B-ORG',
+ 'I-ORG',
+ 'I-ORG',
+ 'O',
+ 'O',
+ 'B-MISC',
+ 'O',
+ 'O',
+ 'O',
+ 'O',
+ 'O',
+ 'B-LOC',
+ 'I-LOC',
+ 'O',
+ 'O']
+```
+</pt>
+<tf>
+Tokenize the text and return TensorFlow tensors (you can use the model you just finetuned or a pretrained model for NER):
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("philschmid/distilroberta-base-ner-conll2003")
+>>> inputs = tokenizer(text, return_tensors="tf")
+```
+
+Pass your inputs to the model and return the `logits`:
+
+```py
+>>> from transformers import TFAutoModelForTokenClassification
+
+>>> model = TFAutoModelForTokenClassification.from_pretrained("philschmid/distilroberta-base-ner-conll2003")
+>>> logits = model(**inputs).logits
+```
+
+Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a label:
+
+```py
+>>> predicted_token_class_ids = tf.math.argmax(logits, axis=-1)
+>>> predicted_token_class = [model.config.id2label[t] for t in predicted_token_class_ids[0].numpy().tolist()]
+>>> predicted_token_class
+['O',
+ 'O',
+ 'B-ORG',
+ 'I-ORG',
+ 'I-ORG',
+ 'O',
+ 'O',
+ 'B-MISC',
+ 'O',
+ 'O',
+ 'O',
+ 'O',
+ 'O',
+ 'B-LOC',
+ 'I-LOC',
+ 'O',
+ 'O']
+```
+</tf>
+</frameworkcontent>

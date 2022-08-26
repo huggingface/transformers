@@ -269,3 +269,86 @@ For a more in-depth example of how to fine-tune a model for question answering, 
 or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/question_answering-tf.ipynb).
 
 </Tip>
+
+## Inference
+
+Great, now that you've finetuned a model, you can use it for inference!
+
+Come up with a question and some context you'd like the model to predict:
+
+```py
+>>> question = "How many programming languages does BLOOM support?"
+>>> context = "BLOOM has 176 billion parameters and can generate text in 46 languages natural languages and 13 programming languages."
+```
+
+<frameworkcontent>
+<pt>
+Tokenize the text and return PyTorch tensors (you can use the model you just finetuned or a pretrained model for question answering):
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased-distilled-squad")
+>>> inputs = tokenizer(question, text, return_tensors="pt")
+```
+
+Pass your inputs to the model and return the `logits`:
+
+```py
+>>> from transformers import AutoModelForQuestionAnswering
+
+>>> model = AutoModelForQuestionAnswering.from_pretrained("distilbert-base-cased-distilled-squad")
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+```
+
+Get the highest probability from the model output for the start and end positions:
+
+```py
+>>> answer_start_index = outputs.start_logits.argmax()
+>>> answer_end_index = outputs.end_logits.argmax()
+```
+
+Decode the predicted tokens to get the answer:
+
+```py
+>>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+>>> tokenizer.decode(predict_answer_tokens)
+'13'
+```
+</pt>
+<tf>
+Tokenize the text and return TensorFlow tensors (you can use the model you just finetuned or a pretrained model for question answering):
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased-distilled-squad")
+>>> inputs = tokenizer(question, text, return_tensors="tf")
+```
+
+Pass your inputs to the model and return the `logits`:
+
+```py
+>>> from transformers import TFAutoModelForQuestionAnswering
+
+>>> model = TFAutoModelForQuestionAnswering.from_pretrained("distilbert-base-cased-distilled-squad")
+>>> outputs = model(**inputs)
+```
+
+Get the highest probability from the model output for the start and end positions:
+
+```py
+>>> answer_start_index = int(tf.math.argmax(outputs.start_logits, axis=-1)[0])
+>>> answer_end_index = int(tf.math.argmax(outputs.end_logits, axis=-1)[0])
+```
+
+Decode the predicted tokens to get the answer:
+
+```py
+>>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+>>> tokenizer.decode(predict_answer_tokens)
+'13'
+```
+</tf>
+</frameworkcontent>

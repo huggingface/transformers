@@ -228,3 +228,68 @@ For a more in-depth example of how to fine-tune a model for translation, take a 
 or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/translation-tf.ipynb).
 
 </Tip>
+
+## Inference
+
+Great, now that you've finetuned a model, you can use it for inference!
+
+Come up with some text you'd like to translate to another language. For T5, you need to prefix your input depending on the task you're working on. In other words, to translate from English to French you should prefix your input as shown below:
+
+```py
+>>> text = "translate English to French: Legumes share resources with nitrogen-fixing bacteria."
+```
+
+<frameworkcontent>
+<pt>
+Tokenize the text and return the `input_ids` as PyTorch tensors (you can use the model you just finetuned or a pretrained model for translation):
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
+>>> inputs = tokenizer(text, return_tensors="pt").input_ids
+```
+
+Use the [`~transformers.generation_utils.GenerationMixin.generate`] method to generate the translation. Check out the [Generation](./main_classes/text_generation) to learn more about the different text generation strategies, and parameters for controlling generation.
+
+```py
+>>> from transformers import AutoModelForSeq2SeqLM
+
+>>> model = AutoModelForSeq2SeqLM.from_pretrained("t5-small")
+>>> outputs = model.generate(inputs, max_new_tokens=40, do_sample=True, top_k=30, top_p=0.95)
+```
+
+Decode the generated token ids back into text:
+
+```py
+>>> tokenizer.decode(outputs[0], skip_special_tokens=True)
+'Les lignées partagent des ressources avec des bactéries enfixant l'azote.'
+```
+</pt>
+<tf>
+Tokenize the text and return the `input_ids` as TensorFlow tensors (you can use the model you just finetuned or a pretrained model for translation):
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("t5-small")
+>>> inputs = tokenizer(text, return_tensors="tf").input_ids
+```
+
+Use the [`~transformers.generation_utils.TFGenerationMixin.generate`] method to generate the translation. Check out the [Generation](./main_classes/text_generation) to learn more about the different text generation strategies, and parameters for controlling generation.
+
+```py
+>>> from transformers import TFAutoModelForSeq2SeqLM
+
+>>> model = TFAutoModelForSeq2SeqLM.from_pretrained("t5-small")
+>>> outputs = model.generate(inputs, max_new_tokens=40, do_sample=True, top_k=30, top_p=0.95)
+```
+
+Decode the generated token ids back into text:
+
+```py
+>>> tokenizer.decode(outputs[0], skip_special_tokens=True)
+'Les lugumes partagent les ressources avec des bactéries fixatrices d'azote.'
+```
+</tf>
+</frameworkcontent>
