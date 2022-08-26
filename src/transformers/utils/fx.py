@@ -21,6 +21,7 @@ import math
 import operator
 import os
 import random
+import traceback
 import warnings
 from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 
@@ -547,30 +548,19 @@ class HFProxy(Proxy):
 
     @property
     def shape(self):
-        return self.size()
-
-    def size(self, dim=None):
-        if hasattr(self, "_metadata") and self._metadata is not None:
-            if dim is None:
-                return tuple(
-                    self.tracer.create_proxy("call_method", "size", (self, i), {})
-                    for i, _ in enumerate(self._metadata.size())
-                )
-            else:
-                return self.tracer.create_proxy("call_method", "size", (self, dim), {})
-        return self.tracer.create_proxy("call_method", "size", (self, dim), {})
+        return self.tracer.create_proxy("call_method", "size", (self,), {})
 
     @property
     def dtype(self):
         if hasattr(self, "_metadata") and self._metadata is not None:
             return self._metadata.dtype
-        return self.tracer.create_proxy("call_function", builtins.getattr, (self, "dtype"), {})
+        return self.tracer.create_proxy("call_function", getattr, (self, "dtype"), {})
 
     @property
     def device(self):
         # Hack so we can track when devices are used. During meta-tensor propagation,
         # replace these values with a constant 'meta'
-        return MetaDeviceAttribute(self, "device")
+        return self.tracer.create_proxy("call_function", getattr, (self, "device"), {}, proxy_factory_fn=lambda node: MetaDeviceAttribute(node, self.tracer))
 
     def __len__(self):
         if hasattr(self, "_metadata") and self._metadata is not None:
@@ -649,14 +639,17 @@ class HFAttribute(HFProxy):
         # the node for attributes is added lazily, since most will just be method calls
         # which do not rely on the getitem call
         if self._node is None:
-            self._node = self.tracer.create_proxy("call_function", getattr, (self.root, self.attr), {}).node
+            proxy = self.tracer.create_proxy("call_function", getattr, (self.root, self.attr), {}, proxy_factory_fn=self.set_node)
         return self._node
+
+    def set_node(self, node):
+        self._node = node
+        return self
 
     def __call__(self, *args, **kwargs):
         return self.tracer.create_proxy("call_method", self.attr, (self.root,) + args, kwargs)
 
-
-class MetaDeviceAttribute(HFAttribute):
+class MetaDeviceAttribute(HFProxy):
     pass
 
 
@@ -666,7 +659,8 @@ def _proxies_to_metas(v):
         return "meta"
     if isinstance(v, torch.fx.Proxy):
         if not (isinstance(v, HFProxy) and hasattr(v, "_metadata")):
-            raise RuntimeError(f"No metadata was found for {v}")
+            print("failed querying metadata", id(v), v, v.node.name, v.node.op, v.node.target, v.node.args)
+            raise RuntimeError(f"No metadata was found for {v}, {isinstance(v, HFProxy)} and {hasattr(v, '_metadata')}")
         return v._metadata
     return v
 
@@ -676,10 +670,7 @@ def _patch_fn_for_proxy(fn, tracer):
         if isinstance(x, torch.fx.Proxy):
             if not (isinstance(x, HFProxy) and hasattr(x, "_metadata")):
                 raise RuntimeError(f"No metadata was found for {x}")
-            new_metadata = fn(x._metadata)
-            proxy = tracer.create_proxy("call_function", fn, (x,), {})
-            proxy.install_metadata(new_metadata)
-            return proxy
+            return tracer.create_proxy("call_function", fn, (x,), {})
         return fn(x)
 
     return _apply_on_proxy
@@ -961,7 +952,7 @@ class HFTracer(Tracer):
         return inputs_dict
 
     def create_proxy(self, kind, target, args, kwargs, name=None, type_expr=None, proxy_factory_fn=None):
-        rv = super().create_proxy(kind, target, args, kwargs, name, type_expr, proxy_factory_fn)
+        rv = super().create_proxy(kind, target, args, kwargs, name, type_expr, proxy_factory_fn=proxy_factory_fn)
 
         if kind == "placeholder" and target in self.meta_args:
             rv.install_metadata(self.meta_args[target])
@@ -1020,10 +1011,11 @@ class HFTracer(Tracer):
             if not isinstance(rv, Proxy):
                 raise ValueError("Don't support composite output yet")
             rv.install_metadata(meta_out)
+
         except Exception as e:
             if _IS_IN_DEBUG_MODE:
                 warnings.warn(
-                    f"Could not compute metadata for {kind} target {target} args {args} kwargs {kwargs}: {e}"
+                    f"Could not compute metadata for {kind} target {target} args {args} kwargs {kwargs}: {e}\n{traceback.format_exc()}"
                 )
 
         return rv
@@ -1168,8 +1160,6 @@ class HFTracer(Tracer):
                         create_nn_module_getattribute_wrapper(self),
                     )
                 ],
-                "math.log2": [(math, "log2", math.log2, _patch_fn_for_proxy(math.log2, self))],
-                "math.floor": [(math, "floor", math.floor, _patch_fn_for_proxy(math.floor, self))],
                 "torch.finfo": [(torch, "finfo", torch.finfo, _patch_fn_for_proxy(torch.finfo, self))],
             }
         else:
