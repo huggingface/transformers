@@ -537,7 +537,7 @@ class XClipModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    # override as the `logit_scale`, `prompts_generator.alpha` and `mit.position_embedding` parameters require special treatment
+    # override as the `logit_scale`, `prompts_generator.alpha` parameters require special treatment
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -554,8 +554,8 @@ class XClipModelTest(ModelTesterMixin, unittest.TestCase):
                             delta=1e-3,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
-                    elif name in ["prompts_generator.alpha", "mit.position_embedding"]:
-                        pass
+                    elif name == "prompts_generator.alpha":
+                        self.assertAlmostEqual(param.data.mean().item(), model.config.prompt_alpha)
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),

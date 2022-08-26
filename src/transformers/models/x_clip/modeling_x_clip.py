@@ -510,6 +510,8 @@ class XClipPreTrainedModel(PreTrainedModel):
                 std=module.vision_embed_dim**-0.5 * factor,
             )
             nn.init.normal_(module.prompts_visual_projection, mean=0.0, std=module.vision_embed_dim**-0.5 * factor)
+        elif isinstance(module, XClipMultiframeIntegrationTransformer):
+            nn.init.normal_(module.position_embedding, std=self.config.initializer_factor)
 
         if isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
@@ -1412,13 +1414,7 @@ class XClipModel(XClipPreTrainedModel):
 
         cls_features = image_embeds.view(batch_size, num_frames, -1)
 
-        # print("Shape of MIT input:", cls_features.shape)
-        # print("Initial values of MIT input:", cls_features[0, :3, :3])
-
         image_embeds = self.mit(cls_features)
-
-        # print("Shape of output of MIT:", image_embeds.shape)
-        # print("First values of output of MIT:", image_embeds[0, :3])
 
         img_features = vision_outputs[0][:, 1:, :]
         img_features = self.prompts_visual_layernorm(img_features)
@@ -1440,7 +1436,6 @@ class XClipModel(XClipPreTrainedModel):
 
         # TODO remove this assertion (text pooler output)
         # assert torch.allclose(text_embeds[0, :3], torch.tensor([-0.2870, -0.3504, 0.0417]), atol=1e-4)
-        # print("Looks ok!")
 
         text_embeds = text_embeds.unsqueeze(0).expand(batch_size, -1, -1)
         text_embeds = text_embeds + self.prompts_generator(text_embeds, img_features)
@@ -1448,9 +1443,6 @@ class XClipModel(XClipPreTrainedModel):
         # normalized features
         image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
         text_embeds = text_embeds / text_embeds.norm(p=2, dim=-1, keepdim=True)
-
-        # print("Shape of image embeds:", image_embeds.shape)
-        # print("Shape of text embeds:", text_embeds.shape)
 
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
