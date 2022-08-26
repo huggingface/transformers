@@ -354,7 +354,7 @@ Use the [`~transformers.generation_tf_utils.TFGenerationMixin`] method to genera
 >>> from transformers import AutoModelForCausalLM
 
 >>> model = AutoModelForCausalLM.from_pretrained("distilgpt2")
->>> outputs = model.generate(input_ids=inputs, max_new_tokens=100, do_sample=True, top_k=50, top_p=0.95) 
+>>> outputs = model.generate(input_ids=inputs, max_new_tokens=100, do_sample=True, top_k=50, top_p=0.95)
 ```
 
 Decode the generated token ids back into text:
@@ -514,7 +514,7 @@ Then return the five masked tokens with the highest probability and print them o
 >>> top_5_tokens = torch.topk(mask_token_logits, 5, dim=1).indices[0].tolist()
 
 >>> for token in top_5_tokens:
-...    print(text.replace(tokenizer.mask_token, tokenizer.decode([token])))
+...     print(text.replace(tokenizer.mask_token, tokenizer.decode([token])))
 The Milky Way is a spiral galaxy.
 The Milky Way is a binary galaxy.
 The Milky Way is a dwarf galaxy.
@@ -546,7 +546,7 @@ Then return the five masked tokens with the highest probability and print them o
 >>> top_5_tokens = tf.math.top_k(mask_token_logits, 5).indices.numpy()
 
 >>> for token in top_5_tokens:
-...    print(text.replace(tokenizer.mask_token, tokenizer.decode([token])))
+...     print(text.replace(tokenizer.mask_token, tokenizer.decode([token])))
 The Milky Way is a spiral galaxy.
 The Milky Way is a binary galaxy.
 The Milky Way is a dwarf galaxy.
