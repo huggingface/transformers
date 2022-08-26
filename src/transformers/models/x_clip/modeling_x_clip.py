@@ -76,7 +76,6 @@ def x_clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
-# Copied from transformers.models.clip.modeling_clip.CLIPOutput with CLIP->XClip
 class XClipOutput(ModelOutput):
     """
     Args:
@@ -93,10 +92,12 @@ class XClipOutput(ModelOutput):
         image_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The image embeddings obtained by applying the projection layer to the pooled output of
             [`XClipVisionModel`].
-        text_model_output(`BaseModelOutputWithPooling`):
+        text_model_output (`BaseModelOutputWithPooling`):
             The output of the [`XClipTextModel`].
-        vision_model_output(`BaseModelOutputWithPooling`):
+        vision_model_output (`BaseModelOutputWithPooling`):
             The output of the [`XClipVisionModel`].
+        mit_output (`BaseModelOutputWithPooling`):
+            The output of `XClipMultiframeIntegrationTransformer` (MIT for short).
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -106,10 +107,13 @@ class XClipOutput(ModelOutput):
     image_embeds: torch.FloatTensor = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
+    mit_output: BaseModelOutputWithPooling = None
 
     def to_tuple(self) -> Tuple[Any]:
         return tuple(
-            self[k] if k not in ["text_model_output", "vision_model_output"] else getattr(self, k).to_tuple()
+            self[k]
+            if k not in ["text_model_output", "vision_model_output", "mit_output"]
+            else getattr(self, k).to_tuple()
             for k in self.keys()
         )
 
@@ -1092,8 +1096,6 @@ class XClipMultiframeIntegrationTransformer(nn.Module):
     def forward(
         self,
         hidden_states,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1103,7 +1105,6 @@ class XClipMultiframeIntegrationTransformer(nn.Module):
         # add position embeddings
         hidden_states = hidden_states + self.position_embedding
 
-        # TODO support output hidden states and/or attentions
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             output_attentions=output_attentions,
@@ -1114,7 +1115,17 @@ class XClipMultiframeIntegrationTransformer(nn.Module):
 
         last_hidden_state = last_hidden_state.type(hidden_states.dtype) + residual
 
-        return last_hidden_state.mean(dim=1, keepdim=False)
+        pooled_output = last_hidden_state.mean(dim=1, keepdim=False)
+
+        if not return_dict:
+            return (last_hidden_state, pooled_output) + encoder_outputs[1:]
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
+        )
 
 
 class XClipCrossAttention(nn.Module):
@@ -1414,7 +1425,13 @@ class XClipModel(XClipPreTrainedModel):
 
         cls_features = image_embeds.view(batch_size, num_frames, -1)
 
-        image_embeds = self.mit(cls_features)
+        mit_outputs = self.mit(
+            cls_features,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        image_embeds = mit_outputs[1]
 
         img_features = vision_outputs[0][:, 1:, :]
         img_features = self.prompts_visual_layernorm(img_features)
@@ -1465,4 +1482,5 @@ class XClipModel(XClipPreTrainedModel):
             image_embeds=image_embeds,
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
+            mit_output=mit_outputs,
         )
