@@ -88,11 +88,20 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         image = "https://templates.invoicehome.com/invoice-template-us-neat-750px.png"
         question = "How many cats are there?"
 
+        expected_output = [
+            {
+                "score": 0.0001,
+                "answer": "2312/2019 DUE DATE 26102/2019 ay DESCRIPTION UNIT PRICE",
+                "start": 38,
+                "end": 45,
+            },
+            {"score": 0.0001, "answer": "2312/2019 DUE", "start": 38, "end": 39},
+        ]
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
-        self.assertEqual(outputs, [{"score": 2.0, "answer": "te"}, {"score": 2.0, "answer": "te"}])
+        self.assertEqual(nested_simplify(outputs, decimals=4), expected_output)
 
         outputs = dqa_pipeline({"image": image, "question": question}, top_k=2)
-        self.assertEqual(outputs, [{"score": 2.0, "answer": "te"}, {"score": 2.0, "answer": "te"}])
+        self.assertEqual(nested_simplify(outputs, decimals=4), expected_output)
 
         # This image does not detect ANY text in it, meaning layoutlmv2 should fail.
         # Empty answer probably

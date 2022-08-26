@@ -80,7 +80,7 @@ def apply_tesseract(image: "Image.Image", lang: Optional[str], tesseract_config:
 
 class ModelType(ExplicitEnum):
     LayoutLM = "layoutlm"
-    LayoutLMv2Plus = "layoutlmv2+"  # Refers to LayoutLMv2 and LayoutLMv3
+    LayoutLMv2andv3 = "layoutlmv2andv3"
     Donut = "donut"
 
 
@@ -108,7 +108,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         elif self.model.config.__class__.__name__ == "LayoutLMConfig":
             self.model_type = ModelType.LayoutLM
         else:
-            self.model_type = ModelType.LayoutLMv2Plus
+            self.model_type = ModelType.LayoutLMv2andv3
 
     def _sanitize_parameters(
         self,
