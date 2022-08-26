@@ -21,7 +21,6 @@ import math
 import operator
 import os
 import random
-import traceback
 import warnings
 from typing import Any, Callable, Dict, Iterable, List, Optional, Type, Union
 
@@ -633,7 +632,7 @@ class HFModelAttribute(HFProxy):
 
         # Without `_metadata` we create a proxy to get such an element.
         return self.tracer.create_proxy(
-            "get_attr", item, (), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, tracer)
+            "get_attr", item, (), {}, proxy_factory_fn=lambda node: HFModelAttribute(node, self.tracer)
         )
 
 
