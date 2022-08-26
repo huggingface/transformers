@@ -560,7 +560,13 @@ class HFProxy(Proxy):
     def device(self):
         # Hack so we can track when devices are used. During meta-tensor propagation,
         # replace these values with a constant 'meta'
-        return self.tracer.create_proxy("call_function", getattr, (self, "device"), {}, proxy_factory_fn=lambda node: MetaDeviceAttribute(node, self.tracer))
+        return self.tracer.create_proxy(
+            "call_function",
+            getattr,
+            (self, "device"),
+            {},
+            proxy_factory_fn=lambda node: MetaDeviceAttribute(node, self.tracer),
+        )
 
     def __len__(self):
         if hasattr(self, "_metadata") and self._metadata is not None:
@@ -588,9 +594,6 @@ class HFProxy(Proxy):
         return super().__iter__()
 
     def __getattr__(self, k):
-        if k == "_metadata":
-            return super().__getattribute__(k)
-
         # note: not added to the graph yet, if this is a method call
         # we peephole optimize to the method invocation
         return HFAttribute(self, k)
@@ -628,7 +631,8 @@ class HFModelAttribute(HFProxy):
 
 class HFAttribute(HFProxy):
     def __init__(self, root, attr: str):
-        assert attr != "_metadata", "`_metadata` is an invalid attribute for a proxy"
+        if attr == "_metadata":
+            raise AttributeError("`_metadata` is an invalid attribute for an HFAttribute")
         self.root = root
         self.attr = attr
         self.tracer = root.tracer
@@ -639,7 +643,9 @@ class HFAttribute(HFProxy):
         # the node for attributes is added lazily, since most will just be method calls
         # which do not rely on the getitem call
         if self._node is None:
-            proxy = self.tracer.create_proxy("call_function", getattr, (self.root, self.attr), {}, proxy_factory_fn=self.set_node)
+            proxy = self.tracer.create_proxy(
+                "call_function", getattr, (self.root, self.attr), {}, proxy_factory_fn=self.set_node
+            )
         return self._node
 
     def set_node(self, node):
@@ -648,6 +654,7 @@ class HFAttribute(HFProxy):
 
     def __call__(self, *args, **kwargs):
         return self.tracer.create_proxy("call_method", self.attr, (self.root,) + args, kwargs)
+
 
 class MetaDeviceAttribute(HFProxy):
     pass
@@ -660,7 +667,9 @@ def _proxies_to_metas(v):
     if isinstance(v, torch.fx.Proxy):
         if not (isinstance(v, HFProxy) and hasattr(v, "_metadata")):
             print("failed querying metadata", id(v), v, v.node.name, v.node.op, v.node.target, v.node.args)
-            raise RuntimeError(f"No metadata was found for {v}, {isinstance(v, HFProxy)} and {hasattr(v, '_metadata')}")
+            raise RuntimeError(
+                f"No metadata was found for {v}, {isinstance(v, HFProxy)} and {hasattr(v, '_metadata')}"
+            )
         return v._metadata
     return v
 
@@ -707,20 +716,26 @@ def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Option
 
 
 class Patch:
+    """Context manager to patch some functions/methods for the duration of the context manager"""
+
     def __init__(self, patched_methods):
+        """
+        Args:
+            patched_methods:
+                (`List[Tuple[Any, str, callable]]`, *required*): List of methods to patch containing namespace, method
+                name and the patched_version
+        """
         self.patched_methods = patched_methods
+        self.orginal_methods = [getattr(__o, name) for __o, name, _ in self.patched_methods]
 
     def __enter__(self):
-        for _, original_methods in self.patched_methods.items():
-            for __o, name, orig, wrapper in original_methods:
-                setattr(__o, name, wrapper)
-
+        for __o, name, wrapper in self.patched_methods:
+            setattr(__o, name, wrapper)
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        for _, original_methods in self.patched_methods.items():
-            for __o, name, orig, wrapper in original_methods:
-                setattr(__o, name, orig)
+        for i, (__o, name, _) in enumerate(self.patched_methods):
+            setattr(__o, name, self.orginal_methods[i])
 
 
 def create_nn_module_getattribute_wrapper(tracer):
@@ -1015,7 +1030,8 @@ class HFTracer(Tracer):
         except Exception as e:
             if _IS_IN_DEBUG_MODE:
                 warnings.warn(
-                    f"Could not compute metadata for {kind} target {target} args {args} kwargs {kwargs}: {e}\n{traceback.format_exc()}"
+                    f"Could not compute metadata for {kind} target {target} args {args} kwargs {kwargs}:"
+                    f" {e}\n{traceback.format_exc()}"
                 )
 
         return rv
@@ -1122,9 +1138,9 @@ class HFTracer(Tracer):
         for input_name in input_names_to_generate_dummies:
             # We enforce that root must either be a PreTrainedModel or deserialized from a serialized traced model to
             # be able to use HFTracer._generate_dummy_input.
-            if isinstance(root, PreTrainedModel) or type(root).__qualname__.startswith("_deserialize_graph_module"):
-                continue
-            else:
+            if not (
+                isinstance(root, PreTrainedModel) or type(root).__qualname__.startswith("_deserialize_graph_module")
+            ):
                 raise RuntimeError(
                     f"Could not generate input named {input_name} for because root is not a"
                     " transformers.PreTrainedModel."
@@ -1142,26 +1158,17 @@ class HFTracer(Tracer):
         self.meta_args = concrete_metas
         self.orig_fns = set(getattr(torch, target) for target in self._TORCH_METHODS_TO_PATCH)
 
-        patched_torch_methods = {
-            f"torch.{target}": [
-                (torch, target, getattr(torch, target), _gen_constructor_wrapper(getattr(torch, target)))
-            ]
+        patched_torch_methods = [
+            (torch, target, _gen_constructor_wrapper(getattr(torch, target)))
             for target in self._TORCH_METHODS_TO_PATCH
-        }
+        ]
 
         if trace_non_torch_object:
-            patched_methods = {
-                **patched_torch_methods,
-                "nn.Module.__getattribute__": [
-                    (
-                        nn.Module,
-                        "__getattribute__",
-                        nn.Module.__getattribute__,
-                        create_nn_module_getattribute_wrapper(self),
-                    )
-                ],
-                "torch.finfo": [(torch, "finfo", torch.finfo, _patch_fn_for_proxy(torch.finfo, self))],
-            }
+            patched_methods = [
+                *patched_torch_methods,
+                (nn.Module, "__getattribute__", create_nn_module_getattribute_wrapper(self)),
+                (torch, "finfo", _patch_fn_for_proxy(torch.finfo, self)),
+            ]
         else:
             patched_methods = patched_torch_methods
 
