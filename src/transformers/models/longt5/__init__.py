@@ -18,7 +18,13 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_flax_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_flax_available,
+    is_tf_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -37,6 +43,20 @@ else:
         "LongT5ForConditionalGeneration",
         "LongT5Model",
         "LongT5PreTrainedModel",
+    ]
+
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["modeling_tf_longt5"] = [
+        "TF_LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "TFLongT5EncoderModel",
+        "TFLongT5ForConditionalGeneration",
+        "TFLongT5Model",
+        "TFLongT5PreTrainedModel",
     ]
 
 try:
@@ -67,6 +87,20 @@ if TYPE_CHECKING:
             LongT5ForConditionalGeneration,
             LongT5Model,
             LongT5PreTrainedModel,
+        )
+
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_longt5 import (
+            TF_LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFLongT5EncoderModel,
+            TFLongT5ForConditionalGeneration,
+            TFLongT5Model,
+            TFLongT5PreTrainedModel,
         )
 
     try:

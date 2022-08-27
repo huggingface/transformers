@@ -52,12 +52,12 @@ _CONFIG_FOR_DOC = "LongT5Config"
 _TOKENIZER_FOR_DOC = "T5Tokenizer"
 _CHECKPOINT_FOR_DOC = "google/long-t5-local-base"
 
-# TODO: Update before the merge
 LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "google/long-t5-local-base",
     "google/long-t5-local-large",
     "google/long-t5-tglobal-base",
     "google/long-t5-tglobal-large",
+    "google/long-t5-tglobal-xl",
 ]
 
 
