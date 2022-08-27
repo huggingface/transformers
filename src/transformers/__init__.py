@@ -143,6 +143,13 @@ _import_structure = {
         "BertTokenizer",
         "WordpieceTokenizer",
     ],
+    "models.ernie": [
+        "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "BasicTokenizer",
+        "ErnieConfig",
+       
+        "WordpieceTokenizer",
+    ],
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
@@ -886,6 +893,22 @@ else:
             "BertModel",
             "BertPreTrainedModel",
             "load_tf_weights_in_bert",
+        ]
+    )
+    _import_structure["models.ernie"].extend(
+        [
+            "ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ErnieForMaskedLM",
+            "ErnieForMultipleChoice",
+            "ErnieForNextSentencePrediction",
+            "ErnieForPreTraining",
+            "ErnieForQuestionAnswering",
+            "ErnieForSequenceClassification",
+            "ErnieForTokenClassification",
+            "ErnieLayer",
+            "ErnieLMHeadModel",
+            "ErnieModel",
+            "ErniePreTrainedModel",
         ]
     )
     _import_structure["models.bert_generation"].extend(
@@ -2989,6 +3012,13 @@ if TYPE_CHECKING:
         BertTokenizer,
         WordpieceTokenizer,
     )
+    from .models.ernie import (
+        ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        BasicTokenizer,
+        ErnieConfig,
+       
+        WordpieceTokenizer,
+    )
     from .models.bert_generation import BertGenerationConfig
     from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
     from .models.bertweet import BertweetTokenizer
@@ -3629,6 +3659,20 @@ if TYPE_CHECKING:
             BertModel,
             BertPreTrainedModel,
             load_tf_weights_in_bert,
+        )
+        from .models.ernie import (
+            ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ErnieForMaskedLM,
+            ErnieForMultipleChoice,
+            ErnieForNextSentencePrediction,
+            ErnieForPreTraining,
+            ErnieForQuestionAnswering,
+            ErnieForSequenceClassification,
+            ErnieForTokenClassification,
+            ErnieLayer,
+            ErnieLMHeadModel,
+            ErnieModel,
+            ErniePreTrainedModel,
         )
         from .models.bert_generation import (
             BertGenerationDecoder,
