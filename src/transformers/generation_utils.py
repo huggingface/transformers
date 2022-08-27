@@ -1635,7 +1635,7 @@ class GenerationMixin:
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
         >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
 
-        >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
+        >>> # set eos_token_id to pad_token_id because GPT2 does not have a PAD token
         >>> model.config.pad_token_id = model.config.eos_token_id
 
         >>> input_prompt = "It might be possible to"
