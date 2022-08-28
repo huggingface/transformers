@@ -42,6 +42,7 @@ from ...utils import (
 )
 from .configuration_layoutlmv2 import LayoutLMv2Config
 
+
 # soft dependency
 if is_detectron2_available():
     import detectron2
