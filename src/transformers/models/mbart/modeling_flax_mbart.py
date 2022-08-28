@@ -1670,7 +1670,7 @@ class FlaxMBartForSequenceClassificationModule(nn.Module):
 
 @add_start_docstrings(
     """
-    MBart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for GLUE
+    MBart model with a sequence classification/head on top (a linear layer on top of last EOS token) e.g. for GLUE
     tasks.
     """,
     MBART_START_DOCSTRING,

@@ -1401,7 +1401,7 @@ class PLBartForConditionalGeneration(PLBartPreTrainedModel):
 
 @add_start_docstrings(
     """
-    PLBart model with a sequence classification/head on top (a linear layer on top of the pooled output) e.g. for code
+    PLBart model with a sequence classification/head on top (a linear layer on top of last EOS token) e.g. for code
     classification.
     """,
     PLBART_START_DOCSTRING,
