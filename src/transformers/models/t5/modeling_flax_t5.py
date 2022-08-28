@@ -1388,7 +1388,7 @@ FLAX_T5_MODEL_DOCSTRING = """
     ... ).input_ids
     >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="np").input_ids
 
-    >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for T5Model. 
+    >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for T5Model.
     >>> # This is not needed for T5ForConditionalGeneration as it does this internally using labels arg.
     >>> decoder_input_ids = model._shift_right(decoder_input_ids)
 
