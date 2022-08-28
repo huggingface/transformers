@@ -869,14 +869,9 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
 
         input_shape = self._get_input_shape(input_ids, inputs_embeds)
         device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        visual_shape = list(input_shape)
-        visual_shape[1] = self.config.image_feature_pool_shape[0] * self.config.image_feature_pool_shape[1]
-        visual_shape = torch.Size(visual_shape)
-        # needs a new copy of input_shape for tracing. Otherwise wrong dimensions will occur
-        final_shape = list(self._get_input_shape(input_ids, inputs_embeds))
-        final_shape[1] += visual_shape[1]
-        final_shape = torch.Size(final_shape)
+        visual_feature_map_size = self.config.image_feature_pool_shape[0] * self.config.image_feature_pool_shape[1]
+        visual_shape = torch.Size([input_shape[0], visual_feature_map_size])
+        final_shape = torch.Size([input_shape[0], input_shape[1] + visual_feature_map_size])
 
         visual_bbox = self._calc_visual_bbox(self.config.image_feature_pool_shape, bbox, device, final_shape)
         final_bbox = torch.cat([bbox, visual_bbox], dim=1)
@@ -1050,12 +1045,12 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
 
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        visual_shape = list(input_shape)
-        visual_shape[1] = self.config.image_feature_pool_shape[0] * self.config.image_feature_pool_shape[1]
-        visual_shape = torch.Size(visual_shape)
-        final_shape = list(input_shape)
-        final_shape[1] += visual_shape[1]
-        final_shape = torch.Size(final_shape)
+        visual_feature_map_size = self.config.image_feature_pool_shape[0] * self.config.image_feature_pool_shape[1]
+        visual_shape = torch.Size([
+            input_shape[0],
+            visual_feature_map_size
+        ])
+        final_shape = torch.Size([input_shape[0], input_shape[1] + visual_feature_map_size])
 
         visual_bbox = self.layoutlmv2._calc_visual_bbox(
             self.config.image_feature_pool_shape, bbox, device, final_shape
