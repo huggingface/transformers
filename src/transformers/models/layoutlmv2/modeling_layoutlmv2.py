@@ -42,7 +42,6 @@ from ...utils import (
 )
 from .configuration_layoutlmv2 import LayoutLMv2Config
 
-
 # soft dependency
 if is_detectron2_available():
     import detectron2
@@ -1046,10 +1045,7 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         visual_feature_map_size = self.config.image_feature_pool_shape[0] * self.config.image_feature_pool_shape[1]
-        visual_shape = torch.Size([
-            input_shape[0],
-            visual_feature_map_size
-        ])
+        visual_shape = torch.Size([input_shape[0], visual_feature_map_size])
         final_shape = torch.Size([input_shape[0], input_shape[1] + visual_feature_map_size])
 
         visual_bbox = self.layoutlmv2._calc_visual_bbox(
