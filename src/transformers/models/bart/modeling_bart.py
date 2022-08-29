@@ -1704,8 +1704,7 @@ class BartDecoderWrapper(BartPretrainedModel):
 
 @add_start_docstrings(
     """
-    BART decoder with with a language modeling head on top (linear layer with weights tied to the input
-    embeddings).
+    BART decoder with with a language modeling head on top (linear layer with weights tied to the input embeddings).
     """,
     BART_START_DOCSTRING,
 )
