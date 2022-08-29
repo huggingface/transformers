@@ -1,7 +1,9 @@
-from PIL import Image
-import requests
-from torchvision import transforms as T
 import numpy as np
+from PIL import Image
+from torchvision import transforms as T
+
+import requests
+
 
 url = "https://miro.medium.com/max/1000/0*w1s81z-Q72obhE_z"
 image = Image.open(requests.get(url, stream=True).raw)
