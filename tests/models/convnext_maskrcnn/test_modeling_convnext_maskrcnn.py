@@ -247,12 +247,17 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
         )
 
         image = prepare_img()
-        width, height = image.size
         pixel_values = transforms(image).unsqueeze(0).to(torch_device)
+
+        width, height = image.size
+        pixel_values_height, pixel_values_width = pixel_values.shape[-2:]
+        width_scale = pixel_values_width / width
+        height_scale = pixel_values_height / height
+
         img_metas = [
             dict(
                 img_shape=tuple(pixel_values.shape[2:]) + (3,),
-                scale_factor=np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
+                scale_factor=np.array([width_scale, height_scale, width_scale, height_scale], dtype=np.float32),
                 ori_shape=(height, width, 3),
             )
         ]
@@ -265,10 +270,11 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
         # verify the results
         self.assertEqual(len(bbox_results), 80)
 
+        print("Bbox results:", bbox_results[15])
         expected_slice = np.array(
             [
-                [17.905682, 55.41647, 318.95575, 470.2593, 0.9981325],
-                [336.97797, 18.415943, 632.41956, 381.94666, 0.99591476],
+                [17.922478, 55.41647, 319.25494, 470.2593, 0.9981325],
+                [337.29407, 18.415943, 633.0128, 381.94666, 0.99591476],
             ],
             dtype=np.float32,
         )
