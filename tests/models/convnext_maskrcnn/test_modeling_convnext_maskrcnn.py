@@ -247,12 +247,13 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
         )
 
         image = prepare_img()
+        width, height = image.size
         pixel_values = transforms(image).unsqueeze(0).to(torch_device)
         img_metas = [
             dict(
-                img_shape=(800, 1067, 3),
+                img_shape=tuple(pixel_values.shape[2:]) + (3,),
                 scale_factor=np.array([1.6671875, 1.6666666, 1.6671875, 1.6666666], dtype=np.float32),
-                ori_shape=(480, 640, 3),
+                ori_shape=(height, width, 3),
             )
         ]
 
