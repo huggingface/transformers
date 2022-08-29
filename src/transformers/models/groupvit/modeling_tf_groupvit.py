@@ -113,7 +113,7 @@ def hard_softmax(logits: tf.Tensor, dim: int) -> tf.Tensor:
         depth=tf.shape(logits)[dim],
         # TensorFlow expects axis to be -1 or between [0, 3).  But received: -2
         # This is why the following code snippet is used.
-        axis=tf.rank(logits) - dim,
+        axis=tf.math.floormod(dim, tf.rank(logits)),
         dtype=y_soft.dtype,
     )
     ret = y_hard - tf.stop_gradient(y_soft) + y_soft
@@ -1241,13 +1241,13 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
 
         self.visual_projection = [
             tf.keras.layers.Dense(self.projection_intermediate_dim, name="visual_projection.0"),
-            tf.keras.layers.BatchNormalization(name="visual_projection.1"),
+            tf.keras.layers.BatchNormalization(name="visual_projection.1", momentum=0.1, epsilon=1e-5),
             tf.keras.layers.ReLU(name="visual_projection.2"),
             tf.keras.layers.Dense(self.projection_dim, name="visual_projection.3"),
         ]
         self.text_projection = [
             tf.keras.layers.Dense(self.projection_intermediate_dim, name="text_projection.0"),
-            tf.keras.layers.BatchNormalization(name="text_projection.1"),
+            tf.keras.layers.BatchNormalization(name="text_projection.1", momentum=0.1, epsilon=1e-5),
             tf.keras.layers.ReLU(name="text_projection.2"),
             tf.keras.layers.Dense(self.projection_dim, name="text_projection.3"),
         ]
@@ -1376,8 +1376,8 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
             text_embeds = layer(text_embeds)
 
         # normalized features
-        image_embeds = image_embeds / tf.norm(image_embeds, ord="euclidean", axis=-1, keepdims=True)
-        text_embeds = text_embeds / tf.norm(text_embeds, ord="euclidean", axis=-1, keepdims=True)
+        image_embeds = image_embeds / tf.norm(image_embeds, axis=-1, keepdims=True)
+        text_embeds = text_embeds / tf.norm(text_embeds, axis=-1, keepdims=True)
 
         # cosine similarity as logits
         logit_scale = tf.math.exp(self.logit_scale)
