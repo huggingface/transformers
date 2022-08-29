@@ -1820,15 +1820,25 @@ class ConvNextMaskRCNNRPN(nn.Module):
         """Forward features from the upstream network.
 
         Args:
-            hidden_states (tuple[torch.Tensor]): Features from the upstream network, each is a 4D-tensor.
+            hidden_states (tuple[torch.FloatTensor]):
+                Features from the upstream network, each being a 4D-tensor.
         Returns:
             tuple: A tuple of classification scores and bbox prediction.
-                - cls_scores (list[Tensor]): Classification scores for all \
-                    scale levels, each is a 4D-tensor, the channels number \ is num_base_priors * num_classes.
-                - bbox_preds (list[Tensor]): Box energies / deltas for all \
-                    scale levels, each is a 4D-tensor, the channels number \ is num_base_priors * 4.
+                - cls_scores (list[Tensor]):
+                    Classification scores for all scale levels, each is a 4D-tensor, the channels number
+                    is num_base_priors * num_classes.
+                - bbox_preds (list[Tensor]):
+                    Box energies / deltas for all scale levels, each is a 4D-tensor, the channels number
+                    is num_base_priors * 4.
         """
-        return multi_apply(self.forward_single, hidden_states)
+        cls_scores = []
+        bbox_preds = []
+        for hidden_state in hidden_states:
+            cls_score, bbox_pred = self.forward_single(hidden_state)
+            cls_scores.append(cls_score)
+            bbox_preds.append(bbox_pred)
+        
+        return cls_scores, bbox_preds
 
     def forward_train(
         self, hidden_states, img_metas, gt_bboxes, gt_labels=None, gt_bboxes_ignore=None, proposal_cfg=None, **kwargs
@@ -2259,6 +2269,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
                 with_nms,
                 **kwargs,
             )
+            print("Shape of RPN result:", results.shape)
             result_list.append(results)
         return result_list
 
@@ -2277,26 +2288,32 @@ class ConvNextMaskRCNNRPN(nn.Module):
         """Transform outputs of a single image into bbox predictions.
 
         Args:
-            cls_score_list (list[Tensor]): Box scores from all scale
-                levels of a single image, each item has shape (num_anchors * num_classes, H, W).
-            bbox_pred_list (list[Tensor]): Box energies / deltas from
-                all scale levels of a single image, each item has shape (num_anchors * 4, H, W).
-            score_factor_list (list[Tensor]): Score factor from all scale
-                levels of a single image. RPN head does not need this value.
-            mlvl_anchors (list[Tensor]): Anchors of all scale level
-                each item has shape (num_anchors, 4).
+            cls_score_list (list[Tensor]): 
+                Box scores from all scale levels of a single image, each item has shape (num_anchors * num_classes, H, W).
+            bbox_pred_list (list[Tensor]):
+                Box energies / deltas from all scale levels of a single image, each item has shape (num_anchors * 4, H, W).
+            score_factor_list (list[Tensor]):
+                Score factor from all scale levels of a single image. RPN head does not need this value.
+            mlvl_anchors (list[Tensor]):
+                Anchors of all scale level each item has shape (num_anchors, 4).
             img_meta (dict): Image meta info.
-            cfg (mmcv.Config): Test / postprocessing configuration,
-                if None, test_cfg would be used.
-            rescale (bool): If True, return boxes in original image space.
-                Default: False.
-            with_nms (bool): If True, do nms before return boxes.
-                Default: True.
+            cfg (mmcv.Config):
+                Test / postprocessing configuration. If None, test_cfg would be used.
+            rescale (bool, *optional*, defaults to `False`):
+                If True, return boxes in original image space.
+            with_nms (bool, *optional*, defaults to `True`):
+                If True, do nms before return boxes.
 
         Returns:
             Tensor: Labeled boxes in shape (n, 5), where the first 4 columns
                 are bounding box positions (tl_x, tl_y, br_x, br_y) and the 5-th column is a score between 0 and 1.
         """
+        print("RPN classification logits:")
+        for i in cls_score_list:
+            print(i.shape)
+        print("RPN bounding box predictions:")
+        for i in bbox_pred_list:
+            print(i.shape)
         cfg = self.test_cfg if cfg is None else cfg
         cfg = copy.deepcopy(cfg)
         img_shape = img_meta["img_shape"]
@@ -2344,19 +2361,22 @@ class ConvNextMaskRCNNRPN(nn.Module):
 
     def _bbox_post_process(self, mlvl_scores, mlvl_bboxes, mlvl_valid_anchors, level_ids, cfg, img_shape, **kwargs):
         """bbox post-processing method.
+        
         Args:
         Do the nms operation for bboxes in same level.
-            mlvl_scores (list[Tensor]): Box scores from all scale
-                levels of a single image, each item has shape (num_bboxes, ).
-            mlvl_bboxes (list[Tensor]): Decoded bboxes from all scale
-                levels of a single image, each item has shape (num_bboxes, 4).
-            mlvl_valid_anchors (list[Tensor]): Anchors of all scale level
-                each item has shape (num_bboxes, 4).
-            level_ids (list[Tensor]): Indexes from all scale levels of a
-                single image, each item has shape (num_bboxes, ).
-            cfg (mmcv.Config): Test / postprocessing configuration,
-                if None, `self.test_cfg` would be used.
-            img_shape (tuple(int)): The shape of model's input image.
+            mlvl_scores (list[Tensor]):
+                Box scores from all scale levels of a single image, each item has shape (num_bboxes, ).
+            mlvl_bboxes (list[Tensor]):
+                Decoded bboxes from all scale levels of a single image, each item has shape (num_bboxes, 4).
+            mlvl_valid_anchors (list[Tensor]):
+                Anchors of all scale level each item has shape (num_bboxes, 4).
+            level_ids (list[Tensor]):
+                Indexes from all scale levels of a single image, each item has shape (num_bboxes, ).
+            cfg (mmcv.Config):
+                Test / postprocessing configuration. If None, `self.test_cfg` would be used.
+            img_shape (tuple(int)):
+                The shape of model's input image.
+        
         Returns:
             Tensor: Labeled boxes in shape (n, 5), where the first 4 columns
                 are bounding box positions (tl_x, tl_y, br_x, br_y) and the 5-th column is a score between 0 and 1.
@@ -3323,6 +3343,9 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             hidden_states, img_metas, proposal_list, self.test_cfg, rescale=rescale
         )
 
+        print("Detected boxes:", det_bboxes)
+        print("Detected labels:", det_labels)
+
         bbox_results = [
             bbox2result(det_bboxes[i], det_labels[i], self.bbox_head.num_classes) for i in range(len(det_bboxes))
         ]
@@ -3481,8 +3504,6 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         # the FPN outputs feature maps at 5 different scales
         hidden_states = self.neck(hidden_states)
 
-        # print("Features:", hidden_states[-1][0, 0, :3, :3])
-
         # next, RPN computes a tuple of (class, bounding box) features for each of the 5 feature maps
         # rpn_outs[0] are the class features for each of the feature maps
         # rpn_outs[1] are the bounding box features for each of the feature maps
@@ -3512,6 +3533,9 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
             losses.update(roi_losses)
         else:
             proposal_list = self.rpn_head.forward_test(hidden_states, img_metas)
+            print("Proposal list:")
+            for i in proposal_list:
+                print(i.shape)
             results = self.roi_head.forward_test(hidden_states, proposal_list, img_metas=img_metas)
 
         if not return_dict:
