@@ -2639,19 +2639,20 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
         """Transform network output for a batch into bbox predictions.
 
         Args:
-            rois (Tensor): Boxes to be transformed. Has shape (num_boxes, 5).
-                last dimension 5 arrange as (batch_index, x1, y1, x2, y2).
-            cls_score (Tensor): Box scores, has shape
-                (num_boxes, num_classes + 1).
-            bbox_pred (Tensor, optional): Box energies / deltas.
-                has shape (num_boxes, num_classes * 4).
-            img_shape (Sequence[int], optional): Maximum bounds for boxes,
-                specifies (H, W, C) or (H, W).
-            scale_factor (ndarray): Scale factor of the
-               image arrange as (w_scale, h_scale, w_scale, h_scale).
-            rescale (bool): If True, return boxes in original image space.
-                Default: False.
-            cfg (obj:`ConfigDict`): `test_cfg` of Bbox Head. Default: None
+            rois (Tensor):
+                Boxes to be transformed. Has shape (num_boxes, 5). Last dimension 5 arrange as (batch_index, x1, y1, x2, y2).
+            cls_score (Tensor):
+                Box scores, has shape (num_boxes, num_classes + 1).
+            bbox_pred (Tensor, optional):
+                Box energies / deltas. Has shape (num_boxes, num_classes * 4).
+            img_shape (Sequence[int], optional):
+                Maximum bounds for boxes, specifies (H, W, C) or (H, W).
+            scale_factor (ndarray):
+                Scale factor of the image arrange as (w_scale, h_scale, w_scale, h_scale).
+            rescale (bool):
+                If True, return boxes in original image space. Default: False.
+            cfg (obj:`ConfigDict`):
+                `test_cfg` of Bbox Head. Default: None
 
         Returns:
             tuple[Tensor, Tensor]:
@@ -2663,6 +2664,7 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
         # if self.custom_cls_channels:
         #     scores = self.loss_cls.get_activation(cls_score)
         # else:
+        print("Shape of cls_score:", cls_score.shape)
         scores = nn.functional.softmax(cls_score, dim=-1) if cls_score is not None else None
         # bbox_pred would be None in some detector when with_reg is False,
         # e.g. Grid R-CNN.
@@ -2678,6 +2680,8 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
             scale_factor = bboxes.new_tensor(scale_factor)
             bboxes = (bboxes.view(bboxes.size(0), -1, 4) / scale_factor).view(bboxes.size()[0], -1)
 
+        print("Shape of boxes just before NMS:", bboxes[0].shape)
+        
         if cfg is None:
             return bboxes, scores
         else:
@@ -3073,6 +3077,9 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         #     bbox_feats = self.shared_head(bbox_feats)
         cls_score, bbox_pred = self.bbox_head(bbox_feats)
 
+        print("CLS score of bounding box head (before postprocessing):", cls_score.shape)
+        print("Bbox pred of bounding box head (before postprocessing):", bbox_pred.shape)
+
         bbox_results = dict(cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats)
         return bbox_results
 
@@ -3091,12 +3098,17 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         """Test only det bboxes without augmentation.
 
         Args:
-            x (tuple[Tensor]): Feature maps of all scale level.
-            img_metas (list[dict]): Image meta info.
-            proposals (List[Tensor]): Region proposals.
-            rcnn_test_cfg (obj:`ConfigDict`): `test_cfg` of R-CNN.
-            rescale (bool): If True, return boxes in original image space.
-                Default: False.
+            x (tuple[Tensor]):
+                Feature maps of all scale levels.
+            img_metas (list[dict]):
+                Image meta info.
+            proposals (List[Tensor]):
+                Region proposals.
+            rcnn_test_cfg (obj:`ConfigDict`):
+                `test_cfg` of R-CNN.
+            rescale (bool):
+                If True, return boxes in original image space. Default: False.
+        
         Returns:
             tuple[list[Tensor], list[Tensor]]: The first list contains
                 the boxes of the corresponding image in a batch, each tensor has the shape (num_boxes, 5) and last
@@ -3124,6 +3136,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         cls_score = bbox_results["cls_score"]
         bbox_pred = bbox_results["bbox_pred"]
         num_proposals_per_img = tuple(len(p) for p in proposals)
+        print("Number of proposals per img:", num_proposals_per_img)
         rois = rois.split(num_proposals_per_img, 0)
         cls_score = cls_score.split(num_proposals_per_img, 0)
 
@@ -3138,6 +3151,8 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         else:
             bbox_pred = (None,) * len(proposals)
 
+        print("Shape of bbox_pred:", bbox_pred[0].shape)
+        
         # apply bbox post-processing to each image individually
         det_bboxes = []
         det_labels = []
@@ -3160,6 +3175,8 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
                     rescale=rescale,
                     cfg=rcnn_test_cfg,
                 )
+                print("Detected boxes:", det_bbox.shape)
+                print("Detected labels:", det_label.shape)
             det_bboxes.append(det_bbox)
             det_labels.append(det_label)
         return det_bboxes, det_labels
@@ -3169,6 +3186,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         assert (rois is not None) ^ (pos_inds is not None and bbox_feats is not None)
         if rois is not None:
             mask_feats = self.mask_roi_extractor(x[: self.mask_roi_extractor.num_inputs], rois)
+            print("Shape of mask_feats:", mask_feats.shape)
             # if self.with_shared_head:
             #     mask_feats = self.shared_head(mask_feats)
         else:
@@ -3176,6 +3194,10 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             mask_feats = bbox_feats[pos_inds]
 
         mask_pred = self.mask_head(mask_feats)
+
+        print("Pos indices:", pos_inds)
+        
+        print("Shape of mask pred:", mask_pred.shape)
 
         mask_results = dict(mask_pred=mask_pred, mask_feats=mask_feats)
         return mask_results
@@ -3330,8 +3352,8 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
 
         Args:
             hidden_states (tuple[Tensor]): Features from upstream network. Each has shape (batch_size, c, h, w).
-            proposal_list (list(Tensor)): Proposals from rpn head.
-                Each has shape (num_proposals, 5), last dimension 5 represent (x1, y1, x2, y2, score).
+            proposal_list (list(Tensor)):
+                Proposals from rpn head. Each has shape (num_proposals, 5), last dimension 5 represent (x1, y1, x2, y2, score).
             img_metas (list[dict]): Meta information of images.
             rescale (bool): Whether to rescale the results to
                 the original image. Default: True.
@@ -3345,8 +3367,9 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             hidden_states, img_metas, proposal_list, self.test_cfg, rescale=rescale
         )
 
-        print("Detected boxes:", det_bboxes)
-        print("Detected labels:", det_labels)
+        for i in range(len(det_bboxes)):
+            print("Detected boxes:", det_bboxes[i].shape)
+            print("Detected labels:", det_labels[i].shape)
 
         bbox_results = [
             bbox2result(det_bboxes[i], det_labels[i], self.bbox_head.num_classes) for i in range(len(det_bboxes))
