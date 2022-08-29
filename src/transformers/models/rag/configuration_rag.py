@@ -28,7 +28,7 @@ RAG_CONFIG_DOC = r"""
         title_sep (`str`, *optional*, defaults to  `" / "`):
             Separator inserted between the title and the text of the retrieved document when calling [`RagRetriever`].
         doc_sep (`str`, *optional*, defaults to  `" // "`):
-            Separator inserted between the the text of the retrieved document and the original input when calling
+            Separator inserted between the text of the retrieved document and the original input when calling
             [`RagRetriever`].
         n_docs (`int`, *optional*, defaults to 5):
             Number of documents to retrieve.
@@ -49,7 +49,7 @@ RAG_CONFIG_DOC = r"""
             `"compressed"`.
         index_path (`str`, *optional*)
             The path to the serialized faiss index on disk.
-        passages_path: (`str`, *optional*):
+        passages_path (`str`, *optional*):
             A path to text passages compatible with the faiss index. Required if using
             [`~models.rag.retrieval_rag.LegacyIndex`]
         use_dummy_dataset (`bool`, *optional*, defaults to `False`)

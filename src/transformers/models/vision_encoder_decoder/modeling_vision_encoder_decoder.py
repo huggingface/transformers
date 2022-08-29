@@ -137,7 +137,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             If set to `True`, the model will return a [`~utils.Seq2SeqLMOutput`] instead of a plain tuple.
-        kwargs: (*optional*) Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
+        kwargs (*optional*): Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
 
             - Without a prefix which will be input as `**encoder_kwargs` for the encoder forward function.
             - With a *decoder_* prefix which will be input as `**decoder_kwargs` for the decoder forward function.

@@ -21,7 +21,6 @@ import sys
 from dataclasses import dataclass, field
 from typing import Optional
 
-import datasets
 import numpy as np
 import torch
 from datasets import load_dataset
@@ -30,6 +29,7 @@ from torch import nn
 from torchvision import transforms
 from torchvision.transforms import functional
 
+import evaluate
 import transformers
 from huggingface_hub import hf_hub_download
 from transformers import (
@@ -51,7 +51,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.21.0.dev0")
+check_min_version("4.22.0.dev0")
 
 require_version("datasets>=2.0.0", "To fix: pip install -r examples/pytorch/semantic-segmentation/requirements.txt")
 
@@ -246,7 +246,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -337,7 +337,7 @@ def main():
     label2id = {v: str(k) for k, v in id2label.items()}
 
     # Load the mean IoU metric from the datasets package
-    metric = datasets.load_metric("mean_iou")
+    metric = evaluate.load("mean_iou")
 
     # Define our compute_metrics function. It takes an `EvalPrediction` object (a namedtuple with a
     # predictions and label_ids field) and has to return a dictionary string to float.

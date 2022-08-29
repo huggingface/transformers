@@ -30,8 +30,9 @@ from itertools import chain
 from typing import Optional
 
 import datasets
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 
+import evaluate
 import transformers
 from transformers import (
     CONFIG_MAPPING,
@@ -52,7 +53,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.21.0.dev0")
+check_min_version("4.22.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 
@@ -110,7 +111,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -515,7 +516,7 @@ def main():
                 logits = logits[0]
             return logits.argmax(dim=-1)
 
-        metric = load_metric("accuracy")
+        metric = evaluate.load("accuracy")
 
         def compute_metrics(eval_preds):
             preds, labels = eval_preds

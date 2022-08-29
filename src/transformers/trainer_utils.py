@@ -337,7 +337,6 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     should be run immediately after the operation to be measured has completed.
 
     Args:
-
     - split: name to prefix metric (like train, eval, test...)
     - start_time: operation start time
     - num_samples: number of samples processed
@@ -653,6 +652,7 @@ def find_executable_batch_size(
 class FSDPOption(ExplicitEnum):
     FULL_SHARD = "full_shard"
     SHARD_GRAD_OP = "shard_grad_op"
+    NO_SHARD = "no_shard"
     OFFLOAD = "offload"
     AUTO_WRAP = "auto_wrap"
 
