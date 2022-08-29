@@ -1825,11 +1825,11 @@ class ConvNextMaskRCNNRPN(nn.Module):
         Returns:
             tuple: A tuple of classification scores and bbox prediction.
                 - cls_scores (list[Tensor]):
-                    Classification scores for all scale levels, each is a 4D-tensor, the channels number
-                    is num_base_priors * num_classes.
+                    Classification scores for all scale levels, each is a 4D-tensor, the channels number is
+                    num_base_priors * num_classes.
                 - bbox_preds (list[Tensor]):
-                    Box energies / deltas for all scale levels, each is a 4D-tensor, the channels number
-                    is num_base_priors * 4.
+                    Box energies / deltas for all scale levels, each is a 4D-tensor, the channels number is
+                    num_base_priors * 4.
         """
         cls_scores = []
         bbox_preds = []
@@ -1837,7 +1837,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
             cls_score, bbox_pred = self.forward_single(hidden_state)
             cls_scores.append(cls_score)
             bbox_preds.append(bbox_pred)
-        
+
         return cls_scores, bbox_preds
 
     def forward_train(
@@ -2288,10 +2288,12 @@ class ConvNextMaskRCNNRPN(nn.Module):
         """Transform outputs of a single image into bbox predictions.
 
         Args:
-            cls_score_list (list[Tensor]): 
-                Box scores from all scale levels of a single image, each item has shape (num_anchors * num_classes, H, W).
+            cls_score_list (list[Tensor]):
+                Box scores from all scale levels of a single image, each item has shape (num_anchors * num_classes, H,
+                W).
             bbox_pred_list (list[Tensor]):
-                Box energies / deltas from all scale levels of a single image, each item has shape (num_anchors * 4, H, W).
+                Box energies / deltas from all scale levels of a single image, each item has shape (num_anchors * 4, H,
+                W).
             score_factor_list (list[Tensor]):
                 Score factor from all scale levels of a single image. RPN head does not need this value.
             mlvl_anchors (list[Tensor]):
@@ -2361,7 +2363,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
 
     def _bbox_post_process(self, mlvl_scores, mlvl_bboxes, mlvl_valid_anchors, level_ids, cfg, img_shape, **kwargs):
         """bbox post-processing method.
-        
+
         Args:
         Do the nms operation for bboxes in same level.
             mlvl_scores (list[Tensor]):
@@ -2376,7 +2378,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
                 Test / postprocessing configuration. If None, `self.test_cfg` would be used.
             img_shape (tuple(int)):
                 The shape of model's input image.
-        
+
         Returns:
             Tensor: Labeled boxes in shape (n, 5), where the first 4 columns
                 are bounding box positions (tl_x, tl_y, br_x, br_y) and the 5-th column is a score between 0 and 1.
