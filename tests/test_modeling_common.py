@@ -859,6 +859,10 @@ class ModelTesterMixin:
                         f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
                     )
 
+            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
+            # (Even with this call, there are still memory leak by ~0.04MB)
+            self.clear_torch_jit_class_registry()
+
     def test_headmasking(self):
         if not self.test_head_masking:
             return
