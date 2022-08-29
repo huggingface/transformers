@@ -403,6 +403,7 @@ class EncoderDecoderMixin:
         )
 
         model = SpeechEncoderDecoderModel(encoder=encoder_model, decoder=decoder_model)
+        model.to(torch_device)
         model.train()
         model.gradient_checkpointing_enable()
         model.config.decoder_start_token_id = 0
