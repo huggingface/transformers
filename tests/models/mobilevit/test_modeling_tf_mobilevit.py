@@ -360,8 +360,7 @@ class MobileViTModelTest(TFModelTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            # `from_pt` will be removed.
-            model = TFMobileViTModel.from_pretrained(model_name, from_pt=True)
+            model = TFMobileViTModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -375,8 +374,7 @@ def prepare_img():
 class TFMobileViTModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_image_classification_head(self):
-        # `from_pt` will be removed
-        model = TFMobileViTForImageClassification.from_pretrained("apple/mobilevit-xx-small", from_pt=True)
+        model = TFMobileViTForImageClassification.from_pretrained("apple/mobilevit-xx-small")
 
         feature_extractor = MobileViTFeatureExtractor.from_pretrained("apple/mobilevit-xx-small")
         image = prepare_img()
@@ -396,7 +394,7 @@ class TFMobileViTModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_semantic_segmentation(self):
         # `from_pt` will be removed
-        model = TFMobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-xx-small", from_pt=True)
+        model = TFMobileViTForSemanticSegmentation.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
 
         feature_extractor = MobileViTFeatureExtractor.from_pretrained("apple/deeplabv3-mobilevit-xx-small")
 
