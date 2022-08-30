@@ -205,6 +205,7 @@ PYTORCH_EXPORT_MODELS = {
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
     ("layoutlmv3", "microsoft/layoutlmv3-base"),
     ("levit", "facebook/levit-128S"),
+    ("owlvit", "google/owlvit-base-patch32"),
     ("vit", "google/vit-base-patch16-224"),
     ("deit", "facebook/deit-small-patch16-224"),
     ("beit", "microsoft/beit-base-patch16-224"),
