@@ -2353,6 +2353,16 @@ else:
             "TFLayoutLMPreTrainedModel",
         ]
     )
+    _import_structure["models.layoutlmv3"].extend(
+        [
+            "TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFLayoutLMv3ForQuestionAnswering",
+            "TFLayoutLMv3ForSequenceClassification",
+            "TFLayoutLMv3ForTokenClassification",
+            "TFLayoutLMv3Model",
+            "TFLayoutLMv3PreTrainedModel",
+        ]
+    )
     _import_structure["models.led"].extend(["TFLEDForConditionalGeneration", "TFLEDModel", "TFLEDPreTrainedModel"])
     _import_structure["models.longformer"].extend(
         [
@@ -2575,6 +2585,14 @@ else:
             "TFWav2Vec2ForCTC",
             "TFWav2Vec2Model",
             "TFWav2Vec2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.xglm"].extend(
+        [
+            "TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFXGLMForCausalLM",
+            "TFXGLMModel",
+            "TFXGLMPreTrainedModel",
         ]
     )
     _import_structure["models.xlm"].extend(
@@ -4811,6 +4829,14 @@ if TYPE_CHECKING:
             TFHubertModel,
             TFHubertPreTrainedModel,
         )
+        from .models.layoutlmv3 import (
+            TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFLayoutLMv3ForQuestionAnswering,
+            TFLayoutLMv3ForSequenceClassification,
+            TFLayoutLMv3ForTokenClassification,
+            TFLayoutLMv3Model,
+            TFLayoutLMv3PreTrainedModel,
+        )
         from .models.led import TFLEDForConditionalGeneration, TFLEDModel, TFLEDPreTrainedModel
         from .models.longformer import (
             TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4971,6 +4997,12 @@ if TYPE_CHECKING:
             TFWav2Vec2ForCTC,
             TFWav2Vec2Model,
             TFWav2Vec2PreTrainedModel,
+        )
+        from .models.xglm import (
+            TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFXGLMForCausalLM,
+            TFXGLMModel,
+            TFXGLMPreTrainedModel,
         )
         from .models.xlm import (
             TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
