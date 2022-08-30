@@ -687,7 +687,10 @@ class OwlViTTextTransformer(nn.Module):
         last_hidden_state = self.final_layer_norm(last_hidden_state)
 
         # take features from the end of tokens embedding (end of token is the highest number in each sequence)
-        pooled_output = last_hidden_state[torch.arange(last_hidden_state.shape[0]), input_ids.argmax(dim=-1)]
+        # casting to torch.int for onnx compatibility: argmax doesn't support int64 inputs with opset 14
+        pooled_output = last_hidden_state[
+            torch.arange(last_hidden_state.shape[0]), input_ids.to(torch.int).argmax(dim=-1)
+        ]
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -1066,7 +1069,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
         logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
-        logits_per_image = logits_per_text.T
+        logits_per_image = logits_per_text.t()
 
         loss = None
         if return_loss:
