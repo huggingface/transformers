@@ -1816,7 +1816,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
         rpn_bbox_pred = self.rpn_reg(hidden_state)
         return rpn_cls_score, rpn_bbox_pred
 
-    def forward(self, hidden_states):
+    def forward_features(self, hidden_states):
         """Forward features from the upstream network.
 
         Args:
@@ -1840,30 +1840,31 @@ class ConvNextMaskRCNNRPN(nn.Module):
 
         return cls_scores, bbox_preds
 
-    def forward_train(
-        self, hidden_states, img_metas, gt_bboxes, gt_labels=None, gt_bboxes_ignore=None, proposal_cfg=None, **kwargs
+    def forward(
+        self,
+        hidden_states,
+        img_metas,
+        gt_bboxes=None,
+        gt_labels=None,
+        gt_bboxes_ignore=None,
+        proposal_cfg=None,
+        **kwargs
     ):
-        outs = self(hidden_states)
+        outs = self.forward_features(hidden_states)
 
-        if gt_labels is None:
-            loss_inputs = outs + (gt_bboxes, img_metas)
-        else:
-            loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
+        losses = None
+        if gt_bboxes is not None:
+            if gt_labels is None:
+                loss_inputs = outs + (gt_bboxes, img_metas)
+            else:
+                loss_inputs = outs + (gt_bboxes, gt_labels, img_metas)
 
-        losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+            losses = self.loss(*loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
 
-        if proposal_cfg is None:
-            return losses
-        else:
-            proposal_list = self.get_bboxes(*outs, img_metas=img_metas, cfg=proposal_cfg)
-            return losses, proposal_list
+        proposal_list = self.get_bboxes(*outs, img_metas=img_metas, cfg=proposal_cfg)
 
-    def forward_test(self, hidden_states, img_metas):
-        outs = self(hidden_states)
-
-        proposal_list = self.get_bboxes(*outs, img_metas=img_metas)
-
-        return proposal_list
+        # TODO create RPNOutput class, which also includes outs
+        return losses, proposal_list
 
     def get_anchors(self, featmap_sizes, img_metas, device="cuda"):
         """Get anchors according to feature map sizes.
@@ -2640,7 +2641,8 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
 
         Args:
             rois (Tensor):
-                Boxes to be transformed. Has shape (num_boxes, 5). Last dimension 5 arrange as (batch_index, x1, y1, x2, y2).
+                Boxes to be transformed. Has shape (num_boxes, 5). Last dimension 5 arrange as (batch_index, x1, y1,
+                x2, y2).
             cls_score (Tensor):
                 Box scores, has shape (num_boxes, num_classes + 1).
             bbox_pred (Tensor, optional):
@@ -2681,7 +2683,7 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
             bboxes = (bboxes.view(bboxes.size(0), -1, 4) / scale_factor).view(bboxes.size()[0], -1)
 
         print("Shape of boxes just before NMS:", bboxes[0].shape)
-        
+
         if cfg is None:
             return bboxes, scores
         else:
@@ -3108,7 +3110,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
                 `test_cfg` of R-CNN.
             rescale (bool):
                 If True, return boxes in original image space. Default: False.
-        
+
         Returns:
             tuple[list[Tensor], list[Tensor]]: The first list contains
                 the boxes of the corresponding image in a batch, each tensor has the shape (num_boxes, 5) and last
@@ -3152,7 +3154,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             bbox_pred = (None,) * len(proposals)
 
         print("Shape of bbox_pred:", bbox_pred[0].shape)
-        
+
         # apply bbox post-processing to each image individually
         det_bboxes = []
         det_labels = []
@@ -3196,7 +3198,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         mask_pred = self.mask_head(mask_feats)
 
         print("Pos indices:", pos_inds)
-        
+
         print("Shape of mask pred:", mask_pred.shape)
 
         mask_results = dict(mask_pred=mask_pred, mask_feats=mask_feats)
@@ -3353,7 +3355,8 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         Args:
             hidden_states (tuple[Tensor]): Features from upstream network. Each has shape (batch_size, c, h, w).
             proposal_list (list(Tensor)):
-                Proposals from rpn head. Each has shape (num_proposals, 5), last dimension 5 represent (x1, y1, x2, y2, score).
+                Proposals from rpn head. Each has shape (num_proposals, 5), last dimension 5 represent (x1, y1, x2, y2,
+                score).
             img_metas (list[dict]): Meta information of images.
             rescale (bool): Whether to rescale the results to
                 the original image. Default: True.
@@ -3536,7 +3539,7 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         losses = dict()
         results = None
         if labels is not None:
-            rpn_losses, proposal_list = self.rpn_head.forward_train(
+            rpn_losses, proposal_list = self.rpn_head(
                 hidden_states,
                 img_metas,
                 gt_bboxes=labels["gt_bboxes"],
@@ -3557,7 +3560,7 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
             )
             losses.update(roi_losses)
         else:
-            proposal_list = self.rpn_head.forward_test(hidden_states, img_metas)
+            _, proposal_list = self.rpn_head(hidden_states, img_metas)
             print("Proposal list:")
             for i in proposal_list:
                 print(i.shape)
