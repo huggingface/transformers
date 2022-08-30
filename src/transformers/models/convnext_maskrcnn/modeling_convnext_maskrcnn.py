@@ -1837,7 +1837,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
             cls_score, bbox_pred = self.forward_single(hidden_state)
             cls_scores.append(cls_score)
             bbox_preds.append(bbox_pred)
-
+        
         return cls_scores, bbox_preds
 
     def forward(
@@ -2629,6 +2629,8 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
         self.loss_bbox = L1Loss()  # this corresponds to dict(type='L1Loss', loss_weight=1.0)
 
     def forward(self, hidden_states):
+        print("Shape of hidden states:", hidden_states.shape)
+
         # shared part
         hidden_states = hidden_states.flatten(1)
         for fc in self.shared_fcs:
@@ -3079,9 +3081,17 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         return hasattr(self, "mask_head") and self.mask_head is not None
 
     def _bbox_forward(self, x, rois):
-        """Box head forward function used in both training and testing."""
+        """Box head forward function used in both training and testing.
+        
+        Args:
+            x (list of `torch.FloatTensor`):
+                Multi-scale feature maps coming from the FPN.
+            rois 
+
+        """
         # TODO: a more flexible way to decide which feature maps to use
         bbox_feats = self.bbox_roi_extractor(x[: self.bbox_roi_extractor.num_inputs], rois)
+        print("Shape of bbox_feats:", bbox_feats.shape)
         # if self.with_shared_head:
         #     bbox_feats = self.shared_head(bbox_feats)
         cls_score, bbox_pred = self.bbox_head(bbox_feats)
@@ -3126,6 +3136,8 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         """
 
         rois = bbox2roi(proposals)
+
+        print("Shape of rois:", rois.shape)
 
         if rois.shape[0] == 0:
             batch_size = len(proposals)
