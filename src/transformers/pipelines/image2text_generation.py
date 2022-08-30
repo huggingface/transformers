@@ -1,7 +1,7 @@
 import enum
 from typing import List, Union
 
-from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
+from ..utils import add_end_docstrings, is_flax_available, is_tf_available, is_torch_available, is_vision_available, logging, requires_backends
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 
@@ -9,6 +9,12 @@ if is_vision_available():
     from PIL import Image
 
     from ..image_utils import load_image
+
+if is_flax_available():
+    from ..models.auto.modeling_flax_auto import FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING
+
+if is_tf_available():
+    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_VISION_2_SEQ_MAPPING
 
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_VISION_2_SEQ_MAPPING
@@ -24,13 +30,18 @@ class ReturnType(enum.Enum):
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class Image2TextGenerationPipeline(Pipeline):
     """
-    Image2Text Generation pipeline using a `AutoModelForVision2Seq`. This pipeline is currently only available in
-    PyTorch.
+    Image2Text Generation pipeline using a `AutoModelForVision2Seq`.
     """
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.check_model_type(MODEL_FOR_VISION_2_SEQ_MAPPING)
+        requires_backends(self, "vision")
+        if self.framework == "flax":
+            self.check_model_type(FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING)
+        elif self.framework == "tf":
+            self.check_model_type(TF_MODEL_FOR_VISION_2_SEQ_MAPPING)
+        else:
+            self.check_model_type(MODEL_FOR_VISION_2_SEQ_MAPPING)
 
     def _sanitize_parameters(
         self, return_tensors=None, return_text=None, return_type=None, clean_up_tokenization_spaces=None, **kwargs
