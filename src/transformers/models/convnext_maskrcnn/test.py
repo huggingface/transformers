@@ -1,9 +1,9 @@
 import numpy as np
+import torch
 from PIL import Image
 from torchvision import transforms as T
-import torch
-import requests
 
+import requests
 from transformers import ConvNextMaskRCNNForObjectDetection
 
 
@@ -37,8 +37,8 @@ with torch.no_grad():
 
 detections = []
 for label in range(len(bbox_results)):
-  if len(bbox_results[label]) > 0:
-    for detection in bbox_results[label]:
-      detections.append((label, detection))
+    if len(bbox_results[label]) > 0:
+        for detection in bbox_results[label]:
+            detections.append((label, detection))
 
 print("Number of detections:", len(detections))
