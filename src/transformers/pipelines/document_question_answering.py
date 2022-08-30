@@ -448,7 +448,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             if word_start is not None and word_end is not None:
                 answers.append(
                     {
-                        "score": score,
+                        "score": float(score),  # XXX Write a test that verifies the result is JSON-serializable
                         "answer": " ".join(words[word_start : word_end + 1]),
                         "start": word_start,
                         "end": word_end,
