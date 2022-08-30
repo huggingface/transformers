@@ -35,9 +35,9 @@ logger = logging.get_logger(__name__)
 
 
 _CONFIG_FOR_DOC = "ViTMSNConfig"
-_CHECKPOINT_FOR_DOC = "facebook/vit-msn-small"
+_CHECKPOINT_FOR_DOC = "sayakpaul/vit-msn-small"
 VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/vit-msn-small",
+    "sayakpaul/vit-msn-small",
     # See all ViTMSN models at https://huggingface.co/models?filter=vit_msn
 ]
 
@@ -58,7 +58,7 @@ class ViTMSNEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
-        # Following https://github.com/facebookresearch/msn/blob/main/src/deit.py#L196-#L197
+        # Following https://github.com/sayakpaulresearch/msn/blob/main/src/deit.py#L196-#L197
         torch.nn.init.trunc_normal_(self.position_embeddings, std=self.config.initializer_range)
         torch.nn.init.trunc_normal_(self.cls_token, std=self.config.initializer_range)
 
@@ -68,7 +68,7 @@ class ViTMSNEmbeddings(nn.Module):
         resolution images.
 
         Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        https://github.com/sayakpaulresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
         """
 
         num_patches = embeddings.shape[1] - 1
@@ -81,7 +81,7 @@ class ViTMSNEmbeddings(nn.Module):
         h0 = height // self.config.patch_size
         w0 = width // self.config.patch_size
         # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
+        # see discussion at https://github.com/sayakpaulresearch/dino/issues/8
         h0, w0 = h0 + 0.1, w0 + 0.1
         patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
@@ -432,7 +432,7 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-    # Following https://github.com/facebookresearch/msn/blob/main/src/deit.py#L200-#L211.
+    # Following https://github.com/sayakpaulresearch/msn/blob/main/src/deit.py#L200-#L211.
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
