@@ -116,7 +116,7 @@ def remove_classification_head_(state_dict):
 
 
 def remove_projection_head(state_dict):
-    # projection head is used in the self-supervised pre-training in MSN
+    # projection head is used in the self-supervised pre-training in MSN,
     # for downstream task it's not needed.
     ignore_keys = [
         "module.fc.fc1.weight",
@@ -170,7 +170,7 @@ def convert_vit_msn_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     model = ViTMSNModel(config, add_pooling_layer=False)
 
-    state_dict = torch.load(checkpoint_url)["model"]["target_encoder"]
+    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["target_encoder"]
 
     feature_extractor = ViTFeatureExtractor(size=config.image_size)
 
