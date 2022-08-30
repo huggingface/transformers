@@ -1863,6 +1863,10 @@ class ConvNextMaskRCNNRPN(nn.Module):
 
         proposal_list = self.get_bboxes(*outs, img_metas=img_metas, cfg=proposal_cfg)
 
+        print("Shape of proposals:")
+        for i in proposal_list:
+            print(i.shape)
+
         # TODO create RPNOutput class, which also includes outs
         return losses, proposal_list
 
@@ -2270,7 +2274,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
                 with_nms,
                 **kwargs,
             )
-            print("Shape of RPN result:", results.shape)
+            # print("Shape of RPN result:", results.shape)
             result_list.append(results)
         return result_list
 
@@ -2311,12 +2315,12 @@ class ConvNextMaskRCNNRPN(nn.Module):
             Tensor: Labeled boxes in shape (n, 5), where the first 4 columns
                 are bounding box positions (tl_x, tl_y, br_x, br_y) and the 5-th column is a score between 0 and 1.
         """
-        print("RPN classification logits:")
-        for i in cls_score_list:
-            print(i.shape)
-        print("RPN bounding box predictions:")
-        for i in bbox_pred_list:
-            print(i.shape)
+        # print("RPN classification logits:")
+        # for i in cls_score_list:
+        #     print(i.shape)
+        # print("RPN bounding box predictions:")
+        # for i in bbox_pred_list:
+        #     print(i.shape)
         cfg = self.test_cfg if cfg is None else cfg
         cfg = copy.deepcopy(cfg)
         img_shape = img_meta["img_shape"]
@@ -2634,6 +2638,9 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
         cls_score = self.fc_cls(hidden_states)
         bbox_pred = self.fc_reg(hidden_states)
 
+        print("Shape of cls_score:", cls_score.shape)
+        print("Shape of bbox_pred:", bbox_pred.shape)
+
         return cls_score, bbox_pred
 
     def get_bboxes(self, rois, cls_score, bbox_pred, img_shape, scale_factor, rescale=False, cfg=None):
@@ -2666,7 +2673,7 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
         # if self.custom_cls_channels:
         #     scores = self.loss_cls.get_activation(cls_score)
         # else:
-        print("Shape of cls_score:", cls_score.shape)
+        # print("Shape of cls_score:", cls_score.shape)
         scores = nn.functional.softmax(cls_score, dim=-1) if cls_score is not None else None
         # bbox_pred would be None in some detector when with_reg is False,
         # e.g. Grid R-CNN.
@@ -2682,7 +2689,7 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
             scale_factor = bboxes.new_tensor(scale_factor)
             bboxes = (bboxes.view(bboxes.size(0), -1, 4) / scale_factor).view(bboxes.size()[0], -1)
 
-        print("Shape of boxes just before NMS:", bboxes[0].shape)
+        # print("Shape of boxes just before NMS:", bboxes[0].shape)
 
         if cfg is None:
             return bboxes, scores
@@ -3079,8 +3086,8 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         #     bbox_feats = self.shared_head(bbox_feats)
         cls_score, bbox_pred = self.bbox_head(bbox_feats)
 
-        print("CLS score of bounding box head (before postprocessing):", cls_score.shape)
-        print("Bbox pred of bounding box head (before postprocessing):", bbox_pred.shape)
+        # print("CLS score of bounding box head (before postprocessing):", cls_score.shape)
+        # print("Bbox pred of bounding box head (before postprocessing):", bbox_pred.shape)
 
         bbox_results = dict(cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats)
         return bbox_results
@@ -3138,7 +3145,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         cls_score = bbox_results["cls_score"]
         bbox_pred = bbox_results["bbox_pred"]
         num_proposals_per_img = tuple(len(p) for p in proposals)
-        print("Number of proposals per img:", num_proposals_per_img)
+        # print("Number of proposals per img:", num_proposals_per_img)
         rois = rois.split(num_proposals_per_img, 0)
         cls_score = cls_score.split(num_proposals_per_img, 0)
 
@@ -3153,7 +3160,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         else:
             bbox_pred = (None,) * len(proposals)
 
-        print("Shape of bbox_pred:", bbox_pred[0].shape)
+        # print("Shape of bbox_pred:", bbox_pred[0].shape)
 
         # apply bbox post-processing to each image individually
         det_bboxes = []
@@ -3177,8 +3184,8 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
                     rescale=rescale,
                     cfg=rcnn_test_cfg,
                 )
-                print("Detected boxes:", det_bbox.shape)
-                print("Detected labels:", det_label.shape)
+                # print("Detected boxes:", det_bbox.shape)
+                # print("Detected labels:", det_label.shape)
             det_bboxes.append(det_bbox)
             det_labels.append(det_label)
         return det_bboxes, det_labels
@@ -3188,7 +3195,6 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         assert (rois is not None) ^ (pos_inds is not None and bbox_feats is not None)
         if rois is not None:
             mask_feats = self.mask_roi_extractor(x[: self.mask_roi_extractor.num_inputs], rois)
-            print("Shape of mask_feats:", mask_feats.shape)
             # if self.with_shared_head:
             #     mask_feats = self.shared_head(mask_feats)
         else:
@@ -3196,10 +3202,6 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             mask_feats = bbox_feats[pos_inds]
 
         mask_pred = self.mask_head(mask_feats)
-
-        print("Pos indices:", pos_inds)
-
-        print("Shape of mask pred:", mask_pred.shape)
 
         mask_results = dict(mask_pred=mask_pred, mask_feats=mask_feats)
         return mask_results
@@ -3561,9 +3563,6 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
             losses.update(roi_losses)
         else:
             _, proposal_list = self.rpn_head(hidden_states, img_metas)
-            print("Proposal list:")
-            for i in proposal_list:
-                print(i.shape)
             results = self.roi_head.forward_test(hidden_states, proposal_list, img_metas=img_metas)
 
         if not return_dict:
