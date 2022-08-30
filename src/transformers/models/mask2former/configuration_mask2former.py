@@ -14,7 +14,7 @@
 # limitations under the License.
 """ Mask2Former model configuration"""
 import copy
-from typing import Dict, Optional
+from typing import Dict, List, Optional
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -97,6 +97,7 @@ class Mask2FormerConfig(PretrainedConfig):
     attribute_map = {"hidden_size": "mask_feature_size"}
     backbones_supported = ["swin"]
     decoders_supported = ["detr"]
+    pixel_decoders_supported = ["detr"] #since deformable_detr not available in transformers yet
 
     def __init__(
         self,
@@ -112,6 +113,12 @@ class Mask2FormerConfig(PretrainedConfig):
         cross_entropy_weight: float = 1.0,
         mask_weight: float = 20.0,
         output_auxiliary_logits: Optional[bool] = None,
+        train_num_points: Optional[int] = 12544,
+        importance_sample_ratio: Optional[float] = 0.75,
+        oversample_ratio: Optional[float] = 3.0,
+        common_stride: Optional[int] = 4,
+        encoder_in_features: Optional[List[str]] = ['res2', 'res3', 'res5'],
+        pixel_decoder_config: Optional[Dict] = None,
         **kwargs,
     ):
         if backbone_config is None:
@@ -147,6 +154,18 @@ class Mask2FormerConfig(PretrainedConfig):
                 )
             decoder_config = AutoConfig.for_model(decoder_type, **decoder_config)
 
+        if pixel_decoder_config is None:
+            
+            pixel_decoder_config = DetrConfig()
+        else:
+            pixel_decoder_type = pixel_decoder_config.pop("model_type")
+            if pixel_decoder_type not in self.pixel_decoders_supported:
+                raise ValueError(
+                    f"Pixel Decoder {pixel_decoder_type} not supported, please use one of"
+                    f" {'.'.join(self.pixel_decoders_supported)}"
+                )
+            pixel_decoder_config = AutoConfig.for_model(pixel_decoder_type, **pixel_decoder_config)
+
         self.backbone_config = backbone_config
         self.decoder_config = decoder_config
         # main feature dimension for the model
@@ -162,6 +181,12 @@ class Mask2FormerConfig(PretrainedConfig):
         self.use_auxiliary_loss = use_auxiliary_loss
         self.no_object_weight = no_object_weight
         self.output_auxiliary_logits = output_auxiliary_logits
+        self.train_num_points = train_num_points
+        self.importance_sample_ratio = importance_sample_ratio
+        self.oversample_ratio = oversample_ratio
+        self.common_stride = common_stride
+        self.encoder_in_features = encoder_in_features
+        self.pixel_decoder_config = pixel_decoder_config
 
         self.num_attention_heads = self.decoder_config.encoder_attention_heads
         self.num_hidden_layers = self.decoder_config.num_hidden_layers
@@ -199,5 +224,6 @@ class Mask2FormerConfig(PretrainedConfig):
         output = copy.deepcopy(self.__dict__)
         output["backbone_config"] = self.backbone_config.to_dict()
         output["decoder_config"] = self.decoder_config.to_dict()
+        output["pixel_decoder_config"] = self.pixel_decoder_config.to_dict()
         output["model_type"] = self.__class__.model_type
         return output

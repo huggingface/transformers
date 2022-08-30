@@ -16,6 +16,7 @@
 
 import collections.abc
 import math
+import warnings
 import random
 from dataclasses import dataclass
 from numbers import Number
@@ -190,6 +191,7 @@ class Mask2FormerPixelLevelModuleOutput(ModelOutput):
     decoder_last_hidden_state: Optional[torch.FloatTensor] = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     decoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    multi_scale_features: Optional[List[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerPixelDecoderOutput with MaskFormer->Mask2Former
@@ -212,6 +214,35 @@ class Mask2FormerPixelDecoderOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
+    transformer_encoder_features: torch.FloatTensor = None
+    multi_scale_features: List[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+@dataclass
+class Mask2FormerMSDeformableAttnEncoderOutput(ModelOutput):
+    """
+    Class for Mask2FormerMSDeformableAttnEncoder's outputs.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    spatial_shapes: torch.FloatTensor = None
+    level_start_index: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -2076,33 +2107,401 @@ class Mask2FormerFPNModel(nn.Module):
             fpn_features.append(output)
         return fpn_features
 
+def multiscale_deformable_attention_core(value, value_spatial_shapes, sampling_locations, attention_weights):
 
-# Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerPixelDecoder with MaskFormer->Mask2Former
-class Mask2FormerPixelDecoder(nn.Module):
-    def __init__(self, *args, feature_size: int = 256, mask_feature_size: int = 256, **kwargs):
-        """
-        Pixel Decoder Module proposed in [Per-Pixel Classification is Not All You Need for Semantic
-        Segmentation](https://arxiv.org/abs/2107.06278). It first runs the backbone's feature into a Feature Pyramid
-        Network creating a list of feature maps. Then, it projects the last one to the correct `mask_size`.
+    #N_, S_, M_, D_
+    batch_size, sequence_length, num_heads, embed_dim = value.shape
 
-        Args:
-            feature_size (`int`, *optional*, defaults to 256):
-                The feature size (channel dimension) of the FPN feature maps.
-            mask_feature_size (`int`, *optional*, defaults to 256):
-                The features (channels) of the target masks size \\C_{\epsilon}\\ in the paper.
-        """
+    #_, Lq_, M_, L_, P_, _ 
+    _, num_queries, num_heads, n_levels, n_points, _ = sampling_locations.shape
+
+    value_list = value.split([height * width for height,width in value_spatial_shapes], dim=1)
+
+    sampling_grids = 2 * sampling_locations - 1
+
+    sampling_value_list = []
+
+    for level_id, (height, width) in enumerate(value_spatial_shapes):
+
+        value_l = value_list[level_id].flatten(2).transpose(1, 2).reshape(batch_size * num_heads, embed_dim, height, width)
+
+        sampling_grid_l = sampling_grids[:,:,:, level_id].transpose(1,2).flatten(0,1)
+
+        sampling_value_l = F.grid_sample(value_l, sampling_grid_l, mode='bilinear', padding_mode='zeros', align_corners=False)
+
+        sampling_value_list.append(sampling_value_l)
+
+    attention_weights = attention_weights.transpose(1,2).reshape(batch_size * num_heads, 1, num_queries, n_levels * n_points)
+
+    output = (torch.stack(sampling_value_list, dim=-2).flatten(-2) * attention_weights).sum(-1).view(batch_size, num_heads * embed_dim, num_queries)
+
+    output = output.transpose(1,2).contiguous()
+    
+    return output
+    
+
+def _is_power_of_2(n):
+    if (not isinstance(n, int)) or (n < 0):
+        raise ValueError("invalid input for _is_power_of_2: {} (type: {})".format(n, type(n)))
+    return (n & (n-1) == 0) and n != 0
+
+class MultiScaleDeformableAttention(nn.Module):
+    """
+    """
+
+    def __init__(self, embed_dim: int, num_heads: int, n_levels: int, n_points: int):
         super().__init__()
-        self.fpn = Mask2FormerFPNModel(*args, feature_size=feature_size, **kwargs)
-        self.mask_projection = nn.Conv2d(feature_size, mask_feature_size, kernel_size=3, padding=1)
+        if embed_dim % num_heads != 0:
+            raise ValueError("embed_dim must be divisible by num_heads, but got {} and {}".format(embed_dim, num_heads))
+        
+        dim_per_head = embed_dim // num_heads
 
-    def forward(self, features: List[Tensor], output_hidden_states: bool = False) -> Mask2FormerPixelDecoderOutput:
-        fpn_features: List[Tensor] = self.fpn(features)
-        # we use the last feature map
-        last_feature_projected = self.mask_projection(fpn_features[-1])
-        return Mask2FormerPixelDecoderOutput(
-            last_hidden_state=last_feature_projected, hidden_states=tuple(fpn_features) if output_hidden_states else ()
+        if not _is_power_of_2(dim_per_head):
+            warnings.warn("You'd better set embed_dim in MultiScaleDeformableAttention to make the dimension of each attention head a power of 2 "
+                          "which is more efficient in our CUDA implementation.")
+
+        self.im2col_step = 128
+
+        self.embed_dim = embed_dim
+        self.n_levels = n_levels
+        self.num_heads = num_heads
+        self.n_points = n_points
+
+        self.sampling_offsets = nn.Linear(self.embed_dim, self.num_heads * self.n_levels * self.n_points * 2)
+        self.attention_weights = nn.Linear(self.embed_dim, self.num_heads * self.n_levels * self.n_points)
+        self.value_projection = nn.Linear(self.embed_dim, self.embed_dim)
+        self.ouput_projection = nn.Linear(self.embed_dim, self.embed_dim)
+
+        self._reset_parameters()
+
+    
+    def _reset_parameters(self):
+        nn.init.constant_(self.sampling_offsets.weight.data, 0.)
+        thetas = torch.arange(self.num_heads, dtype=torch.float32) * (2.0 * math.pi / self.num_heads)
+        grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
+        grid_init = (grid_init / grid_init.abs().max(-1, keepdim=True)[0]).view(self.num_heads, 1,1,2).repeat(1, self.n_levels, self.n_points, 1)
+
+        for idx in range(self.n_points):
+            grid_init[:,:,idx,:] *= idx + 1
+
+        with torch.no_grad():
+            self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
+
+        nn.init.constant_(self.attention_weights.weight.data, 0.)
+        nn.init.constant_(self.attention_weights.bias.data, 0.)
+        nn.init.xavier_uniform_(self.value_projection.weight.data)
+        nn.init.constant_(self.value_projection.bias.data, 0.)
+        nn.init.xavier_uniform_(self.ouput_projection.weight.data)
+        nn.init.constant_(self.ouput_projection.bias.data, 0.)
+
+    def forward(self,
+        hidden_states: torch.Tensor, #query
+        attention_mask: Optional[torch.Tensor] = None, #input_padding_mask
+        encoder_hidden_states = None, #input_flatten
+        reference_points = None,
+        spatial_shapes = None,
+    ):
+        #N, Len_q, _ = query.shape
+        batch_size, num_queries, _ = hidden_states.shape
+
+        #N, Len_in, _ = input_flatten.shape
+        batch_size, sequence_length, _ = encoder_hidden_states.shape
+
+        if (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
+            raise ValueError(
+                    "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
+                )
+
+        value = self.value_projection(encoder_hidden_states)
+        
+        if attention_mask is not None:    
+            value = value.masked_fill(~attention_mask[...,None], float(0))
+        
+        value = value.view(batch_size, sequence_length, self.num_heads, self.embed_dim // self.num_heads)
+        sampling_offsets = self.sampling_offsets(hidden_states).view(batch_size, num_queries, self.num_heads, self.n_levels, self.n_points, 2)
+
+        attention_weights = self.attention_weights(hidden_states).view(batch_size, num_queries, self.num_heads, self.n_levels * self.n_points)
+
+        attention_weights = nn.functional.softmax(attention_weights, -1).view(batch_size, num_queries, self.num_heads, self.n_levels, self.n_points)
+
+        if reference_points.shape[-1] == 2:
+            offset_normalizer = torch.stack([spatial_shapes[..., 1], spatial_shapes[..., 0]], -1)
+            sampling_locations = reference_points[:,:, None, :, None, :] \
+                + sampling_offsets / offset_normalizer[None, None, None, :, None, :]
+
+        elif reference_points.shape[-1] == 4:
+            sampling_locations = reference_points[:, :, None, :, None, :2] \
+                + sampling_offsets / self.n_points * reference_points[:, :, None, :, None, 2:] * 0.5
+
+        else:
+            raise ValueError(
+                "Last dim of reference points must be 2 or 4 but got {} instead.".format(reference_points.shape[-1])
+                )
+        
+        ##cuda implementation of multiscale_deformable_attention not added yet
+        output = multiscale_deformable_attention_core(value, spatial_shapes, sampling_locations, attention_weights) #for CPU
+
+        output = self.ouput_projection(output)
+
+        return output, attention_weights
+
+class MultiScaleDeformAttnTransformerEncoderLayer(nn.Module):
+    """
+    """
+    def __init__(self, config: DetrConfig):
+        super().__init__()
+        self.embed_dim = config.d_model
+
+        #self attention
+        self.self_attention = MultiScaleDeformableAttention(
+            embed_dim=self.embed_dim, #256
+            num_heads=config.encoder_attention_heads, #8
+            n_levels=config.num_feature_levels, #4 
+            n_points=config.encoder_n_points, #4 
+        )
+        self.dropout = config.encoder_layerdrop #0.1
+        self.first_dropout = nn.Dropout(self.dropout) #dropout1
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim) #norm1
+        
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+
+        #FFN
+        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim) #linear1
+        self.second_dropout(self.activation_dropout) #dropout2
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim) #linear2
+        self.third_dropout(self.dropout) #dropout3
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim) #norm2
+
+    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+        return tensor if position_embeddings is None else tensor + position_embeddings
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        position_embeddings: torch.Tensor = None,
+        reference_points = None,
+        spatial_shapes = None,
+        output_attentions: bool = False,
+    ):
+        """
+        """
+        residual = hidden_states
+
+        if position_embeddings is not None:
+            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+
+        hidden_states, attention_weights = self.self_attention(
+            hidden_states=hidden_states, #src
+            attention_mask=attention_mask, #padding_mask
+            encoder_hidden_states=hidden_states,
+            reference_points=reference_points,
+            spatial_shapes=spatial_shapes,
         )
 
+        hidden_states = self.first_dropout(hidden_states)
+        hidden_states = residual + hidden_states
+        hidden_states = self.self_attn_layer_norm(hidden_states)
+
+        residual = hidden_states
+
+        ##FFN
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.second_dropout(hidden_states)
+
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = self.third_dropout(hidden_states)
+
+        hidden_states = residual + hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attention_weights,)
+
+        return outputs
+
+
+class MultiScaleDeformAttnTransformerEncoder(nn.Module):
+    """
+    """
+
+    def __init__(self, config: DetrConfig) -> None:
+        super().__init__(config)
+
+        self.dropout = config.encoder_layerdrop
+        self.layers = nn.ModuleList([MultiScaleDeformAttnTransformerEncoderLayer(config) for _ in range(config.encoder_layers)])
+
+    @staticmethod
+    def get_reference_points(spatial_shapes, valid_ratios, device):
+        """
+        """
+
+        reference_points_list = []
+
+        for level, (height, width) in enumerate(spatial_shapes):
+
+            ref_y, ref_x = torch.meshgrid(
+                torch.linspace(0.5, height - 0.5, height, dtype=torch.float32, device=device),
+                torch.linspace(0.5, width - 0.5, width, dtype=torch.float32, device=device),
+            )
+
+            ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, level, 1] * height)
+            ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, level, 0] * width)
+            ref = torch.stack((ref_y, ref_x), -1)
+            reference_points_list.append(ref)
+
+        reference_points = torch.cat(reference_points_list, 1)
+        reference_points = reference_points[:,:, None] * valid_ratios[:, None]
+        return reference_points
+
+    def forward(
+        self,
+        input_embeds: torch.Tensor = None, #src
+        attention_mask: torch.Tensor = None, #padding_mask
+        position_embeddings: torch.Tensor = None, #pos
+        spatial_shapes=None,
+        valid_ratios=None,
+        output_attentions: bool = None,
+        output_hidden_states: bool =None
+    ):
+     output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+     
+     output_hidden_states = (
+        output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+     )
+
+     encoder_states = () if output_hidden_states else None
+     attentions = () if output_attentions else None
+
+     hidden_states = input_embeds
+
+     device = input_embeds.device
+     
+     reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device)
+
+     for _, encoder_layer in enumerate(self.layers):
+        if output_hidden_states:
+            encoder_states = encoder_states + (hidden_states,)
+        layer_outputs = encoder_layer(
+            hidden_states,
+            attention_mask,
+            position_embeddings=position_embeddings,
+            reference_points=reference_points,
+            spatial_shapes=spatial_shapes,
+            output_attentions=output_attentions,
+        )
+
+        hidden_states = layer_outputs[0]
+
+        if output_attentions:
+            attentions = attentions + (layer_outputs[1],)
+
+     if output_hidden_states:
+        encoder_states = encoder_states + (hidden_states,)
+
+     return hidden_states, encoder_states, attentions
+
+
+class MultiScaleDeformAttnEncoderOnly(nn.Module):
+    def __init__(self, config, num_feature_levels=4):
+        super().__init__()
+
+        self.embed_dim = config.embed_dim
+        self.num_head = config.num_head
+        # self.num_encoder_layers = config.encoder_layers
+        # self.encoder_ffn_dim = config.encoder_ffn_dim
+        # self.activation_fn = ACT2FN()
+        # self.dropout = config.dropout
+        # self.enc_n_points = config.enc_n_points
+
+        encoder_layer = MultiScaleDeformAttnTransformerEncoderLayer(config, num_feature_levels)
+
+        self.encoder = MultiScaleDeformAttnTransformerEncoder(encoder_layer, self.embed_dim)
+
+        self.level_embed = nn.Parameter(torch.Tensor(num_feature_levels, self.embed_dim))
+
+        self._reset_parameters()
+
+    def _reset_parameters(self):
+        for parameter in self.parameters():
+            if parameter.dim() > 1:
+                nn.init.xavier_uniform_(parameter)
+        for module in self.modules():
+            if isinstance(module, MultiScaleDeformableAttention):
+                module._reset_parameters()
+        nn.init.normal_(self.level_embed)
+
+    def get_valid_ratio(self, mask):
+        _, height, width = mask.shape
+        valid_height = torch.sum(~mask[:,:,0], 1)
+        valid_width = torch.sum(~mask[:, 0, :], 1)
+        valid_ratio_height = valid_height.float() / height
+        valid_ratio_width = valid_width.float() / width
+        valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
+        return valid_ratio
+
+    def forward(self, 
+        input_embeds, 
+        position_embeddings, 
+        output_attentions: Optional[bool] = None, 
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None):
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+     
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.return_dict
+
+        encoder_states = () if output_hidden_states else None
+        attentions = () if output_attentions else None
+
+        masks = [torch.zeros((input_embed.size(0), input_embed.size(2), input_embed.size(3)), device=input_embed.device, dtype=torch.bool) for input_embed in input_embeds]
+
+        input_embeds_flatten = []
+        mask_flatten = []
+        level_pos_embed_flatten = []
+        spatial_shapes = []
+
+        for level, (input_embed, mask, position_embedding) in enumerate(zip(input_embeds, masks, position_embeddings)):
+            batch_size, channels, height, width = input_embed.shape
+            spatial_shape = (height, width)
+            spatial_shapes.append(spatial_shape)
+            input_embed = input_embed.flatten(2).transpose(1,2)
+            mask = mask.flatten(1)
+            position_embedding = position_embedding.flatten(2).transpose(1,2)
+            level_pos_embed = position_embedding + self.level_embed[level].view(1,1,-1)
+            level_pos_embed_flatten.append(level_pos_embed)
+            input_embeds_flatten.append(input_embed)
+            mask_flatten.append(mask)
+
+        input_embeds_flatten = torch.cat(input_embeds_flatten, 1)
+        mask_flatten = torch.cat(mask_flatten, 1)
+        level_pos_embed_flatten = torch.cat(level_pos_embed_flatten, 1)
+        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=input_embeds_flatten.device)
+
+        level_start_index = torch.car((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        valid_ratios = torch.stack([self.get_valid_ratio(mask) for mask in masks], 1)
+
+        last_hidden_state, encoder_states, attentions = self.encoder(input_embeds_flatten, mask_flatten, level_pos_embed_flatten, spatial_shapes, valid_ratios, output_attentions, output_hidden_states)
+
+        output = Mask2FormerMSDeformableAttnEncoderOutput(
+                last_hidden_state=last_hidden_state,
+                spatial_shapes=spatial_shapes,
+                level_start_index=level_start_index, 
+                hidden_states=encoder_states, 
+                attentions=attentions)
+
+        if not return_dict:
+            output = tuple(value for value in [last_hidden_state, spatial_shapes, level_start_index, encoder_states, attentions] if value is not None)
+
+        return output # return encoder_output, spatial_shapes, level_start_index
+        
 
 # copied and adapted from original implementation, also practically equal to DetrSinePositionEmbedding
 # Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerSinePositionEmbedding with MaskFormer->Mask2Former
@@ -2143,6 +2542,176 @@ class Mask2FormerSinePositionEmbedding(nn.Module):
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
         return pos
+
+def c2_xavier_fill(module: nn.Module) -> None:
+    """
+    Initialize `module.weight` using the "XavierFill" implemented in Caffe2.
+    Also initializes `module.bias` to 0.
+    Caffe2 implementation of XavierFill in fact corresponds to kaiming_uniform_ in PyTorch
+    
+    Args:
+        module (torch.nn.Module): module to initialize.
+    """
+    nn.init.kaiming_uniform_(module.weight, a=1)
+    if module.bias is not None:
+        nn.init.constant_(module.bias, 0)
+
+# Copied from transformers.models.maskformer.modeling_maskformer.MaskFormerPixelDecoder with MaskFormer->Mask2Former
+class Mask2FormerPixelDecoder(nn.Module):
+    def __init__(self, *args, input_shape, feature_size: int = 256, mask_feature_size: int = 256, transformer_in_features: List[str], common_stride: int, **kwargs):
+        """
+        Pixel Decoder Module proposed in [Per-Pixel Classification is Not All You Need for Semantic
+        Segmentation](https://arxiv.org/abs/2107.06278). It first runs the backbone's feature into a Feature Pyramid
+        Network creating a list of feature maps. Then, it projects the last one to the correct `mask_size`.
+
+        Args:
+            feature_size (`int`, *optional*, defaults to 256):
+                The feature size (channel dimension) of the FPN feature maps.
+            mask_feature_size (`int`, *optional*, defaults to 256):
+                The features (channels) of the target masks size \\C_{\epsilon}\\ in the paper.
+        """
+        super().__init__()
+
+        transformer_input_shape = {
+            key: value for key, value in input_shape.items() if key in transformer_in_features
+        }
+
+        input_shape = sorted(input_shape.items(), key=lambda x: x[1].stride)
+        self.in_features = [key for key, value in input_shape]
+        self.feature_strides = [value.stride for key, value in input_shape]
+        self.feature_channels = [value.channels for key, value in input_shape]
+
+        transformer_input_shape = sorted(transformer_input_shape.items(), key = lambda x: x[1].stride)
+        self.transformer_in_features = [key for key, value in transformer_input_shape]
+        self.transformer_in_channels = [value.channels for key, value in transformer_input_shape]
+        self.transformer_feature_strides = [value.stride for key, value in transformer_input_shape]
+        self.transformer_num_feature_levels = len(self.transformer_in_features)
+
+        input_projection_list = []
+        if self.transformer_num_feature_levels > 1:
+            for in_channels in self.transformer_in_channels[::-1]:
+                input_projection_list.append(nn.Sequential(
+                    nn.Conv2d(in_channels, feature_size, kernel_size=1),
+                    nn.GroupNorm(32, feature_size)
+                ))
+        else:
+            input_projection_list.append(nn.Sequential(
+                    nn.Conv2d(self.transformer_in_channels[-1], feature_size, kernel_size=1),
+                    nn.GroupNorm(32, feature_size)
+                ))
+        
+        self.input_projection = nn.ModuleList(input_projection_list)
+
+        for projection in self.input_projection:
+            nn.init.xavier_uniform_(projection[0].weight, gain=1) #replace with config file val
+            nn.init.constant_(projection[0].bias, 0)
+
+        self.msdeformattn_transformer = MultiScaleDeformAttnEncoderOnly(config, self.transformer_num_feature_levels)
+        
+        self.position_embedding_layer = Mask2FormerSinePositionEmbedding(num_pos_feats = feature_size // 2, normalize=True)
+        
+        self.mask_projection = nn.Conv2d(feature_size, mask_feature_size, kernel_size=1, stride=1, padding=0)
+
+        c2_xavier_fill(self.mask_projection)
+
+        self.mask2former_num_feature_levels = config.num_feature_levels
+
+        ##Extra FPN Levels
+        stride = min(self.transformer_feature_strides)
+        self.num_fpn_levels = int(np.log2(stride) - np.log2(common_stride))
+
+        lateral_convs = []
+        output_convs = []
+        use_bias = False
+
+        for idx, in_channels in enumerate(self.feature_channels[:self.num_fpn_levels]):
+            lateral_norm = nn.GroupNorm(32, feature_size)
+            output_norm = nn.GroupNorm(32, feature_size)
+
+            lateral_conv = nn.Sequential(
+                    nn.Conv2d(in_channels, feature_size, kernel_size=1),
+                    lateral_norm
+                )
+            output_conv = nn.Sequential(
+                    nn.Conv2d(feature_size, feature_size, kernel_size=3, stride=1, padding=1,bias=use_bias),
+                    output_norm
+                )
+
+            c2_xavier_fill(lateral_conv)
+            c2_xavier_fill(output_conv)
+            self.add_module("adapter_{}".format(idx+1), lateral_conv)
+            self.add_module("layer {}".format(idx + 1), output_conv)
+
+            lateral_convs.append(lateral_conv)
+            output_convs.append(output_conv)
+
+        self.lateral_convs = lateral_convs[::-1]
+        self.output_convs = output_convs[::-1]
+
+    
+    def forward(self, features: List[Tensor], output_hidden_states: bool = False) -> Mask2FormerPixelDecoderOutput:
+        
+        input_embeds = []
+        position_embeddings = []
+        transformer_encoder_features = []
+        multi_scale_features = []
+        num_cur_levels = 0
+
+        for idx, feature in enumerate(self.transformer_in_features[::-1]):
+            feature = features[feature].float()
+            input_embeds.append(self.input_projection[idx](feature))
+            position_embeddings.append(self.position_embedding_layer(feature))
+        
+        encoder_output: Mask2FormerMSDeformableAttnEncoderOutput = self.msdeformattn_transformer(input_embeds, position_embeddings)
+        
+        final_encoder_output = encoder_output.last_hidden_state
+        spatial_shapes = encoder_output.spatial_shapes
+        level_start_index = encoder_output.level_start_index
+        
+        batch_size = final_encoder_output.shape[0]
+
+        split_size_or_sections = [None] * self.transformer_num_feature_levels
+
+        for idx in range(self.transformer_num_feature_levels):
+            if idx < self.transformer_num_feature_levels -1:
+                split_size_or_sections[idx] = level_start_index[idx + 1] - level_start_index[idx]
+
+            else:
+                split_size_or_sections[idx] = final_encoder_output.shape
+
+        final_encoder_output = torch.split(final_encoder_output, split_size_or_sections, dim=1)
+
+        for idx, feature in enumerate(final_encoder_output):
+            feature = feature.transpose(1,2).view(batch_size, -1, spatial_shapes[idx][0], spatial_shapes[idx][1])
+            transformer_encoder_features.append(feature)
+
+        ##append `transformer_encoder_features` with extra FPN levels
+
+        for idx, feature in enumerate(self.in_features[:self.num_fpn_levels][::-1]):
+            feature = features[feature].float()
+            lateral_conv = self.lateral_convs[idx]
+            output_conv = self.output_convs[idx]
+            cur_fpn = lateral_conv(feature)
+            upsampled_feature = nn.functional.interpolate(transformer_encoder_features[-1], size=cur_fpn.shape[-2:], mode='bilinear', align_corners=False)
+            output = cur_fpn + upsampled_feature
+            output = output_conv(output)
+            transformer_encoder_features.append(output)
+
+        for feature in transformer_encoder_features:
+            if num_cur_levels < self.mask2former_num_feature_levels:
+                multi_scale_features.append(feature)
+                num_cur_levels += 1
+
+        # we use the last feature map
+        last_feature_projected = self.mask_projection(transformer_encoder_features[-1])
+
+        ##redefine??
+        return Mask2FormerPixelDecoderOutput(
+            last_hidden_state=last_feature_projected,
+            transformer_encoder_features=transformer_encoder_features[0],
+            multi_scale_features=multi_scale_features,
+            hidden_states=tuple(transformer_encoder_features) if output_hidden_states else ()
+        )
 
 
 class PredictionBlock(nn.Module):
@@ -2214,21 +2783,25 @@ class Mask2FormerPixelLevelModule(nn.Module):
         super().__init__()
         self.encoder = Mask2FormerSwinTransformerBackbone(config.backbone_config)
         self.decoder = Mask2FormerPixelDecoder(
-            in_features=self.encoder.outputs_shapes[-1],
+            config=config.pixel_decoder_config,
+            input_shape=self.encoder.outputs_shapes[-1],
+            transformer_in_features=config.encoder_in_features,
             feature_size=config.fpn_feature_size,
             mask_feature_size=config.mask_feature_size,
-            lateral_widths=self.encoder.outputs_shapes[:-1],
+            common_stride=config.common_stride,
         )
 
     def forward(self, pixel_values: Tensor, output_hidden_states: bool = False) -> Mask2FormerPixelLevelModuleOutput:
         features: List[Tensor] = self.encoder(pixel_values)
         decoder_output: Mask2FormerPixelDecoderOutput = self.decoder(features, output_hidden_states)
+        
         return Mask2FormerPixelLevelModuleOutput(
             # the last feature is actually the output from the last layer
             encoder_last_hidden_state=features[-1],
             decoder_last_hidden_state=decoder_output.last_hidden_state,
             encoder_hidden_states=tuple(features) if output_hidden_states else (),
             decoder_hidden_states=decoder_output.hidden_states if output_hidden_states else (),
+            multi_scale_features=decoder_output.multi_scale_features,
         )
 
 
@@ -2243,8 +2816,15 @@ class Mask2FormerTransformerModule(nn.Module):
         hidden_size = config.decoder_config.hidden_size
         should_project = in_features != hidden_size
         self.position_embedder = Mask2FormerSinePositionEmbedding(num_pos_feats=hidden_size // 2, normalize=True)
+        
+        # self.query_features = nn.Embedding(config.decoder_config.num_queries, hidden_size)
         self.queries_embedder = nn.Embedding(config.decoder_config.num_queries, hidden_size)
+        
+        # num_feature_levels = 3
+        # self.level_embed = nn.Embedding(num_feature_levels, hidden_size)
+
         self.input_projection = nn.Conv2d(in_features, hidden_size, kernel_size=1) if should_project else None
+        
         self.decoder = DetrDecoder(config=config.decoder_config)
 
     def forward(
@@ -2412,11 +2992,17 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
             pixel_values, output_hidden_states
         )
         image_features = pixel_level_module_output.encoder_last_hidden_state
+
+        # multi_scale_features  = pixel_level_module_output.multi_scale_features
+
         pixel_embeddings = pixel_level_module_output.decoder_last_hidden_state
 
         transformer_module_output: DetrDecoderOutput = self.transformer_module(
             image_features, output_hidden_states, output_attentions
         )
+        # transformer_module_output: DetrDecoderOutput = self.transformer_module(
+        #     multi_scale_features, output_hidden_states, output_attentions
+        # )
         queries = transformer_module_output.last_hidden_state
 
         encoder_hidden_states = None
