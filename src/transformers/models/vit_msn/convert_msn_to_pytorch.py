@@ -20,8 +20,8 @@ import torch
 from PIL import Image
 
 import requests
-from src.transformers.models.vit_msn.configuration_vit_msn import ViTMSNConfig
-from src.transformers.models.vit_msn.modeling_vit_msn import ViTMSNModel
+from .configuration_vit_msn import ViTMSNConfig
+from .modeling_vit_msn import ViTMSNModel
 from transformers import ViTFeatureExtractor
 
 from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
