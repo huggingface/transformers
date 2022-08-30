@@ -15,7 +15,8 @@ image = Image.open(requests.get(url, stream=True).raw)
 # standard PyTorch mean-std input image normalization
 transform = T.Compose([T.Resize(800), T.ToTensor(), T.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
 
-pixel_values = transform(image).unsqueeze(0)
+pixel_values = transform(image)
+pixel_values = torch.stack([pixel_values, pixel_values], dim=0)
 
 width, height = image.size
 pixel_values_height, pixel_values_width = pixel_values.shape[-2:]
@@ -27,7 +28,12 @@ img_metas = [
         img_shape=tuple(pixel_values.shape[2:]) + (3,),
         scale_factor=np.array([width_scale, height_scale, width_scale, height_scale], dtype=np.float32),
         ori_shape=(height, width, 3),
-    )
+    ),
+    dict(
+        img_shape=tuple(pixel_values.shape[2:]) + (3,),
+        scale_factor=np.array([width_scale, height_scale, width_scale, height_scale], dtype=np.float32),
+        ori_shape=(height, width, 3),
+    ),
 ]
 
 # forward pass
