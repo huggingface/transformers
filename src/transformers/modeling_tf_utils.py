@@ -36,7 +36,12 @@ from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 from tensorflow.python.keras.saving import hdf5_format
 
 from huggingface_hub import Repository, list_repo_files
-from tensorflow.python.keras.saving.hdf5_format import save_attributes_to_hdf5_group
+
+try:
+    from keras.saving.hdf5_format import save_attributes_to_hdf5_group
+except:
+    from tensorflow.python.keras.saving.hdf5_format import save_attributes_to_hdf5_group
+    
 from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 
 from . import DataCollatorWithPadding, DefaultDataCollator
