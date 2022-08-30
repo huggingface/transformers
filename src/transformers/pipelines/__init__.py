@@ -91,6 +91,7 @@ if is_tf_available():
         TFAutoModelForSequenceClassification,
         TFAutoModelForTableQuestionAnswering,
         TFAutoModelForTokenClassification,
+        TFAutoModelForVision2Seq,
     )
 
 if is_torch_available():
@@ -306,9 +307,14 @@ SUPPORTED_TASKS = {
     },
     "image2text-generation": {
         "impl": Image2TextGenerationPipeline,
-        "tf": (),
+        "tf": (TFAutoModelForVision2Seq,) if is_tf_available() else (),
         "pt": (AutoModelForVision2Seq,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("nlpconnect/vit-gpt2-image-captioning", "27b41be")}},
+        "default": {
+            "model": {
+                "pt": ("nlpconnect/vit-gpt2-image-captioning", "27b41be"),
+                "tf": ("ydshieh/vit-gpt2-coco-en", "65636df"),
+            }
+        },
         "type": "multimodal",
     },
     "object-detection": {
