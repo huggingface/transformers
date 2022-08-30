@@ -72,6 +72,27 @@ GPU_MEM_LIMIT = 1024**3  # 1 GB memory limit
 
 
 @dataclass
+class RPNOutput(ModelOutput):
+    """
+    Region Proposal Network (RPN) outputs.
+
+    Args:
+        losses (`torch.FloatTensor`):
+            Losses of the RPN head.
+        proposal_list (`list[`torch.FloatTensor`]`):
+            List of proposals, for each example in the batch. Each proposal is a `torch.FloatTensor` of shape
+            (num_proposals, 5). Each proposal is of the format (x1, y1, x2, y2, score).
+        outs (`tuple(List(torch.FloatTensor)`)):
+            Tuple of lists, the first list containing the class logits and the second list containing the box
+            predictions.
+    """
+
+    losses: torch.FloatTensor = None
+    proposal_list: List[torch.FloatTensor] = None
+    outs: Optional[Tuple[torch.FloatTensor]] = None
+
+
+@dataclass
 class MaskRCNNModelOutput(ModelOutput):
     """
     Base class for models that leverage the Mask R-CNN framework.
@@ -561,9 +582,11 @@ def multiclass_nms(multi_bboxes, multi_scores, score_thr, nms_cfg, max_num=-1, s
 
 def bbox2roi(bbox_list):
     """Convert a list of bboxes to roi format.
+
     Args:
         bbox_list (list[Tensor]): a list of bboxes corresponding to a batch
             of images.
+
     Returns:
         Tensor: shape (n, 5), [batch_ind, x1, y1, x2, y2]
     """
@@ -1695,12 +1718,22 @@ class ConvNextMaskRCNNRandomSampler:
 
     def sample(self, assign_result, bboxes, gt_bboxes, gt_labels=None, **kwargs):
         """Sample positive and negative bboxes.
-        Args:
+
         This is a simple implementation of bbox sampling given candidates, assigning results and ground truth bboxes.
-            assign_result (`AssignResult`): Bbox assigning results. bboxes (Tensor): Boxes to be sampled from.
-            gt_bboxes (Tensor): Ground truth bboxes. gt_labels (Tensor, optional): Class labels of ground truth bboxes.
+
+        Args:
+            assign_result (`AssignResult`):
+                Bbox assigning results.
+            boxes (Tensor):
+                Boxes to be sampled from.
+            gt_bboxes (Tensor):
+                Ground truth bboxes.
+            gt_labels (Tensor, optional):
+                Class labels of ground truth bboxes.
+
         Returns:
             `SamplingResult`: Sampling result.
+
         Example:
             >>> from mmdet.core.bbox import RandomSampler >>> from mmdet.core.bbox import AssignResult >>> from
             mmdet.core.bbox.demodata import ensure_rng, random_boxes >>> rng = ensure_rng(None) >>> assign_result =
@@ -1754,6 +1787,8 @@ class ConvNextMaskRCNNRPN(nn.Module):
 
     def __init__(self, config, num_classes=1, reg_decoded_bbox=False):
         super().__init__()
+
+        self.config = config
 
         # anchor generator
         self.prior_generator = ConvNextMaskRCNNAnchorGenerator(config)
@@ -1837,7 +1872,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
             cls_score, bbox_pred = self.forward_single(hidden_state)
             cls_scores.append(cls_score)
             bbox_preds.append(bbox_pred)
-        
+
         return cls_scores, bbox_preds
 
     def forward(
@@ -1848,8 +1883,12 @@ class ConvNextMaskRCNNRPN(nn.Module):
         gt_labels=None,
         gt_bboxes_ignore=None,
         proposal_cfg=None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         **kwargs
     ):
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         outs = self.forward_features(hidden_states)
 
         losses = None
@@ -1863,20 +1902,25 @@ class ConvNextMaskRCNNRPN(nn.Module):
 
         proposal_list = self.get_bboxes(*outs, img_metas=img_metas, cfg=proposal_cfg)
 
-        print("Shape of proposals:")
-        for i in proposal_list:
-            print(i.shape)
+        if not return_dict:
+            output = (
+                proposal_list,
+                outs,
+            )
+            return ((losses,) + output) if losses is not None else output
 
-        # TODO create RPNOutput class, which also includes outs
-        return losses, proposal_list
+        return RPNOutput(losses=losses, proposal_list=proposal_list, outs=outs)
 
     def get_anchors(self, featmap_sizes, img_metas, device="cuda"):
         """Get anchors according to feature map sizes.
 
         Args:
-            featmap_sizes (list[tuple]): Multi-level feature map sizes.
-            img_metas (list[dict]): Image meta info.
-            device (torch.device | str): Device for returned tensors
+            featmap_sizes (list[tuple]):
+                Multi-level feature map sizes.
+            img_metas (list[dict]):
+                Image meta info.
+            device (torch.device | str):
+                Device for returned tensors
 
         Returns:
             tuple:
@@ -1999,21 +2043,28 @@ class ConvNextMaskRCNNRPN(nn.Module):
         unmap_outputs=True,
         return_sampling_results=False,
     ):
-        """Compute regression and classification targets for anchors in
+        """Compute regression and classification targets for anchors in multiple images.
+
         Args:
-        multiple images.
-            anchor_list (list[list[Tensor]]): Multi level anchors of each
-                image. The outer list indicates images, and the inner list corresponds to feature levels of the image.
-                Each element of the inner list is a tensor of shape (num_anchors, 4).
-            valid_flag_list (list[list[Tensor]]): Multi level valid flags of
-                each image. The outer list indicates images, and the inner list corresponds to feature levels of the
-                image. Each element of the inner list is a tensor of shape (num_anchors, )
-            gt_bboxes_list (list[Tensor]): Ground truth bboxes of each image. img_metas (list[dict]): Meta info of each
-            image. gt_bboxes_ignore_list (list[Tensor]): Ground truth bboxes to be
-                ignored.
-            gt_labels_list (list[Tensor]): Ground truth labels of each box. label_channels (int): Channel of label.
-            unmap_outputs (bool): Whether to map outputs back to the original
-                set of anchors.
+            anchor_list (list[list[Tensor]]):
+                Multi level anchors of each image. The outer list indicates images, and the inner list corresponds to
+                feature levels of the image. Each element of the inner list is a tensor of shape (num_anchors, 4).
+            valid_flag_list (list[list[Tensor]]):
+                Multi level valid flags of each image. The outer list indicates images, and the inner list corresponds
+                to feature levels of the image. Each element of the inner list is a tensor of shape (num_anchors, )
+            gt_bboxes_list (list[Tensor]):
+                Ground truth bboxes of each image.
+            img_metas (list[dict]):
+                Meta info of each image.
+            gt_bboxes_ignore_list (list[Tensor]):
+                Ground truth bboxes to be ignored.
+            gt_labels_list (list[Tensor]):
+                Ground truth labels of each box.
+            label_channels (int):
+                Channel of label.
+            unmap_outputs (bool):
+                Whether to map outputs back to the original set of anchors.
+
         Returns:
             tuple: Usually returns a tuple containing learning targets.
                 - labels_list (list[Tensor]): Labels of each level.
@@ -2186,8 +2237,10 @@ class ConvNextMaskRCNNRPN(nn.Module):
             concat_anchor_list.append(torch.cat(anchor_list[i]))
         all_anchor_list = images_to_levels(concat_anchor_list, num_level_anchors)
 
-        losses_cls, losses_bbox = multi_apply(
-            self.loss_single_scale_level,
+        losses_cls = []
+        losses_bbox = []
+
+        for cls_score, bbox_pred, anchors, labels, label_weights, bbox_targets, bbox_weights in zip(
             cls_scores,
             bbox_preds,
             all_anchor_list,
@@ -2195,8 +2248,20 @@ class ConvNextMaskRCNNRPN(nn.Module):
             label_weights_list,
             bbox_targets_list,
             bbox_weights_list,
-            num_total_samples=num_total_samples,
-        )
+        ):
+            loss_cls, loss_bbox = self.loss_single_scale_level(
+                cls_score,
+                bbox_pred,
+                anchors,
+                labels,
+                label_weights,
+                bbox_targets,
+                bbox_weights,
+                num_total_samples=num_total_samples,
+            )
+            losses_cls.append(loss_cls)
+            losses_bbox.append(loss_bbox)
+
         return dict(loss_cls=losses_cls, loss_bbox=losses_bbox)
 
     def get_bboxes(
@@ -3082,13 +3147,15 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
 
     def _bbox_forward(self, x, rois):
         """Box head forward function used in both training and testing.
-        
+
         Args:
             x (list of `torch.FloatTensor`):
                 Multi-scale feature maps coming from the FPN.
-            rois 
+            rois (`torch.FloatTensor`):
+
 
         """
+        print("Shape of rois:", rois.shape)
         # TODO: a more flexible way to decide which feature maps to use
         bbox_feats = self.bbox_roi_extractor(x[: self.bbox_roi_extractor.num_inputs], rois)
         print("Shape of bbox_feats:", bbox_feats.shape)
@@ -3113,7 +3180,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         bbox_results.update(loss_bbox=loss_bbox)
         return bbox_results
 
-    def simple_test_bboxes(self, x, img_metas, proposals, rcnn_test_cfg, rescale=False):
+    def forward_test_bboxes(self, x, img_metas, proposals, rcnn_test_cfg, rescale=False):
         """Test only det bboxes without augmentation.
 
         Args:
@@ -3219,8 +3286,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         return mask_results
 
     def _mask_forward_train(self, x, sampling_results, bbox_feats, gt_masks, img_metas):
-        """Run forward function and calculate loss for mask head in
-        training."""
+        """Run forward function and calculate loss for mask head in training."""
         if not self.share_roi_extractor:
             pos_rois = bbox2roi([res.pos_bboxes for res in sampling_results])
             mask_results = self._mask_forward(x, pos_rois)
@@ -3241,7 +3307,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         mask_results.update(loss_mask=loss_mask, mask_targets=mask_targets)
         return mask_results
 
-    def simple_test_mask(self, x, img_metas, det_bboxes, det_labels, rescale=False):
+    def forward_test_mask(self, x, img_metas, det_bboxes, det_labels, rescale=False):
         """Simple test for mask head without augmentation."""
         # image shapes of images in the batch
         ori_shapes = tuple(meta["ori_shape"] for meta in img_metas)
@@ -3301,19 +3367,23 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
     ):
         """
         Args:
-            x (list[Tensor]): list of multi-level img features.
-            img_metas (list[dict]): list of image info dict where each dict
-                has: 'img_shape', 'scale_factor', 'flip', and may also contain 'filename', 'ori_shape', 'pad_shape',
-                and 'img_norm_cfg'. For details on the values of these keys see
+            x (list[Tensor]):
+                list of multi-level img features.
+            img_metas (list[dict]):
+                list of image info dict where each dict. Jas: 'img_shape', 'scale_factor', 'flip', and may also contain
+                'filename', 'ori_shape', 'pad_shape', and 'img_norm_cfg'. For details on the values of these keys see
                 `mmdet/datasets/pipelines/formatting.py:Collect`.
-            proposals (list[Tensors]): list of region proposals.
-            gt_bboxes (list[Tensor]): Ground truth bboxes for each image with
-                shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
-            gt_labels (list[Tensor]): class indices corresponding to each box
-            gt_bboxes_ignore (None | list[Tensor]): specify which bounding
-                boxes can be ignored when computing the loss.
-            gt_masks (None | Tensor) : true segmentation masks for each box
-                used if the architecture supports a segmentation task.
+            proposals (list[Tensors]):
+                list of region proposals.
+            gt_bboxes (list[Tensor]):
+                Ground truth bboxes for each image with shape (num_gts, 4) in [tl_x, tl_y, br_x, br_y] format.
+            gt_labels (list[Tensor]):
+                Class indices corresponding to each box.
+            gt_bboxes_ignore (None | list[Tensor]):
+                Specify which bounding boxes can be ignored when computing the loss.
+            gt_masks (None | Tensor) :
+                True segmentation masks for each box used if the architecture supports a segmentation task.
+
         Returns:
             dict[str, Tensor]: a dictionary of loss components
         """
@@ -3335,6 +3405,10 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
                     feats=[lvl_feat[i][None] for lvl_feat in x],
                 )
                 sampling_results.append(sampling_result)
+
+        print("Sampling:")
+        for i in sampling_results:
+            print(sampling_result.bboxes.shape)
 
         losses = dict()
         # bbox head forward and loss
@@ -3380,7 +3454,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             each class. When the model has mask branch, it contains bbox results and mask results. The outer list
             corresponds to each image, and first element of tuple is bbox results, second element is mask results.
         """
-        det_bboxes, det_labels = self.simple_test_bboxes(
+        det_bboxes, det_labels = self.forward_test_bboxes(
             hidden_states, img_metas, proposal_list, self.test_cfg, rescale=rescale
         )
 
@@ -3392,7 +3466,7 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             bbox2result(det_bboxes[i], det_labels[i], self.bbox_head.num_classes) for i in range(len(det_bboxes))
         ]
 
-        segm_results = self.simple_test_mask(hidden_states, img_metas, det_bboxes, det_labels, rescale=rescale)
+        segm_results = self.forward_test_mask(hidden_states, img_metas, det_bboxes, det_labels, rescale=rescale)
 
         return list(zip(bbox_results, segm_results))
 
@@ -3553,7 +3627,7 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
         losses = dict()
         results = None
         if labels is not None:
-            rpn_losses, proposal_list = self.rpn_head(
+            rpn_outputs = self.rpn_head(
                 hidden_states,
                 img_metas,
                 gt_bboxes=labels["gt_bboxes"],
@@ -3561,12 +3635,12 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
                 gt_bboxes_ignore=labels["gt_bboxes_ignore"],
                 proposal_cfg=self.config.rpn_proposal,
             )
-            losses.update(rpn_losses)
+            losses.update(rpn_outputs.losses)
             # TODO: check for kwargs forwarded here
             roi_losses = self.roi_head.forward_train(
                 hidden_states,
                 img_metas,
-                proposal_list,
+                rpn_outputs.proposal_list,
                 labels["gt_bboxes"],
                 labels["gt_labels"],
                 labels["gt_bboxes_ignore"],
@@ -3574,8 +3648,8 @@ class ConvNextMaskRCNNForObjectDetection(ConvNextMaskRCNNPreTrainedModel):
             )
             losses.update(roi_losses)
         else:
-            _, proposal_list = self.rpn_head(hidden_states, img_metas)
-            results = self.roi_head.forward_test(hidden_states, proposal_list, img_metas=img_metas)
+            rpn_outputs = self.rpn_head(hidden_states, img_metas)
+            results = self.roi_head.forward_test(hidden_states, rpn_outputs.proposal_list, img_metas=img_metas)
 
         if not return_dict:
             output = (results,) + outputs[2:]
