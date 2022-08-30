@@ -326,6 +326,10 @@ class FeaturesManager:
             "sequence-classification",
             onnx_config_cls="models.gpt_neo.GPTNeoOnnxConfig",
         ),
+        "groupvit": supported_features_mapping(
+            "default",
+            onnx_config_cls="models.groupvit.GroupViTOnnxConfig",
+        ),
         "ibert": supported_features_mapping(
             "default",
             "masked-lm",

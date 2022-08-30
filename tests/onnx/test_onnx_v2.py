@@ -204,6 +204,7 @@ PYTORCH_EXPORT_MODELS = {
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
     ("layoutlmv3", "microsoft/layoutlmv3-base"),
+    ("groupvit", "nvidia/groupvit-gcc-yfcc"),
     ("levit", "facebook/levit-128S"),
     ("owlvit", "google/owlvit-base-patch32"),
     ("vit", "google/vit-base-patch16-224"),
