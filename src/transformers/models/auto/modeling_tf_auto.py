@@ -334,7 +334,6 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("funnel", "TFFunnelForTokenClassification"),
         ("layoutlm", "TFLayoutLMForTokenClassification"),
         ("layoutlmv3", "TFLayoutLMv3ForTokenClassification"),
-        ("layoutlmv3", "TFLayoutLMv3ForTokenClassification"),
         ("longformer", "TFLongformerForTokenClassification"),
         ("mobilebert", "TFMobileBertForTokenClassification"),
         ("mpnet", "TFMPNetForTokenClassification"),

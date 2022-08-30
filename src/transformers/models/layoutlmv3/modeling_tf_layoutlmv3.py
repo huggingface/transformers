@@ -79,7 +79,6 @@ class TFLayoutLMv3PatchEmbeddings(tf.keras.layers.Layer):
             data_format="channels_last",
             use_bias=True,
             kernel_initializer=get_initializer(config.initializer_range),
-            bias_initializer="zeros",
             name="proj",
         )
         self.hidden_size = config.hidden_size
@@ -274,19 +273,16 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
         self.query = tf.keras.layers.Dense(
             self.all_head_size,
             kernel_initializer=get_initializer(config.initializer_range),
-            bias_initializer="zeros",
             name="query",
         )
         self.key = tf.keras.layers.Dense(
             self.all_head_size,
             kernel_initializer=get_initializer(config.initializer_range),
-            bias_initializer="zeros",
             name="key",
         )
         self.value = tf.keras.layers.Dense(
             self.all_head_size,
             kernel_initializer=get_initializer(config.initializer_range),
-            bias_initializer="zeros",
             name="value",
         )
 
@@ -1214,7 +1210,6 @@ class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
             config.hidden_size,
             activation="tanh",
             kernel_initializer=get_initializer(config.initializer_range),
-            bias_initializer="zeros",
             name="dense",
         )
         classifier_dropout = (
@@ -1227,7 +1222,6 @@ class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
         self.out_proj = tf.keras.layers.Dense(
             config.num_labels,
             kernel_initializer=get_initializer(config.initializer_range),
-            bias_initializer="zeros",
             name="out_proj",
         )
 
@@ -1372,7 +1366,6 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
             self.classifier = tf.keras.layers.Dense(
                 config.num_labels,
                 kernel_initializer=get_initializer(config.initializer_range),
-                bias_initializer="zeros",
                 name="classifier",
             )
         else:
