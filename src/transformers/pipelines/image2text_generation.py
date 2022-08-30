@@ -1,7 +1,15 @@
 import enum
 from typing import List, Union
 
-from ..utils import add_end_docstrings, is_flax_available, is_tf_available, is_torch_available, is_vision_available, logging, requires_backends
+from ..utils import (
+    add_end_docstrings,
+    is_flax_available,
+    is_tf_available,
+    is_torch_available,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
 from .base import PIPELINE_INIT_ARGS, Pipeline
 
 

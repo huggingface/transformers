@@ -16,7 +16,7 @@ import unittest
 
 from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
 from transformers.pipelines import pipeline
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, require_vision, slow
+from transformers.testing_utils import is_pipeline_test, require_flax, require_tf, require_torch, require_vision, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -55,6 +55,16 @@ class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTes
             ],
         )
 
+    @require_flax
+    @unittest.skip("No small model yet on the hub")
+    def test_small_model_flax(self):
+        raise NotImplementedError
+
+    @require_tf
+    @unittest.skip("No small model yet on the hub")
+    def test_small_model_tf(self):
+        raise NotImplementedError
+
     @require_torch
     @unittest.skip("No small model yet on the hub")
     def test_small_model_pt(self):
@@ -73,8 +83,3 @@ class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTes
         self.assertEqual(
             outputs, [[{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}]] * 2
         )
-
-    @require_tf
-    @unittest.skip("Image2Text not implemented in TF")
-    def test_small_model_tf(self):
-        pass
