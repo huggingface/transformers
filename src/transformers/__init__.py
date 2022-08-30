@@ -2343,6 +2343,16 @@ else:
             "TFLayoutLMPreTrainedModel",
         ]
     )
+    _import_structure["models.layoutlmv3"].extend(
+        [
+            "TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFLayoutLMv3ForQuestionAnswering",
+            "TFLayoutLMv3ForSequenceClassification",
+            "TFLayoutLMv3ForTokenClassification",
+            "TFLayoutLMv3Model",
+            "TFLayoutLMv3PreTrainedModel",
+        ]
+    )
     _import_structure["models.led"].extend(["TFLEDForConditionalGeneration", "TFLEDModel", "TFLEDPreTrainedModel"])
     _import_structure["models.longformer"].extend(
         [
@@ -4800,6 +4810,14 @@ if TYPE_CHECKING:
             TFHubertForCTC,
             TFHubertModel,
             TFHubertPreTrainedModel,
+        )
+        from .models.layoutlmv3 import (
+            TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFLayoutLMv3ForQuestionAnswering,
+            TFLayoutLMv3ForSequenceClassification,
+            TFLayoutLMv3ForTokenClassification,
+            TFLayoutLMv3Model,
+            TFLayoutLMv3PreTrainedModel,
         )
         from .models.led import TFLEDForConditionalGeneration, TFLEDModel, TFLEDPreTrainedModel
         from .models.longformer import (
