@@ -39,7 +39,7 @@ from huggingface_hub import Repository, list_repo_files
 
 try:
     from keras.saving.hdf5_format import save_attributes_to_hdf5_group
-except:
+except ModuleNotFoundError:
     from tensorflow.python.keras.saving.hdf5_format import save_attributes_to_hdf5_group
     
 from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
