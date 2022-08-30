@@ -416,6 +416,10 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.m2m_100.M2M100OnnxConfig",
         ),
+        "owlvit": supported_features_mapping(
+            "default",
+            onnx_config_cls="models.owlvit.OwlViTOnnxConfig",
+        ),
         "perceiver": supported_features_mapping(
             "image-classification",
             "masked-lm",
