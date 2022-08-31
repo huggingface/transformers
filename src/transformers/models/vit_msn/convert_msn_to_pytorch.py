@@ -26,6 +26,7 @@ from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 torch.set_grad_enabled(False)
 
+
 # here we list all keys to be renamed (original name on the left, our name on the right)
 def create_rename_keys(config, base_model=False):
     rename_keys = []
