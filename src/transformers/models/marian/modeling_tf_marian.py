@@ -1277,6 +1277,9 @@ class BiasLayer(tf.keras.layers.Layer):
 
     def __init__(self, shape, initializer, trainable, name, **kwargs):
         super().__init__(name=name, **kwargs)
+        # Note: the name of this variable will NOT be scoped when serialized, i.e. it will not be in the format of
+        # "outer_layer/inner_layer/.../name:0". Instead, it will be "name:0". For further details, see:
+        # https://github.com/huggingface/transformers/pull/18833#issuecomment-1233090214
         self.bias = self.add_weight(name=name, shape=shape, initializer=initializer, trainable=trainable)
 
     def call(self, x):
