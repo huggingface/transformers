@@ -121,23 +121,6 @@ class MaskRCNNModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-def multi_apply(func, *args, **kwargs):
-    """Apply function to a list of arguments.
-    Note:
-        This function applies the `func` to multiple inputs and map the multiple outputs of the `func` into different
-        list. Each list contains the same type of outputs corresponding to different inputs.
-    Args:
-        func (Function): A function that will be applied to a list of
-            arguments
-    Returns:
-        tuple(list): A tuple containing multiple list, each list contains \
-            a kind of returned results by the function
-    """
-    pfunc = partial(func, **kwargs) if kwargs else func
-    map_results = map(pfunc, *args)
-    return tuple(map(list, zip(*map_results)))
-
-
 def unmap(data, count, inds, fill=0):
     """Unmap a subset of item (data) back to the original set of items (of size count)"""
     new_size = (count,) + data.size()[1:]
@@ -1953,25 +1936,24 @@ class ConvNextMaskRCNNRPN(nn.Module):
         label_channels=1,
         unmap_outputs=True,
     ):
-        """Compute regression and classification targets for anchors in a
-        single image.
+        """Compute regression and classification targets for anchors in a single image.
 
         Args:
-            flat_anchors (Tensor): Multi-level anchors of the image, which are
-                concatenated into a single tensor of shape (num_anchors ,4)
-            valid_flags (Tensor): Multi level valid flags of the image,
-                which are concatenated into a single tensor of
-                    shape (num_anchors,).
-            gt_bboxes (Tensor): Ground truth bboxes of the image,
-                shape (num_gts, 4).
-            gt_bboxes_ignore (Tensor): Ground truth bboxes to be
-                ignored, shape (num_ignored_gts, 4).
+            flat_anchors (Tensor):
+                Multi-level anchors of the image, which are concatenated into a single tensor of shape (num_anchors ,4)
+            valid_flags (Tensor):
+                Multi level valid flags of the image, which are concatenated into a single tensor of shape
+                (num_anchors,).
+            gt_bboxes (Tensor):
+                Ground truth bboxes of the image, shape (num_gts, 4).
+            gt_bboxes_ignore (Tensor):
+                Ground truth bboxes to be ignored, shape (num_ignored_gts, 4).
             img_meta (dict): Meta info of the image.
-            gt_labels (Tensor): Ground truth labels of each box,
-                shape (num_gts,).
+            gt_labels (Tensor):
+                Ground truth labels of each box, shape (num_gts,).
             label_channels (int): Channel of label.
-            unmap_outputs (bool): Whether to map outputs back to the original
-                set of anchors.
+            unmap_outputs (bool):
+                Whether to map outputs back to the original set of anchors.
 
         Returns:
             tuple:
@@ -2095,27 +2077,50 @@ class ConvNextMaskRCNNRPN(nn.Module):
             gt_bboxes_ignore_list = [None for _ in range(num_imgs)]
         if gt_labels_list is None:
             gt_labels_list = [None for _ in range(num_imgs)]
-        results = multi_apply(
-            self._get_targets_single,
+
+        all_labels = []
+        all_label_weights = []
+        all_bbox_targets = []
+        all_bbox_weights = []
+        pos_inds_list = []
+        neg_inds_list = []
+        sampling_results_list = []
+
+        for flat_anchors, valid_flags, gt_bboxes, gt_bboxes_ignore, gt_labels, img_meta in zip(
             concat_anchor_list,
             concat_valid_flag_list,
             gt_bboxes_list,
             gt_bboxes_ignore_list,
             gt_labels_list,
             img_metas,
-            label_channels=label_channels,
-            unmap_outputs=unmap_outputs,
-        )
-        (
-            all_labels,
-            all_label_weights,
-            all_bbox_targets,
-            all_bbox_weights,
-            pos_inds_list,
-            neg_inds_list,
-            sampling_results_list,
-        ) = results[:7]
-        rest_results = list(results[7:])  # user-added return values
+        ):
+            (
+                labels,
+                label_weights,
+                bbox_targets,
+                bbox_weights,
+                pos_inds,
+                neg_inds,
+                sampling_result,
+            ) = self._get_targets_single(
+                flat_anchors,
+                valid_flags,
+                gt_bboxes,
+                gt_bboxes_ignore,
+                gt_labels,
+                img_meta,
+                label_channels=label_channels,
+                unmap_outputs=unmap_outputs,
+            )
+            all_labels.append(labels)
+            all_label_weights.append(label_weights)
+            all_bbox_targets.append(bbox_targets)
+            all_bbox_weights.append(bbox_weights)
+            pos_inds_list.append(pos_inds)
+            neg_inds_list.append(neg_inds)
+            sampling_results_list.append(sampling_result)
+
+        # rest_results = []  # user-added return values
         # no valid anchors
         if any([labels is None for labels in all_labels]):
             return None
@@ -2130,10 +2135,11 @@ class ConvNextMaskRCNNRPN(nn.Module):
         res = (labels_list, label_weights_list, bbox_targets_list, bbox_weights_list, num_total_pos, num_total_neg)
         if return_sampling_results:
             res = res + (sampling_results_list,)
-        for i, r in enumerate(rest_results):  # user-added return values
-            rest_results[i] = images_to_levels(r, num_level_anchors)
 
-        return res + tuple(rest_results)
+        # for i, r in enumerate(rest_results):  # user-added return values
+        #     rest_results[i] = images_to_levels(r, num_level_anchors)
+
+        return res
 
     def loss_single_scale_level(
         self, cls_score, bbox_pred, anchors, labels, label_weights, bbox_targets, bbox_weights, num_total_samples
@@ -2849,14 +2855,22 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
         neg_bboxes_list = [res.neg_bboxes for res in sampling_results]
         pos_gt_bboxes_list = [res.pos_gt_bboxes for res in sampling_results]
         pos_gt_labels_list = [res.pos_gt_labels for res in sampling_results]
-        labels, label_weights, bbox_targets, bbox_weights = multi_apply(
-            self._get_target_single,
-            pos_bboxes_list,
-            neg_bboxes_list,
-            pos_gt_bboxes_list,
-            pos_gt_labels_list,
-            cfg=rcnn_train_cfg,
-        )
+
+        labels = []
+        label_weights = []
+        bbox_targets = []
+        bbox_weights = []
+
+        for pos_bboxes, neg_bboxes, pos_gt_bboxes, pos_gt_labels in zip(
+            pos_bboxes_list, neg_bboxes_list, pos_gt_bboxes_list, pos_gt_labels_list
+        ):
+            labels_, label_weights_, bbox_targets_, bbox_weights_ = self._get_target_single(
+                pos_bboxes, neg_bboxes, pos_gt_bboxes, pos_gt_labels, cfg=rcnn_train_cfg
+            )
+            labels.append(labels_)
+            label_weights.append(label_weights_)
+            bbox_targets.append(bbox_targets_)
+            bbox_weights.append(bbox_weights_)
 
         if concat:
             labels = torch.cat(labels, 0)
