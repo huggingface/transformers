@@ -243,7 +243,8 @@ class HfArgumentParser(ArgumentParser):
             json_file (`str` or `os.PathLike`):
                 File name of the json file to parse
             allow_extra_keys (`bool`, *optional*, defaults to `False`):
-                Defaults to False. If False, will raise an exception if the json file contains keys that are not parsed.
+                Defaults to False. If False, will raise an exception if the json file contains keys that are not
+                parsed.
 
         Returns:
             Tuple consisting of:
