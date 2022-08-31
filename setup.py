@@ -109,7 +109,7 @@ _deps = [
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
-    "ffspec!=2022.8.1",
+    "fsspec!=2022.8.1",
     "filelock",
     "flake8>=3.8.3",
     "flax>=0.4.1",
@@ -291,7 +291,7 @@ extras["testing"] = (
         "datasets",
         "dill",
         "evaluate",
-        "ffspec", # can be removed once the fix is in Datasets
+        "fsspec", # can be removed once the fix is in Datasets
         "pytest-timeout",
         "black",
         "sacrebleu",
