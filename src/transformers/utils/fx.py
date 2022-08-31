@@ -30,7 +30,7 @@ from torch import nn
 from torch.fx import Graph, GraphModule, Proxy, Tracer
 from torch.fx.proxy import ParameterProxy
 
-from .. import BloomForCausalLM, PretrainedConfig, PreTrainedModel, logging
+from .. import BloomForCausalLM, PretrainedConfig, PreTrainedModel, logging, modeling_outputs
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -669,36 +669,27 @@ def _proxies_to_metas(v):
     return v
 
 
-def _patch_fn_for_proxy(fn, tracer):
-    def _apply_on_proxy(x):
-        if isinstance(x, torch.fx.Proxy):
-            if not (isinstance(x, HFProxy) and hasattr(x, "_metadata")):
-                raise RuntimeError(f"No metadata was found for {x}")
-            return tracer.create_proxy("call_function", fn, (x,), {})
-        return fn(x)
-
-    return _apply_on_proxy
-
-
-def _gen_constructor_wrapper(target):
-    @functools.wraps(target)
-    def wrapper(*args, **kwargs):
+def _patch_fn_for_proxy(fn):
+    @functools.wraps(fn)
+    def _apply_on_proxy(*args, **kwargs):
         proxy = None
 
-        def check_has_proxy(v):
-            if isinstance(v, Proxy):
+        def check_has_proxy(x):
+            if isinstance(x, Proxy):
+                if not (isinstance(x, HFProxy) and hasattr(x, "_metadata")):
+                    raise RuntimeError(f"No metadata was found for {x}")
                 nonlocal proxy
-                proxy = v
+                proxy = x
 
         torch.fx.node.map_aggregate(args, check_has_proxy)
         torch.fx.node.map_aggregate(kwargs, check_has_proxy)
 
         if proxy is not None:
-            return proxy.tracer.create_proxy("call_function", target, args, kwargs)
+            return proxy.tracer.create_proxy("call_function", fn, args, kwargs)
         else:
-            return target(*args, **kwargs)
+            return fn(*args, **kwargs)
 
-    return wrapper
+    return _apply_on_proxy
 
 
 def _generate_random_int(low: int = 10, high: int = 20, forbidden_values: Optional[List[int]] = None):
@@ -1144,15 +1135,20 @@ class HFTracer(Tracer):
         self.orig_fns = set(getattr(torch, target) for target in self._TORCH_METHODS_TO_PATCH)
 
         patched_torch_methods = [
-            (torch, target, _gen_constructor_wrapper(getattr(torch, target)))
-            for target in self._TORCH_METHODS_TO_PATCH
+            (torch, target, _patch_fn_for_proxy(getattr(torch, target))) for target in self._TORCH_METHODS_TO_PATCH
         ]
 
         if trace_non_torch_object:
             patched_methods = [
                 *patched_torch_methods,
                 (nn.Module, "__getattribute__", create_nn_module_getattribute_wrapper(self)),
-                (torch, "finfo", _patch_fn_for_proxy(torch.finfo, self)),
+                (torch, "finfo", _patch_fn_for_proxy(torch.finfo)),
+                # TODO @thomasw21 figure out why creating a node for dataclass constructor does not work:
+                #   - tried patching `__new__`: gets caught but ignores
+                #   - tried patching `__init__`: gets caught but ignored
+                #   - tried batching `cls(...)`: doesn't get caught
+                # *((modeling_outputs, name, _patch_fn_for_proxy(getattr(modeling_outputs, name), is_class_method=False)) for name, cls in inspect.getmembers(modeling_outputs, inspect.isclass)),
+                # *((cls, "__new__", _patch_fn_for_proxy(cls.__new__, is_class_method=True)) for name, cls in inspect.getmembers(modeling_outputs, inspect.isclass)),
             ]
         else:
             patched_methods = patched_torch_methods
@@ -1266,7 +1262,11 @@ def check_if_model_is_supported(model: PreTrainedModel):
 
 
 def symbolic_trace(
-    model: PreTrainedModel, input_names: Optional[List[str]] = None, disable_check: bool = False, **trace_kwargs
+    model: PreTrainedModel,
+    input_names: Optional[List[str]] = None,
+    disable_check: bool = False,
+    concrete_args: Optional[Dict[str, Any]] = None,
+    **trace_kwargs
 ) -> GraphModule:
 
     """
@@ -1293,9 +1293,12 @@ def symbolic_trace(
     """
     if input_names is None:
         input_names = model.dummy_inputs.keys()
+    input_names = set(input_names)
 
-    input_names = list(input_names)
-    concrete_args = get_concrete_args(model, input_names)
+    if concrete_args is not None:
+        assert set(input_names).isdisjoint(concrete_args.keys())
+
+    concrete_args = {**concrete_args, **get_concrete_args(model, input_names)}
 
     if not disable_check:
         check_if_model_is_supported(model)
