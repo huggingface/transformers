@@ -1083,13 +1083,8 @@ class OwlViTModel(OwlViTPreTrainedModel):
             loss = owlvit_loss(logits_per_text)
 
         if return_base_image_embeds:
-            image_embeds = self.get_image_features(
-                pixel_values=pixel_values,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-                return_projected=False,
-            )
+            last_hidden_state = vision_outputs[0]
+            image_embeds = self.vision_model.post_layernorm(last_hidden_state)
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
