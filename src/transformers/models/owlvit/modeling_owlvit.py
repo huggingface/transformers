@@ -517,7 +517,7 @@ OWLVIT_INPUTS_DOCSTRING = r"""
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
         return_base_image_embeds (`bool`, *optional*):
-            Whether or not to return unprojected image embeddings. Set to True when `OwlViTModel` is called within
+            Whether or not to return unprojected image embeddings. Set to `True` when `OwlViTModel` is called within
             `OwlViTForObjectDetection`.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
