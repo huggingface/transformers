@@ -128,7 +128,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "DPTForDepthEstimation",
     "DecisionTransformerGPT2Model",
     "GLPNForDepthEstimation",
-    "ViltForQuestionAnswering",
     "ViltForImagesAndTextClassification",
     "ViltForImageAndTextRetrieval",
     "ViltForTokenClassification",
@@ -162,6 +161,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlavaImageModel",
     "FlavaMultimodalModel",
     "GPT2DoubleHeadsModel",
+    "LayoutLMForQuestionAnswering",
     "LukeForMaskedLM",
     "LukeForEntityClassification",
     "LukeForEntityPairClassification",
@@ -179,6 +179,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "RealmReader",
     "TFDPRReader",
     "TFGPT2DoubleHeadsModel",
+    "TFLayoutLMForQuestionAnswering",
     "TFOpenAIGPTDoubleHeadsModel",
     "TFRagModel",
     "TFRagSequenceForGeneration",
@@ -206,6 +207,7 @@ MODEL_TYPE_TO_DOC_MAPPING = OrderedDict(
         ("data2vec-text", "data2vec"),
         ("data2vec-audio", "data2vec"),
         ("data2vec-vision", "data2vec"),
+        ("donut-swin", "donut"),
     ]
 )
 

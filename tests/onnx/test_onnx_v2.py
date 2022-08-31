@@ -185,6 +185,7 @@ PYTORCH_EXPORT_MODELS = {
     ("big-bird", "google/bigbird-roberta-base"),
     ("ibert", "kssteven/ibert-roberta-base"),
     ("camembert", "camembert-base"),
+    ("clip", "openai/clip-vit-base-patch32"),
     ("convbert", "YituTech/conv-bert-base"),
     ("codegen", "Salesforce/codegen-350M-multi"),
     ("deberta", "microsoft/deberta-base"),
@@ -198,11 +199,14 @@ PYTORCH_EXPORT_MODELS = {
     ("roformer", "junnyu/roformer_chinese_base"),
     ("squeezebert", "squeezebert/squeezebert-uncased"),
     ("mobilebert", "google/mobilebert-uncased"),
+    ("mobilevit", "apple/mobilevit-small"),
     ("xlm", "xlm-clm-ende-1024"),
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
     ("layoutlmv3", "microsoft/layoutlmv3-base"),
+    ("groupvit", "nvidia/groupvit-gcc-yfcc"),
     ("levit", "facebook/levit-128S"),
+    ("owlvit", "google/owlvit-base-patch32"),
     ("vit", "google/vit-base-patch16-224"),
     ("deit", "facebook/deit-small-patch16-224"),
     ("beit", "microsoft/beit-base-patch16-224"),
@@ -210,11 +214,13 @@ PYTORCH_EXPORT_MODELS = {
     ("data2vec-vision", "facebook/data2vec-vision-base"),
     ("perceiver", "deepmind/language-perceiver", ("masked-lm", "sequence-classification")),
     ("perceiver", "deepmind/vision-perceiver-conv", ("image-classification",)),
+    ("longformer", "allenai/longformer-base-4096"),
     ("yolos", "hustvl/yolos-tiny"),
+    ("segformer", "nvidia/segformer-b0-finetuned-ade-512-512"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
-    ("bloom", "bigscience/bloom-350m"),
+    ("bloom", "bigscience/bloom-560m"),
     ("gpt2", "gpt2"),
     ("gpt-neo", "EleutherAI/gpt-neo-125M"),
 }
@@ -283,6 +289,12 @@ class OnnxExportTestCaseV2(TestCase):
         model_class = FeaturesManager.get_model_class_for_feature(feature)
         config = AutoConfig.from_pretrained(model_name)
         model = model_class.from_config(config)
+
+        # Dynamic axes aren't supported for YOLO-like models. This means they cannot be exported to ONNX on CUDA devices.
+        # See: https://github.com/ultralytics/yolov5/pull/8378
+        if model.__class__.__name__.startswith("Yolos") and device != "cpu":
+            return
+
         onnx_config = onnx_config_class_constructor(model.config)
 
         if is_torch_available():

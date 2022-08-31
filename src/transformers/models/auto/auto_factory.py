@@ -563,7 +563,6 @@ class _LazyAutoMapping(OrderedDict):
     " A mapping config to object (model or tokenizer for instance) that will load keys and values when it is accessed.
 
     Args:
-
         - config_mapping: The map model type to config class
         - model_mapping: The map model type to model (or tokenizer) class
     """

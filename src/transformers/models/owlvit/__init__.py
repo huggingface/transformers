@@ -32,6 +32,7 @@ _import_structure = {
     "configuration_owlvit": [
         "OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "OwlViTConfig",
+        "OwlViTOnnxConfig",
         "OwlViTTextConfig",
         "OwlViTVisionConfig",
     ],
@@ -66,6 +67,7 @@ if TYPE_CHECKING:
     from .configuration_owlvit import (
         OWLVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         OwlViTConfig,
+        OwlViTOnnxConfig,
         OwlViTTextConfig,
         OwlViTVisionConfig,
     )
