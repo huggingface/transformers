@@ -129,6 +129,13 @@ class TFLayoutLMForMaskedLM(metaclass=DummyObject):
         requires_backends(self, ["tf"])
 
 
+class TFLayoutLMForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
 class TFLayoutLMForSequenceClassification(metaclass=DummyObject):
     _backends = ["tf"]
 
