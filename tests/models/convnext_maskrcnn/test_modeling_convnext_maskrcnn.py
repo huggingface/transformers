@@ -256,9 +256,9 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
 
         img_metas = [
             dict(
-                img_shape=tuple(pixel_values.shape[2:]) + (3,),
+                img_shape=pixel_values.shape[1:],
                 scale_factor=np.array([width_scale, height_scale, width_scale, height_scale], dtype=np.float32),
-                ori_shape=(height, width, 3),
+                ori_shape=(3, height, width),
             )
         ]
 
@@ -294,38 +294,6 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
         # TODO use feature extractor instead?
         local_path = hf_hub_download(repo_id="nielsr/init-files", filename="pixel_values.pt")
         img = torch.load(local_path).unsqueeze(0)
-        img_metas = [
-            {
-                "filename": "./drive/MyDrive/ConvNeXT MaskRCNN/COCO/val2017/000000039769.jpg",
-                "ori_filename": "000000039769.jpg",
-                "ori_shape": (480, 640, 3),
-                "img_shape": (480, 640, 3),
-                "pad_shape": (480, 640, 3),
-                "scale_factor": np.array([1.0, 1.0, 1.0, 1.0], dtype=np.float32),
-                "flip": False,
-                "flip_direction": None,
-                "img_norm_cfg": {
-                    "mean": np.array([123.675, 116.28, 103.53], dtype=np.float32),
-                    "std": np.array([58.395, 57.12, 57.375], dtype=np.float32),
-                    "to_rgb": True,
-                },
-            },
-            {
-                "filename": "./drive/MyDrive/ConvNeXT MaskRCNN/COCO/val2017/000000039769.jpg",
-                "ori_filename": "000000039769.jpg",
-                "ori_shape": (480, 640, 3),
-                "img_shape": (704, 939, 3),
-                "pad_shape": (704, 960, 3),
-                "scale_factor": np.array([1.4671875, 1.4666667, 1.4671875, 1.4666667], dtype=np.float32),
-                "flip": False,
-                "flip_direction": None,
-                "img_norm_cfg": {
-                    "mean": np.array([123.675, 116.28, 103.53], dtype=np.float32),
-                    "std": np.array([58.395, 57.12, 57.375], dtype=np.float32),
-                    "to_rgb": True,
-                },
-            },
-        ]
 
         labels = dict()
         local_path = hf_hub_download(repo_id="nielsr/init-files", filename="boxes.pt")
@@ -335,7 +303,7 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
         local_path = hf_hub_download(repo_id="nielsr/init-files", filename="masks.pt")
         labels["gt_masks"] = [torch.load(local_path).to(torch_device)]
         labels["gt_bboxes_ignore"] = None
-        img_metas = [{"pad_shape": img.shape[::-1], "img_shape": img.shape[::-1]}]
+        img_metas = [{"pad_shape": img.shape[1:], "img_shape": img.shape[1:]}]
 
         # forward pass
         with torch.no_grad():
@@ -344,10 +312,10 @@ class ConvNextMaskRCNNModelIntegrationTest(unittest.TestCase):
 
         # verify the losses
         expected_loss_gpu = {
-            "loss_cls": torch.tensor(0.1540, device=torch_device),
-            "loss_bbox": torch.tensor(0.0940, device=torch_device),
-            "acc": torch.tensor([93.5547], device=torch_device),
-            "loss_mask": torch.tensor([0.1787], device=torch_device),
+            "loss_cls": torch.tensor(0.1876, device=torch_device),
+            "loss_bbox": torch.tensor(0.1139, device=torch_device),
+            "acc": torch.tensor([90.8203], device=torch_device),
+            "loss_mask": torch.tensor([0.2180], device=torch_device),
         }
         for key, value in expected_loss_gpu.items():
             self.assertTrue(torch.allclose(losses[key], value, atol=1e-4))

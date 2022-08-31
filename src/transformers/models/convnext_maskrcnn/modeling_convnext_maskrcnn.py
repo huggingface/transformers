@@ -20,7 +20,6 @@
 import copy
 import warnings
 from dataclasses import dataclass
-from functools import partial
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -182,7 +181,7 @@ def anchor_inside_flags(flat_anchors, valid_flags, img_shape, allowed_border=0):
         torch.Tensor: Flags indicating whether the anchors are inside a \
             valid range.
     """
-    img_h, img_w = img_shape[:2]
+    img_h, img_w = img_shape[-2:]
     if allowed_border >= 0:
         inside_flags = (
             valid_flags
@@ -323,6 +322,7 @@ def delta2bbox(
     x2y2 = gxy + (gwh * 0.5)
     bboxes = torch.cat([x1y1, x2y2], dim=-1)
     if clip_border and max_shape is not None:
+        max_shape = max_shape[-2:]
         bboxes[..., 0::2].clamp_(min=0, max=max_shape[1])
         bboxes[..., 1::2].clamp_(min=0, max=max_shape[0])
     bboxes = bboxes.reshape(num_bboxes, -1)
@@ -1111,7 +1111,7 @@ class ConvNextMaskRCNNAnchorGenerator(nn.Module):
         for i in range(self.num_levels):
             anchor_stride = self.strides[i]
             feat_h, feat_w = featmap_sizes[i]
-            h, w = pad_shape[:2]
+            h, w = pad_shape[-2:]
             valid_feat_h = min(int(np.ceil(h / anchor_stride[1])), feat_h)
             valid_feat_w = min(int(np.ceil(w / anchor_stride[0])), feat_w)
             flags = self.single_level_valid_flags(
@@ -1963,7 +1963,7 @@ class ConvNextMaskRCNNRPN(nn.Module):
                 images num_total_neg (int): Number of negative samples in all images
         """
         inside_flags = anchor_inside_flags(
-            flat_anchors, valid_flags, img_meta["img_shape"][:2], self.train_cfg["allowed_border"]
+            flat_anchors, valid_flags, img_meta["img_shape"][-2:], self.train_cfg["allowed_border"]
         )
         if not inside_flags.any():
             return (None,) * 7
@@ -2755,6 +2755,7 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
         else:
             bboxes = rois[:, 1:].clone()
             if img_shape is not None:
+                img_shape = img_shape[-2:]
                 bboxes[:, [0, 2]].clamp_(min=0, max=img_shape[1])
                 bboxes[:, [1, 3]].clamp_(min=0, max=img_shape[0])
 
@@ -3052,9 +3053,10 @@ class ConvNextMaskRCNNFCNMaskHead(nn.Module):
             scale_factor = torch.Tensor(scale_factor)
 
         if rescale:
-            img_h, img_w = ori_shape[:2]
+            img_h, img_w = ori_shape[-2:]
             bboxes = bboxes / scale_factor.to(bboxes)
         else:
+            ori_shape = ori_shape[-2:]
             w_scale, h_scale = scale_factor[0], scale_factor[1]
             img_h = np.round(ori_shape[0] * h_scale.item()).astype(np.int32)
             img_w = np.round(ori_shape[1] * w_scale.item()).astype(np.int32)
