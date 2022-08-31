@@ -174,7 +174,6 @@ class Seq2SeqTrainer(Trainer):
         gen_kwargs = self._gen_kwargs.copy()
         if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
             gen_kwargs["max_length"] = self.model.config.max_length
-        prompt_seq_length = 1
         gen_kwargs["num_beams"] = (
             gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.model.config.num_beams
         )
@@ -203,8 +202,8 @@ class Seq2SeqTrainer(Trainer):
         # in case the batch is shorter than max length, the output should be padded
         if gen_kwargs.get("max_length") is not None and generated_tokens.shape[-1] < gen_kwargs["max_length"]:
             generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
-        elif gen_kwargs.get("max_new_tokens") is not None and generated_tokens.shape[-1] < (gen_kwargs["max_new_tokens"] + prompt_seq_length):
-            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_new_tokens"] + prompt_seq_length)
+        elif gen_kwargs.get("max_new_tokens") is not None and generated_tokens.shape[-1] < (gen_kwargs["max_new_tokens"] + 1):
+            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_new_tokens"] + 1)
 
         with torch.no_grad():
             with self.compute_loss_context_manager():
@@ -224,8 +223,8 @@ class Seq2SeqTrainer(Trainer):
             labels = inputs["labels"]
             if gen_kwargs.get("max_length") is not None and labels.shape[-1] < gen_kwargs["max_length"]:
                 labels = self._pad_tensors_to_max_len(labels, gen_kwargs["max_length"])
-            elif gen_kwargs.get("max_new_tokens") is not None and labels.shape[-1] < (gen_kwargs["max_new_tokens"] + prompt_seq_length):
-                labels = self._pad_tensors_to_max_len(labels, (gen_kwargs["max_new_tokens"] + prompt_seq_length))
+            elif gen_kwargs.get("max_new_tokens") is not None and labels.shape[-1] < (gen_kwargs["max_new_tokens"] + 1):
+                labels = self._pad_tensors_to_max_len(labels, (gen_kwargs["max_new_tokens"] + 1))
         else:
             labels = None
 
