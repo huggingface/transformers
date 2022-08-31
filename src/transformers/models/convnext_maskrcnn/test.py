@@ -25,14 +25,14 @@ height_scale = pixel_values_height / height
 
 img_metas = [
     dict(
-        img_shape=tuple(pixel_values.shape[2:]) + (3,),
+        img_shape=pixel_values.shape[1:],
         scale_factor=np.array([width_scale, height_scale, width_scale, height_scale], dtype=np.float32),
-        ori_shape=(height, width, 3),
+        ori_shape=(3, height, width),
     ),
     dict(
-        img_shape=tuple(pixel_values.shape[2:]) + (3,),
+        img_shape=pixel_values.shape[1:],
         scale_factor=np.array([width_scale, height_scale, width_scale, height_scale], dtype=np.float32),
-        ori_shape=(height, width, 3),
+        ori_shape=(3, height, width),
     ),
 ]
 
