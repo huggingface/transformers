@@ -1269,6 +1269,20 @@ class TFMarianModel(TFMarianPreTrainedModel):
         )
 
 
+class BiasLayer(tf.keras.layers.Layer):
+    """
+    Bias as a layer. It is used for serialization purposes: `tf.keras.Model.save_weights` stores on a per-layer basis,
+    so all weights have to be registered in a layer.
+    """
+
+    def __init__(self, shape, initializer, trainable, name, **kwargs):
+        super().__init__(name=name, **kwargs)
+        self.bias = self.add_weight(name, shape=shape, initializer=initializer, trainable=trainable)
+
+    def call(self, x):
+        return x + self.bias
+
+
 @add_start_docstrings(
     "The MARIAN Model with a language modeling head. Can be used for summarization.",
     MARIAN_START_DOCSTRING,
@@ -1284,8 +1298,8 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         self.model = TFMarianMainLayer(config, name="model")
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the sake of consistency.
-        self.final_logits_bias = self.add_weight(
-            name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
+        self.final_logits_bias = BiasLayer(
+            shape=[1, config.vocab_size], initializer="zeros", trainable=False, name="final_logits_bias"
         )
 
     def get_decoder(self):
@@ -1301,10 +1315,10 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         self.set_input_embeddings(value)
 
     def get_bias(self):
-        return {"final_logits_bias": self.final_logits_bias}
+        return {"final_logits_bias": self.final_logits_bias.bias}
 
     def set_bias(self, value):
-        self.final_logits_bias = value["final_logits_bias"]
+        self.final_logits_bias.bias = value["final_logits_bias"]
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(MARIAN_INPUTS_DOCSTRING)
@@ -1373,7 +1387,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
             training=training,
         )
         lm_logits = self.model.shared(outputs[0], mode="linear")
-        lm_logits = lm_logits + self.final_logits_bias
+        lm_logits = self.final_logits_bias(lm_logits)
         masked_lm_loss = None if labels is None else self.hf_compute_loss(labels, lm_logits)
 
         if not return_dict:
