@@ -65,6 +65,9 @@ class DepthEstimationPipeline(Pipeline):
         """
         return super().__call__(images, **kwargs)
 
+    def _sanitize_parameters(self, **kwargs):
+        return {}, {}, {}
+
     def preprocess(self, image):
         image = load_image(image)
         self.image_size = image.size
@@ -85,6 +88,5 @@ class DepthEstimationPipeline(Pipeline):
         depth = Image.fromarray(formatted)
         output_dict = {}
         output_dict["predicted_depth"] = predicted_depth
-        output_dict["prediction"] = prediction
         output_dict["depth"] = depth
         return output_dict
