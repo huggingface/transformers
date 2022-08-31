@@ -434,7 +434,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
 
         for name, child in module._modules.items():
             if child is not None:
-                load(child, prefix + name + ".")
+                load(child, state_dict, prefix + name + ".")
 
     load(model_to_load, state_dict, prefix=start_prefix)
     # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
