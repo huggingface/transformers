@@ -1198,17 +1198,21 @@ class ConvNextMaskRCNNDeltaXYWHBBoxCoder(nn.Module):
 
     def decode(self, bboxes, pred_bboxes, max_shape=None, wh_ratio_clip=16 / 1000):
         """Apply transformation `pred_bboxes` to `boxes`.
+
         Args:
-            bboxes (torch.Tensor): Basic boxes. Shape (B, N, 4) or (N, 4)
-            pred_bboxes (Tensor): Encoded offsets with respect to each roi.
-               Has shape (B, N, num_classes * 4) or (B, N, 4) or (N, num_classes * 4) or (N, 4). Note N = num_anchors *
-               W * H when rois is a grid of anchors.Offset encoding follows [1]_.
+            bboxes (torch.Tensor):
+                Basic boxes. Shape (B, N, 4) or (N, 4)
+            pred_bboxes (Tensor):
+                Encoded offsets with respect to each roi. Has shape (B, N, num_classes * 4) or (B, N, 4) or (N,
+                num_classes * 4) or (N, 4). Note N = num_anchors * W * H when rois is a grid of anchors.Offset encoding
+                follows [1]_.
             max_shape (Sequence[int] or torch.Tensor or Sequence[
                Sequence[int]],optional): Maximum bounds for boxes, specifies (H, W, C) or (H, W). If bboxes shape is
                (B, N, 4), then the max_shape should be a Sequence[Sequence[int]] and the length of max_shape should
                also be B.
             wh_ratio_clip (float, optional): The allowed ratio between
                 width and height.
+
         Returns:
             torch.Tensor: Decoded boxes.
         """
@@ -2345,7 +2349,6 @@ class ConvNextMaskRCNNRPN(nn.Module):
                 with_nms,
                 **kwargs,
             )
-            # print("Shape of RPN result:", results.shape)
             result_list.append(results)
         return result_list
 
@@ -2386,12 +2389,6 @@ class ConvNextMaskRCNNRPN(nn.Module):
             Tensor: Labeled boxes in shape (n, 5), where the first 4 columns
                 are bounding box positions (tl_x, tl_y, br_x, br_y) and the 5-th column is a score between 0 and 1.
         """
-        # print("RPN classification logits:")
-        # for i in cls_score_list:
-        #     print(i.shape)
-        # print("RPN bounding box predictions:")
-        # for i in bbox_pred_list:
-        #     print(i.shape)
         cfg = self.test_cfg if cfg is None else cfg
         cfg = copy.deepcopy(cfg)
         img_shape = img_meta["img_shape"]
@@ -2700,8 +2697,6 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
         self.loss_bbox = L1Loss()  # this corresponds to dict(type='L1Loss', loss_weight=1.0)
 
     def forward(self, hidden_states):
-        print("Shape of hidden states:", hidden_states.shape)
-
         # shared part
         hidden_states = hidden_states.flatten(1)
         for fc in self.shared_fcs:
@@ -2710,9 +2705,6 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
         # separate branches
         cls_score = self.fc_cls(hidden_states)
         bbox_pred = self.fc_reg(hidden_states)
-
-        print("Shape of cls_score:", cls_score.shape)
-        print("Shape of bbox_pred:", bbox_pred.shape)
 
         return cls_score, bbox_pred
 
@@ -2746,7 +2738,6 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
         # if self.custom_cls_channels:
         #     scores = self.loss_cls.get_activation(cls_score)
         # else:
-        # print("Shape of cls_score:", cls_score.shape)
         scores = nn.functional.softmax(cls_score, dim=-1) if cls_score is not None else None
         # bbox_pred would be None in some detector when with_reg is False,
         # e.g. Grid R-CNN.
@@ -2763,11 +2754,13 @@ class ConvNextMaskRNNShared2FCBBoxHead(nn.Module):
             scale_factor = bboxes.new_tensor(scale_factor)
             bboxes = (bboxes.view(bboxes.size(0), -1, 4) / scale_factor).view(bboxes.size()[0], -1)
 
-        # print("Shape of boxes just before NMS:", bboxes[0].shape)
+        print("Shape of boxes just before NMS:", bboxes.shape)
+        print("Shape of scores just before NMS:", scores.shape)
 
         if cfg is None:
             return bboxes, scores
         else:
+            # it's here that we create a different amount of objects per image in a batch
             det_bboxes, det_labels = multiclass_nms(bboxes, scores, cfg["score_thr"], cfg["nms"], cfg["max_per_img"])
 
             return det_bboxes, det_labels
@@ -3168,27 +3161,28 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             x (list of `torch.FloatTensor`):
                 Multi-scale feature maps coming from the FPN.
             rois (`torch.FloatTensor`):
-
-
         """
-        print("Shape of rois:", rois.shape)
+        # print("Shape of rois:", rois.shape)
         # TODO: a more flexible way to decide which feature maps to use
         bbox_feats = self.bbox_roi_extractor(x[: self.bbox_roi_extractor.num_inputs], rois)
-        print("Shape of bbox_feats:", bbox_feats.shape)
+        # print("Shape of bbox_feats:", bbox_feats.shape)
         # if self.with_shared_head:
         #     bbox_feats = self.shared_head(bbox_feats)
         cls_score, bbox_pred = self.bbox_head(bbox_feats)
 
-        # print("CLS score of bounding box head (before postprocessing):", cls_score.shape)
-        # print("Bbox pred of bounding box head (before postprocessing):", bbox_pred.shape)
-
         bbox_results = dict(cls_score=cls_score, bbox_pred=bbox_pred, bbox_feats=bbox_feats)
+
         return bbox_results
 
     def _bbox_forward_train(self, x, sampling_results, gt_bboxes, gt_labels, img_metas):
         """Run forward function and calculate loss for box head in training."""
         rois = bbox2roi([res.bboxes for res in sampling_results])
         bbox_results = self._bbox_forward(x, rois)
+
+        cls_score = bbox_results["cls_score"]
+        bbox_pred = bbox_results["bbox_pred"]
+        print("cls_Score:", cls_score.shape)
+        print("bbox_pred:", bbox_pred.shape)
 
         bbox_targets = self.bbox_head.get_targets(sampling_results, gt_bboxes, gt_labels, self.train_cfg)
         loss_bbox = self.bbox_head.loss(bbox_results["cls_score"], bbox_results["bbox_pred"], rois, *bbox_targets)
@@ -3220,8 +3214,6 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
 
         rois = bbox2roi(proposals)
 
-        print("Shape of rois:", rois.shape)
-
         if rois.shape[0] == 0:
             batch_size = len(proposals)
             det_bbox = rois.new_zeros(0, 5)
@@ -3240,7 +3232,12 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         cls_score = bbox_results["cls_score"]
         bbox_pred = bbox_results["bbox_pred"]
         num_proposals_per_img = tuple(len(p) for p in proposals)
-        # print("Number of proposals per img:", num_proposals_per_img)
+
+        # TODO for the general ObjectDetectionOutput class, we will need to output the following 2 variables:
+        # logits = cls_score.reshape(len(proposals), num_proposals_per_img[0], cls_score.size(-1))
+        # pred_boxes = bbox_pred.reshape(len(proposals), num_proposals_per_img[0], bbox_pred.size(-1))
+        # return logits, pred_boxes
+
         rois = rois.split(num_proposals_per_img, 0)
         cls_score = cls_score.split(num_proposals_per_img, 0)
 
@@ -3255,8 +3252,9 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         else:
             bbox_pred = (None,) * len(proposals)
 
-        # print("Shape of bbox_pred:", bbox_pred[0].shape)
-
+        # TODO we might need to put this outside of the model,
+        # as it's postprocessing (NMS), creating lists
+        # as each image in a batch has a different amount of examples
         # apply bbox post-processing to each image individually
         det_bboxes = []
         det_labels = []
@@ -3279,8 +3277,6 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
                     rescale=rescale,
                     cfg=rcnn_test_cfg,
                 )
-                # print("Detected boxes:", det_bbox.shape)
-                # print("Detected labels:", det_label.shape)
             det_bboxes.append(det_bbox)
             det_labels.append(det_label)
         return det_bboxes, det_labels
@@ -3356,6 +3352,9 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
             mask_rois = bbox2roi(_bboxes)
             mask_results = self._mask_forward(x, mask_rois)
             mask_pred = mask_results["mask_pred"]
+
+            print("Shape of mask_pred:", mask_pred.shape)
+
             # split batch mask prediction back to each image
             num_mask_roi_per_img = [len(det_bbox) for det_bbox in det_bboxes]
             mask_preds = mask_pred.split(num_mask_roi_per_img, 0)
@@ -3422,22 +3421,11 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
                 )
                 sampling_results.append(sampling_result)
 
-        print("Sampling:")
-        for i in sampling_results:
-            print(sampling_result.bboxes.shape)
-
         losses = dict()
         # bbox head forward and loss
         if self.with_bbox:
             bbox_results = self._bbox_forward_train(x, sampling_results, gt_bboxes, gt_labels, img_metas)
 
-            # print("Cls_score:", bbox_results["cls_score"].shape)
-            # print("Cls_score first values:", bbox_results["cls_score"][:3, :3])
-            # print("Bbox_pred shape:", bbox_results["bbox_pred"].shape)
-            # print("Bbox_pred first values:", bbox_results["bbox_pred"][:3, :3])
-            # print("Bbox feats shape:", bbox_results["bbox_feats"].shape)
-            # print("Bbox feats first values:", bbox_results["bbox_feats"][0, 0, :3, :3])
-            # print("Bbox loss:", bbox_results["loss_bbox"])
             losses.update(bbox_results["loss_bbox"])
 
         # TODO verify mask head loss computation
@@ -3485,6 +3473,56 @@ class ConvNextMaskRCNNRoIHead(nn.Module):
         segm_results = self.forward_test_mask(hidden_states, img_metas, det_bboxes, det_labels, rescale=rescale)
 
         return list(zip(bbox_results, segm_results))
+
+    def forward(self, x, img_metas, proposals, rcnn_test_cfg, rescale=False):
+        """
+        THIS IS A NEW EXPERIMENTAL METHOD to output a general ObjectDetectionOutput class.
+
+        This method replaces `forward_test`, `forward_test_bboxes` and `forward_test_mask`.
+
+        Args:
+            x (tuple[Tensor]):
+                Feature maps of all scale levels.
+            img_metas (list[dict]):
+                Image meta info.
+            proposals (List[Tensor]):
+                Region proposals.
+            rcnn_test_cfg (obj:`ConfigDict`):
+                `test_cfg` of R-CNN.
+            rescale (bool):
+                If True, return boxes in original image space. Default: False.
+
+        Returns:
+            tuple[list[Tensor], list[Tensor]]: The first list contains
+                the boxes of the corresponding image in a batch, each tensor has the shape (num_boxes, 5) and last
+                dimension 5 represent (tl_x, tl_y, br_x, br_y, score). Each Tensor in the second list is the labels
+                with shape (num_boxes, ). The length of both lists should be equal to batch_size.
+        """
+
+        rois = bbox2roi(proposals)
+
+        if rois.shape[0] == 0:
+            batch_size = len(proposals)
+            det_bbox = rois.new_zeros(0, 5)
+            det_label = rois.new_zeros((0,), dtype=torch.long)
+            if rcnn_test_cfg is None:
+                det_bbox = det_bbox[:, :4]
+                det_label = rois.new_zeros((0, self.bbox_head.fc_cls.out_features))
+            # There is no proposal in the whole batch
+            return [det_bbox] * batch_size, [det_label] * batch_size
+
+        bbox_results = self._bbox_forward(x, rois)
+
+        # split batch bbox prediction back to each image
+        cls_score = bbox_results["cls_score"]
+        bbox_pred = bbox_results["bbox_pred"]
+        num_proposals_per_img = tuple(len(p) for p in proposals)
+
+        # TODO for the general ObjectDetectionOutput class, we will need to output the following 2 variables:
+        logits = cls_score.reshape(len(proposals), num_proposals_per_img[0], cls_score.size(-1))
+        pred_boxes = bbox_pred.reshape(len(proposals), num_proposals_per_img[0], bbox_pred.size(-1))
+
+        return logits, pred_boxes
 
 
 # Copied from transformers.models.convnext.modeling_convnext.ConvNextPreTrainedModel with ConvNext->ConvNextMaskRCNN,convnext->convnext_maskrcnn
