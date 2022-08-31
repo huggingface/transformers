@@ -8,8 +8,9 @@ name: Self-hosted runner (nightly)
 
 on:
   repository_dispatch:
-  schedule:
-    - cron: "0 16 * * *"
+# Disable temporarily until the test suite can be run under 12 hours.
+#  schedule:
+#    - cron: "0 16 * * *"
 
 env:
   HF_HOME: /mnt/cache

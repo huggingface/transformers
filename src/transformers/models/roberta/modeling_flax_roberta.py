@@ -580,7 +580,7 @@ class FlaxRobertaLayerCollection(nn.Module):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        outputs = (hidden_states,)
+        outputs = (hidden_states, all_hidden_states, all_attentions, all_cross_attentions)
 
         if not return_dict:
             return tuple(v for v in outputs if v is not None)

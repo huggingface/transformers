@@ -87,11 +87,15 @@ Here are a few examples:
 In Computer Vision:
 - [Image classification with ViT](https://huggingface.co/google/vit-base-patch16-224)
 - [Object Detection with DETR](https://huggingface.co/facebook/detr-resnet-50)
-- [Image Segmentation with DETR](https://huggingface.co/facebook/detr-resnet-50-panoptic)
+- [Semantic Segmentation with SegFormer](https://huggingface.co/nvidia/segformer-b0-finetuned-ade-512-512)
+- [Panoptic Segmentation with DETR](https://huggingface.co/facebook/detr-resnet-50-panoptic)
 
 In Audio:
 - [Automatic Speech Recognition with Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base-960h)
 - [Keyword Spotting with Wav2Vec2](https://huggingface.co/superb/wav2vec2-base-superb-ks)
+
+In Multimodal tasks:
+- [Visual Question Answering with ViLT](https://huggingface.co/dandelin/vilt-b32-finetuned-vqa)
 
 **[Write With Transformer](https://transformer.huggingface.co)**, built by the Hugging Face team, is the official demo of this repo’s text generation capabilities.
 
