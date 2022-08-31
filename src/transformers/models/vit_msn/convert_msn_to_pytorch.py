@@ -21,7 +21,6 @@ from PIL import Image
 
 import requests
 from transformers import ViTFeatureExtractor, ViTMSNConfig, ViTMSNModel
-
 from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
