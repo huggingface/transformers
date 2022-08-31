@@ -2,7 +2,7 @@
 # There's no way to ignore "F401 '...' imported but unused" warnings in this
 # module, but to preserve other warnings. So, don't check this module at all.
 
-# Copyright 2022 The HuggingFace Team. All rights reserved.
+# Copyright 2020 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,19 +17,21 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_vit_msn": ["VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST", "ViTMSNConfig"]}
+_import_structure = {"configuration_vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"]}
 
 try:
-    if not is_vision_available():
+    if not is_torch_available():
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_vit_msn"] = ["ViTMSNModel"]
-
+    _import_structure["modeling_vit_msn"] = [
+        "VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "ViTMSNModel",
+    ]
 
 if TYPE_CHECKING:
     from .configuration_vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
@@ -41,7 +43,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_vit_msn import VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST, ViTMSNModel
-
 
 else:
     import sys

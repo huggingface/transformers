@@ -22,7 +22,7 @@ from PIL import Image
 import requests
 from transformers import ViTFeatureExtractor, ViTMSNConfig, ViTMSNModel
 
-from ...image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
+from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
 
 torch.set_grad_enabled(False)
