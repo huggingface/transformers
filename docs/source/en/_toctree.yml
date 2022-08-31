@@ -59,7 +59,7 @@
         title: Multiple choice
       title: Task guides
       isExpanded: false
-    title: "NLP"
+    title: "Natural Language Processing"
   - sections:
     - local: tasks/audio_classification
       title: Audio classification
@@ -69,7 +69,7 @@
   - sections:
     - local: tasks/image_classification
       title: Image classification
-    title: "Image"
+    title: "Computer Vision"
   - sections:
     - local: performance
       title: Overview
