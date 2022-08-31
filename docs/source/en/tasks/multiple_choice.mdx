@@ -286,3 +286,67 @@ Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to fin
 
 Great, now that you've finetuned a model, you can use it for inference!
 
+Come up with some text and two candidate answers:
+
+```py
+>>> prompt = "France has a bread law, Le Décret Pain, with strict rules on what is allowed in a traditional baguette."
+>>> candidate1 = "The law does not apply to croissants and brioche."
+>>> candidate2 = "The law applies to baguettes."
+```
+
+<frameworkcontent>
+<pt>
+Tokenize each prompt and candidate answer pair and return PyTorch tensors (you can use the model you just finetuned or a pretrained model for multiple choice). You should also create some `labels`:
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased-distilled-squad")
+>>> inputs = tokenizer([[prompt, candidate1], [prompt, candidate2]], return_tensors="pt", padding=True)
+>>> labels = torch.tensor(0).unsqueeze(0)
+```
+
+Pass your inputs and labels to the model and return the `logits`:
+
+```py
+>>> from transformers import AutoModelForMultipleChoice
+
+>>> model = AutoModelForMultipleChoice.from_pretrained("distilbert-base-cased-distilled-squad")
+>>> outputs = model(**{k: v.unsqueeze(0) for k, v in inputs.items()}, labels=labels)
+>>> logits = outputs.logits
+```
+
+Get the class with the highest probability:
+
+```py
+>>> predicted_class = logits.argmax().item()
+>>> predicted_class
+'1'
+```
+</pt>
+<tf>
+Tokenize each prompt and candidate answer pair and return TensorFlow tensors (you can use the model you just finetuned or a pretrained model for multiple choice).
+
+```py
+>>> from transformers import AutoTokenizer
+
+>>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-cased-distilled-squad")
+>>> inputs = tokenizer([[prompt, candidate1], [prompt, candidate2]], return_tensors="tf", padding=True)
+```
+
+Pass your inputs to the model and return the `logits`:
+
+```py
+>>> inputs = {k: tf.expand_dims(v, 0) for k, v in inputs.items()}
+>>> outputs = model(inputs)
+>>> logits = outputs.logits
+```
+
+Get the class with the highest probability:
+
+```py
+>>> predicted_class = int(tf.math.argmax(logits, axis=-1)[0])
+>>> predicted_class
+```
+</tf>
+</frameworkcontent>
