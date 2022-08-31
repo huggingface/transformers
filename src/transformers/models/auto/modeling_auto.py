@@ -482,8 +482,8 @@ MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for depth estimation mapping
-        ("dpt", "DptForDepthEstimation"),
-        ("glpn", "GlpnForDepthEstimation"),
+        ("dpt", "DPTForDepthEstimation"),
+        ("glpn", "GLPNForDepthEstimation"),
     ]
 )
 MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
