@@ -38,10 +38,11 @@ class ReturnType(enum.Enum):
 @add_end_docstrings(PIPELINE_INIT_ARGS)
 class Image2TextGenerationPipeline(Pipeline):
     """
-    Image2Text Generation pipeline using a `AutoModelForVision2Seq`. This pipeline predicts a caption for a given image.
+    Image2Text Generation pipeline using a `AutoModelForVision2Seq`. This pipeline predicts a caption for a given
+    image.
 
-    This image to text generation pipeline can currently be loaded from pipeline() using the following task
-    identifier: "image2text-generation".
+    This image to text generation pipeline can currently be loaded from pipeline() using the following task identifier:
+    "image2text-generation".
 
     See the list of available models on
     [huggingface.co/models](https://huggingface.co/models?pipeline_tag=image-to-text).
