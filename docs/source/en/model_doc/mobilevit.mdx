@@ -35,16 +35,23 @@ Tips:
   from transformers import TFMobileViTForImageClassification
   import tensorflow as tf
 
-  model = TFMobileViTForImageClassification.from_pretrained("apple/mobilevit-xx-small")
+
+  model_ckpt = "apple/mobilevit-xx-small"
+  model = TFMobileViTForImageClassification.from_pretrained(model_ckpt)
 
   converter = tf.lite.TFLiteConverter.from_keras_model(model)
   converter.optimizations = [tf.lite.Optimize.DEFAULT]
+  converter.target_spec.supported_ops = [
+      tf.lite.OpsSet.TFLITE_BUILTINS,  # Enable TensorFlow Lite ops.
+      tf.lite.OpsSet.SELECT_TF_OPS,  # Enable TensorFlow ops.
+  ]
   tflite_model = converter.convert()
-  with open("mobilevit_xxs.tflite", "wb") as f:
+  tflite_filename = model_ckpt.split("/")[-1] + ".tflite"
+  with open(tflite_filename, "wb") as f:
       f.write(tflite_model)
   ```
 
-  The resulting model will be just **about an MB** making it a perfect fit for mobile applications where resources and network
+  The resulting model will be just **about an MB** making it a good fit for mobile applications where resources and network
   bandwidth can be constrained. 
 
 
