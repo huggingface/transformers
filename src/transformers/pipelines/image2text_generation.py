@@ -75,7 +75,12 @@ class Image2TextGenerationPipeline(Pipeline):
         return model_inputs
 
     def _forward(self, model_inputs):
-        model_outputs = self.model.generate(**model_inputs)
+        # FIXME: We need to pop here due to a difference in how `generation_utils.py` and `generation_tf_utils.py`
+        #  parse inputs. In the Tensorflow version, `generate` raises an error if we don't use `input_ids` whereas
+        #  the PyTorch version matches it with `self.model.main_input_name` or `self.model.encoder.main_input_name`
+        #  in the `_prepare_model_inputs` method.
+        inputs = model_inputs.pop(self.model.main_input_name)
+        model_outputs = self.model.generate(inputs, **model_inputs)
         return model_outputs
 
     def postprocess(self, model_outputs):

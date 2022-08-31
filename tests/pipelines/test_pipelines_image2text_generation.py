@@ -56,9 +56,51 @@ class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTes
         )
 
     @require_tf
-    @unittest.skip("No small model yet on the hub")
     def test_small_model_tf(self):
-        raise NotImplementedError
+        pipe = pipeline("image2text-generation", model="hf-internal-testing/tiny-random-vit-gpt2")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+
+        outputs = pipe(image)
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "generated_text": (
+                        " intermedi intermedi intermedi intermedi intermedi "
+                        "explorer explorer explorer explorer explorer explorer "
+                        "explorer medicine medicine medicine medicine medicine "
+                        "medicine medicine"
+                    )
+                },
+            ],
+        )
+
+        outputs = pipe([image, image])
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {
+                        "generated_text": (
+                            " intermedi intermedi intermedi intermedi intermedi "
+                            "explorer explorer explorer explorer explorer explorer "
+                            "explorer medicine medicine medicine medicine medicine "
+                            "medicine medicine"
+                        )
+                    },
+                ],
+                [
+                    {
+                        "generated_text": (
+                            " intermedi intermedi intermedi intermedi intermedi "
+                            "explorer explorer explorer explorer explorer explorer "
+                            "explorer medicine medicine medicine medicine medicine "
+                            "medicine medicine"
+                        )
+                    },
+                ],
+            ],
+        )
 
     @require_torch
     def test_small_model_pt(self):
@@ -95,7 +137,25 @@ class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTes
     @slow
     @require_torch
     def test_large_model_pt(self):
-        pipe = pipeline("image2text-generation", model="nlpconnect/vit-gpt2-image-captioning")
+        pipe = pipeline("image2text-generation", model="ydshieh/vit-gpt2-coco-en")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+
+        outputs = pipe(image)
+        self.assertEqual(outputs, [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}])
+
+        outputs = pipe([image, image])
+        self.assertEqual(
+            outputs,
+            [
+                [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}],
+                [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}],
+            ],
+        )
+
+    @slow
+    @require_tf
+    def test_large_model_tf(self):
+        pipe = pipeline("image2text-generation", model="ydshieh/vit-gpt2-coco-en")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)
