@@ -1279,6 +1279,9 @@ class BiasLayer(tf.keras.layers.Layer):
         super().__init__(name=name, **kwargs)
         self.bias = self.add_weight(name=name, shape=shape, initializer=initializer, trainable=trainable)
 
+    def call(self, x):
+        return x + self.bias
+
 
 @add_start_docstrings(
     "The MARIAN Model with a language modeling head. Can be used for summarization.",
@@ -1295,10 +1298,10 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         self.model = TFMarianMainLayer(config, name="model")
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the sake of consistency.
-        self._bias_layer = BiasLayer(
+        self.bias_layer = BiasLayer(
             name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
-        self.final_logits_bias = self._bias_layer.bias  # alias to keep the same interface with PT
+        self.final_logits_bias = self.bias_layer.bias  # alias to keep the same interface with PT
 
     def get_decoder(self):
         return self.model.decoder
@@ -1385,7 +1388,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
             training=training,
         )
         lm_logits = self.model.shared(outputs[0], mode="linear")
-        lm_logits = lm_logits + self.final_logits_bias
+        lm_logits = self.bias_layer(lm_logits)
         masked_lm_loss = None if labels is None else self.hf_compute_loss(labels, lm_logits)
 
         if not return_dict:
