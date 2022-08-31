@@ -56,9 +56,26 @@ class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTes
         )
 
     @require_flax
-    @unittest.skip("No small model yet on the hub")
     def test_small_model_flax(self):
-        raise NotImplementedError
+        pipe = pipeline("image2text-generation", model="hf-internal-testing/tiny-random-vit-gpt2")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+
+        outputs = pipe(image)
+        self.assertEqual(
+            outputs,
+            [
+                {"generated_text": ANY(str)},
+            ],
+        )
+
+        outputs = pipe([image, image])
+        self.assertEqual(
+            outputs,
+            [
+                [{"generated_text": ANY(str)}],
+                [{"generated_text": ANY(str)}],
+            ],
+        )
 
     @require_tf
     @unittest.skip("No small model yet on the hub")
@@ -66,9 +83,26 @@ class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTes
         raise NotImplementedError
 
     @require_torch
-    @unittest.skip("No small model yet on the hub")
     def test_small_model_pt(self):
-        raise NotImplementedError
+        pipe = pipeline("image2text-generation", model="hf-internal-testing/tiny-random-vit-gpt2")
+        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
+
+        outputs = pipe(image)
+        self.assertEqual(
+            outputs,
+            [
+                {"generated_text": ANY(str)},
+            ],
+        )
+
+        outputs = pipe([image, image])
+        self.assertEqual(
+            outputs,
+            [
+                [{"generated_text": ANY(str)}],
+                [{"generated_text": ANY(str)}],
+            ],
+        )
 
     @slow
     @require_torch
