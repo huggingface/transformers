@@ -1277,7 +1277,7 @@ class BiasLayer(tf.keras.layers.Layer):
 
     def __init__(self, shape, initializer, trainable, name, **kwargs):
         super().__init__(name=name, **kwargs)
-        self.bias = self.add_weight(name, shape=shape, initializer=initializer, trainable=trainable)
+        self.bias = self.add_weight(name=name, shape=shape, initializer=initializer, trainable=trainable)
 
 
 @add_start_docstrings(
@@ -1296,7 +1296,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the sake of consistency.
         self._bias_layer = BiasLayer(
-            shape=[1, config.vocab_size], initializer="zeros", trainable=False, name="final_logits_bias"
+            name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
         self.final_logits_bias = self._bias_layer.bias  # alias to keep the same interface with PT
 
