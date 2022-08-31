@@ -68,9 +68,8 @@ class Seq2SeqTrainer(Trainer):
         """
 
         gen_kwargs = gen_kwargs.copy()
-        gen_kwargs["max_length"] = (
-            gen_kwargs["max_length"] if gen_kwargs.get("max_length") is not None else self.args.generation_max_length
-        )
+        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
+            gen_kwargs["max_length"] = self.args.generation_max_length
         gen_kwargs["num_beams"] = (
             gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.args.generation_num_beams
         )
@@ -126,9 +125,8 @@ class Seq2SeqTrainer(Trainer):
         """
 
         gen_kwargs = gen_kwargs.copy()
-        gen_kwargs["max_length"] = (
-            gen_kwargs["max_length"] if gen_kwargs.get("max_length") is not None else self.args.generation_max_length
-        )
+        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
+            gen_kwargs["max_length"] = self.args.generation_max_length
         gen_kwargs["num_beams"] = (
             gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.args.generation_num_beams
         )
@@ -176,7 +174,7 @@ class Seq2SeqTrainer(Trainer):
         gen_kwargs = self._gen_kwargs.copy()
         if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
             gen_kwargs["max_length"] = self.model.config.max_length
-        prompt_seq_length = 1 if self.model.config.is_encoder_decoder else 0
+        prompt_seq_length = 1
         gen_kwargs["num_beams"] = (
             gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.model.config.num_beams
         )
