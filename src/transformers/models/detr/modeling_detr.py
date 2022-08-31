@@ -2153,7 +2153,7 @@ class DetrHungarianMatcher(nn.Module):
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
         self.giou_cost = giou_cost
-        if class_cost == 0 or bbox_cost == 0 or giou_cost == 0:
+        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
             raise ValueError("All costs of the Matcher can't be 0")
 
     @torch.no_grad()
