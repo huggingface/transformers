@@ -42,8 +42,9 @@ class DetrConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
-
     Args:
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
         num_queries (`int`, *optional*, defaults to 100):
             Number of object queries, i.e. detection slots. This is the maximal number of objects [`DetrModel`] can
             detect in a single image. For COCO, we recommend 100 queries.
@@ -132,6 +133,7 @@ class DetrConfig(PretrainedConfig):
 
     def __init__(
         self,
+        num_channels=3,
         num_queries=100,
         max_position_embeddings=1024,
         encoder_layers=6,
@@ -167,6 +169,7 @@ class DetrConfig(PretrainedConfig):
         eos_coefficient=0.1,
         **kwargs
     ):
+        self.num_channels = num_channels
         self.num_queries = num_queries
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
