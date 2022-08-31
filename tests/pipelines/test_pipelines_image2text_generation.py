@@ -14,9 +14,9 @@
 
 import unittest
 
-from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
+from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, TF_MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
 from transformers.pipelines import pipeline
-from transformers.testing_utils import is_pipeline_test, require_flax, require_tf, require_torch, require_vision, slow
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, require_vision, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -32,13 +32,13 @@ else:
 
 
 @is_pipeline_test
-@require_torch
 @require_vision
 class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_VISION_2_SEQ_MAPPING
+    tf_model_mapping = TF_MODEL_FOR_VISION_2_SEQ_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        pipe = pipeline("image2text-generation", model="nlpconnect/vit-gpt2-image-captioning")
+        pipe = pipeline("image2text-generation", model=model, tokenizer=tokenizer, feature_extractor=feature_extractor)
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -47,28 +47,6 @@ class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTes
 
     def run_pipeline_test(self, pipe, examples):
         outputs = pipe(examples)
-        self.assertEqual(
-            outputs,
-            [
-                [{"generated_text": ANY(str)}],
-                [{"generated_text": ANY(str)}],
-            ],
-        )
-
-    @require_flax
-    def test_small_model_flax(self):
-        pipe = pipeline("image2text-generation", model="hf-internal-testing/tiny-random-vit-gpt2")
-        image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
-
-        outputs = pipe(image)
-        self.assertEqual(
-            outputs,
-            [
-                {"generated_text": ANY(str)},
-            ],
-        )
-
-        outputs = pipe([image, image])
         self.assertEqual(
             outputs,
             [
@@ -91,7 +69,9 @@ class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTes
         self.assertEqual(
             outputs,
             [
-                {"generated_text": ANY(str)},
+                {
+                    "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
+                },
             ],
         )
 
@@ -99,8 +79,16 @@ class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTes
         self.assertEqual(
             outputs,
             [
-                [{"generated_text": ANY(str)}],
-                [{"generated_text": ANY(str)}],
+                [
+                    {
+                        "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
+                    }
+                ],
+                [
+                    {
+                        "generated_text": "growthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthgrowthGOGO"
+                    }
+                ],
             ],
         )
 
@@ -115,5 +103,9 @@ class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTes
 
         outputs = pipe([image, image])
         self.assertEqual(
-            outputs, [[{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}]] * 2
+            outputs,
+            [
+                [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}],
+                [{"generated_text": "a cat laying on a blanket next to a cat laying on a bed "}],
+            ],
         )

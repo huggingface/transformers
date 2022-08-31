@@ -71,7 +71,6 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("van", "ConvNextFeatureExtractor"),
         ("videomae", "VideoMAEFeatureExtractor"),
         ("vilt", "ViltFeatureExtractor"),
-        ("vision-encoder-decoder", "ViTFeatureExtractor"),
         ("vit", "ViTFeatureExtractor"),
         ("vit_mae", "ViTFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
