@@ -145,10 +145,7 @@ _import_structure = {
     ],
     "models.ernie": [
         "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "BasicTokenizer",
         "ErnieConfig",
-       
-        "WordpieceTokenizer",
     ],
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
@@ -3014,10 +3011,7 @@ if TYPE_CHECKING:
     )
     from .models.ernie import (
         ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        BasicTokenizer,
         ErnieConfig,
-       
-        WordpieceTokenizer,
     )
     from .models.bert_generation import BertGenerationConfig
     from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
