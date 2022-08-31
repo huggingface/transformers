@@ -1279,9 +1279,6 @@ class BiasLayer(tf.keras.layers.Layer):
         super().__init__(name=name, **kwargs)
         self.bias = self.add_weight(name, shape=shape, initializer=initializer, trainable=trainable)
 
-    def call(self, x):
-        return x + self.bias
-
 
 @add_start_docstrings(
     "The MARIAN Model with a language modeling head. Can be used for summarization.",
