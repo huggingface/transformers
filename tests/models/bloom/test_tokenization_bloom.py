@@ -113,6 +113,7 @@ class BloomTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     padding="max_length",
                 )
 
+    @unittest.skip("Skip while issue unresolved in datasets (https://github.com/fsspec/filesystem_spec/issues/1034")
     def test_encodings_from_xnli_dataset(self):
         """
         Tests the tokenizer downloaded from here:
