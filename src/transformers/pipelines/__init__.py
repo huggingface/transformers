@@ -311,7 +311,7 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForVision2Seq,) if is_torch_available() else (),
         "default": {
             "model": {
-                "pt": ("nlpconnect/vit-gpt2-image-captioning", "27b41be"),
+                "pt": ("ydshieh/vit-gpt2-coco-en", "65636df"),
                 "tf": ("ydshieh/vit-gpt2-coco-en", "65636df"),
             }
         },
