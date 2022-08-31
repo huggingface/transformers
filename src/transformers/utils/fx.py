@@ -551,8 +551,6 @@ class HFProxy(Proxy):
 
     @property
     def dtype(self):
-        if hasattr(self, "_metadata") and self._metadata is not None:
-            return self._metadata.dtype
         return self.tracer.create_proxy("call_function", getattr, (self, "dtype"), {})
 
     @property
