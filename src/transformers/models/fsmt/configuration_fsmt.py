@@ -95,9 +95,9 @@ class FSMTConfig(PretrainedConfig):
             End of stream token id.
         decoder_start_token_id (`int`, *optional*):
             This model starts decoding with `eos_token_id`
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether this is an encoder/decoder model.
