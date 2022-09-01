@@ -13,13 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import unittest
 
 import numpy as np
 
 from transformers import LayoutLMConfig, is_tf_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
@@ -29,11 +27,6 @@ from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_at
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import (
-        TF_MODEL_FOR_MASKED_LM_MAPPING,
-        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-    )
     from transformers.models.layoutlm.modeling_tf_layoutlm import (
         TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFLayoutLMForMaskedLM,

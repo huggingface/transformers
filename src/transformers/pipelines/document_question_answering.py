@@ -412,7 +412,6 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         sequence = sequence.replace(self.tokenizer.eos_token, "").replace(self.tokenizer.pad_token, "")
         sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
         ret = {
-            "score": 0.5,  # TODO
             "answer": "",
         }
 

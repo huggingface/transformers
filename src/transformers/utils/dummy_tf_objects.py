@@ -265,6 +265,9 @@ class TFAlbertPreTrainedModel(metaclass=DummyObject):
 TF_MODEL_FOR_CAUSAL_LM_MAPPING = None
 
 
+TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING = None
+
+
 TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
 
 
@@ -321,6 +324,13 @@ class TFAutoModel(metaclass=DummyObject):
 
 
 class TFAutoModelForCausalLM(metaclass=DummyObject):
+    _backends = ["tf"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tf"])
+
+
+class TFAutoModelForDocumentQuestionAnswering(metaclass=DummyObject):
     _backends = ["tf"]
 
     def __init__(self, *args, **kwargs):

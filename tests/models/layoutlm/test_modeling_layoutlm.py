@@ -12,12 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import copy
 import unittest
 
 from transformers import LayoutLMConfig, is_torch_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -28,9 +25,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_FOR_MASKED_LM_MAPPING,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         LayoutLMForMaskedLM,
         LayoutLMForQuestionAnswering,
         LayoutLMForSequenceClassification,

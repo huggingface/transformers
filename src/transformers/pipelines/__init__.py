@@ -222,7 +222,9 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
         "tf": (),
         "default": {
-            "model": {"pt": ("impira/layoutlm-document-qa", "3a93017")},  # TODO Update with custom pipeline removed, just before we land
+            "model": {
+                "pt": ("impira/layoutlm-document-qa", "3a93017")
+            },  # TODO Update with custom pipeline removed, just before we land
         },
         "type": "multimodal",
     },
