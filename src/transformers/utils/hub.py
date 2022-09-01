@@ -21,7 +21,6 @@ import shutil
 import sys
 import traceback
 import warnings
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 from uuid import uuid4
@@ -249,28 +248,6 @@ def try_to_load_from_cache(cache_dir, repo_id, filename, revision=None, commit_h
     return cached_file if os.path.isfile(cached_file) else None
 
 
-# If huggingface_hub changes the class of error for this to FileNotFoundError, we will be able to avoid that in the
-# future.
-LOCAL_FILES_ONLY_HF_ERROR = (
-    "Cannot find the requested files in the disk cache and outgoing traffic has been disabled. To enable hf.co "
-    "look-ups and downloads online, set 'local_files_only' to False."
-)
-
-
-# In the future, this ugly contextmanager can be removed when huggingface_hub as a released version where we can
-# activate/deactivate progress bars.
-@contextmanager
-def _patch_hf_hub_tqdm():
-    """
-    A context manager to make huggingface hub use the tqdm version of Transformers (which is controlled by some utils)
-    in logging.
-    """
-    old_tqdm = huggingface_hub.file_download.tqdm
-    huggingface_hub.file_download.tqdm = tqdm
-    yield
-    huggingface_hub.file_download.tqdm = old_tqdm
-
-
 def cached_file(
     path_or_repo_id: Union[str, os.PathLike],
     filename: str,
@@ -375,20 +352,19 @@ def cached_file(
     user_agent = http_user_agent(user_agent)
     try:
         # Load from URL or cache if already cached
-        with _patch_hf_hub_tqdm():
-            resolved_file = hf_hub_download(
-                path_or_repo_id,
-                filename,
-                subfolder=None if len(subfolder) == 0 else subfolder,
-                revision=revision,
-                cache_dir=cache_dir,
-                user_agent=user_agent,
-                force_download=force_download,
-                proxies=proxies,
-                resume_download=resume_download,
-                use_auth_token=use_auth_token,
-                local_files_only=local_files_only,
-            )
+        resolved_file = hf_hub_download(
+            path_or_repo_id,
+            filename,
+            subfolder=None if len(subfolder) == 0 else subfolder,
+            revision=revision,
+            cache_dir=cache_dir,
+            user_agent=user_agent,
+            force_download=force_download,
+            proxies=proxies,
+            resume_download=resume_download,
+            use_auth_token=use_auth_token,
+            local_files_only=local_files_only,
+        )
 
     except RepositoryNotFoundError:
         raise EnvironmentError(
@@ -421,13 +397,8 @@ def cached_file(
             return None
 
         raise EnvironmentError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{err}")
-    except ValueError as err:
-        # HuggingFace Hub returns a ValueError for a missing file when local_files_only=True we need to catch it here
-        # This could be caught above along in `EntryNotFoundError` if hf_hub sent a different error message here
-        if LOCAL_FILES_ONLY_HF_ERROR in err.args[0] and local_files_only and not _raise_exceptions_for_missing_entries:
-            return None
-
-        # Otherwise we try to see if we have a cached version (not up to date):
+    except ValueError:
+        # We try to see if we have a cached version (not up to date):
         resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, revision=revision)
         if resolved_file is not None:
             return resolved_file
