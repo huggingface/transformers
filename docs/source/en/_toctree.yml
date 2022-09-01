@@ -177,7 +177,6 @@
   - sections:
     - local: model_doc/auto
       title: Auto Classes
-<<<<<<< HEAD
     - isExpanded: false
       sections:
       - local: model_doc/albert
