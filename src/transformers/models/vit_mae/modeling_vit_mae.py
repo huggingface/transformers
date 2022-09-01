@@ -251,7 +251,7 @@ class ViTMAEEmbeddings(nn.Module):
 
         # keep the first subset
         ids_keep = ids_shuffle[:, :len_keep]
-        sequence_masked = torch.gather(sequence, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, dim))
+        sequence_unmasked = torch.gather(sequence, dim=1, index=ids_keep.unsqueeze(-1).repeat(1, 1, dim))
 
         # generate the binary mask: 0 is keep, 1 is remove
         mask = torch.ones([batch_size, seq_length], device=sequence.device)
@@ -259,7 +259,7 @@ class ViTMAEEmbeddings(nn.Module):
         # unshuffle to get the binary mask
         mask = torch.gather(mask, dim=1, index=ids_restore)
 
-        return sequence_masked, mask, ids_restore
+        return sequence_unmasked, mask, ids_restore
 
     def forward(self, pixel_values, noise=None):
         batch_size, num_channels, height, width = pixel_values.shape
