@@ -26,11 +26,18 @@ from transformers import (
     XCLIPConfig,
     XCLIPModel,
     XCLIPProcessor,
+    XCLIPTextConfig,
+    XCLIPVisionConfig,
 )
 
 
-def get_xclip_config(model_name):
-    config = XCLIPConfig()
+def get_xclip_config(model_name, num_frames):
+    text_config = XCLIPTextConfig()
+
+    # derive patch size from model name
+    patch_size = int(model_name[-2:])
+    vision_config = XCLIPVisionConfig(patch_size=patch_size, num_frames=num_frames)
+    config = XCLIPConfig.from_text_vision_configs(text_config, vision_config)
     return config
 
 
@@ -178,8 +185,8 @@ def prepare_video():
     return list(video)
 
 
-def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_path=None, push_to_hub=False):
-    config = get_xclip_config(model_name)
+def convert_xclip_checkpoint(checkpoint_url, model_name, num_frames, pytorch_dump_folder_path=None, push_to_hub=False):
+    config = get_xclip_config(model_name, num_frames=num_frames)
     model = XCLIPModel(config)
     model.eval()
 
@@ -207,7 +214,13 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_pat
     # Verify outputs
     logits_per_video = outputs.logits_per_video
     probs = logits_per_video.softmax(dim=1)
-    expected_probs = torch.tensor([[0.0019, 0.9951, 0.0030]])
+    print("Probs:", probs)
+    if model_name == "xclip-base-patch32":
+        expected_probs = torch.tensor([[0.0019, 0.9951, 0.0030]])
+    elif model_name == "xclip-base-patch16":
+        expected_probs = torch.tensor([[0.0083, 0.9681, 0.0236]])
+    else:
+        raise ValueError(f"Model name {model_name} not supported")
     assert torch.allclose(probs, expected_probs, atol=1e-3)
     print("Looks ok!")
 
@@ -237,6 +250,7 @@ if __name__ == "__main__":
         type=str,
         help="Name of the model.",
     )
+    parser.add_argument("--num_frames", default=8, type=int, help="Number of frames (can be 8 or 16).")
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
@@ -245,4 +259,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_xclip_checkpoint(args.checkpoint_url, args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_xclip_checkpoint(
+        args.checkpoint_url, args.model_name, args.num_frames, args.pytorch_dump_folder_path, args.push_to_hub
+    )
