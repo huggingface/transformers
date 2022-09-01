@@ -649,10 +649,7 @@ class TFMobileViTMainLayer(tf.keras.layers.Layer):
 
         if self.expand_output:
             self.conv_1x1_exp = TFMobileViTConvLayer(
-                config,
-                out_channels=config.neck_hidden_sizes[6],
-                kernel_size=1,
-                name="conv_1x1_exp",
+                config, out_channels=config.neck_hidden_sizes[6], kernel_size=1, name="conv_1x1_exp"
             )
 
         self.pooler = tf.keras.layers.GlobalAveragePooling2D(data_format="channels_first", name="pooler")
