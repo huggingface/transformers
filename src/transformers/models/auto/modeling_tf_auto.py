@@ -59,6 +59,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("marian", "TFMarianModel"),
         ("mbart", "TFMBartModel"),
         ("mobilebert", "TFMobileBertModel"),
+        ("mobilevit", "TFMobileViTModel"),
         ("mpnet", "TFMPNetModel"),
         ("mt5", "TFMT5Model"),
         ("openai-gpt", "TFOpenAIGPTModel"),
@@ -182,6 +183,7 @@ TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("convnext", "TFConvNextForImageClassification"),
         ("data2vec-vision", "TFData2VecVisionForImageClassification"),
         ("deit", ("TFDeiTForImageClassification", "TFDeiTForImageClassificationWithTeacher")),
+        ("mobilevit", "TFMobileViTForImageClassification"),
         ("regnet", "TFRegNetForImageClassification"),
         ("resnet", "TFResNetForImageClassification"),
         ("segformer", "TFSegformerForImageClassification"),
@@ -194,6 +196,7 @@ TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Semantic Segmentation mapping
         ("data2vec-vision", "TFData2VecVisionForSemanticSegmentation"),
+        ("mobilevit", "TFMobileViTForSemanticSegmentation"),
         ("segformer", "TFSegformerForSemanticSegmentation"),
     ]
 )

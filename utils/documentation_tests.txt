@@ -51,6 +51,7 @@ src/transformers/models/mbart/modeling_mbart.py
 src/transformers/models/mobilebert/modeling_mobilebert.py
 src/transformers/models/mobilebert/modeling_tf_mobilebert.py
 src/transformers/models/mobilevit/modeling_mobilevit.py
+src/transformers/models/mobilevit/modeling_tf_mobilevit.py
 src/transformers/models/opt/modeling_opt.py
 src/transformers/models/opt/modeling_tf_opt.py
 src/transformers/models/owlvit/modeling_owlvit.py
