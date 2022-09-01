@@ -93,8 +93,15 @@ __global__ void forward_masked_softmax_kernel(
 
     // Compute softmax
     if (batch_id < batch_size) {
-        for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
-            result[batch_id][kv_length_id] = static_cast<attention_scores_scalar>(exponential[kv_length_id - kv_length_start] / temp_storage[row_id_mem_offset + 1]);
+        // If sum of all exponential is 0, we set the softmax values to 0
+        if (temp_storage[row_id_mem_offset + 1] == 0.) {
+            for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
+                result[batch_id][kv_length_id] = 0.;
+            }
+        } else {
+            for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
+                result[batch_id][kv_length_id] = static_cast<attention_scores_scalar>(exponential[kv_length_id - kv_length_start] / temp_storage[row_id_mem_offset + 1]);
+            }
         }
     }
 }
