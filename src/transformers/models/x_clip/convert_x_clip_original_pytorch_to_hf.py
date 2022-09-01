@@ -18,6 +18,7 @@ import argparse
 import numpy as np
 import torch
 
+import gdown
 from huggingface_hub import hf_hub_download
 from transformers import (
     CLIPTokenizer,
@@ -37,7 +38,24 @@ def get_xclip_config(model_name, num_frames):
     # derive patch size from model name
     patch_size = int(model_name[-2:])
     vision_config = XCLIPVisionConfig(patch_size=patch_size, num_frames=num_frames)
+
+    if "large" in model_name:
+        text_config.hidden_size = 768
+        text_config.intermediate_size = 3072
+        text_config.num_attention_heads = 12
+
+        vision_config.hidden_size = 1024
+        vision_config.intermediate_size = 4096
+        vision_config.num_attention_heads = 16
+        vision_config.num_hidden_layers = 24
+        vision_config.mit_hidden_size = 768
+        vision_config.mit_intermediate_size = 3072
+
     config = XCLIPConfig.from_text_vision_configs(text_config, vision_config)
+
+    if "large" in model_name:
+        config.projection_dim = 768
+
     return config
 
 
@@ -190,7 +208,13 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, num_frames, pytorch_dum
     model = XCLIPModel(config)
     model.eval()
 
-    state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
+    if "drive" in checkpoint_url:
+        output = "pytorch_model.bin"
+        gdown.cached_download(checkpoint_url, output, quiet=False)
+        state_dict = torch.load(output, map_location="cpu")["model"]
+    else:
+        state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
+
     state_dict = convert_state_dict(state_dict, config)
 
     model = XCLIPModel(config)
@@ -219,6 +243,8 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, num_frames, pytorch_dum
         expected_probs = torch.tensor([[0.0019, 0.9951, 0.0030]])
     elif model_name == "xclip-base-patch16":
         expected_probs = torch.tensor([[0.0083, 0.9681, 0.0236]])
+    elif model_name == "xclip-large-patch14":
+        expected_probs = torch.tensor([[0.0062, 0.9864, 0.0075]])
     else:
         raise ValueError(f"Model name {model_name} not supported")
     assert torch.allclose(probs, expected_probs, atol=1e-3)
