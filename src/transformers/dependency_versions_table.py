@@ -15,6 +15,7 @@ deps = {
     "fairscale": "fairscale>0.3",
     "faiss-cpu": "faiss-cpu",
     "fastapi": "fastapi",
+    "fsspec": "fsspec!=2022.8.1",
     "filelock": "filelock",
     "flake8": "flake8>=3.8.3",
     "flax": "flax>=0.4.1",

@@ -216,6 +216,7 @@ PYTORCH_EXPORT_MODELS = {
     ("perceiver", "deepmind/vision-perceiver-conv", ("image-classification",)),
     ("longformer", "allenai/longformer-base-4096"),
     ("yolos", "hustvl/yolos-tiny"),
+    ("segformer", "nvidia/segformer-b0-finetuned-ade-512-512"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
