@@ -562,6 +562,8 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("funnel", "FunnelForQuestionAnswering"),
         ("gptj", "GPTJForQuestionAnswering"),
         ("ibert", "IBertForQuestionAnswering"),
+        ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
+        ("layoutlmv3", "LayoutLMv3ForQuestionAnswering"),
         ("led", "LEDForQuestionAnswering"),
         ("longformer", "LongformerForQuestionAnswering"),
         ("luke", "LukeForQuestionAnswering"),
@@ -603,10 +605,7 @@ MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
-        # TODO Uncomment after # 18407 lands
-        # ("layoutlm", "LayoutLMForQuestionAnswering"),
-        ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
-        ("layoutlmv3", "LayoutLMv3ForQuestionAnswering"),
+        ("layoutlm", "LayoutLMForQuestionAnswering"),
     ]
 )
 

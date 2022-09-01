@@ -263,24 +263,6 @@ class TFLayoutLMModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFLayoutLMModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = copy.deepcopy(inputs_dict)
-        if return_labels:
-            if model_class in get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
-                inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in [
-                *get_values(TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
-                *get_values(TF_MODEL_FOR_MASKED_LM_MAPPING),
-            ]:
-                inputs_dict["labels"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
-                )
-            elif model_class.__name__ == "TFLayoutLMForQuestionAnswering":
-                inputs_dict["start_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-                inputs_dict["end_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-
-        return inputs_dict
-
 
 def prepare_layoutlm_batch_inputs():
     # Here we prepare a batch of 2 sequences to test a LayoutLM forward pass on:
