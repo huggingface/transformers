@@ -1,6 +1,7 @@
 import argparse
-import dateutil.parser as date_parser
 import math
+
+import dateutil.parser as date_parser
 import requests
 
 
@@ -49,7 +50,7 @@ def get_job_time(workflow_run_id):
 if __name__ == "__main__":
     r"""
     Example:
-    
+
         python get_github_job_time.py --workflow_run_id 2945609517
     """
 
