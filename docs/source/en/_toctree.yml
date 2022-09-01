@@ -36,7 +36,7 @@
       title: Export 🤗 Transformers models
     - local: troubleshooting
       title: Troubleshoot
-    title: "General usage"
+    title: General usage
   - sections:
     - local: fast_tokenizers
       title: Use tokenizers from 🤗 Tokenizers
@@ -59,17 +59,17 @@
         title: Multiple choice
       title: Task guides
       isExpanded: false
-    title: "Natural Language Processing"
+    title: Natural Language Processing
   - sections:
     - local: tasks/audio_classification
       title: Audio classification
     - local: tasks/asr
       title: Automatic speech recognition
-    title: "Audio"
+    title: Audio
   - sections:
     - local: tasks/image_classification
       title: Image classification
-    title: "Computer Vision"
+    title: Computer Vision
   - sections:
     - local: performance
       title: Overview
@@ -99,7 +99,7 @@
       title: Instantiating a big model
     - local: debugging
       title: Debugging
-    title: "Performance and scalability"
+    title: Performance and scalability
   - sections:
     - local: contributing
       title: How to contribute to transformers?
@@ -111,7 +111,7 @@
       title: Testing
     - local: pr_checks
       title: Checks on a Pull Request
-    title: "Contribute"
+    title: Contribute
   - local: notebooks
     title: 🤗 Transformers Notebooks
   - local: community
@@ -120,7 +120,7 @@
     title: Benchmarks
   - local: migration
     title: Migrating from previous packages
-  title: "How-to guides"
+  title: How-to guides
 - sections:
   - local: philosophy
     title: Philosophy
