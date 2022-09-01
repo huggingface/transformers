@@ -281,8 +281,6 @@ class OPTDecoderLayer(nn.Module):
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
 
-        self.activation_dropout = config.activation_dropout
-
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.ffn_dim)
         self.fc2 = nn.Linear(config.ffn_dim, self.embed_dim)
