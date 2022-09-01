@@ -910,11 +910,7 @@ class TFMobileViTForImageClassification(TFMobileViTPreTrainedModel, TFSequenceCl
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return TFImageClassifierOutputWithNoAttention(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-        )
+        return TFImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
 
     def serving_output(self, output: TFImageClassifierOutputWithNoAttention) -> TFImageClassifierOutputWithNoAttention:
         # hidden_states and attention not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions
