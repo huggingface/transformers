@@ -145,7 +145,7 @@ _deps = [
     "regex!=2019.12.17",
     "requests",
     "rjieba",
-    "rouge-score",
+    "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "sagemaker>=2.31.0",
