@@ -31,25 +31,25 @@ Tips:
   You can use the following code to convert a MobileViT checkpoint (be it image classification or semantic segmentation) to generate a 
   TensorFlow Lite model:
 
-  ```py
-  from transformers import TFMobileViTForImageClassification
-  import tensorflow as tf
+```py
+from transformers import TFMobileViTForImageClassification
+import tensorflow as tf
 
 
-  model_ckpt = "apple/mobilevit-xx-small"
-  model = TFMobileViTForImageClassification.from_pretrained(model_ckpt)
+model_ckpt = "apple/mobilevit-xx-small"
+model = TFMobileViTForImageClassification.from_pretrained(model_ckpt)
 
-  converter = tf.lite.TFLiteConverter.from_keras_model(model)
-  converter.optimizations = [tf.lite.Optimize.DEFAULT]
-  converter.target_spec.supported_ops = [
-      tf.lite.OpsSet.TFLITE_BUILTINS,
-      tf.lite.OpsSet.SELECT_TF_OPS,
-  ]
-  tflite_model = converter.convert()
-  tflite_filename = model_ckpt.split("/")[-1] + ".tflite"
-  with open(tflite_filename, "wb") as f:
-      f.write(tflite_model)
-  ```
+converter = tf.lite.TFLiteConverter.from_keras_model(model)
+converter.optimizations = [tf.lite.Optimize.DEFAULT]
+converter.target_spec.supported_ops = [
+    tf.lite.OpsSet.TFLITE_BUILTINS,
+    tf.lite.OpsSet.SELECT_TF_OPS,
+]
+tflite_model = converter.convert()
+tflite_filename = model_ckpt.split("/")[-1] + ".tflite"
+with open(tflite_filename, "wb") as f:
+    f.write(tflite_model)
+```
 
   The resulting model will be just **about an MB** making it a good fit for mobile applications where resources and network
   bandwidth can be constrained. 
