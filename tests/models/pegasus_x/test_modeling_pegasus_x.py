@@ -556,7 +556,7 @@ TOLERANCE = 1e-4
 class PegasusXModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_tokenizer(self):
-        return PegasusTokenizer.from_pretrained("zphang/pegasus-x-base")
+        return PegasusTokenizer.from_pretrained("google/pegasus-x-base")
 
     def test_inference_no_head(self):
         model = PegasusXModel.from_pretrained("pegasus-x-base").to(torch_device)
@@ -591,8 +591,8 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        hf = PegasusXForConditionalGeneration.from_pretrained("zphang/pegasus-x-base").to(torch_device)
-        tok = PegasusTokenizer.from_pretrained("zphang/pegasus-x-large")
+        hf = PegasusXForConditionalGeneration.from_pretrained("google/pegasus-x-base").to(torch_device)
+        tok = PegasusTokenizer.from_pretrained("google/pegasus-x-large")
 
         batch_input = [
             "While large pretrained Transformer models have proven highly capable at tackling natural language tasks,"
