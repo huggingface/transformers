@@ -55,7 +55,7 @@ __global__ void forward_masked_softmax_kernel(
     __syncthreads();
 
     // Compute mask and max
-    if (batch_id <= batch_size) {
+    if (batch_id < batch_size) {
         float thread_max = -std::numeric_limits<float>::infinity();
         for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
             if (mask[batch_id][kv_length_id] == 0) {
@@ -73,7 +73,7 @@ __global__ void forward_masked_softmax_kernel(
 
     // Compute exp(elt - max) masked
     float exponential[min_kv_length_shard_size_per_thread];
-    if (batch_id <= batch_size) {
+    if (batch_id < batch_size) {
         float thread_add = 0;
         for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
             if (mask[batch_id][kv_length_id] == 0) {
@@ -92,7 +92,7 @@ __global__ void forward_masked_softmax_kernel(
     __syncthreads();
 
     // Compute softmax
-    if (batch_id <= batch_size) {
+    if (batch_id < batch_size) {
         for (int kv_length_id = kv_length_start; kv_length_id < kv_length_end; ++kv_length_id) {
             result[batch_id][kv_length_id] = static_cast<attention_scores_scalar>(exponential[kv_length_id - kv_length_start] / temp_storage[row_id_mem_offset + 1]);
         }
@@ -185,7 +185,7 @@ std::tuple<at::Tensor, std::optional<std::vector<at::Tensor>>, at::Tensor> forwa
             const auto MAX_THREADS_PER_SM = 1024;
             // TODO @thomasw21 figure out how to have longer sequences, currently the maximum is `max_kv_length = MAX_THREADS_PER_SM * MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD`
             const auto MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD = 4;
-            // `effective_kv_length = kv_length // MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD`
+            // `effective_kv_length = ceil(kv_length / MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD)`
             const auto effective_kv_length = (kv_length - 1)/ MIN_KV_LENGTH_SHARD_SIZE_PER_THREAD + 1;
             const auto rows_per_block = MAX_THREADS_PER_SM / effective_kv_length;
             const auto num_blocks = (batch_size_times_num_heads * q_length - 1) / rows_per_block + 1;
