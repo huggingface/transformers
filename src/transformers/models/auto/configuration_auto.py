@@ -56,6 +56,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("deit", "DeiTConfig"),
         ("detr", "DetrConfig"),
         ("distilbert", "DistilBertConfig"),
+        ("donut-swin", "DonutSwinConfig"),
         ("dpr", "DPRConfig"),
         ("dpt", "DPTConfig"),
         ("electra", "ElectraConfig"),
@@ -181,6 +182,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("deit", "DEIT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("detr", "DETR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("distilbert", "DISTILBERT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("donut-swin", "DONUT_SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("dpr", "DPR_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("dpt", "DPT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("electra", "ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -304,6 +306,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("dialogpt", "DialoGPT"),
         ("distilbert", "DistilBERT"),
         ("dit", "DiT"),
+        ("donut", "Donut"),
+        ("donut-swin", "DonutSwin"),
         ("dpr", "DPR"),
         ("dpt", "DPT"),
         ("electra", "ELECTRA"),
@@ -420,6 +424,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("data2vec-audio", "data2vec"),
         ("data2vec-text", "data2vec"),
         ("data2vec-vision", "data2vec"),
+        ("donut-swin", "donut"),
     ]
 )
 
@@ -728,7 +733,7 @@ class AutoConfig:
         kwargs["_from_auto"] = True
         kwargs["name_or_path"] = pretrained_model_name_or_path
         trust_remote_code = kwargs.pop("trust_remote_code", False)
-        config_dict, _ = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        config_dict, unused_kwargs = PretrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)
         if "auto_map" in config_dict and "AutoConfig" in config_dict["auto_map"]:
             if not trust_remote_code:
                 raise ValueError(
@@ -749,13 +754,13 @@ class AutoConfig:
             return config_class.from_pretrained(pretrained_model_name_or_path, **kwargs)
         elif "model_type" in config_dict:
             config_class = CONFIG_MAPPING[config_dict["model_type"]]
-            return config_class.from_dict(config_dict, **kwargs)
+            return config_class.from_dict(config_dict, **unused_kwargs)
         else:
             # Fallback: use pattern matching on the string.
             # We go from longer names to shorter names to catch roberta before bert (for instance)
             for pattern in sorted(CONFIG_MAPPING.keys(), key=len, reverse=True):
                 if pattern in str(pretrained_model_name_or_path):
-                    return CONFIG_MAPPING[pattern].from_dict(config_dict, **kwargs)
+                    return CONFIG_MAPPING[pattern].from_dict(config_dict, **unused_kwargs)
 
         raise ValueError(
             f"Unrecognized model in {pretrained_model_name_or_path}. "

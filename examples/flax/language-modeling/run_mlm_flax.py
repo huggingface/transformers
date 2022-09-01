@@ -107,6 +107,12 @@ class TrainingArguments:
         default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
     )
     hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+    gradient_checkpointing: bool = field(
+        default=False,
+        metadata={
+            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
+        },
+    )
 
     def __post_init__(self):
         if self.output_dir is not None:
@@ -172,7 +178,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -639,6 +645,9 @@ def main():
             seed=training_args.seed,
             dtype=getattr(jnp, model_args.dtype),
         )
+
+    if training_args.gradient_checkpointing:
+        model.enable_gradient_checkpointing()
 
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)

@@ -465,6 +465,21 @@ class Trainer:
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument. "
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
+        if is_torch_tpu_available() and self.optimizer is not None:
+            for param in self.model.parameters():
+                model_device = param.device
+                break
+            for param_group in self.optimizer.param_groups:
+                if len(param_group["params"]) > 0:
+                    optimizer_device = param_group["params"][0].device
+                    break
+            if model_device != optimizer_device:
+                raise ValueError(
+                    "The model and the optimizer parameters are not on the same device, which probably means you"
+                    " created an optimizer around your model **before** putting on the device and passing it to the"
+                    " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
+                    " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
+                )
         if ((self.sharded_ddp is not None) or args.deepspeed or (self.fsdp is not None)) and (
             self.optimizer is not None or self.lr_scheduler is not None
         ):
@@ -1935,7 +1950,9 @@ class Trainer:
             else:
                 # We load the model state dict on the CPU to avoid an OOM error.
                 state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
-                load_result = model.load_state_dict(state_dict, strict=False)
+                # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
+                # which takes *args instead of **kwargs
+                load_result = model.load_state_dict(state_dict, False)
                 # release memory
                 del state_dict
                 self._issue_warnings_after_load(load_result)
@@ -1989,7 +2006,9 @@ class Trainer:
                     # We load the model state dict on the CPU to avoid an OOM error.
                     state_dict = torch.load(best_model_path, map_location="cpu")
                     # If the model is on the GPU, it still works!
-                    load_result = model.load_state_dict(state_dict, strict=False)
+                    # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
+                    # which takes *args instead of **kwargs
+                    load_result = model.load_state_dict(state_dict, False)
                 if not is_sagemaker_mp_enabled():
                     self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
@@ -2302,13 +2321,15 @@ class Trainer:
                 method. Will default to [`~trainer_utils.default_compute_objective`].
             n_trials (`int`, *optional*, defaults to 100):
                 The number of trial runs to test.
-            direction(`str`, *optional*, defaults to `"minimize"`):
+            direction (`str`, *optional*, defaults to `"minimize"`):
                 Whether to optimize greater or lower objects. Can be `"minimize"` or `"maximize"`, you should pick
                 `"minimize"` when optimizing the validation loss, `"maximize"` when optimizing one or several metrics.
-            backend(`str` or [`~training_utils.HPSearchBackend`], *optional*):
+            backend (`str` or [`~training_utils.HPSearchBackend`], *optional*):
                 The backend to use for hyperparameter search. Will default to optuna or Ray Tune or SigOpt, depending
                 on which one is installed. If all are installed, will default to optuna.
-            kwargs:
+            hp_name (`Callable[["optuna.Trial"], str]]`, *optional*):
+                A function that defines the trial/run name. Will default to None.
+            kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to `optuna.create_study` or `ray.tune.run`. For more
                 information see:
 

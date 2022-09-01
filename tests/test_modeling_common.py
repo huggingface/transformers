@@ -859,6 +859,10 @@ class ModelTesterMixin:
                         f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
                     )
 
+            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
+            # (Even with this call, there are still memory leak by ~0.04MB)
+            self.clear_torch_jit_class_registry()
+
     def test_headmasking(self):
         if not self.test_head_masking:
             return
@@ -2925,14 +2929,15 @@ class ModelUtilsTest(TestCasePlus):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
         response_mock.status_code = 500
-        response_mock.headers = []
+        response_mock.headers = {}
         response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
         _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
+        with mock.patch("requests.request", return_value=response_mock) as mock_head:
             _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()

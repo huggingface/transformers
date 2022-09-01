@@ -24,14 +24,7 @@ from typing import Dict, Optional, Union
 
 from huggingface_hub import HfFolder, model_info
 
-from .utils import (
-    HF_MODULES_CACHE,
-    TRANSFORMERS_DYNAMIC_MODULE_NAME,
-    cached_path,
-    hf_bucket_url,
-    is_offline_mode,
-    logging,
-)
+from .utils import HF_MODULES_CACHE, TRANSFORMERS_DYNAMIC_MODULE_NAME, cached_file, is_offline_mode, logging
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -195,7 +188,7 @@ def get_cached_module_file(
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`).
+            when running `huggingface-cli login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -219,18 +212,15 @@ def get_cached_module_file(
     # Download and cache module_file from the repo `pretrained_model_name_or_path` of grab it if it's a local file.
     pretrained_model_name_or_path = str(pretrained_model_name_or_path)
     if os.path.isdir(pretrained_model_name_or_path):
-        module_file_or_url = os.path.join(pretrained_model_name_or_path, module_file)
         submodule = "local"
     else:
-        module_file_or_url = hf_bucket_url(
-            pretrained_model_name_or_path, filename=module_file, revision=revision, mirror=None
-        )
         submodule = pretrained_model_name_or_path.replace("/", os.path.sep)
 
     try:
         # Load from URL or cache if already cached
-        resolved_module_file = cached_path(
-            module_file_or_url,
+        resolved_module_file = cached_file(
+            pretrained_model_name_or_path,
+            module_file,
             cache_dir=cache_dir,
             force_download=force_download,
             proxies=proxies,
@@ -345,7 +335,7 @@ def get_class_from_dynamic_module(
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         use_auth_token (`str` or `bool`, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`).
+            when running `huggingface-cli login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any

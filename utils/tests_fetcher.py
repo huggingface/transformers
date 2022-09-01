@@ -377,6 +377,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     ],
     "optimization.py": "optimization/test_optimization.py",
     "optimization_tf.py": "optimization/test_optimization_tf.py",
+    "pipelines/__init__.py": "pipelines/test_pipelines_*.py",
     "pipelines/base.py": "pipelines/test_pipelines_*.py",
     "pipelines/text2text_generation.py": [
         "pipelines/test_pipelines_text2text_generation.py",
@@ -433,7 +434,7 @@ def module_to_test_file(module_fname):
         return "tests/utils/test_cli.py"
     # Special case for onnx submodules
     elif len(splits) >= 2 and splits[-2] == "onnx":
-        return ["tests/onnx/test_onnx.py", "tests/onnx/test_onnx_v2.py"]
+        return ["tests/onnx/test_features.py", "tests/onnx/test_onnx.py", "tests/onnx/test_onnx_v2.py"]
     # Special case for utils (not the one in src/transformers, the ones at the root of the repo).
     elif len(splits) > 0 and splits[0] == "utils":
         default_test_file = f"tests/utils/test_utils_{module_name}"
@@ -464,6 +465,7 @@ EXPECTED_TEST_FILES_NEVER_TOUCHED = [
     "tests/sagemaker/test_single_node_gpu.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_model_parallel.py",  # SageMaker test
     "tests/sagemaker/test_multi_node_data_parallel.py",  # SageMaker test
+    "tests/mixed_int8/test_mixed_int8.py",  # Mixed-int8 bitsandbytes test
 ]
 
 
