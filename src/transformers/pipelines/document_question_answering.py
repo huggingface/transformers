@@ -397,7 +397,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
 
     def postprocess(self, model_outputs, top_k=1, **kwargs):
         if self.model_type == ModelType.Donut:
-            answers = self.postprocess_encoder_decoder(model_outputs)
+            answers = self.postprocess_donut(model_outputs)
         else:
             answers = self.postprocess_extractive_qa(model_outputs, top_k=top_k, **kwargs)
 
@@ -406,7 +406,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
             return answers[0]
         return answers
 
-    def postprocess_encoder_decoder(self, model_outputs, **kwargs):
+    def postprocess_donut(self, model_outputs, **kwargs):
         # postprocess
         sequence = self.tokenizer.batch_decode(model_outputs.sequences)[0]
         sequence = sequence.replace(self.tokenizer.eos_token, "").replace(self.tokenizer.pad_token, "")
