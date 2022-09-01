@@ -42,8 +42,8 @@ Tips:
   converter = tf.lite.TFLiteConverter.from_keras_model(model)
   converter.optimizations = [tf.lite.Optimize.DEFAULT]
   converter.target_spec.supported_ops = [
-      tf.lite.OpsSet.TFLITE_BUILTINS,  # Enable TensorFlow Lite ops.
-      tf.lite.OpsSet.SELECT_TF_OPS,  # Enable TensorFlow ops.
+      tf.lite.OpsSet.TFLITE_BUILTINS,
+      tf.lite.OpsSet.SELECT_TF_OPS,
   ]
   tflite_model = converter.convert()
   tflite_filename = model_ckpt.split("/")[-1] + ".tflite"
