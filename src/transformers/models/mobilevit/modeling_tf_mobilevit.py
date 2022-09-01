@@ -427,10 +427,7 @@ class TFMobileViTLayer(tf.keras.layers.Layer):
         )
 
         self.fusion = TFMobileViTConvLayer(
-            config,
-            out_channels=in_channels,
-            kernel_size=config.conv_kernel_size,
-            name="fusion",
+            config, out_channels=in_channels, kernel_size=config.conv_kernel_size, name="fusion"
         )
 
     def unfolding(self, features: tf.Tensor) -> Tuple[tf.Tensor, Dict]:
