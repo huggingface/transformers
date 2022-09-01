@@ -652,7 +652,6 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             inputs_embeds = self.project_in(inputs_embeds)
 
         hidden_states = inputs_embeds + pos_embeds
-        hidden_states = self.dropout(hidden_states, training=training)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
