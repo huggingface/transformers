@@ -2398,6 +2398,15 @@ else:
             "TFMobileBertPreTrainedModel",
         ]
     )
+    _import_structure["models.mobilevit"].extend(
+        [
+            "TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFMobileViTPreTrainedModel",
+            "TFMobileViTModel",
+            "TFMobileViTForImageClassification",
+            "TFMobileViTForSemanticSegmentation",
+        ]
+    )
     _import_structure["models.mpnet"].extend(
         [
             "TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -4847,6 +4856,7 @@ if TYPE_CHECKING:
         from .models.mbart import TFMBartForConditionalGeneration, TFMBartModel, TFMBartPreTrainedModel
         from .models.mobilebert import (
             TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFMobileBertForMaskedLM,
             TFMobileBertForMultipleChoice,
             TFMobileBertForNextSentencePrediction,
@@ -4857,6 +4867,10 @@ if TYPE_CHECKING:
             TFMobileBertMainLayer,
             TFMobileBertModel,
             TFMobileBertPreTrainedModel,
+            TFMobileViTForImageClassification,
+            TFMobileViTForSemanticSegmentation,
+            TFMobileViTModel,
+            TFMobileViTPreTrainedModel,
         )
         from .models.mpnet import (
             TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
