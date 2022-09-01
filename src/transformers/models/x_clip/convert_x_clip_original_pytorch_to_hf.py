@@ -36,7 +36,8 @@ def get_xclip_config(model_name, num_frames):
     text_config = XCLIPTextConfig()
 
     # derive patch size from model name
-    patch_size = int(model_name[-2:])
+    start_idx = model_name.find("patch")
+    patch_size = int(model_name[start_idx + len("patch") : start_idx + len("patch") + 2])
     vision_config = XCLIPVisionConfig(patch_size=patch_size, num_frames=num_frames)
 
     if "large" in model_name:
@@ -195,9 +196,11 @@ def convert_state_dict(orig_state_dict, config):
     return orig_state_dict
 
 
-def prepare_video():
+def prepare_video(num_frames):
+    filename = "eating_spaghetti_8_frames.npy" if num_frames == 8 else "eating_spaghetti.npy"
     file = hf_hub_download(
-        repo_id="datasets/hf-internal-testing/spaghetti-video", filename="eating_spaghetti_8_frames.npy"
+        repo_id="datasets/hf-internal-testing/spaghetti-video",
+        filename=filename,
     )
     video = np.load(file)
     return list(video)
@@ -227,7 +230,7 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, num_frames, pytorch_dum
     fast_tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32")
     processor = XCLIPProcessor(feature_extractor=feature_extractor, tokenizer=fast_tokenizer)
 
-    video = prepare_video()
+    video = prepare_video(num_frames)
     inputs = processor(
         text=["playing sports", "eating spaghetti", "go shopping"], videos=video, return_tensors="pt", padding=True
     )
@@ -241,6 +244,8 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, num_frames, pytorch_dum
     print("Probs:", probs)
     if model_name == "xclip-base-patch32":
         expected_probs = torch.tensor([[0.0019, 0.9951, 0.0030]])
+    elif model_name == "xclip-base-patch32-16-frames":
+        expected_probs = torch.tensor([[7.0999e-04, 9.9883e-01, 4.5580e-04]])
     elif model_name == "xclip-base-patch16":
         expected_probs = torch.tensor([[0.0083, 0.9681, 0.0236]])
     elif model_name == "xclip-large-patch14":
