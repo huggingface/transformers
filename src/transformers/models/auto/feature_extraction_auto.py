@@ -69,7 +69,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("swin", "ViTFeatureExtractor"),
         ("swinv2", "ViTFeatureExtractor"),
         ("van", "ConvNextFeatureExtractor"),
-        ("videomae", "ViTFeatureExtractor"),
+        ("videomae", "VideoMAEFeatureExtractor"),
         ("vilt", "ViltFeatureExtractor"),
         ("vit", "ViTFeatureExtractor"),
         ("vit_mae", "ViTFeatureExtractor"),
