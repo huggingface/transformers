@@ -442,7 +442,7 @@ class TFMobileViTLayer(tf.keras.layers.Layer):
         new_height = tf.cast(tf.math.ceil(orig_height / patch_height) * patch_height, "int32")
         new_width = tf.cast(tf.math.ceil(orig_width / patch_width) * patch_width, "int32")
 
-        interpolate = (new_width != orig_width or new_height != orig_height)
+        interpolate = new_width != orig_width or new_height != orig_height
         if interpolate:
             # Note: Padding can be done, but then it needs to be handled in attention function.
             features = tf.image.resize(features, size=(new_height, new_width), method="bilinear")
