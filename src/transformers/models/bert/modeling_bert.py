@@ -1506,23 +1506,28 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bert Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    Bert Model transformer with a sequence classification/regression head on join n last last hiddens states (a linear layer on top of the pooled
     output) e.g. for GLUE tasks.
     """,
     BERT_START_DOCSTRING,
 )
 class BertForSequenceClassification(BertPreTrainedModel):
-    def __init__(self, config):
+    def __init__(self, config, num_last_hidden_join = None):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
+        assert num_last_hidden_join > 0
+        assert num_last_hidden_join < config.num_hidden_layers
+        self.num_last_hiddens_join = (int)(num_last_hidden_join)
+        
 
         self.bert = BertModel(config)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(classifier_dropout)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.classifier = nn.Linear(config.hidden_size * num_last_hidden_join, config.num_labels)
+        
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1569,7 +1574,9 @@ class BertForSequenceClassification(BertPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = outputs[1]
+
+
+        pooled_output = torch.cat(outputs[2][-self.num_last_hiddens_join:], dim = -1)
 
         pooled_output = self.dropout(pooled_output)
         logits = self.classifier(pooled_output)
