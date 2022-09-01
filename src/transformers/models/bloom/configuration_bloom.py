@@ -60,18 +60,12 @@ class BloomConfig(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         n_head (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        attn_pdrop (`float`, *optional*, defaults to 0.1):
-            The dropout ratio for the attention.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-5):
             The epsilon to use in the layer normalization layers.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         apply_residual_connection_post_layernorm (`bool`, *optional*, defaults to `False`):
             If enabled, use the layer norm of the hidden states as the residual in the transformer blocks
-        skip_bias_add (`bool`, *optional*, defaults to `True`):
-            If set to `True`, it will skip bias add for each linear layer in the transformer blocks
-        skip_bias_add_qkv (`bool`, *optional*, defaults to `False`):
-            If set to `True`, it will skip bias add for the first linear layer in the transformer blocks
         hidden_dropout (`float`, *optional*, defaults to 0.1):
             Dropout rate of the dropout function on the bias dropout.
         attention_dropout (`float`, *optional*, defaults to 0.1):
