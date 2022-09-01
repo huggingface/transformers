@@ -40,7 +40,7 @@ _re_checkpoint = re.compile("\[(.+?)\]\((https://huggingface\.co/.+?)\)")
 
 
 CONFIG_CLASSES_TO_IGNORE_FOR_DOCSTRING_CHECKPOINT_CHECK = {
-    "XClipConfig",
+    "XCLIPConfig",
     "CLIPConfig",
     "OwlViTConfig",
     "GroupViTConfig",

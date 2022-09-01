@@ -19,7 +19,7 @@ from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
 
 
-class XClipProcessor(ProcessorMixin):
+class XCLIPProcessor(ProcessorMixin):
     r"""
     Constructs an X-CLIP processor which wraps a VideoMAE feature extractor and a CLIP tokenizer into a single
     processor.

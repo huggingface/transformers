@@ -1,11 +1,11 @@
 import torch
 
 from huggingface_hub import hf_hub_download
-from transformers import AutoTokenizer, XClipConfig, XClipModel
+from transformers import AutoTokenizer, XCLIPConfig, XCLIPModel
 
 
-config = XClipConfig()
-model = XClipModel(config)
+config = XCLIPConfig()
+model = XCLIPModel(config)
 
 file_path = hf_hub_download(
     repo_id="hf-internal-testing/spaghetti-video-8-frames", filename="pixel_values.pt", repo_type="dataset"

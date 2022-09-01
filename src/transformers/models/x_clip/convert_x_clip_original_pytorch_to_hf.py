@@ -23,14 +23,14 @@ from transformers import (
     CLIPTokenizer,
     CLIPTokenizerFast,
     VideoMAEFeatureExtractor,
-    XClipConfig,
-    XClipModel,
-    XClipProcessor,
+    XCLIPConfig,
+    XCLIPModel,
+    XCLIPProcessor,
 )
 
 
 def get_xclip_config(model_name):
-    config = XClipConfig()
+    config = XCLIPConfig()
     return config
 
 
@@ -180,13 +180,13 @@ def prepare_video():
 
 def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_path=None, push_to_hub=False):
     config = get_xclip_config(model_name)
-    model = XClipModel(config)
+    model = XCLIPModel(config)
     model.eval()
 
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url)["model"]
     state_dict = convert_state_dict(state_dict, config)
 
-    model = XClipModel(config)
+    model = XCLIPModel(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     assert missing_keys == ["text_model.embeddings.position_ids", "vision_model.embeddings.position_ids"]
     model.eval()
@@ -194,7 +194,7 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_pat
     feature_extractor = VideoMAEFeatureExtractor()
     slow_tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
     fast_tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32")
-    processor = XClipProcessor(feature_extractor=feature_extractor, tokenizer=fast_tokenizer)
+    processor = XCLIPProcessor(feature_extractor=feature_extractor, tokenizer=fast_tokenizer)
 
     video = prepare_video()
     inputs = processor(
@@ -205,8 +205,8 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, pytorch_dump_folder_pat
         outputs = model(**inputs)
 
     # Verify outputs
-    logits_per_image = outputs.logits_per_image
-    probs = logits_per_image.softmax(dim=1)
+    logits_per_video = outputs.logits_per_video
+    probs = logits_per_video.softmax(dim=1)
     expected_probs = torch.tensor([[0.0019, 0.9951, 0.0030]])
     assert torch.allclose(probs, expected_probs, atol=1e-3)
     print("Looks ok!")

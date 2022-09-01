@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" XClip model configuration"""
+""" X-CLIP model configuration"""
 
 import copy
 import os
@@ -29,11 +29,11 @@ X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class XClipTextConfig(PretrainedConfig):
+class XCLIPTextConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`XClipModel`]. It is used to instantiate an XClip
+    This is the configuration class to store the configuration of a [`XCLIPModel`]. It is used to instantiate an X-CLIP
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the XClip
+    defaults will yield a similar configuration to that of the X-CLIP
     [microsoft/xclip-base-patch32](https://huggingface.co/microsoft/xclip-base-patch32) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -42,8 +42,8 @@ class XClipTextConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
-            Vocabulary size of the XClip text model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`XClipModel`].
+            Vocabulary size of the X-CLIP text model. Defines the number of different tokens that can be represented by
+            the `inputs_ids` passed when calling [`XCLIPModel`].
         hidden_size (`int`, *optional*, defaults to 512):
             Dimensionality of the encoder layers and the pooler layer.
         intermediate_size (`int`, *optional*, defaults to 2048):
@@ -73,13 +73,13 @@ class XClipTextConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import XClipTextModel, XClipTextConfig
+    >>> from transformers import XCLIPTextModel, XCLIPTextConfig
 
-    >>> # Initializing a XClipTextModel with microsoft/xclip-base-patch32 style configuration
-    >>> configuration = XClipTextConfig()
+    >>> # Initializing a XCLIPTextModel with microsoft/xclip-base-patch32 style configuration
+    >>> configuration = XCLIPTextConfig()
 
-    >>> # Initializing a XClipTextConfig from the microsoft/xclip-base-patch32 style configuration
-    >>> model = XClipTextModel(configuration)
+    >>> # Initializing a XCLIPTextConfig from the microsoft/xclip-base-patch32 style configuration
+    >>> model = XCLIPTextModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -125,7 +125,7 @@ class XClipTextConfig(PretrainedConfig):
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the text config dict if we are loading from XClipConfig
+        # get the text config dict if we are loading from XCLIPConfig
         if config_dict.get("model_type") == "xclip":
             config_dict = config_dict["text_config"]
 
@@ -138,11 +138,11 @@ class XClipTextConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class XClipVisionConfig(PretrainedConfig):
+class XCLIPVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`XClipModel`]. It is used to instantiate an XClip
+    This is the configuration class to store the configuration of a [`XCLIPModel`]. It is used to instantiate an X-CLIP
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the XClip
+    defaults will yield a similar configuration to that of the X-CLIP
     [microsoft/xclip-base-patch32](https://huggingface.co/microsoft/xclip-base-patch32) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -191,13 +191,13 @@ class XClipVisionConfig(PretrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import XClipVisionModel, XClipVisionConfig
+    >>> from transformers import XCLIPVisionModel, XCLIPVisionConfig
 
-    >>> # Initializing a XClipVisionModel with microsoft/xclip-base-patch32 style configuration
-    >>> configuration = XClipVisionConfig()
+    >>> # Initializing a XCLIPVisionModel with microsoft/xclip-base-patch32 style configuration
+    >>> configuration = XCLIPVisionConfig()
 
-    >>> # Initializing a XClipVisionModel model from the microsoft/xclip-base-patch32 style configuration
-    >>> model = XClipVisionModel(configuration)
+    >>> # Initializing a XCLIPVisionModel model from the microsoft/xclip-base-patch32 style configuration
+    >>> model = XCLIPVisionModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -255,7 +255,7 @@ class XClipVisionConfig(PretrainedConfig):
 
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
-        # get the vision config dict if we are loading from XClipConfig
+        # get the vision config dict if we are loading from XCLIPConfig
         if config_dict.get("model_type") == "xclip":
             config_dict = config_dict["vision_config"]
 
@@ -268,19 +268,19 @@ class XClipVisionConfig(PretrainedConfig):
         return cls.from_dict(config_dict, **kwargs)
 
 
-class XClipConfig(PretrainedConfig):
+class XCLIPConfig(PretrainedConfig):
     r"""
-    [`XClipConfig`] is the configuration class to store the configuration of a [`XClipModel`]. It is used to
-    instantiate XClip model according to the specified arguments, defining the text model and vision model configs.
+    [`XCLIPConfig`] is the configuration class to store the configuration of a [`XCLIPModel`]. It is used to
+    instantiate X-CLIP model according to the specified arguments, defining the text model and vision model configs.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
         text_config_dict (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`XClipTextConfig`].
+            Dictionary of configuration options used to initialize [`XCLIPTextConfig`].
         vision_config_dict (`dict`, *optional*):
-            Dictionary of configuration options used to initialize [`XClipVisionConfig`].
+            Dictionary of configuration options used to initialize [`XCLIPVisionConfig`].
         projection_dim (`int`, *optional*, defaults to 512):
             Dimentionality of text and vision projection layers.
         prompt_layers (`int`, *optional*, defaults to 2):
@@ -297,7 +297,7 @@ class XClipConfig(PretrainedConfig):
         prompt_projection_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for the projection layers in the video specific prompt generator.
         logit_scale_init_value (`float`, *optional*, defaults to 2.6592):
-            The inital value of the *logit_scale* parameter. Default is used as per the original XClip implementation.
+            The inital value of the *logit_scale* parameter. Default is used as per the original XCLIP implementation.
         kwargs (*optional*):
             Dictionary of keyword arguments.
     """
@@ -323,14 +323,14 @@ class XClipConfig(PretrainedConfig):
 
         if text_config_dict is None:
             text_config_dict = {}
-            logger.info("text_config_dict is None. Initializing the XClipTextConfig with default values.")
+            logger.info("text_config_dict is None. Initializing the XCLIPTextConfig with default values.")
 
         if vision_config_dict is None:
             vision_config_dict = {}
-            logger.info("vision_config_dict is None. initializing the XClipVisionConfig with default values.")
+            logger.info("vision_config_dict is None. initializing the XCLIPVisionConfig with default values.")
 
-        self.text_config = XClipTextConfig(**text_config_dict)
-        self.vision_config = XClipVisionConfig(**vision_config_dict)
+        self.text_config = XCLIPTextConfig(**text_config_dict)
+        self.vision_config = XCLIPVisionConfig(**vision_config_dict)
 
         self.projection_dim = projection_dim
         self.prompt_layers = prompt_layers
@@ -343,13 +343,13 @@ class XClipConfig(PretrainedConfig):
         self.initializer_factor = 1.0
 
     @classmethod
-    def from_text_vision_configs(cls, text_config: XClipTextConfig, vision_config: XClipVisionConfig, **kwargs):
+    def from_text_vision_configs(cls, text_config: XCLIPTextConfig, vision_config: XCLIPVisionConfig, **kwargs):
         r"""
-        Instantiate a [`XClipConfig`] (or a derived class) from xclip text model configuration and xclip vision model
+        Instantiate a [`XCLIPConfig`] (or a derived class) from xclip text model configuration and xclip vision model
         configuration.
 
         Returns:
-            [`XClipConfig`]: An instance of a configuration object
+            [`XCLIPConfig`]: An instance of a configuration object
         """
 
         return cls(text_config_dict=text_config.to_dict(), vision_config_dict=vision_config.to_dict(), **kwargs)

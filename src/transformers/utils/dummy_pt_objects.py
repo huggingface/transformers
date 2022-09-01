@@ -5171,28 +5171,28 @@ class WavLMPreTrainedModel(metaclass=DummyObject):
 X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class XClipModel(metaclass=DummyObject):
+class XCLIPModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class XClipPreTrainedModel(metaclass=DummyObject):
+class XCLIPPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class XClipTextModel(metaclass=DummyObject):
+class XCLIPTextModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class XClipVisionModel(metaclass=DummyObject):
+class XCLIPVisionModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

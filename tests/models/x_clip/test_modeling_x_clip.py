@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch XClip model. """
+""" Testing suite for the PyTorch XCLIP model. """
 
 
 import inspect
@@ -23,7 +23,7 @@ import unittest
 import numpy as np
 
 from huggingface_hub import hf_hub_download
-from transformers import XClipConfig, XClipTextConfig, XClipVisionConfig
+from transformers import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 from transformers.testing_utils import require_torch, require_torch_multi_gpu, require_vision, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -41,15 +41,15 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import XClipModel, XClipTextModel, XClipVisionModel
+    from transformers import XCLIPModel, XCLIPTextModel, XCLIPVisionModel
     from transformers.models.x_clip.modeling_x_clip import X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
-    from transformers import XClipProcessor
+    from transformers import XCLIPProcessor
 
 
-class XClipVisionModelTester:
+class XCLIPVisionModelTester:
     def __init__(
         self,
         parent,
@@ -99,7 +99,7 @@ class XClipVisionModelTester:
         return config, pixel_values
 
     def get_config(self):
-        return XClipVisionConfig(
+        return XCLIPVisionConfig(
             image_size=self.image_size,
             patch_size=self.patch_size,
             num_channels=self.num_channels,
@@ -115,7 +115,7 @@ class XClipVisionModelTester:
         )
 
     def create_and_check_model(self, config, pixel_values):
-        model = XClipVisionModel(config=config)
+        model = XCLIPVisionModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -137,22 +137,22 @@ class XClipVisionModelTester:
 
 
 @require_torch
-class XClipVisionModelTest(ModelTesterMixin, unittest.TestCase):
+class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as X_CLIP does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
-    all_model_classes = (XClipVisionModel,) if is_torch_available() else ()
+    all_model_classes = (XCLIPVisionModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = XClipVisionModelTester(self)
+        self.model_tester = XCLIPVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=XClipVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=XCLIPVisionConfig, has_text_modality=False, hidden_size=37
         )
 
     def test_config(self):
@@ -193,18 +193,18 @@ class XClipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="XClipVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="XCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="XClipVisionModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="XCLIPVisionModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
         for model_name in X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = XClipVisionModel.from_pretrained(model_name)
+            model = XCLIPVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_gradient_checkpointing_backward_compatibility(self):
@@ -306,7 +306,7 @@ class XClipVisionModelTest(ModelTesterMixin, unittest.TestCase):
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
 
-class XClipTextModelTester:
+class XCLIPTextModelTester:
     def __init__(
         self,
         parent,
@@ -362,7 +362,7 @@ class XClipTextModelTester:
         return config, input_ids, input_mask
 
     def get_config(self):
-        return XClipTextConfig(
+        return XCLIPTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -375,7 +375,7 @@ class XClipTextModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask):
-        model = XClipTextModel(config=config)
+        model = XCLIPTextModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
@@ -392,16 +392,16 @@ class XClipTextModelTester:
 
 
 @require_torch
-class XClipTextModelTest(ModelTesterMixin, unittest.TestCase):
+class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
-    all_model_classes = (XClipTextModel,) if is_torch_available() else ()
+    all_model_classes = (XCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = XClipTextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=XClipTextConfig, hidden_size=37)
+        self.model_tester = XCLIPTextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=XCLIPTextConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -420,28 +420,28 @@ class XClipTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="XClipTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="XCLIPTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @unittest.skip(reason="XClipTextModel has no base class and is not available in MODEL_MAPPING")
+    @unittest.skip(reason="XCLIPTextModel has no base class and is not available in MODEL_MAPPING")
     def test_save_load_fast_init_to_base(self):
         pass
 
     @slow
     def test_model_from_pretrained(self):
         for model_name in X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = XClipTextModel.from_pretrained(model_name)
+            model = XCLIPTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
-class XClipModelTester:
+class XCLIPModelTester:
     def __init__(self, parent, projection_dim=64, mit_hidden_size=64, is_training=True):
         self.parent = parent
         self.projection_dim = projection_dim
         self.mit_hidden_size = mit_hidden_size
-        self.text_model_tester = XClipTextModelTester(parent)
-        self.vision_model_tester = XClipVisionModelTester(parent)
+        self.text_model_tester = XCLIPTextModelTester(parent)
+        self.vision_model_tester = XCLIPVisionModelTester(parent)
         self.is_training = is_training
 
     def prepare_config_and_inputs(self):
@@ -462,14 +462,14 @@ class XClipModelTester:
         return config, input_ids, attention_mask, pixel_values
 
     def get_config(self):
-        return XClipConfig.from_text_vision_configs(
+        return XCLIPConfig.from_text_vision_configs(
             self.text_model_tester.get_config(),
             self.vision_model_tester.get_config(),
             projection_dim=self.projection_dim,
         )
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values):
-        model = XClipModel(config).to(torch_device).eval()
+        model = XCLIPModel(config).to(torch_device).eval()
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask)
         self.parent.assertEqual(
@@ -500,8 +500,8 @@ class XClipModelTester:
 
 
 @require_torch
-class XClipModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (XClipModel,) if is_torch_available() else ()
+class XCLIPModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (XCLIPModel,) if is_torch_available() else ()
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
@@ -511,7 +511,7 @@ class XClipModelTest(ModelTesterMixin, unittest.TestCase):
     maxdiff = None
 
     def setUp(self):
-        self.model_tester = XClipModelTester(self)
+        self.model_tester = XCLIPModelTester(self)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -529,11 +529,11 @@ class XClipModelTest(ModelTesterMixin, unittest.TestCase):
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
-    @unittest.skip(reason="XClipModel does not have input/output embeddings")
+    @unittest.skip(reason="XCLIPModel does not have input/output embeddings")
     def test_model_common_attributes(self):
         pass
 
-    @unittest.skip(reason="XClipModel does not support feedforward chunking")
+    @unittest.skip(reason="XCLIPModel does not support feedforward chunking")
     def test_feed_forward_chunking(self):
         pass
 
@@ -617,22 +617,22 @@ class XClipModelTest(ModelTesterMixin, unittest.TestCase):
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # Save XClipConfig and check if we can load XClipVisionConfig from it
+        # Save XCLIPConfig and check if we can load XCLIPVisionConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            vision_config = XClipVisionConfig.from_pretrained(tmp_dir_name)
+            vision_config = XCLIPVisionConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.vision_config.to_dict(), vision_config.to_dict())
 
-        # Save XClipConfig and check if we can load XClipTextConfig from it
+        # Save XCLIPConfig and check if we can load XCLIPTextConfig from it
         with tempfile.TemporaryDirectory() as tmp_dir_name:
             config.save_pretrained(tmp_dir_name)
-            text_config = XClipTextConfig.from_pretrained(tmp_dir_name)
+            text_config = XCLIPTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
     @slow
     def test_model_from_pretrained(self):
         for model_name in X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = XClipModel.from_pretrained(model_name)
+            model = XCLIPModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
 
@@ -647,13 +647,13 @@ def prepare_video():
 
 @require_vision
 @require_torch
-class XClipModelIntegrationTest(unittest.TestCase):
+class XCLIPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         # TODO update organization
         model_name = "nielsr/xclip-base-patch32"
-        model = XClipModel.from_pretrained(model_name).to(torch_device)
-        processor = XClipProcessor.from_pretrained(model_name)
+        model = XCLIPModel.from_pretrained(model_name).to(torch_device)
+        processor = XCLIPProcessor.from_pretrained(model_name)
 
         video = prepare_video()
         inputs = processor(

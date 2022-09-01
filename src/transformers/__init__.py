@@ -370,10 +370,10 @@ _import_structure = {
     ],
     "models.x_clip": [
         "X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "XClipConfig",
-        "XClipProcessor",
-        "XClipTextConfig",
-        "XClipVisionConfig",
+        "XCLIPConfig",
+        "XCLIPProcessor",
+        "XCLIPTextConfig",
+        "XCLIPVisionConfig",
     ],
     "models.xglm": ["XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XGLMConfig"],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
@@ -993,10 +993,10 @@ else:
     _import_structure["models.x_clip"].extend(
         [
             "X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "XClipModel",
-            "XClipPreTrainedModel",
-            "XClipTextModel",
-            "XClipVisionModel",
+            "XCLIPModel",
+            "XCLIPPreTrainedModel",
+            "XCLIPTextModel",
+            "XCLIPVisionModel",
         ]
     )
     _import_structure["models.convbert"].extend(
@@ -3183,10 +3183,10 @@ if TYPE_CHECKING:
     from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
     from .models.x_clip import (
         X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        XClipConfig,
-        XClipProcessor,
-        XClipTextConfig,
-        XClipVisionConfig,
+        XCLIPConfig,
+        XCLIPProcessor,
+        XCLIPTextConfig,
+        XCLIPVisionConfig,
     )
     from .models.xglm import XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XGLMConfig
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
@@ -4490,10 +4490,10 @@ if TYPE_CHECKING:
         )
         from .models.x_clip import (
             X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            XClipModel,
-            XClipPreTrainedModel,
-            XClipTextModel,
-            XClipVisionModel,
+            XCLIPModel,
+            XCLIPPreTrainedModel,
+            XCLIPTextModel,
+            XCLIPVisionModel,
         )
         from .models.xglm import XGLM_PRETRAINED_MODEL_ARCHIVE_LIST, XGLMForCausalLM, XGLMModel, XGLMPreTrainedModel
         from .models.xlm import (

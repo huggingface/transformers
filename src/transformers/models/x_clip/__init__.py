@@ -23,11 +23,11 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 _import_structure = {
     "configuration_x_clip": [
         "X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "XClipConfig",
-        "XClipTextConfig",
-        "XClipVisionConfig",
+        "XCLIPConfig",
+        "XCLIPTextConfig",
+        "XCLIPVisionConfig",
     ],
-    "processing_x_clip": ["XClipProcessor"],
+    "processing_x_clip": ["XCLIPProcessor"],
 }
 
 try:
@@ -38,20 +38,20 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_x_clip"] = [
         "X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "XClipModel",
-        "XClipPreTrainedModel",
-        "XClipTextModel",
-        "XClipVisionModel",
+        "XCLIPModel",
+        "XCLIPPreTrainedModel",
+        "XCLIPTextModel",
+        "XCLIPVisionModel",
     ]
 
 if TYPE_CHECKING:
     from .configuration_x_clip import (
         X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        XClipConfig,
-        XClipTextConfig,
-        XClipVisionConfig,
+        XCLIPConfig,
+        XCLIPTextConfig,
+        XCLIPVisionConfig,
     )
-    from .processing_x_clip import XClipProcessor
+    from .processing_x_clip import XCLIPProcessor
 
     try:
         if not is_torch_available():
@@ -61,10 +61,10 @@ if TYPE_CHECKING:
     else:
         from .modeling_x_clip import (
             X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
-            XClipModel,
-            XClipPreTrainedModel,
-            XClipTextModel,
-            XClipVisionModel,
+            XCLIPModel,
+            XCLIPPreTrainedModel,
+            XCLIPTextModel,
+            XCLIPVisionModel,
         )
 
 else:

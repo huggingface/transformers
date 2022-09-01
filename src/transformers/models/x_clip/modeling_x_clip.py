@@ -33,7 +33,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_x_clip import XClipConfig, XClipTextConfig, XClipVisionConfig
+from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 
 
 logger = logging.get_logger(__name__)
@@ -63,7 +63,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 
 # contrastive loss function, adapted from
-# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/XClip.html
+# https://sachinruk.github.io/blog/pytorch/pytorch%20lightning/loss%20function/gpu/2021/03/07/clip.html
 def contrastive_loss(logits: torch.Tensor) -> torch.Tensor:
     return nn.functional.cross_entropy(logits, torch.arange(len(logits), device=logits.device))
 
@@ -76,7 +76,7 @@ def x_clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 
 
 @dataclass
-class XClipOutput(ModelOutput):
+class XCLIPOutput(ModelOutput):
     """
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
@@ -88,16 +88,16 @@ class XClipOutput(ModelOutput):
             The scaled dot product scores between `text_embeds` and `video_embeds`. This represents the text-video
             similarity scores.
         text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
-            The text embeddings obtained by applying the projection layer to the pooled output of [`XClipTextModel`].
+            The text embeddings obtained by applying the projection layer to the pooled output of [`XCLIPTextModel`].
         video_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The video embeddings obtained by applying the projection layer to the pooled output of
-            [`XClipVisionModel`].
+            [`XCLIPVisionModel`].
         text_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`XClipTextModel`].
+            The output of the [`XCLIPTextModel`].
         vision_model_output (`BaseModelOutputWithPooling`):
-            The output of the [`XClipVisionModel`].
+            The output of the [`XCLIPVisionModel`].
         mit_output (`BaseModelOutputWithPooling`):
-            The output of `XClipMultiframeIntegrationTransformer` (MIT for short).
+            The output of `XCLIPMultiframeIntegrationTransformer` (MIT for short).
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -118,9 +118,9 @@ class XClipOutput(ModelOutput):
         )
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->XClip
-class XClipVisionEmbeddings(nn.Module):
-    def __init__(self, config: XClipVisionConfig):
+# Copied from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings with CLIP->XCLIP
+class XCLIPVisionEmbeddings(nn.Module):
+    def __init__(self, config: XCLIPVisionConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -149,9 +149,9 @@ class XClipVisionEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->XClip
-class XClipTextEmbeddings(nn.Module):
-    def __init__(self, config: XClipTextConfig):
+# Copied from transformers.models.clip.modeling_clip.CLIPTextEmbeddings with CLIP->XCLIP
+class XCLIPTextEmbeddings(nn.Module):
+    def __init__(self, config: XCLIPTextConfig):
         super().__init__()
         embed_dim = config.hidden_size
 
@@ -181,8 +181,8 @@ class XClipTextEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->XClip
-class XClipAttention(nn.Module):
+# Copied from transformers.models.clip.modeling_clip.CLIPAttention with CLIP->XCLIP
+class XCLIPAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -286,8 +286,8 @@ class XClipAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->XClip
-class XClipMLP(nn.Module):
+# Copied from transformers.models.clip.modeling_clip.CLIPMLP with CLIP->XCLIP
+class XCLIPMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -302,14 +302,14 @@ class XClipMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->XClip
-class XClipEncoderLayer(nn.Module):
-    def __init__(self, config: XClipConfig):
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoderLayer with CLIP->XCLIP
+class XCLIPEncoderLayer(nn.Module):
+    def __init__(self, config: XCLIPConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
-        self.self_attn = XClipAttention(config)
+        self.self_attn = XCLIPAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim)
-        self.mlp = XClipMLP(config)
+        self.mlp = XCLIPMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim)
 
     def forward(
@@ -374,8 +374,8 @@ def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     return output
 
 
-# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->XClip
-class XClipDropPath(nn.Module):
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->XCLIP
+class XCLIPDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -389,12 +389,12 @@ class XClipDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-class XClipVisionEncoderLayer(nn.Module):
+class XCLIPVisionEncoderLayer(nn.Module):
     """
     This corresponds to the `CrossFramelAttentionBlock` class in the original implementation.
     """
 
-    def __init__(self, config: XClipConfig):
+    def __init__(self, config: XCLIPConfig):
         super().__init__()
         self.num_frames = config.num_frames
 
@@ -402,13 +402,13 @@ class XClipVisionEncoderLayer(nn.Module):
 
         self.message_fc = nn.Linear(self.embed_dim, self.embed_dim)
         self.message_ln = nn.LayerNorm(self.embed_dim)
-        self.message_attn = XClipAttention(config)
+        self.message_attn = XCLIPAttention(config)
 
-        self.drop_path = XClipDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = XCLIPDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
 
-        self.self_attn = XClipAttention(config)
+        self.self_attn = XCLIPAttention(config)
         self.layer_norm1 = nn.LayerNorm(self.embed_dim)
-        self.mlp = XClipMLP(config)
+        self.mlp = XCLIPMLP(config)
         self.layer_norm2 = nn.LayerNorm(self.embed_dim)
 
     def forward(
@@ -465,13 +465,13 @@ class XClipVisionEncoderLayer(nn.Module):
         return outputs
 
 
-class XClipPreTrainedModel(PreTrainedModel):
+class XCLIPPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = XClipConfig
+    config_class = XCLIPConfig
     base_model_prefix = "x_clip"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -479,15 +479,15 @@ class XClipPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
-        if isinstance(module, XClipTextEmbeddings):
+        if isinstance(module, XCLIPTextEmbeddings):
             module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
             module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-        elif isinstance(module, XClipVisionEmbeddings):
+        elif isinstance(module, XCLIPVisionEmbeddings):
             factor = self.config.initializer_factor
             nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
             nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
             nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
-        elif isinstance(module, XClipAttention):
+        elif isinstance(module, XCLIPAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
@@ -495,7 +495,7 @@ class XClipPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.k_proj.weight, std=in_proj_std)
             nn.init.normal_(module.v_proj.weight, std=in_proj_std)
             nn.init.normal_(module.out_proj.weight, std=out_proj_std)
-        elif isinstance(module, XClipMLP):
+        elif isinstance(module, XCLIPMLP):
             factor = self.config.initializer_factor
             in_proj_std = (
                 (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
@@ -503,7 +503,7 @@ class XClipPreTrainedModel(PreTrainedModel):
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
-        elif isinstance(module, XClipModel):
+        elif isinstance(module, XCLIPModel):
             factor = self.config.initializer_factor
             nn.init.normal_(
                 module.text_projection.weight,
@@ -514,7 +514,7 @@ class XClipPreTrainedModel(PreTrainedModel):
                 std=module.vision_embed_dim**-0.5 * factor,
             )
             nn.init.normal_(module.prompts_visual_projection, mean=0.0, std=module.vision_embed_dim**-0.5 * factor)
-        elif isinstance(module, XClipMultiframeIntegrationTransformer):
+        elif isinstance(module, XCLIPMultiframeIntegrationTransformer):
             nn.init.normal_(module.position_embedding, std=self.config.initializer_factor)
 
         if isinstance(module, nn.LayerNorm):
@@ -526,7 +526,7 @@ class XClipPreTrainedModel(PreTrainedModel):
                 module.bias.data.zero_()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (XClipEncoder, XClipVisionEncoder)):
+        if isinstance(module, (XCLIPEncoder, XCLIPVisionEncoder)):
             module.gradient_checkpointing = value
 
 
@@ -536,7 +536,7 @@ X_CLIP_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`XClipConfig`]): Model configuration class with all the parameters of the model.
+        config ([`XCLIPConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -626,20 +626,20 @@ X_CLIP_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->XClip
-class XClipEncoder(nn.Module):
+# Copied from transformers.models.clip.modeling_clip.CLIPEncoder with CLIP->XCLIP
+class XCLIPEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`XClipEncoderLayer`].
+    [`XCLIPEncoderLayer`].
 
     Args:
-        config: XClipConfig
+        config: XCLIPConfig
     """
 
-    def __init__(self, config: XClipConfig):
+    def __init__(self, config: XCLIPConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([XClipEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([XCLIPEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -730,17 +730,17 @@ class XClipEncoder(nn.Module):
         )
 
 
-class XClipTextTransformer(nn.Module):
-    def __init__(self, config: XClipTextConfig):
+class XCLIPTextTransformer(nn.Module):
+    def __init__(self, config: XCLIPTextConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
-        self.embeddings = XClipTextEmbeddings(config)
-        self.encoder = XClipEncoder(config)
+        self.embeddings = XCLIPTextEmbeddings(config)
+        self.encoder = XCLIPEncoder(config)
         self.final_layer_norm = nn.LayerNorm(embed_dim)
 
     @add_start_docstrings_to_model_forward(X_CLIP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=XClipTextConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=XCLIPTextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -815,12 +815,12 @@ class XClipTextTransformer(nn.Module):
         return mask
 
 
-class XClipTextModel(XClipPreTrainedModel):
-    config_class = XClipTextConfig
+class XCLIPTextModel(XCLIPPreTrainedModel):
+    config_class = XCLIPTextConfig
 
-    def __init__(self, config: XClipTextConfig):
+    def __init__(self, config: XCLIPTextConfig):
         super().__init__(config)
-        self.text_model = XClipTextTransformer(config)
+        self.text_model = XCLIPTextTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -831,7 +831,7 @@ class XClipTextModel(XClipPreTrainedModel):
         self.text_model.embeddings.token_embedding = value
 
     @add_start_docstrings_to_model_forward(X_CLIP_TEXT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=XClipTextConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=XCLIPTextConfig)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -847,9 +847,9 @@ class XClipTextModel(XClipPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, XClipTextModel
+        >>> from transformers import CLIPTokenizer, XCLIPTextModel
 
-        >>> model = XClipTextModel.from_pretrained("microsoft/xclip-base-patch32")
+        >>> model = XCLIPTextModel.from_pretrained("microsoft/xclip-base-patch32")
         >>> tokenizer = CLIPTokenizer.from_pretrained("microsoft/xclip-base-patch32")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
@@ -868,19 +868,19 @@ class XClipTextModel(XClipPreTrainedModel):
         )
 
 
-class XClipVisionEncoder(nn.Module):
+class XCLIPVisionEncoder(nn.Module):
     """
     Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
-    [`XClipVisionEncoderLayer`].
+    [`XCLIPVisionEncoderLayer`].
 
     Args:
-        config: XClipConfig
+        config: XCLIPConfig
     """
 
-    def __init__(self, config: XClipConfig):
+    def __init__(self, config: XCLIPConfig):
         super().__init__()
         self.config = config
-        self.layers = nn.ModuleList([XClipVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([XCLIPVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     def forward(
@@ -971,23 +971,23 @@ class XClipVisionEncoder(nn.Module):
         )
 
 
-class XClipVisionTransformer(nn.Module):
+class XCLIPVisionTransformer(nn.Module):
     """
     This corresponds to the `CrossFrameCommunicationTransformer` class in the original implementation.
     """
 
-    def __init__(self, config: XClipVisionConfig):
+    def __init__(self, config: XCLIPVisionConfig):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size
 
-        self.embeddings = XClipVisionEmbeddings(config)
+        self.embeddings = XCLIPVisionEmbeddings(config)
         self.pre_layernorm = nn.LayerNorm(embed_dim)
-        self.encoder = XClipVisionEncoder(config)
+        self.encoder = XCLIPVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(embed_dim)
 
     @add_start_docstrings_to_model_forward(X_CLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=XClipVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=XCLIPVisionConfig)
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1030,13 +1030,13 @@ class XClipVisionTransformer(nn.Module):
         )
 
 
-class XClipVisionModel(XClipPreTrainedModel):
-    config_class = XClipVisionConfig
+class XCLIPVisionModel(XCLIPPreTrainedModel):
+    config_class = XCLIPVisionConfig
     main_input_name = "pixel_values"
 
-    def __init__(self, config: XClipVisionConfig):
+    def __init__(self, config: XCLIPVisionConfig):
         super().__init__(config)
-        self.vision_model = XClipVisionTransformer(config)
+        self.vision_model = XCLIPVisionTransformer(config)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1044,7 +1044,7 @@ class XClipVisionModel(XClipPreTrainedModel):
         return self.vision_model.embeddings.patch_embedding
 
     @add_start_docstrings_to_model_forward(X_CLIP_VISION_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=XClipVisionConfig)
+    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=XCLIPVisionConfig)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1060,9 +1060,9 @@ class XClipVisionModel(XClipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, XClipVisionModel
+        >>> from transformers import CLIPProcessor, XCLIPVisionModel
 
-        >>> model = XClipVisionModel.from_pretrained("microsoft/xclip-base-patch32")
+        >>> model = XCLIPVisionModel.from_pretrained("microsoft/xclip-base-patch32")
         >>> processor = CLIPProcessor.from_pretrained("microsoft/xclip-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1082,16 +1082,16 @@ class XClipVisionModel(XClipPreTrainedModel):
         )
 
 
-class XClipMultiframeIntegrationTransformer(nn.Module):
+class XCLIPMultiframeIntegrationTransformer(nn.Module):
     """
     This corresponds to the `MultiframeIntegrationTransformer` class in the original implementation.
     """
 
-    def __init__(self, config: XClipVisionConfig):
+    def __init__(self, config: XCLIPVisionConfig):
         super().__init__()
 
         self.position_embedding = nn.Parameter(torch.empty(1, config.num_frames, config.hidden_size))
-        self.encoder = XClipEncoder(config)
+        self.encoder = XCLIPEncoder(config)
 
     def forward(
         self,
@@ -1128,7 +1128,7 @@ class XClipMultiframeIntegrationTransformer(nn.Module):
         )
 
 
-class XClipCrossAttention(nn.Module):
+class XCLIPCrossAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config):
@@ -1173,7 +1173,7 @@ class PromptGeneratorLayer(nn.Module):
         super().__init__()
 
         embed_dim = config.projection_dim
-        self.cross_attn = XClipCrossAttention(config)
+        self.cross_attn = XCLIPCrossAttention(config)
         self.norm1 = nn.LayerNorm(embed_dim)
         self.norm3 = nn.LayerNorm(embed_dim)
         self.mlp = nn.Sequential(
@@ -1189,7 +1189,7 @@ class PromptGeneratorLayer(nn.Module):
         return x
 
 
-class XClipPromptGenerator(nn.Module):
+class XCLIPPromptGenerator(nn.Module):
     """This corresponds to the `VideoSpecificPrompt` class in the original implementation."""
 
     def __init__(self, config):
@@ -1208,21 +1208,21 @@ class XClipPromptGenerator(nn.Module):
 
 
 @add_start_docstrings(X_CLIP_START_DOCSTRING)
-class XClipModel(XClipPreTrainedModel):
-    config_class = XClipConfig
+class XCLIPModel(XCLIPPreTrainedModel):
+    config_class = XCLIPConfig
 
-    def __init__(self, config: XClipConfig):
+    def __init__(self, config: XCLIPConfig):
         super().__init__(config)
 
-        if not isinstance(config.text_config, XClipTextConfig):
+        if not isinstance(config.text_config, XCLIPTextConfig):
             raise ValueError(
-                "config.text_config is expected to be of type XClipTextConfig but is of type"
+                "config.text_config is expected to be of type XCLIPTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
-        if not isinstance(config.vision_config, XClipVisionConfig):
+        if not isinstance(config.vision_config, XCLIPVisionConfig):
             raise ValueError(
-                "config.vision_config is expected to be of type XClipVisionConfig but is of type"
+                "config.vision_config is expected to be of type XCLIPVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
 
@@ -1233,8 +1233,8 @@ class XClipModel(XClipPreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        self.text_model = XClipTextTransformer(text_config)
-        self.vision_model = XClipVisionTransformer(vision_config)
+        self.text_model = XCLIPTextTransformer(text_config)
+        self.vision_model = XCLIPVisionTransformer(vision_config)
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
@@ -1248,9 +1248,9 @@ class XClipModel(XClipPreTrainedModel):
         mit_config.intermediate_size = vision_config.mit_intermediate_size
         mit_config.num_hidden_layers = vision_config.mit_num_hidden_layers
         mit_config.num_attention_heads = vision_config.mit_num_attention_heads
-        self.mit = XClipMultiframeIntegrationTransformer(mit_config)
+        self.mit = XCLIPMultiframeIntegrationTransformer(mit_config)
 
-        self.prompts_generator = XClipPromptGenerator(config)
+        self.prompts_generator = XCLIPPromptGenerator(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1268,14 +1268,14 @@ class XClipModel(XClipPreTrainedModel):
         r"""
         Returns:
             text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`XClipTextModel`].
+            applying the projection layer to the pooled output of [`XCLIPTextModel`].
 
         Examples:
 
         ```python
-        >>> from transformers import CLIPTokenizer, XClipModel
+        >>> from transformers import CLIPTokenizer, XCLIPModel
 
-        >>> model = XClipModel.from_pretrained("microsoft/xclip-base-patch32")
+        >>> model = XCLIPModel.from_pretrained("microsoft/xclip-base-patch32")
         >>> tokenizer = CLIPTokenizer.from_pretrained("microsoft/xclip-base-patch32")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
@@ -1313,16 +1313,16 @@ class XClipModel(XClipPreTrainedModel):
         r"""
         Returns:
             image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`XClipVisionModel`].
+            applying the projection layer to the pooled output of [`XCLIPVisionModel`].
 
         Examples:
 
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, XClipModel
+        >>> from transformers import CLIPProcessor, XCLIPModel
 
-        >>> model = XClipModel.from_pretrained("microsoft/xclip-base-patch32")
+        >>> model = XCLIPModel.from_pretrained("microsoft/xclip-base-patch32")
         >>> processor = CLIPProcessor.from_pretrained("microsoft/xclip-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1364,7 +1364,7 @@ class XClipModel(XClipPreTrainedModel):
         return image_features
 
     @add_start_docstrings_to_model_forward(X_CLIP_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=XClipOutput, config_class=XClipConfig)
+    @replace_return_docstrings(output_type=XCLIPOutput, config_class=XCLIPConfig)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1375,7 +1375,7 @@ class XClipModel(XClipPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, XClipOutput]:
+    ) -> Union[Tuple, XCLIPOutput]:
         r"""
         Returns:
 
@@ -1384,9 +1384,9 @@ class XClipModel(XClipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, XClipModel
+        >>> from transformers import CLIPProcessor, XCLIPModel
 
-        >>> model = XClipModel.from_pretrained("microsoft/xclip-base-patch32")
+        >>> model = XCLIPModel.from_pretrained("microsoft/xclip-base-patch32")
         >>> processor = CLIPProcessor.from_pretrained("microsoft/xclip-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1474,7 +1474,7 @@ class XClipModel(XClipPreTrainedModel):
             output = (logits_per_video, logits_per_text, text_embeds, video_embeds, text_outputs, vision_outputs)
             return ((loss,) + output) if loss is not None else output
 
-        return XClipOutput(
+        return XCLIPOutput(
             loss=loss,
             logits_per_video=logits_per_video,
             logits_per_text=logits_per_text,
