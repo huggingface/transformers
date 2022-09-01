@@ -1448,7 +1448,7 @@ class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFQuestionAnswer
         >>> from datasets import load_dataset
 
         >>> tokenizer = AutoTokenizer.from_pretrained("impira/layoutlm-document-qa", add_prefix_space=True)
-        >>> model = TFLayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa")
+        >>> model = TFLayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa", revision="1e3ebac")
 
         >>> dataset = load_dataset("nielsr/funsd", split="train")
         >>> example = dataset[0]
