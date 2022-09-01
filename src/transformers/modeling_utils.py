@@ -438,8 +438,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
 
     load(model_to_load, state_dict, prefix=start_prefix)
     # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
-    # it's safe to delete it. We don't call `gc.collect` here, instead let GC make its own decision.
-    # See https://github.com/huggingface/transformers/issues/18782
+    # it's safe to delete it.
     del state_dict
 
     return error_msgs
