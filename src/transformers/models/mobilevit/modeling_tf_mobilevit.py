@@ -404,10 +404,7 @@ class TFMobileViTLayer(tf.keras.layers.Layer):
             self.downsampling_layer = None
 
         self.conv_kxk = TFMobileViTConvLayer(
-            config,
-            out_channels=in_channels,
-            kernel_size=config.conv_kernel_size,
-            name="conv_kxk",
+            config, out_channels=in_channels, kernel_size=config.conv_kernel_size, name="conv_kxk"
         )
 
         self.conv_1x1 = TFMobileViTConvLayer(
