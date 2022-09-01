@@ -75,7 +75,7 @@ if is_tf_available():
         TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         BertConfig,
         TFAutoModel,
-        TFAutoModelForSeq2SeqLM,
+        TFAutoModelForCausalLM,
         TFAutoModelForSequenceClassification,
         TFBertModel,
         TFSharedEmbeddings,
@@ -1924,6 +1924,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         response_mock.status_code = 500
         response_mock.headers = {}
         response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
         _ = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -2179,8 +2180,8 @@ class UtilsFunctionsTest(unittest.TestCase):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
     def test_generate_tf_function_export(self):
-        test_model = TFAutoModelForSeq2SeqLM.from_pretrained("hf-internal-testing/tiny-random-t5")
-        max_length = 8
+        test_model = TFAutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        max_length = 2
 
         class DummyModel(tf.Module):
             def __init__(self, model):
@@ -2203,8 +2204,8 @@ class UtilsFunctionsTest(unittest.TestCase):
                 )
                 return {"sequences": outputs["sequences"]}
 
-        dummy_input_ids = [[2, 3, 4, 1, 0, 0, 0, 0], [102, 103, 104, 105, 1, 0, 0, 0]]
-        dummy_attention_masks = [[1, 1, 1, 1, 0, 0, 0, 0], [1, 1, 1, 1, 1, 0, 0, 0]]
+        dummy_input_ids = [[2, 0], [102, 103]]
+        dummy_attention_masks = [[1, 0], [1, 1]]
         dummy_model = DummyModel(model=test_model)
         with tempfile.TemporaryDirectory() as tmp_dir:
             tf.saved_model.save(dummy_model, tmp_dir, signatures={"serving_default": dummy_model.serving})

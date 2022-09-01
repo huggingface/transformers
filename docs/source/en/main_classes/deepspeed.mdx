@@ -37,7 +37,7 @@ won't be possible on a single GPU.
 2. If you don't use [`Trainer`] and want to use your own Trainer where you integrated DeepSpeed
    yourself, core functionality functions like `from_pretrained` and `from_config` include integration of essential
    parts of DeepSpeed like `zero.Init` for ZeRO stage 3 and higher. To tap into this feature read the docs on
-   [deepspeed-non-trainer-integration](#deepspeed-non-trainer-integration).
+   [non-Trainer DeepSpeed Integration](#nontrainer-deepspeed-integration).
 
 What is integrated:
 
@@ -1849,7 +1849,6 @@ In this case you usually need to raise the value of `initial_scale_power`. Setti
 
 
 
-<a id='deepspeed-non-trainer-integration'></a>
 
 ## Non-Trainer Deepspeed Integration
 
