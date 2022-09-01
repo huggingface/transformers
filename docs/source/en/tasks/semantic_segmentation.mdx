@@ -70,6 +70,7 @@ You'll also want to create a dictionary that maps a label id to a label class wh
 >>> id2label = json.load(open(cached_download(hf_hub_url(repo_id, filename)), "r"))
 >>> id2label = {int(k): v for k, v in id2label.items()}
 >>> label2id = {v: k for k, v in id2label.items()}
+>>> num_labels = len(id2label)
 ```
 
 ## Preprocess
@@ -116,16 +117,14 @@ To apply the `jitter` over the entire dataset, use 🤗 Datasets [`~datasets.Dat
 
 ## Train
 
-<frameworkcontent>
-<pt>
-Load SegFormer with [`AutoModelForSemanticSegmentation`], specify the number of labels, and pass the model the mapping between label ids and label classes:
+Load SegFormer with [`AutoModelForSemanticSegmentation`], and pass the model the mapping between label ids and label classes:
 
 ```py
 >>> from transformers import AutoModelForSemanticSegmentation
 
 >>> pretrained_model_name = "nvidia/mit-b0"
 >>> model = AutoModelForSemanticSegmentation.from_pretrained(
-...     pretrained_model_name, num_labels=num_labels, id2label=id2label, label2id=label2id
+...     pretrained_model_name, id2label=id2label, label2id=label2id
 ... )
 ```
 
@@ -217,8 +216,6 @@ Lastly, call [`~Trainer.train`] to finetune your model:
 ```py
 >>> trainer.train()
 ```
-</pt>
-</frameworkcontent>
 
 ## Inference
 
