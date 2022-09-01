@@ -248,6 +248,8 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, num_frames, pytorch_dum
         expected_probs = torch.tensor([[7.0999e-04, 9.9883e-01, 4.5580e-04]])
     elif model_name == "xclip-base-patch16":
         expected_probs = torch.tensor([[0.0083, 0.9681, 0.0236]])
+    elif model_name == "xclip-base-patch16-16-frames":
+        expected_probs = torch.tensor([[7.6937e-04, 9.9728e-01, 1.9473e-03]])
     elif model_name == "xclip-large-patch14":
         expected_probs = torch.tensor([[0.0062, 0.9864, 0.0075]])
     else:
