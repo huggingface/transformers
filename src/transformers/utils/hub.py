@@ -38,7 +38,12 @@ from huggingface_hub import (
 )
 from huggingface_hub.constants import HUGGINGFACE_HEADER_X_LINKED_ETAG, HUGGINGFACE_HEADER_X_REPO_COMMIT
 from huggingface_hub.file_download import REGEX_COMMIT_HASH
-from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError, RevisionNotFoundError
+from huggingface_hub.utils import (
+    EntryNotFoundError,
+    LocalEntryNotFoundError,
+    RepositoryNotFoundError,
+    RevisionNotFoundError,
+)
 from requests.exceptions import HTTPError
 from transformers.utils.logging import tqdm
 
@@ -379,6 +384,19 @@ def cached_file(
             "for this model name. Check the model page at "
             f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
         )
+    except LocalEntryNotFoundError:
+        # We try to see if we have a cached version (not up to date):
+        resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, revision=revision)
+        if resolved_file is not None:
+            return resolved_file
+        if not _raise_exceptions_for_connection_errors:
+            return None
+        raise EnvironmentError(
+            f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this file, couldn't find it in the"
+            f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing a file named"
+            f" {full_filename}.\nCheckout your internet connection or see how to run the library in offline mode at"
+            " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
+        )
     except EntryNotFoundError:
         if not _raise_exceptions_for_missing_entries:
             return None
@@ -397,19 +415,6 @@ def cached_file(
             return None
 
         raise EnvironmentError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{err}")
-    except ValueError:
-        # We try to see if we have a cached version (not up to date):
-        resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, revision=revision)
-        if resolved_file is not None:
-            return resolved_file
-        if not _raise_exceptions_for_connection_errors:
-            return None
-        raise EnvironmentError(
-            f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this file, couldn't find it in the"
-            f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing a file named"
-            f" {full_filename}.\nCheckout your internet connection or see how to run the library in offline mode at"
-            " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
-        )
 
     return resolved_file
 
