@@ -376,8 +376,6 @@
         title: MaskFormer
       - local: model_doc/mobilevit
         title: MobileViT
-      - local: model_doc/owlvit
-        title: OWL-ViT
       - local: model_doc/poolformer
         title: PoolFormer
       - local: model_doc/regnet
@@ -452,6 +450,8 @@
         title: LayoutXLM
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/owlvit
+        title: OWL-ViT
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/speech-encoder-decoder
