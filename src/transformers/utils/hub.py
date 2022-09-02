@@ -389,7 +389,7 @@ def cached_file(
         resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, revision=revision)
         if resolved_file is not None:
             return resolved_file
-        if not _raise_exceptions_for_connection_errors:
+        if not _raise_exceptions_for_missing_entries or not _raise_exceptions_for_connection_errors:
             return None
         raise EnvironmentError(
             f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this file, couldn't find it in the"
