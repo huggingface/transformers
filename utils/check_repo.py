@@ -125,8 +125,6 @@ TEST_FILES_WITH_NO_COMMON_TESTS = [
 # should **not** be the rule.
 IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     # models to ignore for model xxx mapping
-    "XCLIPVisionModel",
-    "XCLIPTextModel",
     "DPTForDepthEstimation",
     "DecisionTransformerGPT2Model",
     "GLPNForDepthEstimation",
@@ -200,6 +198,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TFWav2Vec2ForCTC",
     "TFHubertForCTC",
     "MaskFormerForInstanceSegmentation",
+    "XCLIPVisionModel",
+    "XCLIPTextModel",
 ]
 
 # Update this list for models that have multiple model types for the same

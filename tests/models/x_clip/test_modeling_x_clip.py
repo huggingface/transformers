@@ -42,7 +42,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import XCLIPModel, XCLIPTextModel, XCLIPVisionModel
-    from transformers.models.x_clip.modeling_x_clip import X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.models.x_clip.modeling_x_clip import XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST
 
 
 if is_vision_available():
@@ -139,7 +139,7 @@ class XCLIPVisionModelTester:
 @require_torch
 class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Here we also overwrite some of the tests of test_modeling_common.py, as X_CLIP does not use input_ids, inputs_embeds,
+    Here we also overwrite some of the tests of test_modeling_common.py, as X-CLIP does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
     """
 
@@ -158,7 +158,7 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="X_CLIP does not use inputs_embeds")
+    @unittest.skip(reason="X-CLIP does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -203,7 +203,7 @@ class XCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = XCLIPVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -416,7 +416,7 @@ class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="X_CLIP does not use inputs_embeds")
+    @unittest.skip(reason="X-CLIP does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass
 
@@ -430,7 +430,7 @@ class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = XCLIPTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
@@ -571,7 +571,7 @@ class XCLIPModelTest(ModelTesterMixin, unittest.TestCase):
 
             try:
                 input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # X_CLIP needs pixel_values
+                pixel_values = inputs_dict["pixel_values"]  # X-CLIP needs pixel_values
                 traced_model = torch.jit.trace(model, (input_ids, pixel_values))
             except RuntimeError:
                 self.fail("Couldn't trace module.")
@@ -625,7 +625,7 @@ class XCLIPModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        for model_name in X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+        for model_name in XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = XCLIPModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 

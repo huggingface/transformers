@@ -369,7 +369,7 @@ _import_structure = {
         "WavLMConfig",
     ],
     "models.x_clip": [
-        "X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "XCLIPConfig",
         "XCLIPProcessor",
         "XCLIPTextConfig",
@@ -992,7 +992,7 @@ else:
     )
     _import_structure["models.x_clip"].extend(
         [
-            "X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
             "XCLIPModel",
             "XCLIPPreTrainedModel",
             "XCLIPTextModel",
@@ -3182,7 +3182,7 @@ if TYPE_CHECKING:
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
     from .models.x_clip import (
-        X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XCLIPConfig,
         XCLIPProcessor,
         XCLIPTextConfig,
@@ -4489,7 +4489,7 @@ if TYPE_CHECKING:
             WavLMPreTrainedModel,
         )
         from .models.x_clip import (
-            X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
             XCLIPModel,
             XCLIPPreTrainedModel,
             XCLIPTextModel,

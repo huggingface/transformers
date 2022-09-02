@@ -5168,7 +5168,7 @@ class WavLMPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
+XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
 class XCLIPModel(metaclass=DummyObject):

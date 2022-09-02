@@ -40,7 +40,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "microsoft/xclip-base-patch32"
 
-X_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
+XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # TODO update to appropriate organization
     "nielsr/xclip-base-patch32",
     # See all X-CLIP models at https://huggingface.co/models?filter=x-clip
@@ -770,7 +770,7 @@ class XCLIPTextTransformer(nn.Module):
 
         bsz, seq_len = input_shape
         # X_CLIP's text model uses causal mask, prepare it here.
-        # https://github.com/openai/X_CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/x_clip/model.py#L324
+        # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
         causal_attention_mask = self._build_causal_attention_mask(bsz, seq_len, hidden_states.dtype).to(
             hidden_states.device
         )
@@ -1152,17 +1152,29 @@ class XCLIPCrossAttention(nn.Module):
 
     def forward(self, queries, keys, values):
         """Input shape: Batch x Time x Channel"""
-        B, N, C = queries.shape
-        B, M, C = keys.shape
-        q = self.q_proj(queries).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
-        k = self.k_proj(keys).reshape(B, M, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
-        v = self.v_proj(values).reshape(B, M, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        batch_size, query_seq_len, hidden_size = queries.shape
+        batch_size, key_seq_len, hidden_size = keys.shape
+        queries = (
+            self.q_proj(queries)
+            .reshape(batch_size, query_seq_len, self.num_heads, hidden_size // self.num_heads)
+            .permute(0, 2, 1, 3)
+        )
+        keys = (
+            self.k_proj(keys)
+            .reshape(batch_size, key_seq_len, self.num_heads, hidden_size // self.num_heads)
+            .permute(0, 2, 1, 3)
+        )
+        values = (
+            self.v_proj(values)
+            .reshape(batch_size, key_seq_len, self.num_heads, hidden_size // self.num_heads)
+            .permute(0, 2, 1, 3)
+        )
 
-        attn = (q @ k.transpose(-2, -1)) * self.scale
+        attn = (queries @ keys.transpose(-2, -1)) * self.scale
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
 
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = (attn @ values).transpose(1, 2).reshape(batch_size, query_seq_len, hidden_size)
         x = self.proj(x)
         x = self.proj_drop(x)
         return x
@@ -1297,10 +1309,10 @@ class XCLIPModel(XCLIPPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
+        text_embeds = text_outputs[1]
+        text_embeds = self.text_projection(text_embeds)
 
-        return text_features
+        return text_embeds
 
     @add_start_docstrings_to_model_forward(X_CLIP_VISION_INPUTS_DOCSTRING)
     def get_video_features(
@@ -1312,8 +1324,9 @@ class XCLIPModel(XCLIPPreTrainedModel):
     ) -> torch.FloatTensor:
         r"""
         Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`XCLIPVisionModel`].
+            video_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The video embeddings obtained by
+            applying the projection layer to the pooled output of [`XCLIPVisionModel`] and
+            [`XCLIPMultiframeIntegrationTransformer`].
 
         Examples:
 
@@ -1330,7 +1343,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
-        >>> image_features = model.get_video_features(**inputs)
+        >>> video_features = model.get_video_features(**inputs)
         ```"""
         # Use X_CLIP model's config for some fields (if specified) instead of those of vision & text components.
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1349,19 +1362,20 @@ class XCLIPModel(XCLIPPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
+        video_embeds = vision_outputs[1]
+        video_embeds = self.visual_projection(video_embeds)
 
-        # TODO add the following:
-        # img_features = self.prompts_visual_ln(img_features)
-        # img_features = img_features @ self.prompts_visual_proj
+        cls_features = video_embeds.view(batch_size, num_frames, -1)
 
-        # cls_features = cls_features.view(b, t, -1)
-        # img_features = img_features.view(b,t,-1,cls_features.shape[-1])
+        mit_outputs = self.mit(
+            cls_features,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        video_embeds = mit_outputs[1]
 
-        # video_features = self.mit(cls_features)
-
-        return image_features
+        return video_embeds
 
     @add_start_docstrings_to_model_forward(X_CLIP_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=XCLIPOutput, config_class=XCLIPConfig)
@@ -1417,9 +1431,6 @@ class XCLIPModel(XCLIPPreTrainedModel):
             return_dict=return_dict,
         )
 
-        # TODO remove this assertion (vision pooler output)
-        # assert torch.allclose(vision_outputs.pooler_output[0, :3], torch.tensor([-0.2987, 1.0489, 0.3702]), atol=1e-4)
-
         video_embeds = vision_outputs[1]
         video_embeds = self.visual_projection(video_embeds)
 
@@ -1450,9 +1461,6 @@ class XCLIPModel(XCLIPPreTrainedModel):
 
         text_embeds = text_outputs[1]
         text_embeds = self.text_projection(text_embeds)
-
-        # TODO remove this assertion (text pooler output)
-        # assert torch.allclose(text_embeds[0, :3], torch.tensor([-0.2870, -0.3504, 0.0417]), atol=1e-4)
 
         text_embeds = text_embeds.unsqueeze(0).expand(batch_size, -1, -1)
         text_embeds = text_embeds + self.prompts_generator(text_embeds, img_features)

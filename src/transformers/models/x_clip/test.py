@@ -21,6 +21,10 @@ input_ids = tokenizer(
 ).input_ids
 
 
+# with torch.no_grad():
+#     outputs = model(input_ids=input_ids, pixel_values=pixel_values, return_loss=True)
+#     print(outputs[0])
+
 with torch.no_grad():
-    outputs = model(input_ids=input_ids, pixel_values=pixel_values, return_loss=True)
-    print(outputs[0])
+    video_embeds = model.get_video_features(pixel_values)
+    print("Shape of video embeddings:", video_embeds.shape)
