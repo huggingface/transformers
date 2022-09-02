@@ -1692,8 +1692,7 @@ class GenerationMixin:
 
         # keep track of which sequences are already finished
         unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
-        cur_len = input_ids.shape[-1]
-
+        
         this_peer_finished = False  # used by synced_gpus only
         while True:
 
@@ -1719,7 +1718,6 @@ class GenerationMixin:
             )
 
             if synced_gpus and this_peer_finished:
-                cur_len = cur_len + 1
                 continue  # don't waste resources running the code we don't need
 
             next_token_logits = outputs.logits[:, -1, :]
@@ -1759,8 +1757,7 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
-            cur_len = cur_len + 1
-
+            
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
@@ -1945,8 +1942,7 @@ class GenerationMixin:
 
         # keep track of which sequences are already finished
         unfinished_sequences = input_ids.new(input_ids.shape[0]).fill_(1)
-        cur_len = input_ids.shape[-1]
-
+        
         this_peer_finished = False  # used by synced_gpus only
         # auto-regressive generation
         while True:
@@ -1973,7 +1969,6 @@ class GenerationMixin:
             )
 
             if synced_gpus and this_peer_finished:
-                cur_len = cur_len + 1
                 continue  # don't waste resources running the code we don't need
 
             next_token_logits = outputs.logits[:, -1, :]
@@ -2015,8 +2010,7 @@ class GenerationMixin:
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
-            cur_len = cur_len + 1
-
+            
             # if eos_token was found in one sentence, set sentence to finished
             if eos_token_id is not None:
                 unfinished_sequences = unfinished_sequences.mul((next_tokens != eos_token_id).long())
