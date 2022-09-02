@@ -504,6 +504,7 @@ All models are a standard [`tf.keras.Model`](https://www.tensorflow.org/api_docs
    >>> def tokenize_dataset(dataset):
    ...     return tokenizer(dataset["text"])
 
+
    >>> dataset = dataset.map(tokenize_dataset)
    >>> tf_dataset = model.prepare_tf_dataset(dataset, batch_size=16, shuffle=True, tokenizer=tokenizer)
    ```
