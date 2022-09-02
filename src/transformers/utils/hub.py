@@ -244,6 +244,9 @@ def try_to_load_from_cache(cache_dir, repo_id, filename, revision=None, commit_h
             with open(os.path.join(model_cache, "refs", revision)) as f:
                 commit_hash = f.read()
 
+    if os.path.isfile(os.path.join(model_cache, ".no_exist", commit_hash, filename)):
+        return -1
+
     cached_shas = os.listdir(os.path.join(model_cache, "snapshots"))
     if commit_hash not in cached_shas:
         # No cache for this revision and we won't try to return a random revision
@@ -352,7 +355,7 @@ def cached_file(
         # If the file is cached under that commit hash, we return it directly.
         resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, commit_hash=_commit_hash)
         if resolved_file is not None:
-            return resolved_file
+            return resolved_file if resolved_file != -1 else None
 
     user_agent = http_user_agent(user_agent)
     try:
