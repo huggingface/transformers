@@ -341,7 +341,10 @@ def cached_file(
         resolved_file = os.path.join(os.path.join(path_or_repo_id, subfolder), filename)
         if not os.path.isfile(resolved_file):
             if _raise_exceptions_for_missing_entries:
-                raise EnvironmentError(f"Could not locate {full_filename} inside {path_or_repo_id}.")
+                raise EnvironmentError(
+                    f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
+                    f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
+                )
             else:
                 return None
         return resolved_file
@@ -355,7 +358,12 @@ def cached_file(
         # If the file is cached under that commit hash, we return it directly.
         resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, commit_hash=_commit_hash)
         if resolved_file is not None:
-            return resolved_file if resolved_file != -1 else None
+            if resolved_file != -1:
+                return resolved_file
+            elif not _raise_exceptions_for_missing_entries:
+                return None
+            else:
+                raise EnvironmentError(f"Could not locate {full_filename} inside {path_or_repo_id}.")
 
     user_agent = http_user_agent(user_agent)
     try:
