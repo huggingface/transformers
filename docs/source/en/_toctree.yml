@@ -69,6 +69,8 @@
   - sections:
     - local: tasks/image_classification
       title: Image classification
+    - local: tasks/semantic_segmentation
+      title: Semantic segmentation
     title: Computer Vision
   - sections:
     - local: performance
