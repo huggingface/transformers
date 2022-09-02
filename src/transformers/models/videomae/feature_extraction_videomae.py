@@ -26,6 +26,9 @@ from ...utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD, TensorType, lo
 
 logger = logging.get_logger(__name__)
 
+NUMPY_INT_DTYPE = (int, np.int0, np.int8, np.int16, np.int32, np.int64)
+NUMPY_UINT_DTYPE = (np.uint0, np.uint8, np.uint16, np.uint32, np.uint64)
+
 
 class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
@@ -163,16 +166,19 @@ class VideoMAEFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMix
         if self.do_center_crop and self.size is not None:
             videos = [self.crop_video(video, size=self.size) for video in videos]
 
-        # if do_normalize=False, the casting to a numpy array won't happen, so we need to do it here
+        # cast to numpy array
         make_channel_first = True if isinstance(videos[0][0], Image.Image) else videos[0][0].shape[-1] in (1, 3)
         videos = [
             self.to_numpy_array_video(video, rescale=False, channel_first=make_channel_first) for video in videos
         ]
 
         if self.do_normalize:
+            do_rescale = False
+            if videos[0][0].dtype in (NUMPY_INT_DTYPE + NUMPY_UINT_DTYPE) or (videos[0][0].max() > 1.0):
+                do_rescale = True
             videos = [
                 self.normalize_video(
-                    video, mean=self.image_mean, std=self.image_std, rescale=True, channel_first=False
+                    video, mean=self.image_mean, std=self.image_std, rescale=do_rescale, channel_first=False
                 )
                 for video in videos
             ]
