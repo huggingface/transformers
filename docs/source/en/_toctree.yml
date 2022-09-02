@@ -297,6 +297,8 @@
         title: OPT
       - local: model_doc/pegasus
         title: Pegasus
+      - local: model_doc/pegasus_x
+        title: PEGASUS-X
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart
