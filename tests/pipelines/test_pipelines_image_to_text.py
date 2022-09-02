@@ -33,12 +33,12 @@ else:
 
 @is_pipeline_test
 @require_vision
-class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
+class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_FOR_VISION_2_SEQ_MAPPING
     tf_model_mapping = TF_MODEL_FOR_VISION_2_SEQ_MAPPING
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
-        pipe = pipeline("image2text-generation", model=model, tokenizer=tokenizer, feature_extractor=feature_extractor)
+        pipe = pipeline("image-to-text", model=model, tokenizer=tokenizer, feature_extractor=feature_extractor)
         examples = [
             Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -57,7 +57,7 @@ class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTes
 
     @require_tf
     def test_small_model_tf(self):
-        pipe = pipeline("image2text-generation", model="hf-internal-testing/tiny-random-vit-gpt2")
+        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)
@@ -104,7 +104,7 @@ class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTes
 
     @require_torch
     def test_small_model_pt(self):
-        pipe = pipeline("image2text-generation", model="hf-internal-testing/tiny-random-vit-gpt2")
+        pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)
@@ -137,7 +137,7 @@ class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTes
     @slow
     @require_torch
     def test_large_model_pt(self):
-        pipe = pipeline("image2text-generation", model="ydshieh/vit-gpt2-coco-en")
+        pipe = pipeline("image-to-text", model="ydshieh/vit-gpt2-coco-en")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)
@@ -155,7 +155,7 @@ class Image2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTes
     @slow
     @require_tf
     def test_large_model_tf(self):
-        pipe = pipeline("image2text-generation", model="ydshieh/vit-gpt2-coco-en")
+        pipe = pipeline("image-to-text", model="ydshieh/vit-gpt2-coco-en")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
 
         outputs = pipe(image)
