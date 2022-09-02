@@ -1707,7 +1707,7 @@ class GenerationMixin:
             print("Graph alrdy captured")
         
         while True:
-            
+
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence
@@ -1761,7 +1761,8 @@ class GenerationMixin:
                 next_tokens.masked_fill_(~unfinished_sequences, pad_token_id)
 
             # update generated ids, model inputs, and length for next step
-            input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            input_ids = torch.cat([input_ids[:, 1:], next_tokens[:, None]], dim=-1)
+
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder
             )
@@ -1772,7 +1773,7 @@ class GenerationMixin:
                 unfinished_sequences &= next_tokens != eos_token_id
 
             # stop when each sentence is finished, or if we exceed the maximum length
-            if not (torch.any(unfinished_sequences) and not stopping_criteria(input_ids, scores)):
+            if not (torch.any(unfinished_sequences) and not stopping_criteria(input_ids, scores)) or cur_len >= stopping_criteria[0].max_length:
                 if not synced_gpus:
                     break
                 else:
