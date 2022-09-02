@@ -30,6 +30,8 @@ from typing import Optional
 
 from tqdm import auto as tqdm_lib
 
+import huggingface_hub.utils as hf_hub_utils
+
 
 _lock = threading.Lock()
 _default_handler: Optional[logging.Handler] = None
@@ -336,9 +338,11 @@ def enable_progress_bar():
     """Enable tqdm progress bar."""
     global _tqdm_active
     _tqdm_active = True
+    hf_hub_utils.enable_progress_bars()
 
 
 def disable_progress_bar():
     """Disable tqdm progress bar."""
     global _tqdm_active
     _tqdm_active = False
+    hf_hub_utils.disable_progress_bars()
