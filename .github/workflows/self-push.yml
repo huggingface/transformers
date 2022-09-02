@@ -343,6 +343,9 @@ jobs:
           git checkout ${{ env.CI_SHA }}
           echo "log = $(git log -n 1)"
 
+      - name: Remove cached torch extensions
+        run: rm -rf /github/home/.cache/torch_extensions/
+
       # To avoid unknown test failures
       - name: Pre build DeepSpeed *again*
         working-directory: /workspace
@@ -423,7 +426,7 @@ jobs:
           echo "log = $(git log -n 1)"
 
       - name: Remove cached torch extensions
-        run: sudo rm -rf /github/home/.cache/torch_extensions/
+        run: rm -rf /github/home/.cache/torch_extensions/
 
       # To avoid unknown test failures
       - name: Pre build DeepSpeed *again*
