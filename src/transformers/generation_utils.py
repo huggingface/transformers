@@ -54,6 +54,7 @@ from .generation_stopping_criteria import (
 from .pytorch_utils import torch_int_div
 from .utils import ModelOutput, logging
 
+from graphing import graph_simple
 
 logger = logging.get_logger(__name__)
 
@@ -1695,8 +1696,18 @@ class GenerationMixin:
         cur_len = input_ids.shape[-1]
 
         this_peer_finished = False  # used by synced_gpus only
-        while True:
 
+        if not self.captured_cg:
+            print("Graphing..")
+            graphed_model = graph_simple(self, (input_ids,))
+            self.graphed_model = graphed_model
+            print("Done Graphing!")
+            self.captured_cg = True
+        else:
+            print("Graph alrdy captured")
+        
+        while True:
+            
             if synced_gpus:
                 # Under synced_gpus the `forward` call must continue until all gpus complete their sequence.
                 # The following logic allows an early break if all peers finished generating their sequence
@@ -1711,12 +1722,7 @@ class GenerationMixin:
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
             # forward pass to get next token
-            outputs = self(
-                **model_inputs,
-                return_dict=True,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-            )
+            outputs = self.graphed_model(model_inputs['input_ids'], model_inputs['past_key_values'], model_inputs['attention_mask'])
 
             if synced_gpus and this_peer_finished:
                 cur_len = cur_len + 1

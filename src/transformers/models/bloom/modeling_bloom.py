@@ -104,7 +104,7 @@ def build_alibi_tensor(attention_mask: torch.Tensor, num_heads: int) -> torch.Te
     batch_size, seq_length = attention_mask.shape
     closest_power_of_2 = 2 ** math.floor(math.log2(num_heads))
     base = torch.tensor(
-        2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), device=attention_mask.device, dtype=torch.float32
+        2 ** (-(2 ** -(math.log2(closest_power_of_2) - 3))), dtype=torch.float32
     )
     powers = torch.arange(1, 1 + closest_power_of_2, device=attention_mask.device, dtype=torch.int32)
     slopes = torch.pow(base, powers)
@@ -770,7 +770,7 @@ class BloomModel(BloomPreTrainedModel):
             causal_mask = torch.repeat_interleave(causal_mask, block_size, dim=0)
         else:
             alibi = alibi.reshape(batch_size * self.num_heads, 1, seq_length_with_past)
-            causal_mask = torch.repeat_interleave(causal_mask, self.num_heads, dim=0)
+            causal_mask = torch.repeat_interleave(causal_mask, self.num_heads, dim=0, output_size=causal_mask.shape[0] * self.num_heads)
 
         alibi = alibi.to(hidden_states.dtype)
 
