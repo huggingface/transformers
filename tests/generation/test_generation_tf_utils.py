@@ -23,7 +23,7 @@ from transformers.testing_utils import require_tf, slow
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import tf_top_k_top_p_filtering, TFAutoModelForSeq2SeqLM, TFAutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoTokenizer, TFAutoModelForCausalLM, TFAutoModelForSeq2SeqLM, tf_top_k_top_p_filtering
 
 
 @require_tf
