@@ -307,7 +307,7 @@ jobs:
         run: git fetch && git checkout ${{ github.sha }}
 
       - name: Remove cached torch extensions
-        run: sudo rm -rf /github/home/.cache/torch_extensions/
+        run: rm -rf /github/home/.cache/torch_extensions/
 
       # To avoid unknown test failures
       - name: Pre build DeepSpeed *again*
