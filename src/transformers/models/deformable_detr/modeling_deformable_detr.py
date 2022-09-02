@@ -665,7 +665,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
                 attention_weights,
                 self.im2col_step,
             )
-        except:
+        except AttributeError:
             # CPU
             output = ms_deform_attn_core_pytorch(value, spatial_shapes, sampling_locations, attention_weights)
         output = self.output_proj(output)
