@@ -48,9 +48,9 @@ from .load_custom import load_cuda_kernels
 
 # Move this to not compile only when importing, this needs to happen later, like in __init__.
 if is_torch_cuda_available():
-    MSDA = load_cuda_kernels()
+    MultiScaleDeformableAttention = load_cuda_kernels()
 else:
-    MSDA = None
+    MultiScaleDeformableAttention = None
 
 
 class MultiScaleDeformableAttentionFunction(Function):
@@ -65,7 +65,7 @@ class MultiScaleDeformableAttentionFunction(Function):
         im2col_step,
     ):
         context.im2col_step = im2col_step
-        output = MSDA.ms_deform_attn_forward(
+        output = MultiScaleDeformableAttention.ms_deform_attn_forward(
             value,
             value_spatial_shapes,
             value_level_start_index,
@@ -88,7 +88,7 @@ class MultiScaleDeformableAttentionFunction(Function):
             sampling_locations,
             attention_weights,
         ) = context.saved_tensors
-        grad_value, grad_sampling_loc, grad_attn_weight = MSDA.ms_deform_attn_backward(
+        grad_value, grad_sampling_loc, grad_attn_weight = MultiScaleDeformableAttention.ms_deform_attn_backward(
             value,
             value_spatial_shapes,
             value_level_start_index,
@@ -524,13 +524,6 @@ def build_position_encoding(config):
     return position_embedding
 
 
-def _is_power_of_2(n):
-    """Returns True if n is a power of 2"""
-    if (not isinstance(n, int)) or (n < 0):
-        raise ValueError(f"Invalid input for _is_power_of_2: {n} (type: {type(n)})")
-    return (n & (n - 1) == 0) and n != 0  # we use bitwise manipulation
-
-
 def ms_deform_attn_core_pytorch(value, value_spatial_shapes, sampling_locations, attention_weights):
     # for debug and test only,
     # need to use cuda version instead
@@ -566,8 +559,9 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
             raise ValueError(
                 f"embed_dim (d_model) must be divisible by num_heads, but got {embed_dim} and {num_heads}"
             )
-        _d_per_head = embed_dim // num_heads
-        if not _is_power_of_2(_d_per_head):
+        dim_per_head = embed_dim // num_heads
+        # check if dim_per_head is power of 2
+        if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
             warnings.warn(
                 "You'd better set embed_dim (d_model) in DeformableDetrMultiscaleDeformableAttention to make the"
                 " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
@@ -1756,14 +1750,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         )
 
         if not return_dict:
-            enc_outputs = tuple(
-                v
-                for v in [
-                    enc_outputs_class,
-                    enc_outputs_coord_logits,
-                ]
-                if v is not None
-            )
+            enc_outputs = tuple(value for value in [enc_outputs_class, enc_outputs_coord_logits] if value is not None)
             tuple_outputs = (init_reference_points,) + decoder_outputs + encoder_outputs + enc_outputs
 
             return tuple_outputs
