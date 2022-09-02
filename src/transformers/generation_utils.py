@@ -1698,13 +1698,14 @@ class GenerationMixin:
         this_peer_finished = False  # used by synced_gpus only
 
         if not self.captured_cg:
-            print("Graphing..")
-            graphed_model = graph_simple(self, (input_ids,))
+            # print("Graphing..")
+            graphed_model = graph_simple(self, (input_ids,), warmup_iters=15)
             self.graphed_model = graphed_model
-            print("Done Graphing!")
+            # print("Done Graphing!")
             self.captured_cg = True
         else:
-            print("Graph alrdy captured")
+            pass
+            # print("Graph alrdy captured")
         
         while True:
 
