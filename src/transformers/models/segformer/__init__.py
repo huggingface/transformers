@@ -26,7 +26,9 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig"]}
+_import_structure = {
+    "configuration_segformer": ["SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SegformerConfig", "SegformerOnnxConfig"]
+}
 
 try:
     if not is_vision_available():
@@ -69,7 +71,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig
+    from .configuration_segformer import SEGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, SegformerConfig, SegformerOnnxConfig
 
     try:
         if not is_vision_available():

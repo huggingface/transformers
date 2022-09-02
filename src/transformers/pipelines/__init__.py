@@ -53,6 +53,7 @@ from .base import (
 from .conversational import Conversation, ConversationalPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
+from .image2text_generation import Image2TextGenerationPipeline
 from .image_classification import ImageClassificationPipeline
 from .image_segmentation import ImageSegmentationPipeline
 from .object_detection import ObjectDetectionPipeline
@@ -90,6 +91,7 @@ if is_tf_available():
         TFAutoModelForSequenceClassification,
         TFAutoModelForTableQuestionAnswering,
         TFAutoModelForTokenClassification,
+        TFAutoModelForVision2Seq,
     )
 
 if is_torch_available():
@@ -118,6 +120,7 @@ if is_torch_available():
         AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
+        AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
     )
 if TYPE_CHECKING:
@@ -302,6 +305,18 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": ("facebook/detr-resnet-50-panoptic", "fc15262")}},
         "type": "image",
     },
+    "image2text-generation": {
+        "impl": Image2TextGenerationPipeline,
+        "tf": (TFAutoModelForVision2Seq,) if is_tf_available() else (),
+        "pt": (AutoModelForVision2Seq,) if is_torch_available() else (),
+        "default": {
+            "model": {
+                "pt": ("ydshieh/vit-gpt2-coco-en", "65636df"),
+                "tf": ("ydshieh/vit-gpt2-coco-en", "65636df"),
+            }
+        },
+        "type": "multimodal",
+    },
     "object-detection": {
         "impl": ObjectDetectionPipeline,
         "tf": (),
@@ -317,7 +332,7 @@ NO_TOKENIZER_TASKS = set()
 # any tokenizer/feature_extractor might be use for a given model so we cannot
 # use the statically defined TOKENIZER_MAPPING and FEATURE_EXTRACTOR_MAPPING to
 # see if the model defines such objects or not.
-MULTI_MODEL_CONFIGS = {"VisionTextDualEncoderConfig", "SpeechEncoderDecoderConfig"}
+MULTI_MODEL_CONFIGS = {"SpeechEncoderDecoderConfig", "VisionEncoderDecoderConfig", "VisionTextDualEncoderConfig"}
 for task, values in SUPPORTED_TASKS.items():
     if values["type"] == "text":
         NO_FEATURE_EXTRACTOR_TASKS.add(task)

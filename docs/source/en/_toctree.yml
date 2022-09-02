@@ -21,44 +21,55 @@
     title: Share a model
   title: Tutorials
 - sections:
-  - local: fast_tokenizers
-    title: Use tokenizers from 🤗 Tokenizers
-  - local: create_a_model
-    title: Create a custom architecture
-  - local: custom_models
-    title: Sharing custom models
   - sections:
-    - local: tasks/sequence_classification
-      title: Text classification
-    - local: tasks/token_classification
-      title: Token classification
-    - local: tasks/question_answering
-      title: Question answering
-    - local: tasks/language_modeling
-      title: Language modeling
-    - local: tasks/translation
-      title: Translation
-    - local: tasks/summarization
-      title: Summarization
-    - local: tasks/multiple_choice
-      title: Multiple choice
+    - local: create_a_model
+      title: Create a custom architecture
+    - local: custom_models
+      title: Sharing custom models
+    - local: run_scripts
+      title: Train with a script
+    - local: sagemaker
+      title: Run training on Amazon SageMaker
+    - local: converting_tensorflow_models
+      title: Converting TensorFlow Checkpoints
+    - local: serialization
+      title: Export 🤗 Transformers models
+    - local: troubleshooting
+      title: Troubleshoot
+    title: General usage
+  - sections:
+    - local: fast_tokenizers
+      title: Use tokenizers from 🤗 Tokenizers
+    - local: multilingual
+      title: Inference for multilingual models
+    - sections:
+      - local: tasks/sequence_classification
+        title: Text classification
+      - local: tasks/token_classification
+        title: Token classification
+      - local: tasks/question_answering
+        title: Question answering
+      - local: tasks/language_modeling
+        title: Language modeling
+      - local: tasks/translation
+        title: Translation
+      - local: tasks/summarization
+        title: Summarization
+      - local: tasks/multiple_choice
+        title: Multiple choice
+      title: Task guides
+      isExpanded: false
+    title: Natural Language Processing
+  - sections:
     - local: tasks/audio_classification
       title: Audio classification
     - local: tasks/asr
       title: Automatic speech recognition
+    title: Audio
+  - sections:
     - local: tasks/image_classification
       title: Image classification
-    title: Fine-tune for downstream tasks
-  - local: run_scripts
-    title: Train with a script
-  - local: sagemaker
-    title: Run training on Amazon SageMaker
-  - local: multilingual
-    title: Inference for multilingual models
-  - local: converting_tensorflow_models
-    title: Converting TensorFlow Checkpoints
-  - local: serialization
-    title: Export 🤗 Transformers models
+    title: Computer Vision
   - sections:
     - local: performance
       title: Overview
@@ -84,31 +95,31 @@
       title: Inference on Specialized Hardware
     - local: perf_hardware
       title: Custom hardware for training
+    - local: big_models
+      title: Instantiating a big model
+    - local: debugging
+      title: Debugging
     title: Performance and scalability
-  - local: big_models
-    title: Instantiating a big model
+  - sections:
+    - local: contributing
+      title: How to contribute to transformers?
+    - local: add_new_model
+      title: How to add a model to 🤗 Transformers?
+    - local: add_new_pipeline
+      title: How to add a pipeline to 🤗 Transformers?
+    - local: testing
+      title: Testing
+    - local: pr_checks
+      title: Checks on a Pull Request
+    title: Contribute
+  - local: notebooks
+    title: 🤗 Transformers Notebooks
+  - local: community
+    title: Community resources
   - local: benchmarks
     title: Benchmarks
   - local: migration
     title: Migrating from previous packages
-  - local: troubleshooting
-    title: Troubleshoot
-  - local: debugging
-    title: Debugging
-  - local: notebooks
-    title: 🤗 Transformers Notebooks
-  - local: community
-    title: Community
-  - local: contributing
-    title: How to contribute to transformers?
-  - local: add_new_model
-    title: How to add a model to 🤗 Transformers?
-  - local: add_new_pipeline
-    title: How to create a custom pipeline?
-  - local: testing
-    title: Testing
-  - local: pr_checks
-    title: Checks on a Pull Request
   title: How-to guides
 - sections:
   - local: philosophy
