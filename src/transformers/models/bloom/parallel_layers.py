@@ -220,8 +220,8 @@ class TensorParallelEmbedding(nn.Embedding):
 
     def forward(self, input: torch.Tensor) -> torch.Tensor:
         # Sanity check
-        if torch.any(torch.logical_or(0 > input, input >= self.original_num_embeddings)):
-            raise IndexError(f"Input is required to be in [0, {self.original_num_embeddings}[, got min: {torch.min(input)} and max: {torch.max(input)}")
+        # if torch.any(torch.logical_or(0 > input, input >= self.original_num_embeddings)):
+            # raise IndexError(f"Input is required to be in [0, {self.original_num_embeddings}[, got min: {torch.min(input)} and max: {torch.max(input)}")
 
         # `0` if input is in the correct interval, else `1`
         input_mask = torch.logical_or(self.min_id > input, input >= self.max_id)

@@ -767,7 +767,7 @@ class BloomModel(BloomPreTrainedModel):
             block_size = self.num_heads // self.tp_world_size
             alibi = alibi[:, self.tp_rank * block_size: (self.tp_rank + 1) * block_size]
             alibi = alibi.reshape(batch_size * block_size, 1, seq_length_with_past)
-            causal_mask = torch.repeat_interleave(causal_mask, block_size, dim=0)
+            causal_mask = torch.repeat_interleave(causal_mask, block_size, dim=0, output_size=causal_mask.shape[0] * block_size)
         else:
             alibi = alibi.reshape(batch_size * self.num_heads, 1, seq_length_with_past)
             causal_mask = torch.repeat_interleave(causal_mask, self.num_heads, dim=0, output_size=causal_mask.shape[0] * self.num_heads)
