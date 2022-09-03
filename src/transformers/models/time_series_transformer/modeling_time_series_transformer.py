@@ -15,35 +15,25 @@
 """ PyTorch TimeSeriesTransformer model. """
 
 import copy
-from dataclasses import dataclass
 import random
-from typing import Optional, Tuple, List
+from dataclasses import dataclass
+from typing import List, Optional, Tuple
 
 import torch
+from gluonts.torch.distributions import StudentTOutput
 from torch import nn
 
-from gluonts.torch.modules.scaler import MeanScaler, NOPScaler
-from gluonts.torch.modules.feature import FeatureEmbedder
-from gluonts.torch.distributions import StudentTOutput
-from gluonts.torch.modules.loss import NegativeLogLikelihood
-from gluonts.torch.util import weighted_average
-
-
 from ...activations import ACT2FN
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, ModelOutput
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    logging,
     replace_return_docstrings,
 )
-from ...modeling_outputs import (
-    BaseModelOutput,
-    BaseModelOutputWithPastAndCrossAttentions,
-    ModelOutput,
-)
-from ...modeling_utils import PreTrainedModel
-from ...utils import logging
 from .configuration_time_series_transformer import TimeSeriesTransformerConfig
 
 
@@ -57,6 +47,163 @@ TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "huggingface/tst-ett",
     # See all TimeSeriesTransformer models at https://huggingface.co/models?filter=time_series_transformer
 ]
+
+
+class FeatureEmbedder(nn.Module):
+    def __init__(
+        self,
+        cardinalities: List[int],
+        embedding_dims: List[int],
+    ) -> None:
+        super().__init__()
+
+        self._num_features = len(cardinalities)
+        self._embedders = nn.ModuleList([nn.Embedding(c, d) for c, d in zip(cardinalities, embedding_dims)])
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        if self._num_features > 1:
+            # we slice the last dimension, giving an array of length
+            # self._num_features with shape (N,T) or (N)
+            cat_feature_slices = torch.chunk(features, self._num_features, dim=-1)
+        else:
+            cat_feature_slices = [features]
+
+        return torch.cat(
+            [
+                embed(cat_feature_slice.squeeze(-1))
+                for embed, cat_feature_slice in zip(self._embedders, cat_feature_slices)
+            ],
+            dim=-1,
+        )
+
+
+class MeanScaler(nn.Module):
+    """
+    Computes a scaling factor as the weighted average absolute value along
+    dimension ``dim``, and scales the data accordingly.
+    Parameters
+    ----------
+    dim
+        dimension along which to compute the scale
+    keepdim
+        controls whether to retain dimension ``dim`` (of length 1) in the
+        scale tensor, or suppress it.
+    minimum_scale
+        default scale that is used for elements that are constantly zero
+        along dimension ``dim``.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-10):
+        super().__init__()
+        assert dim > 0, "Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0"
+        self.dim = dim
+        self.keepdim = keepdim
+        self.register_buffer("minimum_scale", torch.tensor(minimum_scale))
+
+    def forward(self, data: torch.Tensor, weights: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        # these will have shape (N, C)
+        total_weight = weights.sum(dim=self.dim)
+        weighted_sum = (data.abs() * weights).sum(dim=self.dim)
+
+        # first compute a global scale per-dimension
+        total_observed = total_weight.sum(dim=0)
+        denominator = torch.max(total_observed, torch.ones_like(total_observed))
+        default_scale = weighted_sum.sum(dim=0) / denominator
+
+        # then compute a per-item, per-dimension scale
+        denominator = torch.max(total_weight, torch.ones_like(total_weight))
+        scale = weighted_sum / denominator
+
+        # use per-batch scale when no element is observed
+        # or when the sequence contains only zeros
+        scale = (
+            torch.max(
+                self.minimum_scale,
+                torch.where(
+                    weighted_sum > torch.zeros_like(weighted_sum),
+                    scale,
+                    default_scale * torch.ones_like(total_weight),
+                ),
+            )
+            .detach()
+            .unsqueeze(dim=self.dim)
+        )
+
+        return data / scale, scale if self.keepdim else scale.squeeze(dim=self.dim)
+
+
+class NOPScaler(nn.Module):
+    """
+    Assigns a scaling factor equal to 1 along dimension ``dim``, and therefore
+    applies no scaling to the input data.
+    Parameters
+    ----------
+    dim
+        dimension along which to compute the scale
+    keepdim
+        controls whether to retain dimension ``dim`` (of length 1) in the
+        scale tensor, or suppress it.
+    """
+
+    def __init__(self, dim: int, keepdim: bool = False):
+        super().__init__()
+        self.dim = dim
+        self.keepdim = keepdim
+
+    def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        scale = torch.ones_like(data).mean(
+            dim=self.dim,
+            keepdim=self.keepdim,
+        )
+        return data, scale
+
+
+def weighted_average(x: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
+    """
+    Computes the weighted average of a given tensor across a given dim, masking
+    values associated with weight zero,
+    meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
+    Parameters
+    ----------
+    x
+        Input tensor, of which the average must be computed.
+    weights
+        Weights tensor, of the same shape as `x`.
+    dim
+        The dim along which to average `x`
+    Returns
+    -------
+    Tensor:
+        The tensor with values averaged along the specified `dim`.
+    """
+    if weights is not None:
+        weighted_tensor = torch.where(weights != 0, x * weights, torch.zeros_like(x))
+        sum_weights = torch.clamp(weights.sum(dim=dim) if dim else weights.sum(), min=1.0)
+        return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
+    else:
+        return x.mean(dim=dim)
+
+
+class NegativeLogLikelihood:
+    """
+    Compute the negative log likelihood loss.
+    Parameters
+    ----------
+    beta: float in range (0, 1)
+        beta parameter from the paper: "On the Pitfalls of Heteroscedastic
+        Uncertainty Estimation with Probabilistic Neural Networks" by
+        Seitzer et al. 2022
+        https://openreview.net/forum?id=aPOpXlnV1T
+    """
+
+    beta: float = 0.0
+
+    def __call__(self, input: torch.distributions.Distribution, target: torch.Tensor) -> torch.Tensor:
+        nll = -input.log_prob(target)
+        if self.beta > 0.0:
+            variance = input.variance
+            nll = nll * (variance.detach() ** self.beta)
+        return nll
 
 
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
@@ -189,9 +336,10 @@ class TimeSeriesTransformerAttention(nn.Module):
         self.num_heads = num_heads
         self.dropout = dropout
         self.head_dim = embed_dim // num_heads
-        assert (
-            self.head_dim * num_heads == self.embed_dim
-        ), f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+        assert self.head_dim * num_heads == self.embed_dim, (
+            f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+            f" {num_heads})."
+        )
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
@@ -261,7 +409,8 @@ class TimeSeriesTransformerAttention(nn.Module):
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
             )
 
         if attention_mask is not None:
@@ -277,7 +426,8 @@ class TimeSeriesTransformerAttention(nn.Module):
         if layer_head_mask is not None:
             if layer_head_mask.size() != (self.num_heads,):
                 raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is {layer_head_mask.size()}"
+                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
+                    f" {layer_head_mask.size()}"
                 )
             attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, src_len)
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
@@ -298,7 +448,8 @@ class TimeSeriesTransformerAttention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
             )
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
@@ -962,9 +1113,10 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
         # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
         for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
             if attn_mask is not None:
-                assert attn_mask.size()[0] == (
-                    len(self.layers)
-                ), f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+                assert attn_mask.size()[0] == (len(self.layers)), (
+                    f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
+                    f" {head_mask.size()[0]}."
+                )
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
@@ -976,10 +1128,10 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
-                        "`use_cache = True` is incompatible with gradient checkpointing`. Setting `use_cache = False`..."
+                        "`use_cache = True` is incompatible with gradient checkpointing`. Setting `use_cache ="
+                        " False`..."
                     )
                     use_cache = False
 
@@ -1001,7 +1153,6 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,

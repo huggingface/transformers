@@ -14,15 +14,14 @@
 # limitations under the License.
 """ Transformations for Time Series Transformers. """
 
-from typing import Optional, List, Iterable
 from functools import lru_cache
+from typing import Iterable, List, Optional
 
 import pandas as pd
-
-from torch.utils.data import DataLoader
-
-from gluonts.time_feature import time_features_from_frequency_str
 from gluonts.dataset.field_names import FieldName
+from gluonts.itertools import Cyclic, IterableSlice, PseudoShuffled
+from gluonts.time_feature import time_features_from_frequency_str
+from gluonts.torch.util import IterableDataset
 from gluonts.transform import (
     AddAgeFeature,
     AddObservedValuesIndicator,
@@ -40,8 +39,7 @@ from gluonts.transform import (
     VstackFeatures,
 )
 from gluonts.transform.sampler import InstanceSampler
-from gluonts.itertools import Cyclic, IterableSlice, PseudoShuffled
-from gluonts.torch.util import IterableDataset
+from torch.utils.data import DataLoader
 
 
 @lru_cache(10_000)
