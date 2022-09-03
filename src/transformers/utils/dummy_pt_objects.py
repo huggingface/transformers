@@ -3587,6 +3587,30 @@ class PegasusPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class PegasusXForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PegasusXModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class PegasusXPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

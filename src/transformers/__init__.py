@@ -282,6 +282,7 @@ _import_structure = {
         "OwlViTVisionConfig",
     ],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
+    "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
     "models.plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
@@ -384,9 +385,9 @@ _import_structure = {
         "CsvPipelineDataFormat",
         "FeatureExtractionPipeline",
         "FillMaskPipeline",
-        "Image2TextGenerationPipeline",
         "ImageClassificationPipeline",
         "ImageSegmentationPipeline",
+        "ImageToTextPipeline",
         "JsonPipelineDataFormat",
         "NerPipeline",
         "ObjectDetectionPipeline",
@@ -1547,6 +1548,14 @@ else:
     )
     _import_structure["models.pegasus"].extend(
         ["PegasusForCausalLM", "PegasusForConditionalGeneration", "PegasusModel", "PegasusPreTrainedModel"]
+    )
+    _import_structure["models.pegasus_x"].extend(
+        [
+            "PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PegasusXForConditionalGeneration",
+            "PegasusXModel",
+            "PegasusXPreTrainedModel",
+        ]
     )
     _import_structure["models.perceiver"].extend(
         [
@@ -3108,6 +3117,7 @@ if TYPE_CHECKING:
         OwlViTVisionConfig,
     )
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
+    from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
     from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
@@ -3192,9 +3202,9 @@ if TYPE_CHECKING:
         CsvPipelineDataFormat,
         FeatureExtractionPipeline,
         FillMaskPipeline,
-        Image2TextGenerationPipeline,
         ImageClassificationPipeline,
         ImageSegmentationPipeline,
+        ImageToTextPipeline,
         JsonPipelineDataFormat,
         NerPipeline,
         ObjectDetectionPipeline,
@@ -4165,6 +4175,12 @@ if TYPE_CHECKING:
             PegasusForConditionalGeneration,
             PegasusModel,
             PegasusPreTrainedModel,
+        )
+        from .models.pegasus_x import (
+            PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PegasusXForConditionalGeneration,
+            PegasusXModel,
+            PegasusXPreTrainedModel,
         )
         from .models.perceiver import (
             PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,

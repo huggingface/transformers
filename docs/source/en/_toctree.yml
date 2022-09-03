@@ -69,6 +69,8 @@
   - sections:
     - local: tasks/image_classification
       title: Image classification
+    - local: tasks/semantic_segmentation
+      title: Semantic segmentation
     title: Computer Vision
   - sections:
     - local: performance
@@ -297,6 +299,8 @@
         title: OPT
       - local: model_doc/pegasus
         title: Pegasus
+      - local: model_doc/pegasus_x
+        title: PEGASUS-X
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart
@@ -376,8 +380,6 @@
         title: MaskFormer
       - local: model_doc/mobilevit
         title: MobileViT
-      - local: model_doc/owlvit
-        title: OWL-ViT
       - local: model_doc/poolformer
         title: PoolFormer
       - local: model_doc/regnet
@@ -452,6 +454,8 @@
         title: LayoutXLM
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/owlvit
+        title: OWL-ViT
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/speech-encoder-decoder

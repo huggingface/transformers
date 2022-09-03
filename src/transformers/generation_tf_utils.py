@@ -579,6 +579,7 @@ class TFGenerationMixin:
         do_sample = do_sample if do_sample is not None else self.config.do_sample
 
         if do_sample is False or num_beams == 1:
+            seed = model_kwargs.pop("seed", None)
             return self._generate(
                 input_ids=input_ids,
                 max_length=max_length,
@@ -601,13 +602,14 @@ class TFGenerationMixin:
                 attention_mask=attention_mask,
                 decoder_start_token_id=decoder_start_token_id,
                 use_cache=use_cache,
-                seed=model_kwargs.pop("seed", None),
+                seed=seed,
                 output_scores=output_scores,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 forced_bos_token_id=forced_bos_token_id,
                 forced_eos_token_id=forced_eos_token_id,
+                **model_kwargs,
             )
 
         # We cannot generate if the model does not have a LM head
@@ -1288,6 +1290,29 @@ class TFGenerationMixin:
         else:
             return logits
 
+    def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
+        """Validates model kwargs for generation. Generate argument typos will also be caught here."""
+        # Excludes arguments that are handled before calling any model function
+        if self.config.is_encoder_decoder:
+            for key in ["decoder_input_ids"]:
+                model_kwargs.pop(key, None)
+
+        unused_model_args = []
+        model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)
+        # `kwargs` if often used to handle optional forward pass inputs like `attention_mask`. If
+        # `prepare_inputs_for_generation` doesn't accept `kwargs`, then a stricter check can be made ;)
+        if "kwargs" in model_args:
+            model_args |= set(inspect.signature(self.call).parameters)
+        for key, value in model_kwargs.items():
+            if value is not None and key not in model_args:
+                unused_model_args.append(key)
+
+        if unused_model_args:
+            raise ValueError(
+                f"The following `model_kwargs` are not used by the model: {unused_model_args} (note: typos in the"
+                " generate arguments will also show up in this list)"
+            )
+
     def _generate(
         self,
         input_ids=None,
@@ -1483,6 +1508,9 @@ class TFGenerationMixin:
         # generate sequences without allowing bad_words to be generated
         outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)
         ```"""
+        # 0. Validate model kwargs
+        self._validate_model_kwargs(model_kwargs.copy())
+
         # 1. Set generation parameters if not already defined
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
