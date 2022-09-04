@@ -442,6 +442,7 @@ _import_structure = {
         "VisualQuestionAnsweringPipeline",
         "ZeroShotClassificationPipeline",
         "ZeroShotImageClassificationPipeline",
+        "ZeroShotObjectDetectionPipeline",
         "pipeline",
     ],
     "processing_utils": ["ProcessorMixin"],
@@ -3407,6 +3408,7 @@ if TYPE_CHECKING:
         VisualQuestionAnsweringPipeline,
         ZeroShotClassificationPipeline,
         ZeroShotImageClassificationPipeline,
+        ZeroShotObjectDetectionPipeline,
         pipeline,
     )
     from .processing_utils import ProcessorMixin
