@@ -14,10 +14,9 @@
 # limitations under the License.
 """ PyTorch TimeSeriesTransformer model. """
 
-import copy
 import random
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Callable, Dict, Type
+from typing import List, Optional, Tuple, Callable, Dict
 
 import torch
 from torch import nn
@@ -80,7 +79,7 @@ class AffineTransformed(TransformedDistribution):
         return self.variance.sqrt()
 
 
-class PtArgProj(nn.Module):
+class ParameterProjection(nn.Module):
     def __init__(
         self,
         in_features: int,
@@ -111,18 +110,9 @@ class LambdaLayer(nn.Module):
 class Output:
     in_features: int
     args_dim: Dict[str, int]
-    _dtype: Type = np.float32
 
-    @property
-    def dtype(self):
-        return self._dtype
-
-    @dtype.setter
-    def dtype(self, dtype: Type):
-        self._dtype = dtype
-
-    def get_args_proj(self, in_features: int) -> nn.Module:
-        return PtArgProj(
+    def get_param_proj(self, in_features: int) -> nn.Module:
+        return ParameterProjection(
             in_features=in_features,
             args_dim=self.args_dim,
             domain_map=LambdaLayer(self.domain_map),
@@ -1606,7 +1596,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
         self.model = TimeSeriesTransformerModel(config)
         if config.distribution_output == "student_t":
             self.distribution_output = StudentTOutput()
-            self.param_proj = self.distribution_output.get_args_proj(self.model.config.d_model)
+            self.param_proj = self.distribution_output.get_param_proj(self.model.config.d_model)
             self.target_shape = self.distribution_output.event_shape
 
         if config.loss == "nll":
