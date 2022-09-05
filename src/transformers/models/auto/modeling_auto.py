@@ -909,7 +909,7 @@ class AutoModelForDocumentQuestionAnswering(_BaseAutoModelClass):
 AutoModelForDocumentQuestionAnswering = auto_class_update(
     AutoModelForDocumentQuestionAnswering,
     head_doc="document question answering",
-    checkpoint_for_example='impira/layoutlm-document-qa", revision="3dc6de3',  # XXX verify docs
+    checkpoint_for_example='impira/layoutlm-document-qa", revision="3dc6de3',
 )
 
 

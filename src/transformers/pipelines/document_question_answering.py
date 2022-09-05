@@ -88,8 +88,9 @@ class ModelType(ExplicitEnum):
 class DocumentQuestionAnsweringPipeline(Pipeline):
     # TODO: Update task_summary docs to include an example with document QA and then update the first sentence
     """
-    Document Question Answering pipeline using any `AutoModelForDocumentQuestionAnswering`. See the [question answering
-    examples](../task_summary#question-answering) for more information.
+    Document Question Answering pipeline using any `AutoModelForDocumentQuestionAnswering`. The inputs/outputs are
+    similar to the (extractive) question answering pipeline; however, the pipeline takes an image (and optional
+    OCR'd words/boxes) as input instead of text context.
 
     This document question answering pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"document-question-answering"`.
