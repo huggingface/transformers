@@ -85,6 +85,8 @@ class DetrConfig(PretrainedConfig):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         position_embedding_type (`str`, *optional*, defaults to `"sine"`):
             Type of position embeddings to be used on top of the image features. One of `"sine"` or `"learned"`.
+        normalize_before (`bool`, *optional*, defaults to `False`):
+            Whether or not to normalize the encoder hidden states before the decoder.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
             Name of convolutional backbone to use. Supports any convolutional backbone from the timm package. For a
             list of all available models, see [this
@@ -156,6 +158,7 @@ class DetrConfig(PretrainedConfig):
         scale_embedding=False,
         auxiliary_loss=False,
         position_embedding_type="sine",
+        normalize_before=False,
         backbone="resnet50",
         use_pretrained_backbone=True,
         dilation=False,
@@ -191,6 +194,7 @@ class DetrConfig(PretrainedConfig):
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
+        self.normalize_before = normalize_before
         self.backbone = backbone
         self.use_pretrained_backbone = use_pretrained_backbone
         self.dilation = dilation

@@ -621,6 +621,8 @@ class DetrEncoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
+        self.normalize_before = config.normalize_before
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -638,6 +640,8 @@ class DetrEncoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
+        hidden_states = self.self_attn_layer_norm(hidden_states) if self.normalize_before else hidden_states
+
         residual = hidden_states
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -648,7 +652,9 @@ class DetrEncoderLayer(nn.Module):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = (
+            self.final_layer_norm(hidden_states) if self.normalize_before else self.self_attn_layer_norm(hidden_states)
+        )
 
         residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
@@ -658,7 +664,7 @@ class DetrEncoderLayer(nn.Module):
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = hidden_states if self.normalize_before else self.final_layer_norm(hidden_states)
 
         if self.training:
             if torch.isinf(hidden_states).any() or torch.isnan(hidden_states).any():
@@ -907,7 +913,7 @@ class DetrEncoder(DetrPreTrainedModel):
 
         self.layers = nn.ModuleList([DetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-        # in the original DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
+        self.layernorm = nn.LayerNorm(config.d_model) if config.normalize_before else None
 
         # Initialize weights and apply final processing
         self.post_init()
