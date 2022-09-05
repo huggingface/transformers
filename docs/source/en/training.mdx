@@ -220,7 +220,7 @@ discard the others to make a simpler, more performant dataset.
 - [`~datasets.Dataset.to_tf_dataset`]: This method is more low-level, and is useful when you want to exactly control how
 your dataset is created, by specifying exactly which `columns` and `label_cols` to include.
 
-Before you can use [`~TFPreTrainedModel.prepare_tf_dataset`], you will need to add the tokenizer outputs to your dataset as columns:
+Before you can use [`~TFPreTrainedModel.prepare_tf_dataset`], you will need to add the tokenizer outputs to your dataset as columns, as shown in
 the following code sample:
 
 ```py
