@@ -456,6 +456,12 @@ class FeaturesManager:
             "token-classification",
             onnx_config_cls="models.roformer.RoFormerOnnxConfig",
         ),
+        "segformer": supported_features_mapping(
+            "default",
+            "image-classification",
+            "semantic-segmentation",
+            onnx_config_cls="models.segformer.SegformerOnnxConfig",
+        ),
         "squeezebert": supported_features_mapping(
             "default",
             "masked-lm",
