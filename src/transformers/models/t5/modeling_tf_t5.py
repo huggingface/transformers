@@ -1181,7 +1181,7 @@ class TFT5Model(TFT5PreTrainedModel):
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
 
         >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for T5Model.
-        >>> # This is not needed for T5ForConditionalGeneration as it does this internally using labels arg.
+        >>> # This is not needed for torch's T5ForConditionalGeneration as it does this internally using labels arg.
         >>> decoder_input_ids = model._shift_right(decoder_input_ids)
 
         >>> # forward pass
