@@ -15,6 +15,8 @@
 import hashlib
 import unittest
 
+import torch
+
 from transformers import MODEL_FOR_DEPTH_ESTIMATION_MAPPING, is_vision_available
 from transformers.pipelines import DepthEstimationPipeline, pipeline
 from transformers.testing_utils import is_pipeline_test, require_tf, require_timm, require_torch, require_vision
@@ -51,9 +53,34 @@ class DepthEstimationPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
         ]
 
-    @unittest.skip("Skipping to check if CI passes")
     def run_pipeline_test(self, depth_estimator, examples):
-        pass
+        outputs = depth_estimator("./tests/fixtures/tests_samples/COCO/000000039769.png")
+        self.assertEqual(outputs, {"predicted_depth": torch.tensor, "depth": Image})
+        import datasets
+
+        dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
+        outputs = depth_estimator(
+            [
+                Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
+                "http://images.cocodataset.org/val2017/000000039769.jpg",
+                # RGBA
+                dataset[0]["file"],
+                # LA
+                dataset[1]["file"],
+                # L
+                dataset[2]["file"],
+            ]
+        )
+        self.assertEqual(
+            outputs,
+            [
+                {"predicted_depth": torch.tensor, "depth": Image},
+                {"predicted_depth": torch.tensor, "depth": Image},
+                {"predicted_depth": torch.tensor, "depth": Image},
+                {"predicted_depth": torch.tensor, "depth": Image},
+                {"predicted_depth": torch.tensor, "depth": Image},
+            ],
+        )
 
     @require_tf
     @unittest.skip("Depth estimation is not implemented in TF")
