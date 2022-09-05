@@ -17,11 +17,12 @@
 import copy
 import random
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Callable, Dict, Type
 
 import torch
-from gluonts.torch.distributions import StudentTOutput
 from torch import nn
+from torch.distributions import TransformedDistribution, AffineTransform, Distribution, StudentT
+import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, ModelOutput
@@ -47,6 +48,159 @@ TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "huggingface/tst-ett",
     # See all TimeSeriesTransformer models at https://huggingface.co/models?filter=time_series_transformer
 ]
+
+
+class AffineTransformed(TransformedDistribution):
+    def __init__(self, base_distribution: Distribution, loc=None, scale=None):
+
+        self.scale = 1.0 if scale is None else scale
+        self.loc = 0.0 if loc is None else loc
+
+        super().__init__(base_distribution, [AffineTransform(self.loc, self.scale)])
+
+    @property
+    def mean(self):
+        """
+        Returns the mean of the distribution.
+        """
+        return self.base_dist.mean * self.scale + self.loc
+
+    @property
+    def variance(self):
+        """
+        Returns the variance of the distribution.
+        """
+        return self.base_dist.variance * self.scale**2
+
+    @property
+    def stddev(self):
+        """
+        Returns the standard deviation of the distribution.
+        """
+        return self.variance.sqrt()
+
+
+class PtArgProj(nn.Module):
+    def __init__(
+        self,
+        in_features: int,
+        args_dim: Dict[str, int],
+        domain_map: Callable[..., Tuple[torch.Tensor]],
+        **kwargs,
+    ) -> None:
+        super().__init__(**kwargs)
+        self.args_dim = args_dim
+        self.proj = nn.ModuleList([nn.Linear(in_features, dim) for dim in args_dim.values()])
+        self.domain_map = domain_map
+
+    def forward(self, x: torch.Tensor) -> Tuple[torch.Tensor]:
+        params_unbounded = [proj(x) for proj in self.proj]
+
+        return self.domain_map(*params_unbounded)
+
+
+class LambdaLayer(nn.Module):
+    def __init__(self, function):
+        super().__init__()
+        self._func = function
+
+    def forward(self, x, *args):
+        return self._func(x, *args)
+
+
+class Output:
+    in_features: int
+    args_dim: Dict[str, int]
+    _dtype: Type = np.float32
+
+    @property
+    def dtype(self):
+        return self._dtype
+
+    @dtype.setter
+    def dtype(self, dtype: Type):
+        self._dtype = dtype
+
+    def get_args_proj(self, in_features: int) -> nn.Module:
+        return PtArgProj(
+            in_features=in_features,
+            args_dim=self.args_dim,
+            domain_map=LambdaLayer(self.domain_map),
+        )
+
+    def domain_map(self, *args: torch.Tensor):
+        raise NotImplementedError()
+
+
+class DistributionOutput(Output):
+    distr_cls: type
+
+    def __init__(self) -> None:
+        pass
+
+    def _base_distribution(self, distr_args):
+        return self.distr_cls(*distr_args)
+
+    def distribution(
+        self,
+        distr_args,
+        loc: Optional[torch.Tensor] = None,
+        scale: Optional[torch.Tensor] = None,
+    ) -> Distribution:
+        distr = self._base_distribution(distr_args)
+        if loc is None and scale is None:
+            return distr
+        else:
+            return AffineTransformed(distr, loc=loc, scale=scale)
+
+    @property
+    def event_shape(self) -> Tuple:
+        r"""
+        Shape of each individual event contemplated by the distributions
+        that this object constructs.
+        """
+        raise NotImplementedError()
+
+    @property
+    def event_dim(self) -> int:
+        r"""
+        Number of event dimensions, i.e., length of the `event_shape` tuple,
+        of the distributions that this object constructs.
+        """
+        return len(self.event_shape)
+
+    @property
+    def value_in_support(self) -> float:
+        r"""
+        A float that will have a valid numeric value when computing the
+        log-loss of the corresponding distribution. By default 0.0.
+        This value will be used when padding data series.
+        """
+        return 0.0
+
+    def domain_map(self, *args: torch.Tensor):
+        r"""
+        Converts arguments to the right shape and domain. The domain depends
+        on the type of distribution, while the correct shape is obtained by
+        reshaping the trailing axis in such a way that the returned tensors
+        define a distribution of the right event_shape.
+        """
+        raise NotImplementedError()
+
+
+class StudentTOutput(DistributionOutput):
+    args_dim: Dict[str, int] = {"df": 1, "loc": 1, "scale": 1}
+    distr_cls: type = StudentT
+
+    @classmethod
+    def domain_map(cls, df: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor):
+        scale = F.softplus(scale)
+        df = 2.0 + F.softplus(df)
+        return df.squeeze(-1), loc.squeeze(-1), scale.squeeze(-1)
+
+    @property
+    def event_shape(self) -> Tuple:
+        return ()
 
 
 class FeatureEmbedder(nn.Module):
@@ -158,7 +312,7 @@ class NOPScaler(nn.Module):
         return data, scale
 
 
-def weighted_average(x: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
+def _weighted_average(x: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
     """
     Computes the weighted average of a given tensor across a given dim, masking
     values associated with weight zero,
@@ -1520,7 +1674,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             else:
                 loss_weights = future_observed_values.min(dim=-1, keepdim=False)
 
-            prediction_loss = weighted_average(loss, weights=loss_weights)
+            prediction_loss = _weighted_average(loss, weights=loss_weights)
 
         if not return_dict:
             outputs = (params + outputs[1:]) if params is not None else outputs[1:]
