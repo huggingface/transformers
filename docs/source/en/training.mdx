@@ -160,16 +160,18 @@ Then fine-tune your model by calling [`~transformers.Trainer.train`]:
 When you want to train a 🤗 Transformers model with the Keras API, you need to convert your dataset to a format that
 Keras understands. If your dataset is small, you can just convert the whole thing to NumPy arrays and pass it to Keras.
 
-First, load a dataset:
+First, load a dataset. We'll use the CoLA dataset from the [GLUE benchmark](https://huggingface.co/datasets/glue),
+since it's a simple binary text classification task, and just take the training split for now.
 
 ```py
 from datasets import load_dataset
 
-dataset = load_dataset("glue", "cola")  # Simple text classification dataset
+dataset = load_dataset("glue", "cola")
 dataset = dataset["train"]  # Just take the training split for now
 ```
 
-Next, load a tokenizer and tokenize the data as NumPy arrays:
+Next, load a tokenizer and tokenize the data as NumPy arrays. Note that the labels are already a list of 0 and 1s,
+so we can just convert that directly to a NumPy array without tokenization!
 
 ```py
 from transformers import AutoTokenizer
