@@ -81,7 +81,7 @@ def apply_tesseract(image: "Image.Image", lang: Optional[str], tesseract_config:
 class ModelType(ExplicitEnum):
     LayoutLM = "layoutlm"
     LayoutLMv2andv3 = "layoutlmv2andv3"
-    Donut = "donut"
+    VisionEncoderDecoder = "vision_encoder_decoder"
 
 
 @add_end_docstrings(PIPELINE_INIT_ARGS)
@@ -104,7 +104,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         self.check_model_type(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING)
 
         if self.model.config.__class__.__name__ == "VisionEncoderDecoderConfig":
-            self.model_type = ModelType.Donut
+            self.model_type = ModelType.VisionEncoderDecoder
         elif self.model.config.__class__.__name__ == "LayoutLMConfig":
             self.model_type = ModelType.LayoutLM
         else:
@@ -228,36 +228,20 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
     def preprocess(
         self,
         input,
-        padding="do_not_pad",
-        doc_stride=None,
-        max_question_len=64,
-        max_seq_len=None,
         lang=None,
         tesseract_config="",
     ):
-        # NOTE: This code mirrors the code in question answering and will be implemented in a follow up PR
-        # to support documents with enough tokens that overflow the model's window
-        #        if max_seq_len is None:
-        #            # TODO: LayoutLM's stride is 512 by default. Is it ok to use that as the min
-        #            # instead of 384 (which the QA model uses)?
-        #            max_seq_len = min(self.tokenizer.model_max_length, 512)
-
-        if doc_stride is not None:
-            # TODO implement
-            # doc_stride = min(max_seq_len // 2, 128)
-            raise ValueError("Unsupported: striding inputs")
-
         image = None
         image_features = {}
-        if "image" in input:
+        if input.get("image", None) is not None:
             image = load_image(input["image"])
             if self.feature_extractor is not None:
                 image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
-            elif self.model_type == ModelType.Donut:
+            elif self.model_type == ModelType.VisionEncoderDecoder:
                 raise ValueError("If you are using a VisionEncoderDecoderModel, you must provide a feature extractor")
 
         words, boxes = None, None
-        if not self.model_type == ModelType.Donut:
+        if not self.model_type == ModelType.VisionEncoderDecoder:
             if "word_boxes" in input:
                 words = [x[0] for x in input["word_boxes"]]
                 boxes = [x[1] for x in input["word_boxes"]]
@@ -284,7 +268,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
                 f" {self.tokenizer.padding_side}"
             )
 
-        if self.model_type == ModelType.Donut:
+        if self.model_type == ModelType.VisionEncoderDecoder:
             task_prompt = f'<s_docvqa><s_question>{input["question"]}</s_question><s_answer>'
             # Adapted from https://huggingface.co/spaces/nielsr/donut-docvqa/blob/main/app.py
             encoding = {
@@ -292,13 +276,6 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
                 "decoder_input_ids": self.tokenizer(
                     task_prompt, add_special_tokens=False, return_tensors=self.framework
                 ).input_ids,
-                "max_length": self.model.decoder.config.max_position_embeddings,
-                "early_stopping": True,
-                "pad_token_id": self.tokenizer.pad_token_id,
-                "eos_token_id": self.tokenizer.eos_token_id,
-                "use_cache": True,
-                "num_beams": 1,
-                "bad_words_ids": [[self.tokenizer.unk_token_id]],
                 "return_dict_in_generate": True,
             }
             p_mask = None
@@ -316,9 +293,6 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
                 tokenizer_kwargs["boxes"] = [boxes]
 
             encoding = self.tokenizer(
-                padding=padding,
-                max_length=max_seq_len,
-                stride=doc_stride,
                 return_token_type_ids=True,
                 return_tensors=self.framework,
                 # TODO: In a future PR, use these feature to handle sequences whose length is longer than
@@ -384,7 +358,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         word_ids = model_inputs.pop("word_ids", None)
         words = model_inputs.pop("words", None)
 
-        if self.model_type == ModelType.Donut:
+        if self.model_type == ModelType.VisionEncoderDecoder:
             model_outputs = self.model.generate(**model_inputs)
         else:
             model_outputs = self.model(**model_inputs)
@@ -396,12 +370,12 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         return model_outputs
 
     def postprocess(self, model_outputs, top_k=1, **kwargs):
-        if self.model_type == ModelType.Donut:
+        if self.model_type == ModelType.VisionEncoderDecoder:
             answers = self.postprocess_donut(model_outputs)
         else:
             answers = self.postprocess_extractive_qa(model_outputs, top_k=top_k, **kwargs)
 
-        answers = sorted(answers, key=lambda x: x["score"], reverse=True)[:top_k]
+        answers = sorted(answers, key=lambda x: x.get("score", 0), reverse=True)[:top_k]
         if len(answers) == 1:
             return answers[0]
         return answers
@@ -412,7 +386,7 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
         sequence = sequence.replace(self.tokenizer.eos_token, "").replace(self.tokenizer.pad_token, "")
         sequence = re.sub(r"<.*?>", "", sequence, count=1).strip()  # remove first task start token
         ret = {
-            "answer": "",
+            "answer": None,
         }
 
         answer = re.search(r"<s_answer>(.*)</s_answer>", sequence)

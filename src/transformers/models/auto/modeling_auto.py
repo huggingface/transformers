@@ -606,6 +606,8 @@ MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         ("layoutlm", "LayoutLMForQuestionAnswering"),
+        ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
+        ("layoutlmv3", "LayoutLMv3ForQuestionAnswering"),
     ]
 )
 
@@ -907,7 +909,7 @@ class AutoModelForDocumentQuestionAnswering(_BaseAutoModelClass):
 AutoModelForDocumentQuestionAnswering = auto_class_update(
     AutoModelForDocumentQuestionAnswering,
     head_doc="document question answering",
-    checkpoint_for_example="impira/layoutlm-document-qa",
+    checkpoint_for_example='impira/layoutlm-document-qa", revision="3dc6de3',  # XXX verify docs
 )
 
 
