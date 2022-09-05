@@ -1,3 +1,17 @@
+# Copyright 2022 The Impira Team and the HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import re
 from typing import List, Optional, Tuple, Union
 
@@ -89,8 +103,8 @@ class DocumentQuestionAnsweringPipeline(Pipeline):
     # TODO: Update task_summary docs to include an example with document QA and then update the first sentence
     """
     Document Question Answering pipeline using any `AutoModelForDocumentQuestionAnswering`. The inputs/outputs are
-    similar to the (extractive) question answering pipeline; however, the pipeline takes an image (and optional
-    OCR'd words/boxes) as input instead of text context.
+    similar to the (extractive) question answering pipeline; however, the pipeline takes an image (and optional OCR'd
+    words/boxes) as input instead of text context.
 
     This document question answering pipeline can currently be loaded from [`pipeline`] using the following task
     identifier: `"document-question-answering"`.

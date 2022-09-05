@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 import unittest
 
 from transformers import MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING, AutoTokenizer, is_vision_available
@@ -47,6 +46,13 @@ else:
         return None
 
 
+# This is a pinned image from a specific revision of a document question answering space, hosted by HuggingFace,
+# so we can expect it to be available.
+INVOICE_URL = (
+    "https://huggingface.co/spaces/impira/docquery/resolve/2f6c96314dc84dfda62d40de9da55f2f5165d403/invoice.png"
+)
+
+
 @is_pipeline_test
 @require_torch
 @require_vision
@@ -60,27 +66,27 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
             "document-question-answering", model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
         )
 
-        img_path = "./tests/fixtures/tests_samples/DocVQA/yrvw0217_50.png"
-        words_path = "./tests/fixtures/tests_samples/DocVQA/yrvw0217_50.json"
+        image = INVOICE_URL
+        word_boxes = list(zip(*apply_tesseract(load_image(image), None, "")))
         question = "What is the placebo?"
         examples = [
             {
-                "image": Image.open(img_path),
+                "image": load_image(image),
                 "question": question,
             },
             {
-                "image": img_path,
+                "image": image,
                 "question": question,
             },
             {
-                "image": img_path,
+                "image": image,
                 "question": question,
-                "word_boxes": json.load(open(words_path, "r")),
+                "word_boxes": word_boxes,
             },
             {
                 "image": None,
                 "question": question,
-                "word_boxes": json.load(open(words_path, "r")),
+                "word_boxes": word_boxes,
             },
         ]
         return dqa_pipeline, examples
@@ -103,7 +109,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
     @require_pytesseract
     def test_small_model_pt(self):
         dqa_pipeline = pipeline("document-question-answering", model="hf-internal-testing/tiny-random-layoutlmv2")
-        image = "https://templates.invoicehome.com/invoice-template-us-neat-750px.png"
+        image = INVOICE_URL
         question = "How many cats are there?"
 
         expected_output = [
@@ -157,7 +163,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
             model="tiennvcs/layoutlmv2-base-uncased-finetuned-docvqa",
             revision="9977165",
         )
-        image = "https://templates.invoicehome.com/invoice-template-us-neat-750px.png"
+        image = INVOICE_URL
         question = "What is the invoice number?"
 
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
@@ -206,7 +212,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
             tokenizer=tokenizer,
             revision="3dc6de3",
         )
-        image = "https://templates.invoicehome.com/invoice-template-us-neat-750px.png"
+        image = INVOICE_URL
         question = "What is the invoice number?"
 
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
@@ -263,7 +269,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
             feature_extractor="naver-clova-ix/donut-base-finetuned-docvqa",
         )
 
-        image = "https://templates.invoicehome.com/invoice-template-us-neat-750px.png"
+        image = INVOICE_URL
         question = "What is the invoice number?"
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
         self.assertEqual(nested_simplify(outputs, decimals=4), {"answer": "us-001"})
