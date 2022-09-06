@@ -650,7 +650,7 @@ def main():
 
     if args.with_tracking:
         accelerator.end_training()
-    
+
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)

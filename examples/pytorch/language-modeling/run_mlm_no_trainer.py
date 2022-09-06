@@ -692,7 +692,7 @@ def main():
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
-    
+
     if args.with_tracking:
         accelerator.end_training()
 

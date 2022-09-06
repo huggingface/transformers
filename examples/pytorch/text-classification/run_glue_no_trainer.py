@@ -571,7 +571,6 @@ def main():
                 },
                 step=completed_steps,
             )
-            
 
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
             accelerator.wait_for_everyone()
@@ -590,10 +589,10 @@ def main():
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
-    
+
     if args.with_tracking:
         accelerator.end_training()
-        
+
     if args.output_dir is not None:
         accelerator.wait_for_everyone()
         unwrapped_model = accelerator.unwrap_model(model)
