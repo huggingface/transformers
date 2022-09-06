@@ -344,7 +344,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("m2m_100", "M2M100"),
         ("marian", "Marian"),
         ("maskformer", "MaskFormer"),
-        ("maskformer", "mask2former"),
+        ("mask2former", "Mask2Former"),
         ("mbart", "mBART"),
         ("mbart50", "mBART-50"),
         ("mctct", "M-CTC-T"),
