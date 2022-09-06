@@ -5,6 +5,7 @@ from typing import Dict, List, Optional
 import numpy as np
 import torch
 from torch.utils.data import DataLoader
+
 from transformers import AutoTokenizer, BatchEncoding, PreTrainedTokenizerBase
 from transformers.models.bart.modeling_bart import BartForConditionalGeneration, shift_tokens_right
 
@@ -153,7 +154,7 @@ class DataCollatorForBartDenoisingLM:
                 if is_last_orig and not is_last_in_loop:
                     sentence = torch.cat((sentence, torch.LongTensor([self.tokenizer.pad_token_id])))
 
-                result[index: index + sentence.size(0)] = sentence
+                result[index : index + sentence.size(0)] = sentence
                 index += sentence.size(0)
 
             all_results[seq_idx] = result
@@ -164,9 +165,11 @@ class DataCollatorForBartDenoisingLM:
         if self.mask_whole_word is not None:
             is_word_start = self.mask_whole_word.gather(0, input_ids.view(-1)).reshape(input_ids.size())
         else:
-            is_word_start = (~torch.BoolTensor([
-                self.tokenizer.get_special_tokens_mask(seq, already_has_special_tokens=True) for seq in input_ids
-            ])).long()
+            is_word_start = (
+                ~torch.BoolTensor(
+                    [self.tokenizer.get_special_tokens_mask(seq, already_has_special_tokens=True) for seq in input_ids]
+                )
+            ).long()
         is_word_start[:, 0] = 0
         is_word_start[:, -1] = 0
         return is_word_start
@@ -187,10 +190,13 @@ class DataCollatorForBartDenoisingLM:
             cum_length = torch.cumsum(lengths, 0)
 
             while cum_length[-1] < num_to_mask:
-                lengths = torch.cat([lengths,
-                                     self.mask_span_distribution.sample(sample_shape=(num_to_mask,)),
-                                     ],
-                                    dim=0)
+                lengths = torch.cat(
+                    [
+                        lengths,
+                        self.mask_span_distribution.sample(sample_shape=(num_to_mask,)),
+                    ],
+                    dim=0,
+                )
                 cum_length = torch.cumsum(lengths, 0)
 
             # Trim to masking budget
@@ -218,9 +224,7 @@ class DataCollatorForBartDenoisingLM:
         assert not is_word_start[:, -1].any()
 
         word_starts = is_word_start.nonzero(as_tuple=False)
-        indices = word_starts[
-            torch.randperm(word_starts.size(0))[:num_to_mask]
-        ]
+        indices = word_starts[torch.randperm(word_starts.size(0))[:num_to_mask]]
 
         mask_random = torch.FloatTensor(num_to_mask).uniform_() < self.random_ratio
 
@@ -238,9 +242,7 @@ class DataCollatorForBartDenoisingLM:
                 input_ids[tuple(idxs)] = self.tokenizer.mask_token_id
 
             # Replace a fraction (random_ratio) with a random token
-            rand_tokens = torch.randint(
-                1, len(self.tokenizer), size=(mask_random.sum(),)
-            )
+            rand_tokens = torch.randint(1, len(self.tokenizer), size=(mask_random.sum(),))
             for idxs, tok in zip(indices[mask_random], rand_tokens):
                 input_ids[tuple(idxs)] = tok
 
@@ -264,9 +266,7 @@ class DataCollatorForBartDenoisingLM:
                         input_ids[tuple(idxs)] = self.tokenizer.mask_token_id
 
                     # Replace a fraction (random_ratio) with a random token
-                    rand_tokens = torch.randint(
-                        1, len(self.tokenizer), size=(mask_random.sum(),)
-                    )
+                    rand_tokens = torch.randint(1, len(self.tokenizer), size=(mask_random.sum(),))
                     for idxs, tok in zip(indices[mask_random], rand_tokens):
                         input_ids[tuple(idxs)] = tok
 
@@ -288,9 +288,7 @@ class DataCollatorForBartDenoisingLM:
                         input_ids[tuple(idxs)] = self.tokenizer.mask_token_id
 
                     # Replace a fraction (random_ratio) with a random token
-                    rand_tokens = torch.randint(
-                        1, len(self.tokenizer), size=(mask_random.sum(),)
-                    )
+                    rand_tokens = torch.randint(1, len(self.tokenizer), size=(mask_random.sum(),))
                     for idxs, tok in zip(indices[mask_random], rand_tokens):
                         input_ids[tuple(idxs)] = tok
 
@@ -300,7 +298,7 @@ class DataCollatorForBartDenoisingLM:
         final_ids = torch.full_like(input_ids, fill_value=self.tokenizer.pad_token_id)
         for keeper_idx, keeper in enumerate(to_keep):
             seq = input_ids[keeper_idx, keeper]
-            final_ids[keeper_idx, :seq.size(0)] = seq
+            final_ids[keeper_idx, : seq.size(0)] = seq
         input_ids = final_ids
 
         if num_inserts > 0:
@@ -315,9 +313,11 @@ class DataCollatorForBartDenoisingLM:
         for seq_idx in range(output_ids.size(0)):
             output_ids[seq_idx] = torch.cat(
                 (
-                    input_ids[seq_idx, 0:1], input_ids[seq_idx, offset[seq_idx]:-1],
-                    input_ids[seq_idx, 1:offset[seq_idx]],
-                    input_ids[seq_idx, -1:]),
+                    input_ids[seq_idx, 0:1],
+                    input_ids[seq_idx, offset[seq_idx] : -1],
+                    input_ids[seq_idx, 1 : offset[seq_idx]],
+                    input_ids[seq_idx, -1:],
+                ),
                 dim=0,
             )
         return output_ids
@@ -337,8 +337,9 @@ class DataCollatorForBartDenoisingLM:
 
         seq_num_tokens = input_ids.size(1)
         num_noise = int(math.ceil(seq_num_tokens * p))
-        all_results = torch.full((input_ids.size(0), seq_num_tokens + num_noise),
-                                 fill_value=self.tokenizer.pad_token_id)
+        all_results = torch.full(
+            (input_ids.size(0), seq_num_tokens + num_noise), fill_value=self.tokenizer.pad_token_id
+        )
         for seq_id, sequence in enumerate(input_ids):
             # -2 and + 1 to avoid targetting first and last item?
             noise_indices = torch.randperm(seq_num_tokens + num_noise - 2)[:num_noise] + 1
@@ -349,9 +350,7 @@ class DataCollatorForBartDenoisingLM:
 
             num_random = int(math.ceil(num_noise * self.random_ratio))
             result[noise_indices[num_random:]] = self.tokenizer.mask_token_id
-            result[noise_indices[:num_random]] = torch.randint(
-                low=1, high=len(self.tokenizer), size=(num_random,)
-            )
+            result[noise_indices[:num_random]] = torch.randint(low=1, high=len(self.tokenizer), size=(num_random,))
 
             result[~noise_mask] = sequence
 
@@ -375,22 +374,27 @@ def main():
 
     tokenizer: PreTrainedTokenizerBase = AutoTokenizer.from_pretrained("facebook/bart-base")
     # Two sequences, containing a padtoken to separate sentences
-    text = ["A cookie is a baked or cooked snack or dessert that is typically small, flat and sweet."
-            f"{tokenizer.pad_token}It usually contains flour, sugar, egg, and some type of oil, fat, or butter."
-            f"{tokenizer.pad_token}It may include other ingredients such as raisins, oats, chocolate chips, nuts, etc.",
-            "Biscuit or cookie variants include sandwich biscuits, such as custard creams."
-            f"{tokenizer.pad_token}Chewier biscuits are sometimes called cookies"]
+    text = [
+        "A cookie is a baked or cooked snack or dessert that is typically small, flat and sweet."
+        f"{tokenizer.pad_token}It usually contains flour, sugar, egg, and some type of oil, fat, or butter."
+        f"{tokenizer.pad_token}It may include other ingredients such as raisins, oats, chocolate chips, nuts, etc.",
+        "Biscuit or cookie variants include sandwich biscuits, such as custard creams."
+        f"{tokenizer.pad_token}Chewier biscuits are sometimes called cookies",
+    ]
     max_length = max([len(tokenizer(s)["input_ids"]) for s in text])
     encoded = [tokenizer(s, padding="max_length", truncation=True, max_length=max_length) for s in text]
     dataset = DummyDataset(data=encoded)
     model = BartForConditionalGeneration.from_pretrained("facebook/bart-base")
-    dl = DataLoader(dataset, collate_fn=DataCollatorForBartDenoisingLM(tokenizer, model.config.decoder_start_token_id),
-                    batch_size=2)
+    dl = DataLoader(
+        dataset,
+        collate_fn=DataCollatorForBartDenoisingLM(tokenizer, model.config.decoder_start_token_id),
+        batch_size=2,
+    )
 
     for b in dl:
         print(tokenizer.batch_decode(b["labels"]))
         print(tokenizer.batch_decode(b["input_ids"]))
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
