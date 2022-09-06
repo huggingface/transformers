@@ -192,18 +192,7 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
     Copy/paste/tweak model's weights to our DETR structure.
     """
 
-    # load config
-
-    # TODO: set labels
-    # config.num_labels = 91
-    # repo_id = "datasets/huggingface/label-files"
-    # filename = "coco-detection-id2label.json"
-    # id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
-    # id2label = {int(k): v for k, v in id2label.items()}
-    # config.id2label = id2label
-    # config.label2id = {v: k for k, v in id2label.items()}
-
-    # # load feature extractor
+    # TODO load feature extractor
     # feature_extractor = DetrFeatureExtractor(format="coco_detection")
 
     # # prepare image
@@ -241,10 +230,25 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
         giou_cost=2,
     )
 
-    if True:
+    if "detection" in checkpoint_url:
         config.num_queries = 15
+        config.num_labels = 2
+        id2label = {0: "table", 1: "table rotated"}
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
     else:
         config.num_queries = 125
+        config.num_labels = 6
+        id2label = {
+            0: "table",
+            1: "table column",
+            2: "table row",
+            3: "table column header",
+            4: "table projected row header",
+            5: "table spanning cell",
+        }
+        config.id2label = id2label
+        config.label2id = {v: k for k, v in id2label.items()}
 
     model = DetrForObjectDetection(config)
     model.load_state_dict(state_dict)
@@ -257,11 +261,18 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
 
     outputs = model(pixel_values)
 
-    expected_logits = torch.tensor(
-        [[-6.7897, -16.9985, 6.7937], [-8.0186, -22.2192, 6.9677], [-7.3117, -21.0708, 7.4055]]
-    )
+    if "detection" in checkpoint_url:
+        expected_logits = torch.tensor(
+            [[-6.7897, -16.9985, 6.7937], [-8.0186, -22.2192, 6.9677], [-7.3117, -21.0708, 7.4055]]
+        )
+        expected_shape = (1, 15, 3)
+    else:
+        expected_logits = torch.tensor(
+            [[-7.2321, -18.5677, 7.2361], [-8.4610, -23.7884, 7.4100], [-7.7541, -22.6400, 7.8478]]
+        )
+        expected_shape = (1, 115, 7)
 
-    assert outputs.logits.shape == (1, 15, 3)
+    assert outputs.logits.shape == expected_shape
     assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
     print("Looks ok!")
     # assert torch.allclose(outputs.pred_boxes, expected_boxes, atol=1e-4)
@@ -276,7 +287,12 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
     if push_to_hub:
         # Push model to HF hub
         logger.info("Pushing model to the hub...")
-        model.push_to_hub("nielsr/detr-table-detection")
+        model_name = (
+            "nielsr/detr-table-detection"
+            if "detection" in checkpoint_url
+            else "nielsr/detr-table-structure-recognition"
+        )
+        model.push_to_hub(model_name)
 
 
 if __name__ == "__main__":
@@ -286,7 +302,11 @@ if __name__ == "__main__":
         "--checkpoint_url",
         default="https://pubtables1m.blob.core.windows.net/model/pubtables1m_detection_detr_r18.pth",
         type=str,
-        help="Name of the DETR model you'd like to convert.",
+        choices=[
+            "https://pubtables1m.blob.core.windows.net/model/pubtables1m_detection_detr_r18.pth",
+            "https://pubtables1m.blob.core.windows.net/model/pubtables1m_structure_detr_r18.pth",
+        ],
+        help="URL of the Table Transformer checkpoint you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
