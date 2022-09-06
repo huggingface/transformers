@@ -349,6 +349,7 @@ class ConfigTestUtils(unittest.TestCase):
         response_mock.status_code = 500
         response_mock.headers = {}
         response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
         _ = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")

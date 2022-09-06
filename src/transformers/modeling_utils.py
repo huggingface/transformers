@@ -84,8 +84,6 @@ if is_accelerate_available():
     else:
         get_balanced_memory = None
 
-if is_bitsandbytes_available():
-    from .utils.bitsandbytes import get_key_to_not_convert, replace_8bit_linear, set_module_8bit_tensor_to_device
 
 logger = logging.get_logger(__name__)
 
@@ -417,7 +415,7 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
 
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
-    def load(module: nn.Module, prefix=""):
+    def load(module: nn.Module, state_dict, prefix=""):
         local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
         args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
         if is_deepspeed_zero3_enabled():
@@ -434,9 +432,12 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
 
         for name, child in module._modules.items():
             if child is not None:
-                load(child, prefix + name + ".")
+                load(child, state_dict, prefix + name + ".")
 
-    load(model_to_load, prefix=start_prefix)
+    load(model_to_load, state_dict, prefix=start_prefix)
+    # Delete `state_dict` so it could be collected by GC earlier. Note that `state_dict` is a copy of the argument, so
+    # it's safe to delete it.
+    del state_dict
 
     return error_msgs
 
@@ -523,6 +524,9 @@ def _load_state_dict_into_meta_model(
     # - handling error_msgs - mimicking the error handling in module._load_from_state_dict()
     # - Is there a situation where some keys aren't in `loaded_state_dict_keys` and in which case
     #   they won't get loaded.
+
+    if load_in_8bit:
+        from .utils.bitsandbytes import set_module_8bit_tensor_to_device
 
     error_msgs = []
 
@@ -2139,6 +2143,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = cls(config, *model_args, **model_kwargs)
 
         if load_in_8bit:
+            from .utils.bitsandbytes import get_key_to_not_convert, replace_8bit_linear
+
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
 
             # We never convert lm_head or any last modules for numerical stability reasons
@@ -2276,6 +2282,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         dtype=None,
         load_in_8bit=False,
     ):
+        if load_in_8bit:
+            from .utils.bitsandbytes import set_module_8bit_tensor_to_device
+
         if device_map is not None and "disk" in device_map.values():
             if offload_folder is None:
                 raise ValueError(

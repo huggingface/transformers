@@ -12,18 +12,18 @@ specific language governing permissions and limitations under the License.
 
 # 🤗 Transformers
 
-State-of-the-art Machine Learning for PyTorch, TensorFlow and JAX.
+State-of-the-art Machine Learning for [PyTorch](https://pytorch.org/), [TensorFlow](https://www.tensorflow.org/), and [JAX](https://jax.readthedocs.io/en/latest/).
 
-🤗 Transformers provides APIs to easily download and train state-of-the-art pretrained models. Using pretrained models can reduce your compute costs, carbon footprint, and save you time from training a model from scratch. The models can be used across different modalities such as:
+🤗 Transformers provides APIs and tools to easily download and train state-of-the-art pretrained models. Using pretrained models can reduce your compute costs, carbon footprint, and save you the time and resources required to train a model from scratch. These models support common tasks in different modalities, such as:
 
-* 📝 Text: text classification, information extraction, question answering, summarization, translation, and text generation in over 100 languages.
-* 🖼️ Images: image classification, object detection, and segmentation.
-* 🗣️ Audio: speech recognition and audio classification.
-* 🐙 Multimodal: table question answering, optical character recognition, information extraction from scanned documents, video classification, and visual question answering.
+📝 **Natural Language Processing**: text classification, named entity recognition, question answering, language modeling, summarization, translation, multiple choice, and text generation.<br>
+🖼️ **Computer Vision**: image classification, object detection, and segmentation.<br>
+🗣️ **Audio**: automatic speech recognition and audio classification.<br>
+🐙 **Multimodal**: table question answering, optical character recognition, information extraction from scanned documents, video classification, and visual question answering.
 
-Our library supports seamless integration between three of the most popular deep learning libraries: [PyTorch](https://pytorch.org/), [TensorFlow](https://www.tensorflow.org/) and [JAX](https://jax.readthedocs.io/en/latest/). Train your model in three lines of code in one framework, and load it for inference with another.
+🤗 Transformers support framework interoperability between PyTorch, TensorFlow, and JAX. This provides the flexibility to use a different framework at each stage of a model's life; train a model in three lines of code in one framework, and load it for inference in another. Models can also be exported to a format like ONNX and TorchScript for deployment in production environments.
 
-Each 🤗 Transformers architecture is defined in a standalone Python module so they can be easily customized for research and experiments.
+Join the growing community on the [Hub](https://huggingface.co/models), [forum](https://discuss.huggingface.co/), or [Discord](https://discord.com/invite/JfAtkvEtRb) today!
 
 ## If you are looking for custom support from the Hugging Face team
 
@@ -33,19 +33,17 @@ Each 🤗 Transformers architecture is defined in a standalone Python module so 
 
 ## Contents
 
-The documentation is organized in five parts:
+The documentation is organized into five sections:
 
-- **GET STARTED** contains a quick tour and installation instructions to get up and running with 🤗 Transformers.
-- **TUTORIALS** are a great place to begin if you are new to our library. This section will help you gain the basic skills you need to start using 🤗 Transformers.
-- **HOW-TO GUIDES** will show you how to achieve a specific goal like fine-tuning a pretrained model for language modeling or how to create a custom model head.
-- **CONCEPTUAL GUIDES** provides more discussion and explanation of the underlying concepts and ideas behind models, tasks, and the design philosophy of 🤗 Transformers. 
-- **API** describes each class and function, grouped in:
+- **GET STARTED** provides a quick tour of the library and installation instructions to get up and running.
+- **TUTORIALS** are a great place to start if you're a beginner. This section will help you gain the basic skills you need to start using the library.
+- **HOW-TO GUIDES** show you how to achieve a specific goal, like finetuning a pretrained model for language modeling or how to write and share a custom model.
+- **CONCEPTUAL GUIDES** offers more discussion and explanation of the underlying concepts and ideas behind models, tasks, and the design philosophy of 🤗 Transformers.
+- **API** describes all classes and functions:
 
-  - **MAIN CLASSES** for the main classes exposing the important APIs of the library.
-  - **MODELS** for the classes and functions related to each model implemented in the library.
-  - **INTERNAL HELPERS** for the classes and functions we use internally.
-
-The library currently contains JAX, PyTorch and TensorFlow implementations, pretrained model weights, usage scripts and conversion utilities for the following models.
+  - **MAIN CLASSES** details the most important classes like configuration, model, tokenizer, and pipeline.
+  - **MODELS** details the classes and functions related to each model implemented in the library.
+  - **INTERNAL HELPERS** details utility classes and functions used internally.
 
 ### Supported models
 
@@ -133,6 +131,7 @@ The library currently contains JAX, PyTorch and TensorFlow implementations, pret
 1. **[OPT](master/model_doc/opt)** (from Meta AI) released with the paper [OPT: Open Pre-trained Transformer Language Models](https://arxiv.org/abs/2205.01068) by Susan Zhang, Stephen Roller, Naman Goyal, Mikel Artetxe, Moya Chen, Shuohui Chen et al.
 1. **[OWL-ViT](model_doc/owlvit)** (from Google AI) released with the paper [Simple Open-Vocabulary Object Detection with Vision Transformers](https://arxiv.org/abs/2205.06230) by Matthias Minderer, Alexey Gritsenko, Austin Stone, Maxim Neumann, Dirk Weissenborn, Alexey Dosovitskiy, Aravindh Mahendran, Anurag Arnab, Mostafa Dehghani, Zhuoran Shen, Xiao Wang, Xiaohua Zhai, Thomas Kipf, and Neil Houlsby.
 1. **[Pegasus](model_doc/pegasus)** (from Google) released with the paper [PEGASUS: Pre-training with Extracted Gap-sentences for Abstractive Summarization](https://arxiv.org/abs/1912.08777) by Jingqing Zhang, Yao Zhao, Mohammad Saleh and Peter J. Liu.
+1. **[PEGASUS-X](model_doc/pegasus_x)** (from Google) released with the paper [Investigating Efficiently Extending Transformers for Long Input Summarization](https://arxiv.org/abs/2208.04347) by Jason Phang, Yao Zhao, and Peter J. Liu.
 1. **[Perceiver IO](model_doc/perceiver)** (from Deepmind) released with the paper [Perceiver IO: A General Architecture for Structured Inputs & Outputs](https://arxiv.org/abs/2107.14795) by Andrew Jaegle, Sebastian Borgeaud, Jean-Baptiste Alayrac, Carl Doersch, Catalin Ionescu, David Ding, Skanda Koppula, Daniel Zoran, Andrew Brock, Evan Shelhamer, Olivier Hénaff, Matthew M. Botvinick, Andrew Zisserman, Oriol Vinyals, João Carreira.
 1. **[PhoBERT](model_doc/phobert)** (from VinAI Research) released with the paper [PhoBERT: Pre-trained language models for Vietnamese](https://www.aclweb.org/anthology/2020.findings-emnlp.92/) by Dat Quoc Nguyen and Anh Tuan Nguyen.
 1. **[PLBart](model_doc/plbart)** (from UCLA NLP) released with the paper [Unified Pre-training for Program Understanding and Generation](https://arxiv.org/abs/2103.06333) by Wasi Uddin Ahmad, Saikat Chakraborty, Baishakhi Ray, Kai-Wei Chang.
@@ -245,7 +244,7 @@ Flax), PyTorch, and/or TensorFlow.
 |          ImageGPT           |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |          LayoutLM           |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 |         LayoutLMv2          |       ✅       |       ✅       |       ✅        |         ❌         |      ❌      |
-|         LayoutLMv3          |       ✅       |       ✅       |       ✅        |         ❌         |      ❌      |
+|         LayoutLMv3          |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 |             LED             |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 |            LeViT            |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |         Longformer          |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
@@ -259,7 +258,7 @@ Flax), PyTorch, and/or TensorFlow.
 |            mBART            |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 |        Megatron-BERT        |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |         MobileBERT          |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
-|          MobileViT          |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
+|          MobileViT          |       ❌       |       ❌       |       ✅        |         ✅         |      ❌      |
 |            MPNet            |       ✅       |       ✅       |       ✅        |         ✅         |      ❌      |
 |             MT5             |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 |             MVP             |       ✅       |       ✅       |       ✅        |         ❌         |      ❌      |
@@ -270,6 +269,7 @@ Flax), PyTorch, and/or TensorFlow.
 |             OPT             |       ❌       |       ❌       |       ✅        |         ✅         |      ✅      |
 |           OWL-ViT           |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |           Pegasus           |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
+|          PEGASUS-X          |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |          Perceiver          |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
 |           PLBart            |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
 |         PoolFormer          |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
@@ -312,7 +312,7 @@ Flax), PyTorch, and/or TensorFlow.
 |          Wav2Vec2           |       ✅       |       ❌       |       ✅        |         ✅         |      ✅      |
 |     Wav2Vec2-Conformer      |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
 |            WavLM            |       ❌       |       ❌       |       ✅        |         ❌         |      ❌      |
-|            XGLM             |       ✅       |       ✅       |       ✅        |         ❌         |      ✅      |
+|            XGLM             |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |
 |             XLM             |       ✅       |       ❌       |       ✅        |         ✅         |      ❌      |
 |       XLM-ProphetNet        |       ✅       |       ❌       |       ✅        |         ❌         |      ❌      |
 |         XLM-RoBERTa         |       ✅       |       ✅       |       ✅        |         ✅         |      ✅      |

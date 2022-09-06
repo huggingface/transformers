@@ -24,6 +24,7 @@ _import_structure = {
     "configuration_groupvit": [
         "GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "GroupViTConfig",
+        "GroupViTOnnxConfig",
         "GroupViTTextConfig",
         "GroupViTVisionConfig",
     ],
@@ -47,6 +48,7 @@ if TYPE_CHECKING:
     from .configuration_groupvit import (
         GROUPVIT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         GroupViTConfig,
+        GroupViTOnnxConfig,
         GroupViTTextConfig,
         GroupViTVisionConfig,
     )
