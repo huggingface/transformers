@@ -1134,9 +1134,6 @@ class DetrDecoder(DetrPreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
-            if idx == 0:
-                print(f"Hidden states before layer {idx}", hidden_states[0, :3, :3])
-
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
@@ -1165,9 +1162,6 @@ class DetrDecoder(DetrPreTrainedModel):
                 )
 
             hidden_states = layer_outputs[0]
-
-            if idx == 0:
-                print(f"Hidden states after layer {idx}", hidden_states[0, :3, :3])
 
             if self.config.auxiliary_loss:
                 hidden_states = self.layernorm(hidden_states)
@@ -1342,9 +1336,6 @@ class DetrModel(DetrPreTrainedModel):
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
-
-        print("Shape of encoder outputs:", encoder_outputs[0].shape)
-        print("First values of encoder outputs:", encoder_outputs[0][0, :3, :3])
 
         # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
         query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)

@@ -193,7 +193,6 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
     """
 
     # load config
-    config = DetrConfig(backbone="resnet18", num_queries=15, normalize_before=True)
 
     # TODO: set labels
     # config.num_labels = 91
@@ -211,10 +210,6 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
     # encoding = feature_extractor(images=img, return_tensors="pt")
     # pixel_values = encoding["pixel_values"]
 
-    file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
-    image = Image.open(file_path).convert("RGB")
-    pixel_values = normalize(resize(image)).unsqueeze(0)
-
     logger.info("Converting model...")
 
     # load original state dict
@@ -231,17 +226,27 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
         if not key.startswith("class_labels_classifier") and not key.startswith("bbox_predictor"):
             val = state_dict.pop(key)
             state_dict[prefix + key] = val
-    # finally, create HuggingFace model and load state dict
+    # create HuggingFace model and load state dict
+    config = DetrConfig(backbone="resnet18", num_queries=15, normalize_before=True)
     model = DetrForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
-    # TODO verify our conversion
+
+    # verify our conversion
+    file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
+    image = Image.open(file_path).convert("RGB")
+    pixel_values = normalize(resize(image)).unsqueeze(0)
+
     outputs = model(pixel_values)
 
-    print("Shape of logits:", outputs.logits.shape)
-    print("Final logits:", outputs.logits[0, :3, :3])
-    # assert torch.allclose(outputs.logits, original_outputs["pred_logits"], atol=1e-4)
-    # assert torch.allclose(outputs.pred_boxes, original_outputs["pred_boxes"], atol=1e-4)
+    expected_logits = torch.tensor(
+        [[-6.7897, -16.9985, 6.7937], [-8.0186, -22.2192, 6.9677], [-7.3117, -21.0708, 7.4055]]
+    )
+
+    assert outputs.logits.shape == (1, 15, 3)
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
+    print("Looks ok!")
+    # assert torch.allclose(outputs.pred_boxes, expected_boxes, atol=1e-4)
 
     if pytorch_dump_folder_path is not None:
         # Save model and feature extractor
