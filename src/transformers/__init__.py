@@ -319,6 +319,7 @@ _import_structure = {
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
     "models.tapex": ["TapexTokenizer"],
+    "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimeSformerConfig"],
     "models.trajectory_transformer": [
         "TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrajectoryTransformerConfig",
@@ -344,7 +345,6 @@ _import_structure = {
     ],
     "models.van": ["VAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VanConfig"],
     "models.videomae": ["VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "VideoMAEConfig"],
-    "models.timesformer": ["TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TimeSformerConfig"],
     "models.vilt": ["VILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViltConfig", "ViltFeatureExtractor", "ViltProcessor"],
     "models.vision_encoder_decoder": ["VisionEncoderDecoderConfig"],
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
@@ -3161,6 +3161,7 @@ if TYPE_CHECKING:
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
     from .models.tapex import TapexTokenizer
+    from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimeSformerConfig
     from .models.trajectory_transformer import (
         TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TrajectoryTransformerConfig,
@@ -3176,7 +3177,6 @@ if TYPE_CHECKING:
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
     from .models.videomae import VIDEOMAE_PRETRAINED_CONFIG_ARCHIVE_MAP, VideoMAEConfig
-    from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimeSformerConfig
     from .models.vilt import VILT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViltConfig, ViltFeatureExtractor, ViltProcessor
     from .models.vision_encoder_decoder import VisionEncoderDecoderConfig
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
@@ -4388,6 +4388,13 @@ if TYPE_CHECKING:
             T5PreTrainedModel,
             load_tf_weights_in_t5,
         )
+        from .models.timesformer import (
+            TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TimeSformerForPreTraining,
+            TimeSformerForVideoClassification,
+            TimeSformerModel,
+            TimeSformerPreTrainedModel,
+        )
         from .models.trajectory_transformer import (
             TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TrajectoryTransformerModel,
@@ -4433,13 +4440,6 @@ if TYPE_CHECKING:
             VideoMAEForVideoClassification,
             VideoMAEModel,
             VideoMAEPreTrainedModel,
-        )
-        from .models.timesformer import (
-            TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TimeSformerForPreTraining,
-            TimeSformerForVideoClassification,
-            TimeSformerModel,
-            TimeSformerPreTrainedModel,
         )
         from .models.vilt import (
             VILT_PRETRAINED_MODEL_ARCHIVE_LIST,

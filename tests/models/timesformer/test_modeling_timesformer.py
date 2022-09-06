@@ -169,7 +169,9 @@ class TimeSformerModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (
-        (TimeSformerModel, TimeSformerForPreTraining, TimeSformerForVideoClassification) if is_torch_available() else ()
+        (TimeSformerModel, TimeSformerForPreTraining, TimeSformerForVideoClassification)
+        if is_torch_available()
+        else ()
     )
 
     test_pruning = False
@@ -179,7 +181,9 @@ class TimeSformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TimeSformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=TimeSformerConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=TimeSformerConfig, has_text_modality=False, hidden_size=37
+        )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
@@ -319,7 +323,9 @@ class TimeSformerModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(hidden_states), expected_num_layers)
 
             num_visible_patches = self.model_tester.seq_length - self.model_tester.num_masks
-            seq_length = num_visible_patches if model_class == TimeSformerForPreTraining else self.model_tester.seq_length
+            seq_length = (
+                num_visible_patches if model_class == TimeSformerForPreTraining else self.model_tester.seq_length
+            )
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),

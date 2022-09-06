@@ -124,13 +124,13 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("swinv2", "Swinv2Model"),
         ("t5", "T5Model"),
         ("tapas", "TapasModel"),
+        ("timesformer", "TimeSformerModel"),
         ("trajectory_transformer", "TrajectoryTransformerModel"),
         ("transfo-xl", "TransfoXLModel"),
         ("unispeech", "UniSpeechModel"),
         ("unispeech-sat", "UniSpeechSatModel"),
         ("van", "VanModel"),
         ("videomae", "VideoMAEModel"),
-        ("timesformer", "TimeSformerModel"),
         ("vilt", "ViltModel"),
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
         ("visual_bert", "VisualBertModel"),
@@ -188,11 +188,11 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("t5", "T5ForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
+        ("timesformer", "TimeSformerForPreTraining"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("unispeech", "UniSpeechForPreTraining"),
         ("unispeech-sat", "UniSpeechSatForPreTraining"),
         ("videomae", "VideoMAEForPreTraining"),
-        ("timesformer", "TimeSformerForPreTraining"),
         ("visual_bert", "VisualBertForPreTraining"),
         ("vit_mae", "ViTMAEForPreTraining"),
         ("wav2vec2", "Wav2Vec2ForPreTraining"),
@@ -390,8 +390,8 @@ MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
-        ("videomae", "VideoMAEForVideoClassification"),
         ("timesformer", "TimeSformerForVideoClassification"),
+        ("videomae", "VideoMAEForVideoClassification"),
     ]
 )
 
