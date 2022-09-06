@@ -1174,6 +1174,7 @@ class OwlViTClassPredictionHead(nn.Module):
 
 class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     config_class = OwlViTConfig
+    main_input_name = "pixel_values"
 
     def __init__(self, config: OwlViTConfig):
         super().__init__(config)
