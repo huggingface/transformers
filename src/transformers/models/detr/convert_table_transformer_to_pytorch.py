@@ -19,16 +19,15 @@ URL: https://github.com/microsoft/table-transformer
 
 
 import argparse
-import json
 from collections import OrderedDict
 from pathlib import Path
 
 import torch
 from PIL import Image
+from torchvision.transforms import functional as F
 
-import requests
 from huggingface_hub import hf_hub_download
-from transformers import DetrConfig, DetrFeatureExtractor, DetrForObjectDetection
+from transformers import DetrConfig, DetrForObjectDetection
 from transformers.utils import logging
 
 
@@ -171,12 +170,20 @@ def read_in_q_k_v(state_dict):
         state_dict[f"decoder.layers.{i}.encoder_attn.v_proj.bias"] = in_proj_bias_cross_attn[-256:]
 
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
+def resize(image):
+    width, height = image.size
+    current_max_size = max(width, height)
+    target_max_size = 800
+    scale = target_max_size / current_max_size
+    resized_image = image.resize((int(round(scale * width)), int(round(scale * height))))
 
-    return im
+    return resized_image
+
+
+def normalize(image):
+    image = F.to_tensor(image)
+    image = F.normalize(image, mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+    return image
 
 
 @torch.no_grad()
@@ -197,15 +204,18 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
     # config.id2label = id2label
     # config.label2id = {v: k for k, v in id2label.items()}
 
-    # load feature extractor
-    feature_extractor = DetrFeatureExtractor(format="coco_detection")
+    # # load feature extractor
+    # feature_extractor = DetrFeatureExtractor(format="coco_detection")
 
-    # prepare image
-    img = prepare_img()
-    encoding = feature_extractor(images=img, return_tensors="pt")
-    pixel_values = encoding["pixel_values"]
+    # # prepare image
+    # encoding = feature_extractor(images=img, return_tensors="pt")
+    # pixel_values = encoding["pixel_values"]
 
-    logger.info(f"Converting model...")
+    file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
+    image = Image.open(file_path).convert("RGB")
+    pixel_values = normalize(resize(image)).unsqueeze(0)
+
+    logger.info("Converting model...")
 
     # load original state dict
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")
@@ -227,7 +237,9 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
     model.eval()
     # TODO verify our conversion
     outputs = model(pixel_values)
-    print(outputs.keys())
+
+    print("Shape of logits:", outputs.logits.shape)
+    print("Final logits:", outputs.logits[0, :3, :3])
     # assert torch.allclose(outputs.logits, original_outputs["pred_logits"], atol=1e-4)
     # assert torch.allclose(outputs.pred_boxes, original_outputs["pred_boxes"], atol=1e-4)
 
@@ -236,11 +248,11 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
         logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         model.save_pretrained(pytorch_dump_folder_path)
-        feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         # Push model to HF hub
-        logger.info(f"Pushing model to the hub...")
+        logger.info("Pushing model to the hub...")
         model.push_to_hub("nielsr/detr-table-detection")
 
 

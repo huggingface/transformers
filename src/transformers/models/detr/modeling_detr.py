@@ -640,9 +640,10 @@ class DetrEncoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        hidden_states = self.self_attn_layer_norm(hidden_states) if self.normalize_before else hidden_states
-
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
+
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -652,11 +653,14 @@ class DetrEncoderLayer(nn.Module):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = (
-            self.final_layer_norm(hidden_states) if self.normalize_before else self.self_attn_layer_norm(hidden_states)
-        )
 
-        residual = hidden_states
+        if self.normalize_before:
+            residual = hidden_states
+            hidden_states = self.final_layer_norm(hidden_states)
+        else:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
+            residual = hidden_states
+
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
 
@@ -706,6 +710,8 @@ class DetrDecoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
+        self.normalize_before = config.normalize_before
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -735,6 +741,8 @@ class DetrDecoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
+        hidden_states = self.self_attn_layer_norm(hidden_states) if self.normalize_before else hidden_states
+
         residual = hidden_states
 
         # Self Attention
@@ -747,7 +755,11 @@ class DetrDecoderLayer(nn.Module):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = (
+            self.encoder_attn_layer_norm(hidden_states)
+            if self.normalize_before
+            else self.self_attn_layer_norm(hidden_states)
+        )
 
         # Cross-Attention Block
         cross_attn_weights = None
@@ -765,7 +777,11 @@ class DetrDecoderLayer(nn.Module):
 
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+            hidden_states = (
+                self.final_layer_norm(hidden_states)
+                if self.normalize_before
+                else self.encoder_attn_layer_norm(hidden_states)
+            )
 
         # Fully Connected
         residual = hidden_states
@@ -774,7 +790,8 @@ class DetrDecoderLayer(nn.Module):
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+
+        hidden_states = hidden_states if self.normalize_before else self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
@@ -969,6 +986,9 @@ class DetrEncoder(DetrPreTrainedModel):
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
         for i, encoder_layer in enumerate(self.layers):
+            if i == 0:
+                print(f"Hidden states before layer {i}", hidden_states[0, :3, :3])
+
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -986,11 +1006,17 @@ class DetrEncoder(DetrPreTrainedModel):
 
                 hidden_states = layer_outputs[0]
 
+            if i == 0:
+                print(f"Hidden states after layer {i}", hidden_states[0, :3, :3])
+
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
         if output_hidden_states:
             encoder_states = encoder_states + (hidden_states,)
+
+        if self.layernorm is not None:
+            hidden_states = self.layernorm(hidden_states)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
@@ -1315,6 +1341,9 @@ class DetrModel(DetrPreTrainedModel):
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
+
+        print("Shape of encoder outputs:", encoder_outputs[0].shape)
+        print("First values of encoder outputs:", encoder_outputs[0][0, :3, :3])
 
         # Fifth, sent query embeddings + position embeddings through the decoder (which is conditioned on the encoder output)
         query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)

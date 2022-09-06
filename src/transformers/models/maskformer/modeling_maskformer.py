@@ -1337,6 +1337,8 @@ class DetrDecoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
+        self.normalize_before = config.normalize_before
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1366,6 +1368,8 @@ class DetrDecoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
+        hidden_states = self.self_attn_layer_norm(hidden_states) if self.normalize_before else hidden_states
+
         residual = hidden_states
 
         # Self Attention
@@ -1378,7 +1382,11 @@ class DetrDecoderLayer(nn.Module):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.self_attn_layer_norm(hidden_states)
+        hidden_states = (
+            self.encoder_attn_layer_norm(hidden_states)
+            if self.normalize_before
+            else self.self_attn_layer_norm(hidden_states)
+        )
 
         # Cross-Attention Block
         cross_attn_weights = None
@@ -1396,7 +1404,11 @@ class DetrDecoderLayer(nn.Module):
 
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+            hidden_states = (
+                self.final_layer_norm(hidden_states)
+                if self.normalize_before
+                else self.encoder_attn_layer_norm(hidden_states)
+            )
 
         # Fully Connected
         residual = hidden_states
@@ -1405,7 +1417,8 @@ class DetrDecoderLayer(nn.Module):
         hidden_states = self.fc2(hidden_states)
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = self.final_layer_norm(hidden_states)
+
+        hidden_states = hidden_states if self.normalize_before else self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
 
