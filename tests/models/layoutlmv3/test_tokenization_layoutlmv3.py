@@ -22,11 +22,28 @@ import tempfile
 import unittest
 from typing import List
 
-from transformers import AddedToken, LayoutLMv3TokenizerFast, SpecialTokensMixin, is_tf_available, is_torch_available
+from transformers import (
+    AddedToken,
+    LayoutLMv3TokenizerFast,
+    SpecialTokensMixin,
+    is_tf_available,
+    is_torch_available,
+    logging,
+)
 from transformers.models.layoutlmv3.tokenization_layoutlmv3 import VOCAB_FILES_NAMES, LayoutLMv3Tokenizer
-from transformers.testing_utils import is_pt_tf_cross_test, require_pandas, require_tokenizers, require_torch, slow
+from transformers.testing_utils import (
+    is_pt_tf_cross_test,
+    require_pandas,
+    require_tf,
+    require_tokenizers,
+    require_torch,
+    slow,
+)
 
 from ...test_tokenization_common import SMALL_TRAINING_CORPUS, TokenizerTesterMixin, merge_model_tokenizer_mappings
+
+
+logger = logging.get_logger(__name__)
 
 
 @require_tokenizers
@@ -667,6 +684,49 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
 
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
+
+    def test_padding_warning_message_fast_tokenizer(self):
+        if not self.test_rust_tokenizer:
+            return
+
+        words, boxes = self.get_words_and_boxes_batch()
+
+        tokenizer_fast = self.get_rust_tokenizer()
+
+        encoding_fast = tokenizer_fast(
+            words,
+            boxes=boxes,
+        )
+
+        with self.assertLogs("transformers", level="WARNING") as cm:
+            tokenizer_fast.pad(encoding_fast)
+        self.assertEqual(len(cm.records), 1)
+        self.assertIn(
+            "Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to"
+            " encode the text followed by a call to the `pad` method to get a padded encoding.",
+            cm.records[0].message,
+        )
+
+        if not self.test_slow_tokenizer:
+            return
+
+        tokenizer_slow = self.get_tokenizer()
+
+        encoding_slow = tokenizer_slow(
+            words,
+            boxes=boxes,
+        )
+
+        with self.assertLogs(level="WARNING") as cm:
+            # We want to assert there are no warnings, but the 'assertLogs' method does not support that.
+            # Therefore, we are adding a dummy warning, and then we will assert it is the only warning.
+            logger.warning("Dummy warning")
+            tokenizer_slow.pad(encoding_slow)
+        self.assertEqual(len(cm.records), 1)
+        self.assertIn(
+            "Dummy warning",
+            cm.records[0].message,
+        )
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
@@ -2347,3 +2407,39 @@ class LayoutLMv3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @unittest.skip("Doesn't support another framework than PyTorch")
     def test_np_encode_plus_sent_to_model(self):
         pass
+
+    @require_tf
+    @slow
+    def test_tf_encode_plus_sent_to_model(self):
+        from transformers import TF_MODEL_MAPPING, TOKENIZER_MAPPING
+
+        MODEL_TOKENIZER_MAPPING = merge_model_tokenizer_mappings(TF_MODEL_MAPPING, TOKENIZER_MAPPING)
+
+        tokenizers = self.get_tokenizers(do_lower_case=False)
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
+                    return
+
+                config_class, model_class = MODEL_TOKENIZER_MAPPING[tokenizer.__class__]
+                config = config_class()
+
+                if config.is_encoder_decoder or config.pad_token_id is None:
+                    return
+
+                model = model_class(config)
+
+                # Make sure the model contains at least the full vocabulary size in its embedding matrix
+                self.assertGreaterEqual(model.config.vocab_size, len(tokenizer))
+
+                # Build sequence
+                first_ten_tokens = list(tokenizer.get_vocab().keys())[:10]
+                boxes = [[1000, 1000, 1000, 1000] for _ in range(len(first_ten_tokens))]
+                encoded_sequence = tokenizer.encode_plus(first_ten_tokens, boxes=boxes, return_tensors="tf")
+                batch_encoded_sequence = tokenizer.batch_encode_plus(
+                    [first_ten_tokens, first_ten_tokens], boxes=[boxes, boxes], return_tensors="tf"
+                )
+
+                # This should not fail
+                model(encoded_sequence)
+                model(batch_encoded_sequence)
