@@ -193,8 +193,8 @@ class Mask2FormerConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
     @classmethod
-    def from_backbone_and_decoder_configs(
-        cls, backbone_config: PretrainedConfig, decoder_config: PretrainedConfig, **kwargs
+    def from_backbone_decoder_pixel_decoder_configs(
+        cls, backbone_config: PretrainedConfig, decoder_config: PretrainedConfig, pixel_decoder_config: PretrainedConfig,  **kwargs
     ):
         """Instantiate a [`Mask2FormerConfig`] (or a derived class) from a pre-trained backbone model configuration and DETR model
         configuration.
@@ -204,6 +204,8 @@ class Mask2FormerConfig(PretrainedConfig):
                     The backbone configuration.
                 decoder_config ([`PretrainedConfig`]):
                     The transformer decoder configuration to use.
+                pixel_decoder_config ([`PretrainedConfig`]):
+                    The pixel decoder configuration to use.
 
             Returns:
                 [`Mask2FormerConfig`]: An instance of a configuration object
@@ -211,6 +213,7 @@ class Mask2FormerConfig(PretrainedConfig):
         return cls(
             backbone_config=backbone_config.to_dict(),
             decoder_config=decoder_config.to_dict(),
+            pixel_decoder_config=pixel_decoder_config.to_dict(),
             **kwargs,
         )
 
