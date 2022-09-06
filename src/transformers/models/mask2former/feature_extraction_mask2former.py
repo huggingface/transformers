@@ -35,6 +35,7 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+# Copied from transformers.models.maskformer.feature_extraction_maskformer.MaskFormerFeatureExtractor
 class Mask2FormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a Mask2Former feature extractor. The feature extractor can be used to prepare image(s) and optional
