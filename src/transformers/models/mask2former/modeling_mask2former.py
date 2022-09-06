@@ -2107,7 +2107,12 @@ class Mask2FormerFPNModel(nn.Module):
             fpn_features.append(output)
         return fpn_features
 
-def multiscale_deformable_attention_core(value, value_spatial_shapes, sampling_locations, attention_weights):
+def multiscale_deformable_attention_core(
+    value: torch.Tensor,
+    value_spatial_shapes: torch.Tensor,
+    sampling_locations: torch.Tensor,, 
+    attention_weights: torch.FloatTensor,
+) -> torch.FloatTensor:
 
     #N_, S_, M_, D_
     batch_size, sequence_length, num_heads, embed_dim = value.shape
