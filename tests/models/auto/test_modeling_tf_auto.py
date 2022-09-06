@@ -303,6 +303,5 @@ class TFAutoModelTest(unittest.TestCase):
         with RequestCounter() as counter:
             _ = TFAutoModel.from_pretrained("ArthurZ/tiny-random-bert-sharded")
             self.assertEqual(counter.get_request_count, 0)
-            # There is no pytorch_model.bin so we still get one call for this one.
-            self.assertEqual(counter.head_request_count, 2)
+            self.assertEqual(counter.head_request_count, 1)
             self.assertEqual(counter.other_request_count, 0)

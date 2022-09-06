@@ -167,5 +167,5 @@ Create a pipeline for `vqa` and pass it the image and question:
 >>> preds = vqa(image=image, question=question)
 >>> preds = [{"score": round(pred["score"], 4), "answer": pred["answer"]} for pred in preds]
 >>> preds
-[{'score': 0.9112, 'answer': 'snow'}, {'score': 0.8796, 'answer': 'in snow'}, {'score': 0.6717, 'answer': 'outside'}, {'score': 0.0291, 'answer': 'on ground'}, {'score': 0.027, 'answer': 'ground'}]
+[{'score': 0.911, 'answer': 'snow'}, {'score': 0.8786, 'answer': 'in snow'}, {'score': 0.6714, 'answer': 'outside'}, {'score': 0.0293, 'answer': 'on ground'}, {'score': 0.0272, 'answer': 'ground'}]
 ```

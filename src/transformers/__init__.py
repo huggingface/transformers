@@ -282,6 +282,7 @@ _import_structure = {
         "OwlViTVisionConfig",
     ],
     "models.pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusTokenizer"],
+    "models.pegasus_x": ["PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusXConfig"],
     "models.perceiver": ["PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP", "PerceiverConfig", "PerceiverTokenizer"],
     "models.phobert": ["PhobertTokenizer"],
     "models.plbart": ["PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP", "PLBartConfig"],
@@ -386,6 +387,7 @@ _import_structure = {
         "FillMaskPipeline",
         "ImageClassificationPipeline",
         "ImageSegmentationPipeline",
+        "ImageToTextPipeline",
         "JsonPipelineDataFormat",
         "NerPipeline",
         "ObjectDetectionPipeline",
@@ -1305,6 +1307,7 @@ else:
             "LayoutLMForMaskedLM",
             "LayoutLMForSequenceClassification",
             "LayoutLMForTokenClassification",
+            "LayoutLMForQuestionAnswering",
             "LayoutLMModel",
             "LayoutLMPreTrainedModel",
         ]
@@ -1545,6 +1548,14 @@ else:
     )
     _import_structure["models.pegasus"].extend(
         ["PegasusForCausalLM", "PegasusForConditionalGeneration", "PegasusModel", "PegasusPreTrainedModel"]
+    )
+    _import_structure["models.pegasus_x"].extend(
+        [
+            "PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "PegasusXForConditionalGeneration",
+            "PegasusXModel",
+            "PegasusXPreTrainedModel",
+        ]
     )
     _import_structure["models.perceiver"].extend(
         [
@@ -2337,10 +2348,21 @@ else:
             "TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST",
             "TFLayoutLMForMaskedLM",
             "TFLayoutLMForSequenceClassification",
+            "TFLayoutLMForQuestionAnswering",
             "TFLayoutLMForTokenClassification",
             "TFLayoutLMMainLayer",
             "TFLayoutLMModel",
             "TFLayoutLMPreTrainedModel",
+        ]
+    )
+    _import_structure["models.layoutlmv3"].extend(
+        [
+            "TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFLayoutLMv3ForQuestionAnswering",
+            "TFLayoutLMv3ForSequenceClassification",
+            "TFLayoutLMv3ForTokenClassification",
+            "TFLayoutLMv3Model",
+            "TFLayoutLMv3PreTrainedModel",
         ]
     )
     _import_structure["models.led"].extend(["TFLEDForConditionalGeneration", "TFLEDModel", "TFLEDPreTrainedModel"])
@@ -2384,6 +2406,15 @@ else:
             "TFMobileBertMainLayer",
             "TFMobileBertModel",
             "TFMobileBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.mobilevit"].extend(
+        [
+            "TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFMobileViTPreTrainedModel",
+            "TFMobileViTModel",
+            "TFMobileViTForImageClassification",
+            "TFMobileViTForSemanticSegmentation",
         ]
     )
     _import_structure["models.mpnet"].extend(
@@ -2565,6 +2596,14 @@ else:
             "TFWav2Vec2ForCTC",
             "TFWav2Vec2Model",
             "TFWav2Vec2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.xglm"].extend(
+        [
+            "TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFXGLMForCausalLM",
+            "TFXGLMModel",
+            "TFXGLMPreTrainedModel",
         ]
     )
     _import_structure["models.xlm"].extend(
@@ -3078,6 +3117,7 @@ if TYPE_CHECKING:
         OwlViTVisionConfig,
     )
     from .models.pegasus import PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusConfig, PegasusTokenizer
+    from .models.pegasus_x import PEGASUS_X_PRETRAINED_CONFIG_ARCHIVE_MAP, PegasusXConfig
     from .models.perceiver import PERCEIVER_PRETRAINED_CONFIG_ARCHIVE_MAP, PerceiverConfig, PerceiverTokenizer
     from .models.phobert import PhobertTokenizer
     from .models.plbart import PLBART_PRETRAINED_CONFIG_ARCHIVE_MAP, PLBartConfig
@@ -3164,6 +3204,7 @@ if TYPE_CHECKING:
         FillMaskPipeline,
         ImageClassificationPipeline,
         ImageSegmentationPipeline,
+        ImageToTextPipeline,
         JsonPipelineDataFormat,
         NerPipeline,
         ObjectDetectionPipeline,
@@ -3927,6 +3968,7 @@ if TYPE_CHECKING:
         from .models.layoutlm import (
             LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMForMaskedLM,
+            LayoutLMForQuestionAnswering,
             LayoutLMForSequenceClassification,
             LayoutLMForTokenClassification,
             LayoutLMModel,
@@ -4133,6 +4175,12 @@ if TYPE_CHECKING:
             PegasusForConditionalGeneration,
             PegasusModel,
             PegasusPreTrainedModel,
+        )
+        from .models.pegasus_x import (
+            PEGASUS_X_PRETRAINED_MODEL_ARCHIVE_LIST,
+            PegasusXForConditionalGeneration,
+            PegasusXModel,
+            PegasusXPreTrainedModel,
         )
         from .models.perceiver import (
             PERCEIVER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4565,6 +4613,7 @@ if TYPE_CHECKING:
         from .modeling_tf_layoutlm import (
             TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFLayoutLMForMaskedLM,
+            TFLayoutLMForQuestionAnswering,
             TFLayoutLMForSequenceClassification,
             TFLayoutLMForTokenClassification,
             TFLayoutLMMainLayer,
@@ -4793,6 +4842,14 @@ if TYPE_CHECKING:
             TFHubertModel,
             TFHubertPreTrainedModel,
         )
+        from .models.layoutlmv3 import (
+            TF_LAYOUTLMV3_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFLayoutLMv3ForQuestionAnswering,
+            TFLayoutLMv3ForSequenceClassification,
+            TFLayoutLMv3ForTokenClassification,
+            TFLayoutLMv3Model,
+            TFLayoutLMv3PreTrainedModel,
+        )
         from .models.led import TFLEDForConditionalGeneration, TFLEDModel, TFLEDPreTrainedModel
         from .models.longformer import (
             TF_LONGFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4817,6 +4874,7 @@ if TYPE_CHECKING:
         from .models.mbart import TFMBartForConditionalGeneration, TFMBartModel, TFMBartPreTrainedModel
         from .models.mobilebert import (
             TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TF_MOBILEVIT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFMobileBertForMaskedLM,
             TFMobileBertForMultipleChoice,
             TFMobileBertForNextSentencePrediction,
@@ -4827,6 +4885,10 @@ if TYPE_CHECKING:
             TFMobileBertMainLayer,
             TFMobileBertModel,
             TFMobileBertPreTrainedModel,
+            TFMobileViTForImageClassification,
+            TFMobileViTForSemanticSegmentation,
+            TFMobileViTModel,
+            TFMobileViTPreTrainedModel,
         )
         from .models.mpnet import (
             TF_MPNET_PRETRAINED_MODEL_ARCHIVE_LIST,
@@ -4953,6 +5015,12 @@ if TYPE_CHECKING:
             TFWav2Vec2ForCTC,
             TFWav2Vec2Model,
             TFWav2Vec2PreTrainedModel,
+        )
+        from .models.xglm import (
+            TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFXGLMForCausalLM,
+            TFXGLMModel,
+            TFXGLMPreTrainedModel,
         )
         from .models.xlm import (
             TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,

@@ -89,6 +89,9 @@ class LayoutXLMProcessor(ProcessorMixin):
                 "You cannot provide word labels if you initialized the feature extractor with apply_ocr set to True."
             )
 
+        if return_overflowing_tokens is True and return_offsets_mapping is False:
+            raise ValueError("You cannot return overflowing tokens without returning the offsets mapping.")
+
         # first, apply the feature extractor
         features = self.feature_extractor(images=images, return_tensors=return_tensors)
 

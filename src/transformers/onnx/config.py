@@ -99,6 +99,7 @@ class OnnxConfig(ABC):
                 "end_logits": {0: "batch", 1: "sequence"},
             }
         ),
+        "semantic-segmentation": OrderedDict({"logits": {0: "batch", 1: "num_labels", 2: "height", 3: "width"}}),
         "seq2seq-lm": OrderedDict({"logits": {0: "batch", 1: "decoder_sequence"}}),
         "sequence-classification": OrderedDict({"logits": {0: "batch"}}),
         "token-classification": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
