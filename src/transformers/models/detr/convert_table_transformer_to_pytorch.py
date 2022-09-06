@@ -170,10 +170,10 @@ def read_in_q_k_v(state_dict):
         state_dict[f"decoder.layers.{i}.encoder_attn.v_proj.bias"] = in_proj_bias_cross_attn[-256:]
 
 
-def resize(image):
+def resize(image, checkpoint_url):
     width, height = image.size
     current_max_size = max(width, height)
-    target_max_size = 800
+    target_max_size = 800 if "detection" in checkpoint_url else 1000
     scale = target_max_size / current_max_size
     resized_image = image.resize((int(round(scale * width)), int(round(scale * height))))
 
@@ -255,22 +255,24 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
     model.eval()
 
     # verify our conversion
-    file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename="example_pdf.png")
+    filename = "example_pdf.png" if "detection" in checkpoint_url else "example_table.png"
+    file_path = hf_hub_download(repo_id="nielsr/example-pdf", repo_type="dataset", filename=filename)
     image = Image.open(file_path).convert("RGB")
-    pixel_values = normalize(resize(image)).unsqueeze(0)
+    pixel_values = normalize(resize(image, checkpoint_url)).unsqueeze(0)
 
     outputs = model(pixel_values)
 
     if "detection" in checkpoint_url:
+        expected_shape = (1, 15, 3)
         expected_logits = torch.tensor(
             [[-6.7897, -16.9985, 6.7937], [-8.0186, -22.2192, 6.9677], [-7.3117, -21.0708, 7.4055]]
         )
-        expected_shape = (1, 15, 3)
+
     else:
+        expected_shape = (1, 125, 7)
         expected_logits = torch.tensor(
-            [[-7.2321, -18.5677, 7.2361], [-8.4610, -23.7884, 7.4100], [-7.7541, -22.6400, 7.8478]]
+            [[-18.1430, -8.3214, 4.8274], [-18.4685, -7.1361, -4.2667], [-26.3693, -9.3429, -4.9962]]
         )
-        expected_shape = (1, 115, 7)
 
     assert outputs.logits.shape == expected_shape
     assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
