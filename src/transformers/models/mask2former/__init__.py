@@ -66,8 +66,6 @@ if TYPE_CHECKING:
             Mask2FormerModel,
             Mask2FormerPreTrainedModel,
         )
-
-
 else:
     import sys
 
