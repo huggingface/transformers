@@ -964,7 +964,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         return_projected: Optional[bool] = True,
-        normalized: Optional[bool] = None,
         return_base_image_embeds: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
@@ -1006,8 +1005,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
             image_features = self.visual_projection(pooled_output)
         else:
             image_features = pooled_output
-        if normalized:
-            image_features = image_features / image_features.norm(p=2, dim=-1, keepdim=True)
         if return_base_image_embeds:
             last_hidden_state = vision_outputs[0]
             image_features = self.vision_model.post_layernorm(last_hidden_state)
@@ -1146,19 +1143,13 @@ class OwlViTClassPredictionHead(nn.Module):
     def forward(
         self,
         image_embeds: torch.FloatTensor,
-        query_embeds: torch.FloatTensor,
-        query_mask: torch.Tensor,
-        query_image_embeds: torch.FloatTensor,
+        query_embeds: Optional[torch.FloatTensor],
+        query_mask: Optional[torch.Tensor],
     ) -> Tuple[torch.FloatTensor]:
 
         image_class_embeds = self.dense0(image_embeds)
-        if query_image_embeds is not None:
-            # Get the most dissimilar embedding
-            # https://github.com/google-research/scenic/blob/3506cf25e012b17b81179d8abd256b2fd1b81638/scenic/projects/owl_vit/notebooks/inference.py#L158
-            query_all_embeds = self.dense0(query_image_embeds)
-            query_mean_embed = torch.mean(query_all_embeds, axis=0)
-            query_mean_sim = torch.einsum("bd,bid->bi", query_mean_embed, query_all_embeds)
-            query_embeds = query_all_embeds[:, torch.argmin(query_mean_sim, axis=1)]
+        if query_embeds is None:
+            return (None, image_class_embeds)
 
         # Normalize image and text features
         image_class_embeds /= torch.linalg.norm(image_class_embeds, dim=-1, keepdim=True) + 1e-6
@@ -1260,9 +1251,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def class_predictor(
         self,
         image_feats: torch.FloatTensor,
-        query_embeds: torch.FloatTensor,
-        query_mask: torch.Tensor,
-        query_image_embeds: torch.FloatTensor,
+        query_embeds: Optional[torch.FloatTensor] = None,
+        query_mask: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -1273,7 +1263,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             query_mask:
                 Must be provided with query_embeddings. A mask indicating which query embeddings are valid.
         """
-        (pred_logits, image_class_embeds) = self.class_head(image_feats, query_embeds, query_mask, query_image_embeds)
+        (pred_logits, image_class_embeds) = self.class_head(image_feats, query_embeds, query_mask)
 
         return (pred_logits, image_class_embeds)
 
@@ -1321,6 +1311,13 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return (text_embeds, image_embeds, text_model_last_hidden_state, vision_model_last_hidden_state)
 
+    def embed_image_query(self, query_pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+        (_, class_embeds) = self.class_predictor(query_pixel_values)
+        mean_embeds = torch.mean(class_embeds, axis=1)
+        mean_sim = torch.einsum("bd,bid->bi", mean_embeds, class_embeds)
+        query_embeds = class_embeds[:, torch.argmin(mean_sim, axis=1)]
+        return query_embeds
+
     def image_image_embedder(
         self,
         query_pixel_values: torch.FloatTensor,
@@ -1333,18 +1330,18 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             pixel_values=query_pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_projected=True,
-            normalized=True,
             return_base_image_embeds=True,
         )
         image_embeds = self.owlvit.get_image_features(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_projected=True,
-            normalized=True,
             return_base_image_embeds=True,
         )
+
+        # Normalize query image, image embeddings
+        query_image_embeds = query_image_embeds / query_image_embeds.norm(p=2, dim=-1, keepdim=True)
+        image_embeds = image_embeds / image_embeds.norm(p=2, dim=-1, keepdim=True)
 
         # Resize class token
         new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
@@ -1389,8 +1386,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        input_ids: torch.Tensor = None,
-        query_pixel_values: torch.FloatTensor = None,
+        input_ids: Optional[torch.Tensor] = None,
+        query_pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1439,8 +1436,10 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         query_embeds = None
         query_mask = None
-        query_image_embeds = None
-        if input_ids is None and query_pixel_values is not None:
+        assert (
+            input_ids is None or query_pixel_values is None
+        ), "Both input_ids and query_pixel_values cannot be passed"
+        if query_pixel_values is not None:
             outputs = self.image_image_embedder(
                 query_pixel_values=query_pixel_values,
                 pixel_values=pixel_values,
@@ -1481,10 +1480,11 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             query_mask = input_ids[..., 0] > 0
         else:
             batch_size, num_patches, num_patches, hidden_dim = query_feature_map.shape
-            query_image_embeds = torch.reshape(query_feature_map, (batch_size, num_patches * num_patches, hidden_dim))
+            query_image_feats = torch.reshape(query_feature_map, (batch_size, num_patches * num_patches, hidden_dim))
+            query_embeds = self.embed_image_query(query_image_feats)
 
         # Predict object classes [batch_size, num_patches, num_queries+1]
-        (pred_logits, class_embeds) = self.class_predictor(image_feats, query_embeds, query_mask, query_image_embeds)
+        (pred_logits, class_embeds) = self.class_predictor(image_feats, query_embeds, query_mask)
 
         # Predict object boxes
         pred_boxes = self.box_predictor(image_feats, feature_map)
