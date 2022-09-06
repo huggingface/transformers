@@ -21,7 +21,6 @@ import shutil
 import sys
 import traceback
 import warnings
-from contextlib import contextmanager
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
 from uuid import uuid4
@@ -39,7 +38,12 @@ from huggingface_hub import (
 )
 from huggingface_hub.constants import HUGGINGFACE_HEADER_X_LINKED_ETAG, HUGGINGFACE_HEADER_X_REPO_COMMIT
 from huggingface_hub.file_download import REGEX_COMMIT_HASH
-from huggingface_hub.utils import EntryNotFoundError, RepositoryNotFoundError, RevisionNotFoundError
+from huggingface_hub.utils import (
+    EntryNotFoundError,
+    LocalEntryNotFoundError,
+    RepositoryNotFoundError,
+    RevisionNotFoundError,
+)
 from requests.exceptions import HTTPError
 from transformers.utils.logging import tqdm
 
@@ -115,6 +119,9 @@ if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
 HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_RESOLVE_ENDPOINT)
 HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
 HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/telemetry/examples"
+
+# Return value when trying to load a file from cache but the file does not exist in the distant repo.
+_CACHED_NO_EXIST = object()
 
 
 def get_cached_models(cache_dir: Union[str, Path] = None) -> List[Tuple]:
@@ -218,6 +225,22 @@ def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]
 def try_to_load_from_cache(cache_dir, repo_id, filename, revision=None, commit_hash=None):
     """
     Explores the cache to return the latest cached file for a given revision.
+
+    Args:
+        cache_dir (`str` or `os.PathLike`): The folder where the cached files lie.
+        repo_id (`str`): The ID of the repo on huggingface.co.
+        filename (`str`): The filename to look for inside `repo_id`.
+        revision (`str`, *optional*):
+            The specific model version to use. Will default to `"main"` if it's not provided and no `commit_hash` is
+            provided either.
+        commit_hash (`str`, *optional*): The (full) commit hash to look for inside the cache.
+
+    Returns:
+        `Optional[str]` or `_CACHED_NO_EXIST`:
+            Will return `None` if the file was not cached. Otherwise:
+            - The exact path to the cached file if it's found in the cache
+            - A special value `_CACHED_NO_EXIST` if the file does not exist at the given commit hash and this fact was
+              cached.
     """
     if commit_hash is not None and revision is not None:
         raise ValueError("`commit_hash` and `revision` are mutually exclusive, pick one only.")
@@ -240,6 +263,9 @@ def try_to_load_from_cache(cache_dir, repo_id, filename, revision=None, commit_h
             with open(os.path.join(model_cache, "refs", revision)) as f:
                 commit_hash = f.read()
 
+    if os.path.isfile(os.path.join(model_cache, ".no_exist", commit_hash, filename)):
+        return _CACHED_NO_EXIST
+
     cached_shas = os.listdir(os.path.join(model_cache, "snapshots"))
     if commit_hash not in cached_shas:
         # No cache for this revision and we won't try to return a random revision
@@ -247,28 +273,6 @@ def try_to_load_from_cache(cache_dir, repo_id, filename, revision=None, commit_h
 
     cached_file = os.path.join(model_cache, "snapshots", commit_hash, filename)
     return cached_file if os.path.isfile(cached_file) else None
-
-
-# If huggingface_hub changes the class of error for this to FileNotFoundError, we will be able to avoid that in the
-# future.
-LOCAL_FILES_ONLY_HF_ERROR = (
-    "Cannot find the requested files in the disk cache and outgoing traffic has been disabled. To enable hf.co "
-    "look-ups and downloads online, set 'local_files_only' to False."
-)
-
-
-# In the future, this ugly contextmanager can be removed when huggingface_hub as a released version where we can
-# activate/deactivate progress bars.
-@contextmanager
-def _patch_hf_hub_tqdm():
-    """
-    A context manager to make huggingface hub use the tqdm version of Transformers (which is controlled by some utils)
-    in logging.
-    """
-    old_tqdm = huggingface_hub.file_download.tqdm
-    huggingface_hub.file_download.tqdm = tqdm
-    yield
-    huggingface_hub.file_download.tqdm = old_tqdm
 
 
 def cached_file(
@@ -356,7 +360,10 @@ def cached_file(
         resolved_file = os.path.join(os.path.join(path_or_repo_id, subfolder), filename)
         if not os.path.isfile(resolved_file):
             if _raise_exceptions_for_missing_entries:
-                raise EnvironmentError(f"Could not locate {full_filename} inside {path_or_repo_id}.")
+                raise EnvironmentError(
+                    f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
+                    f"'https://huggingface.co/{path_or_repo_id}/{revision}' for available files."
+                )
             else:
                 return None
         return resolved_file
@@ -370,25 +377,29 @@ def cached_file(
         # If the file is cached under that commit hash, we return it directly.
         resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, commit_hash=_commit_hash)
         if resolved_file is not None:
-            return resolved_file
+            if resolved_file is not _CACHED_NO_EXIST:
+                return resolved_file
+            elif not _raise_exceptions_for_missing_entries:
+                return None
+            else:
+                raise EnvironmentError(f"Could not locate {full_filename} inside {path_or_repo_id}.")
 
     user_agent = http_user_agent(user_agent)
     try:
         # Load from URL or cache if already cached
-        with _patch_hf_hub_tqdm():
-            resolved_file = hf_hub_download(
-                path_or_repo_id,
-                filename,
-                subfolder=None if len(subfolder) == 0 else subfolder,
-                revision=revision,
-                cache_dir=cache_dir,
-                user_agent=user_agent,
-                force_download=force_download,
-                proxies=proxies,
-                resume_download=resume_download,
-                use_auth_token=use_auth_token,
-                local_files_only=local_files_only,
-            )
+        resolved_file = hf_hub_download(
+            path_or_repo_id,
+            filename,
+            subfolder=None if len(subfolder) == 0 else subfolder,
+            revision=revision,
+            cache_dir=cache_dir,
+            user_agent=user_agent,
+            force_download=force_download,
+            proxies=proxies,
+            resume_download=resume_download,
+            use_auth_token=use_auth_token,
+            local_files_only=local_files_only,
+        )
 
     except RepositoryNotFoundError:
         raise EnvironmentError(
@@ -402,6 +413,19 @@ def cached_file(
             f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
             "for this model name. Check the model page at "
             f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
+        )
+    except LocalEntryNotFoundError:
+        # We try to see if we have a cached version (not up to date):
+        resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, revision=revision)
+        if resolved_file is not None:
+            return resolved_file
+        if not _raise_exceptions_for_missing_entries or not _raise_exceptions_for_connection_errors:
+            return None
+        raise EnvironmentError(
+            f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this file, couldn't find it in the"
+            f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing a file named"
+            f" {full_filename}.\nCheckout your internet connection or see how to run the library in offline mode at"
+            " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
         )
     except EntryNotFoundError:
         if not _raise_exceptions_for_missing_entries:
@@ -421,24 +445,6 @@ def cached_file(
             return None
 
         raise EnvironmentError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{err}")
-    except ValueError as err:
-        # HuggingFace Hub returns a ValueError for a missing file when local_files_only=True we need to catch it here
-        # This could be caught above along in `EntryNotFoundError` if hf_hub sent a different error message here
-        if LOCAL_FILES_ONLY_HF_ERROR in err.args[0] and local_files_only and not _raise_exceptions_for_missing_entries:
-            return None
-
-        # Otherwise we try to see if we have a cached version (not up to date):
-        resolved_file = try_to_load_from_cache(cache_dir, path_or_repo_id, full_filename, revision=revision)
-        if resolved_file is not None:
-            return resolved_file
-        if not _raise_exceptions_for_connection_errors:
-            return None
-        raise EnvironmentError(
-            f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load this file, couldn't find it in the"
-            f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing a file named"
-            f" {full_filename}.\nCheckout your internet connection or see how to run the library in offline mode at"
-            " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
-        )
 
     return resolved_file
 

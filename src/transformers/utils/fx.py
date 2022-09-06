@@ -147,6 +147,7 @@ _SPECIAL_SUPPORTED_MODELS = [
     "GPT2DoubleHeadsModel",
     "Speech2Text2Decoder",
     "TrOCRDecoder",
+    "LayoutLMForQuestionAnswering",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
@@ -690,6 +691,7 @@ class HFTracer(Tracer):
                 inputs_dict["labels"] = torch.zeros(batch_size, dtype=torch.long, device=device)
             elif model_class_name in [
                 *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES),
+                "LayoutLMForQuestionAnswering",
                 "XLNetForQuestionAnswering",
             ]:
                 inputs_dict["start_positions"] = torch.zeros(batch_size, dtype=torch.long, device=device)
