@@ -227,8 +227,8 @@ python run_bart_dlm.py \
 As part of BART, the sentences in a sample may be permuted (reordered). To detect sentences for each sample, we need
 sentence splitting. By dfault, we'll use NLTK's English punct sentence splitter but by passing a spaCy model name
 to `spacy_model` (e.g. `en_core_web_sm`) you can also rely on spaCy for better (but slower) sentence splitting.
-You can also disable sentence splitting completely with `==no_sentence_splitting`. In that case, make sure the
-sentences are already split with a padding token between them )`<pad>`_.
+You can also disable sentence splitting completely with `--no_sentence_splitting`. In that case, make sure the
+sentences are already split with a padding token between them (`<pad>`).
 
 
 #### Default values
