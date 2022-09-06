@@ -87,7 +87,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("m2m_100", "M2M100Config"),
         ("marian", "MarianConfig"),
         ("maskformer", "MaskFormerConfig"),
-        ("maskformer", "Mask2FormerConfig"),
+        ("mask2former", "Mask2FormerConfig"),
         ("mbart", "MBartConfig"),
         ("mctct", "MCTCTConfig"),
         ("megatron-bert", "MegatronBertConfig"),
