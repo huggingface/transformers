@@ -424,8 +424,8 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
             # because zero3 puts placeholders in model params, this context
             # manager gathers (unpartitions) the params of the current layer, then loads from
             # the state dict and then re-partitions them again
-            # 
-            # In sharded models, each shard has only part of state_dict, so only gather parameters that are in state_dict. 
+            #
+            # In sharded models, each shard has only part of state_dict, so only gather parameters that are in state_dict.
             named_parameters = dict(module.named_parameters(prefix=prefix[:-1], recurse=False))
             params_to_fetch = [named_parameters[k] for k in state_dict.keys() if k in named_parameters]
             if len(params_to_fetch) > 0:
