@@ -15,8 +15,6 @@
 """ TimeSeriesTransformer model configuration """
 from typing import List, Optional
 
-from gluonts.time_feature import get_lags_for_frequency, time_features_from_frequency_str
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -53,11 +51,10 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             The size of the target variable which by default is 1 for univariate targets.
         scaling (`bool`, *optional* defaults to `True`):
             Whether to scale the input targets.
-        freq (`str`, *optional*):
-            The frequency of the input time series. If `None`, the `lags_seq` and `num_time_features` are set at
-            the finest temporal resolution of 1 second.
-        lags_seq (`list` of `int`, *optional*):
-            The lags of the input time series. If `None`, the `freq` is used to determine the lags.
+        lags_seq (`list` of `int`):
+            The lags of the input time series as covariates often dictated by the frequency. Default is [1, 2, 3, 4, 5, 6, 7].
+        num_time_features (`int`, *optional* defaults to 0):
+            The number of time features in the input time series.
         num_feat_dynamic_real (`int`, *optional* defaults to `0`):
             The number of dynamic real valued features.
         num_feat_static_cat (`int`, *optional* defaults to `0`):
@@ -72,17 +69,33 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             Number of encoder layers.
         decoder_layers (`int`, *optional*, defaults to 2):
             Number of decoder layers.
-        num_attention_heads (`int`, *optional*, defaults to 2):
-            Number of attention heads for each attention layer in the Transformer encoder and decoder.
-        ffn_dim (`int`, *optional*, defaults to 32):
-            Dimension of the "intermediate" (often named feed-forward) layer in encoder and decoder.
+        encoder_attention_heads (`int`, *optional*, defaults to 2):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        decoder_attention_heads (`int`, *optional*, defaults to 2):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        encoder_ffn_dim (`int`, *optional*, defaults to 32):
+            Dimension of the "intermediate" (often named feed-forward) layer in encoder.
+        decoder_ffn_dim (`int`, *optional*, defaults to 32):
+            Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and decoder. If string,
             `"gelu"` and `"relu"` are supported.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the encoder, and decoder.
+        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
+            The dropout probability for the attention and fully connected layers for each encoder layer.
+        decoder_layerdrop (`float`, *optional*, defaults to 0.1):
+            The dropout probability for the attention and fully connected layers for each decoder layer.
+        attention_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for the attention probabilities.
+        activation_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability used between the two layers of the feed-forward networks.
         num_parallel_samples (`int`, *optional*, defaults to 100):
             The number of samples to generate in parallel for each time step of inference.
+        init_std (`float`, *optional*, defaults to 0.01):
+            The standard deviation of the truncated normal weight initialization distribution.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
 
         Example:
 
@@ -103,22 +116,22 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     def __init__(
         self,
         input_size: int = 1,
-        freq: Optional[str] = None,
         prediction_length: Optional[int] = None,
         context_length: Optional[int] = None,
         distribution_output: str = "student_t",
         loss: str = "nll",
-        lags_seq: Optional[List[int]] = None,
+        lags_seq: List[int] = [1, 2, 3, 4, 5, 6, 7],
         scaling: bool = True,
         num_feat_dynamic_real: int = 0,
         num_feat_static_cat: int = 0,
         num_feat_static_real: int = 0,
+        num_time_features: int = 0,
         cardinality: Optional[List[int]] = None,
         embedding_dimension: Optional[List[int]] = None,
         encoder_ffn_dim: int = 32,
         decoder_ffn_dim: int = 32,
-        decoder_attention_heads: int = 2,
         encoder_attention_heads: int = 2,
+        decoder_attention_heads: int = 2,
         encoder_layers: int = 2,
         decoder_layers: int = 2,
         is_encoder_decoder: bool = True,
@@ -133,17 +146,14 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         use_cache=True,
         **kwargs
     ):
-        # time series specific parameters
+        # time series specific configuration
         self.prediction_length = prediction_length
         self.context_length = context_length or prediction_length
-        self.freq = freq or "1S"
         self.distribution_output = distribution_output
         self.loss = loss
         self.input_size = input_size
-        self.num_time_features = (
-            len(time_features_from_frequency_str(freq_str=self.freq)) + 1
-        )  # +1 for the Age feature
-        self.lags_seq = lags_seq or get_lags_for_frequency(freq_str=self.freq)
+        self.num_time_features = num_time_features
+        self.lags_seq = lags_seq
         self.scaling = scaling
         self.num_feat_dynamic_real = num_feat_dynamic_real
         self.num_feat_static_real = num_feat_static_real
@@ -152,7 +162,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.embedding_dimension = embedding_dimension or [min(50, (cat + 1) // 2) for cat in self.cardinality]
         self.num_parallel_samples = num_parallel_samples
 
-        # Transformer architecture parameters
+        # Transformer architecture configuration
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_attention_heads = decoder_attention_heads
         self.encoder_ffn_dim = encoder_ffn_dim
