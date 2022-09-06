@@ -114,7 +114,6 @@ _deps = [
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
-    "gluonts>=0.10.0",
     "hf-doc-builder>=0.3.0",
     "huggingface-hub>=0.1.0,<1.0",
     "importlib_metadata",
@@ -278,7 +277,6 @@ extras["flax-speech"] = extras["audio"]
 extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
 extras["codecarbon"] = deps_list("codecarbon")
-extras["gluonts"] = deps_list("gluonts")
 
 
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
@@ -322,7 +320,6 @@ extras["all"] = (
     + extras["timm"]
     + extras["codecarbon"]
     + extras["accelerate"]
-    + extras["gluonts"]
 )
 
 # Might need to add doc-builder and some specific deps in the future
@@ -347,7 +344,6 @@ extras["dev-torch"] = (
     + extras["sklearn"]
     + extras["modelcreation"]
     + extras["onnxruntime"]
-    + extras["gluonts"]
 )
 extras["dev-tensorflow"] = (
     extras["testing"]
