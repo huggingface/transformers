@@ -140,6 +140,7 @@ from . import (
     unispeech_sat,
     van,
     videomae,
+    timesformer,
     vilt,
     vision_encoder_decoder,
     vision_text_dual_encoder,
