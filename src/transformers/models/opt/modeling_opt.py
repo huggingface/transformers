@@ -339,7 +339,7 @@ class OPTDecoderLayer(nn.Module):
         hidden_states = hidden_states.reshape(-1, hidden_states.size(-1))
         residual = hidden_states
 
-        # 125m, 1.7B, ..., 175B applies layer norm BEFORE attention
+        # 125m, 1.7B, ..., 175B applies layer norm BEFORE fully-connected block
         if self.do_layer_norm_before:
             hidden_states = self.final_layer_norm(hidden_states)
 
@@ -351,7 +351,7 @@ class OPTDecoderLayer(nn.Module):
 
         hidden_states = (residual + hidden_states).view(hidden_states_shape)
 
-        # 350m applies layer norm AFTER attention
+        # 350m applies layer norm AFTER fully-connected block 
         if not self.do_layer_norm_before:
             hidden_states = self.final_layer_norm(hidden_states)
 
