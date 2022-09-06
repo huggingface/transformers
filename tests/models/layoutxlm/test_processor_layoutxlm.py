@@ -126,6 +126,40 @@ class LayoutXLMProcessorTest(unittest.TestCase):
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, LayoutLMv2FeatureExtractor)
 
+    @slow
+    def test_overflowing_tokens(self):
+        # In the case of overflowing tokens, test that we still have 1-to-1 mapping between the images and input_ids (sequences that are too long are broken down into multiple sequences).
+
+        from datasets import load_dataset
+
+        # set up
+        datasets = load_dataset("nielsr/funsd")
+        processor = LayoutXLMProcessor.from_pretrained("microsoft/layoutxlm-base", apply_ocr=False)
+
+        def preprocess_data(examples):
+            images = [Image.open(path).convert("RGB") for path in examples["image_path"]]
+            words = examples["words"]
+            boxes = examples["bboxes"]
+            word_labels = examples["ner_tags"]
+            encoded_inputs = processor(
+                images,
+                words,
+                boxes=boxes,
+                word_labels=word_labels,
+                max_length=512,
+                padding="max_length",
+                truncation=True,
+                return_overflowing_tokens=True,
+                stride=50,
+                return_offsets_mapping=True,
+                return_tensors="pt",
+            )
+            return encoded_inputs
+
+        train_data = preprocess_data(datasets["train"])
+
+        self.assertEqual(len(train_data["image"]), len(train_data["input_ids"]))
+
 
 # different use cases tests
 @require_sentencepiece
