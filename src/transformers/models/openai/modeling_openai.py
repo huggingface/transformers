@@ -20,7 +20,7 @@ import json
 import math
 import os
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Any, Dict, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -606,6 +606,9 @@ class OpenAIGPTLMHeadModel(OpenAIGPTPreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+    def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
+        return {"input_ids": input_ids}
 
 
 @add_start_docstrings(
