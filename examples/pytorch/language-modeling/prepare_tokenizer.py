@@ -3,11 +3,11 @@ This script is adaptated from the Transformers example in https://github.com/hug
 """
 from os import PathLike
 from pathlib import Path
-from typing import Sequence, Union
+from typing import Union
 
 from datasets import load_dataset
 
-from tokenizers import ByteLevelBPETokenizer
+from transformers import AutoTokenizer
 
 
 def train_tokenizer(
@@ -16,23 +16,20 @@ def train_tokenizer(
     dataset_split: str = "train",
     dataset_textcol: str = "text",
     vocab_size: int = 50265,
-    min_frequency: int = 2,
-    special_tokens: Sequence[str] = ("<s>", "<pad>", "</s>", "<unk>", "<mask>"),
+    base_tokenizer_name: str = "facebook/bart-base",
     dout: Union[str, PathLike] = ".",
 ):
     # load dataset
     dataset = load_dataset(dataset_name, dataset_config_name, split=dataset_split)
     # Instantiate tokenizer
-    tokenizer = ByteLevelBPETokenizer()
+    old_tokenizer = AutoTokenizer.from_pretrained(base_tokenizer_name)
 
     def batch_iterator(batch_size=1024):
         for i in range(0, len(dataset), batch_size):
             yield dataset[i : i + batch_size][dataset_textcol]
 
     # Customized training
-    tokenizer.train_from_iterator(
-        batch_iterator(), vocab_size=vocab_size, min_frequency=min_frequency, special_tokens=special_tokens
-    )
+    tokenizer = old_tokenizer.train_new_from_iterator(batch_iterator(), vocab_size=vocab_size)
 
     # Save to disk
     pdout = Path(dout).resolve()
@@ -56,15 +53,12 @@ def main():
         "--dataset_textcol", default="text", help="Name of the text column to use for tokenizer training"
     )
     cparser.add_argument("--vocab_size", type=int, default=50265, help="Vocabulary size")
-    cparser.add_argument("--min_frequency", type=int, default=2, help="Minimal frequency of tokens")
     cparser.add_argument(
-        "--special_tokens",
-        nargs="+",
-        default=["<s>", "<pad>", "</s>", "<unk>", "<mask>"],
+        "--base_tokenizer_name",
+        default="facebook/bart-base",
         help=(
-            "Special tokens to add. Useful for specific training objectives. Note that if you wish"
-            " to use this tokenizer with a default transformers.BartConfig, then make sure that the"
-            " order of at least these special tokens are correct: BOS (0), padding (1), EOS (2)"
+            "Base tokenizer to start from. We'll reuse the same special tokens and tokenization"
+            "algorithm from this tokenizer"
         ),
     )
     cparser.add_argument("--dout", default=".", help="Path to directory to save tokenizer.json file")
