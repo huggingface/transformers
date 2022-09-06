@@ -69,7 +69,7 @@ class DataCollatorForBartDenoisingLM:
         if self.mask_length not in ["subword", "word", "span-poisson"]:
             raise ValueError(f"invalid arg: mask-length={self.mask_length}")
         if self.mask_length == "subword" and self.replace_length not in [0, 1]:
-            raise ValueError(f"if using subwords, use replace-length=1 or 0")
+            raise ValueError("if using subwords, use replace-length=1 or 0")
 
         self.mask_span_distribution = None
         if self.mask_length == "span-poisson":
