@@ -384,7 +384,7 @@ MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Instance Segmentation mapping
         ("maskformer", "MaskFormerForInstanceSegmentation"),
-        ("maskformer", "Mask2FormerForInstanceSegmentation"),
+        ("mask2former", "Mask2FormerForInstanceSegmentation"),
     ]
 )
 
