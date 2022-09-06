@@ -3,43 +3,43 @@
 from ..utils import DummyObject, requires_backends
 
 
-TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST, = None
+TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class TapasForMaskedLM,(metaclass=DummyObject):
+class TapasForMaskedLM(metaclass=DummyObject):
     _backends = ["scatter"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["scatter"])
 
 
-class TapasForQuestionAnswering,(metaclass=DummyObject):
+class TapasForQuestionAnswering(metaclass=DummyObject):
     _backends = ["scatter"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["scatter"])
 
 
-class TapasForSequenceClassification,(metaclass=DummyObject):
+class TapasForSequenceClassification(metaclass=DummyObject):
     _backends = ["scatter"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["scatter"])
 
 
-class TapasModel,(metaclass=DummyObject):
+class TapasModel(metaclass=DummyObject):
     _backends = ["scatter"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["scatter"])
 
 
-class TapasPreTrainedModel,(metaclass=DummyObject):
+class TapasPreTrainedModel(metaclass=DummyObject):
     _backends = ["scatter"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["scatter"])
 
 
-def load_tf_weights_in_tapas,(*args, **kwargs):
-    requires_backends(load_tf_weights_in_tapas,, ["scatter"])
+def load_tf_weights_in_tapas(*args, **kwargs):
+    requires_backends(load_tf_weights_in_tapas, ["scatter"])
