@@ -22,8 +22,23 @@ env:
   RUN_PT_TF_CROSS_TESTS: 1
 
 jobs:
+  run_check_runners:
+    name: Check Runners
+    strategy:
+      matrix:
+        machine_type: [single-gpu, multi-gpu]
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
   setup:
     name: Setup
+    needs: run_check_runners
     strategy:
       matrix:
         machine_type: [single-gpu, multi-gpu]
@@ -67,7 +82,7 @@ jobs:
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
+    needs: [run_check_runners, setup]
     steps:
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
@@ -120,7 +135,7 @@ jobs:
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
+    needs: [run_check_runners, setup]
     steps:
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
@@ -168,7 +183,7 @@ jobs:
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
+    needs: [run_check_runners, setup]
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -211,7 +226,7 @@ jobs:
     container:
       image: huggingface/transformers-pytorch-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
+    needs: [run_check_runners, setup]
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -255,7 +270,7 @@ jobs:
     container:
       image: huggingface/transformers-tensorflow-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
+    needs: [run_check_runners, setup]
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -297,7 +312,7 @@ jobs:
       matrix:
         machine_type: [single-gpu, multi-gpu]
     runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker') }}
-    needs: setup
+    needs: [run_check_runners, setup]
     container:
       image: huggingface/transformers-pytorch-deepspeed-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -346,8 +361,24 @@ jobs:
     name: Send results to webhook
     runs-on: ubuntu-latest
     if: always()
-    needs: [setup, run_tests_single_gpu, run_tests_multi_gpu, run_examples_gpu, run_pipelines_tf_gpu, run_pipelines_torch_gpu, run_all_tests_torch_cuda_extensions_gpu]
+    needs: [
+      run_check_runners,
+      setup,
+      run_tests_single_gpu,
+      run_tests_multi_gpu,
+      run_examples_gpu,
+      run_pipelines_tf_gpu,
+      run_pipelines_torch_gpu,
+      run_all_tests_torch_cuda_extensions_gpu
+    ]
     steps:
+      - name: Preliminary job status
+        shell: bash
+        # For the meaning of these environment variables, see the job `Setup`
+        run: |
+          echo "Runner status: ${{ needs.run_check_runners.result }}"
+          echo "Setup status: ${{ needs.setup.result }}"
+
       - uses: actions/checkout@v2
       - uses: actions/download-artifact@v2
       - name: Send message to Slack
@@ -358,6 +389,8 @@ jobs:
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
           CI_EVENT: scheduled
+          SETUP_STATUS: ${{ needs.setup.result }}
+          RUNNER_STATUS: ${{ needs.run_check_runners.result }}
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
