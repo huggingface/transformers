@@ -357,12 +357,6 @@ class TFGenerationMixin:
 
     supports_xla_generation = True
 
-    def prepare_inputs_for_generation(self, inputs, **kwargs):
-        """
-        Implement in subclasses of [`TFPreTrainedModel`] for custom behavior to prepare inputs in the generate method.
-        """
-        return {"input_ids": inputs}
-
     def _use_cache(self, outputs, use_cache):
         """During generation, decide whether to pass the `past` variable to the next forward pass."""
         use_cache = getattr(self.config, "use_cache", False)
