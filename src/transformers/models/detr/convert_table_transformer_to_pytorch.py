@@ -227,7 +227,25 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
             val = state_dict.pop(key)
             state_dict[prefix + key] = val
     # create HuggingFace model and load state dict
-    config = DetrConfig(backbone="resnet18", num_queries=15, normalize_before=True)
+    config = DetrConfig(
+        backbone="resnet18",
+        normalize_before=True,
+        mask_loss_coefficient=1,
+        dice_loss_coefficient=1,
+        ce_loss_coefficient=1,
+        bbox_loss_coefficient=5,
+        giou_loss_coefficient=2,
+        eos_coefficient=0.4,
+        class_cost=1,
+        bbox_cost=5,
+        giou_cost=2,
+    )
+
+    if True:
+        config.num_queries = 15
+    else:
+        config.num_queries = 125
+
     model = DetrForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()

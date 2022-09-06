@@ -105,6 +105,8 @@ class DetrConfig(PretrainedConfig):
             Relative weight of the Focal loss in the panoptic segmentation loss.
         dice_loss_coefficient (`float`, *optional*, defaults to 1):
             Relative weight of the DICE/F-1 loss in the panoptic segmentation loss.
+        ce_loss_coefficient (`float`, *optional*, defaults to 1):
+            Relative weight of the cross-entropy loss in the object detection loss.
         bbox_loss_coefficient (`float`, *optional*, defaults to 5):
             Relative weight of the L1 bounding box loss in the object detection loss.
         giou_loss_coefficient (`float`, *optional*, defaults to 2):
@@ -167,6 +169,7 @@ class DetrConfig(PretrainedConfig):
         giou_cost=2,
         mask_loss_coefficient=1,
         dice_loss_coefficient=1,
+        ce_loss_coefficient=1,
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
@@ -205,6 +208,7 @@ class DetrConfig(PretrainedConfig):
         # Loss coefficients
         self.mask_loss_coefficient = mask_loss_coefficient
         self.dice_loss_coefficient = dice_loss_coefficient
+        self.ce_loss_coefficient = ce_loss_coefficient
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
         self.eos_coefficient = eos_coefficient

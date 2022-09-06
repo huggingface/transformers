@@ -1510,8 +1510,11 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 
             loss_dict = criterion(outputs_loss, labels)
             # Fourth: compute total loss, as a weighted sum of the various losses
-            weight_dict = {"loss_ce": 1, "loss_bbox": self.config.bbox_loss_coefficient}
-            weight_dict["loss_giou"] = self.config.giou_loss_coefficient
+            weight_dict = {
+                "loss_ce": self.config.ce_loss_coefficient,
+                "loss_bbox": self.config.bbox_loss_coefficient,
+                "loss_giou": self.config.giou_loss_coefficient,
+            }
             if self.config.auxiliary_loss:
                 aux_weight_dict = {}
                 for i in range(self.config.decoder_layers - 1):
