@@ -727,7 +727,7 @@ def main():
                 },
                 step=completed_steps,
             )
-            
+
         if args.push_to_hub and epoch < args.num_train_epochs - 1:
             accelerator.wait_for_everyone()
             unwrapped_model = accelerator.unwrap_model(model)
