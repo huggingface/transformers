@@ -741,9 +741,9 @@ class DetrDecoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        hidden_states = self.self_attn_layer_norm(hidden_states) if self.normalize_before else hidden_states
-
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
@@ -755,17 +755,17 @@ class DetrDecoderLayer(nn.Module):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = (
-            self.encoder_attn_layer_norm(hidden_states)
-            if self.normalize_before
-            else self.self_attn_layer_norm(hidden_states)
-        )
+
+        if self.normalize_before:
+            residual = hidden_states
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+        else:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
+            residual = hidden_states
 
         # Cross-Attention Block
         cross_attn_weights = None
         if encoder_hidden_states is not None:
-            residual = hidden_states
-
             hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
                 position_embeddings=query_position_embeddings,
@@ -777,14 +777,15 @@ class DetrDecoderLayer(nn.Module):
 
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-            hidden_states = (
-                self.final_layer_norm(hidden_states)
-                if self.normalize_before
-                else self.encoder_attn_layer_norm(hidden_states)
-            )
+
+            if self.normalize_before:
+                residual = hidden_states
+                hidden_states = self.final_layer_norm(hidden_states)
+            else:
+                hidden_states = self.encoder_attn_layer_norm(hidden_states)
+                residual = hidden_states
 
         # Fully Connected
-        residual = hidden_states
         hidden_states = self.activation_fn(self.fc1(hidden_states))
         hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
@@ -985,10 +986,7 @@ class DetrEncoder(DetrPreTrainedModel):
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        for i, encoder_layer in enumerate(self.layers):
-            if i == 0:
-                print(f"Hidden states before layer {i}", hidden_states[0, :3, :3])
-
+        for encoder_layer in self.layers:
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -1005,9 +1003,6 @@ class DetrEncoder(DetrPreTrainedModel):
                 )
 
                 hidden_states = layer_outputs[0]
-
-            if i == 0:
-                print(f"Hidden states after layer {i}", hidden_states[0, :3, :3])
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
@@ -1139,6 +1134,9 @@ class DetrDecoder(DetrPreTrainedModel):
             if self.training and (dropout_probability < self.layerdrop):
                 continue
 
+            if idx == 0:
+                print(f"Hidden states before layer {idx}", hidden_states[0, :3, :3])
+
             if self.gradient_checkpointing and self.training:
 
                 def create_custom_forward(module):
@@ -1167,6 +1165,9 @@ class DetrDecoder(DetrPreTrainedModel):
                 )
 
             hidden_states = layer_outputs[0]
+
+            if idx == 0:
+                print(f"Hidden states after layer {idx}", hidden_states[0, :3, :3])
 
             if self.config.auxiliary_loss:
                 hidden_states = self.layernorm(hidden_states)

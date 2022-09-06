@@ -1368,9 +1368,9 @@ class DetrDecoderLayer(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
         """
-        hidden_states = self.self_attn_layer_norm(hidden_states) if self.normalize_before else hidden_states
-
         residual = hidden_states
+        if self.normalize_before:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
@@ -1382,17 +1382,17 @@ class DetrDecoderLayer(nn.Module):
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
-        hidden_states = (
-            self.encoder_attn_layer_norm(hidden_states)
-            if self.normalize_before
-            else self.self_attn_layer_norm(hidden_states)
-        )
+
+        if self.normalize_before:
+            residual = hidden_states
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
+        else:
+            hidden_states = self.self_attn_layer_norm(hidden_states)
+            residual = hidden_states
 
         # Cross-Attention Block
         cross_attn_weights = None
         if encoder_hidden_states is not None:
-            residual = hidden_states
-
             hidden_states, cross_attn_weights = self.encoder_attn(
                 hidden_states=hidden_states,
                 position_embeddings=query_position_embeddings,
@@ -1404,11 +1404,11 @@ class DetrDecoderLayer(nn.Module):
 
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
-            hidden_states = (
-                self.final_layer_norm(hidden_states)
-                if self.normalize_before
-                else self.encoder_attn_layer_norm(hidden_states)
-            )
+
+            if self.normalize_before:
+                hidden_states = self.final_layer_norm(hidden_states)
+            else:
+                hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
         residual = hidden_states
