@@ -349,6 +349,5 @@ class AutoTokenizerTest(unittest.TestCase):
         with RequestCounter() as counter:
             _ = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
             self.assertEqual(counter.get_request_count, 0)
-            # We still have one extra call because the model does not have a added_tokens.json file
-            self.assertEqual(counter.head_request_count, 2)
+            self.assertEqual(counter.head_request_count, 1)
             self.assertEqual(counter.other_request_count, 0)

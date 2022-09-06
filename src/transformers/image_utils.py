@@ -131,7 +131,7 @@ class ImageFeatureExtractionMixin:
 
         return image.convert("RGB")
 
-    def rescale_image(self, image: np.ndarray, scale: Union[float, int]) -> np.ndarray:
+    def rescale(self, image: np.ndarray, scale: Union[float, int]) -> np.ndarray:
         """
         Rescale a numpy image by scale amount
         """
@@ -163,7 +163,7 @@ class ImageFeatureExtractionMixin:
         rescale = isinstance(image.flat[0], np.integer) if rescale is None else rescale
 
         if rescale:
-            image = self.rescale_image(image.astype(np.float32), 1 / 255.0)
+            image = self.rescale(image.astype(np.float32), 1 / 255.0)
 
         if channel_first and image.ndim == 3:
             image = image.transpose(2, 0, 1)
@@ -214,9 +214,9 @@ class ImageFeatureExtractionMixin:
         # type it may need rescaling.
         elif rescale:
             if isinstance(image, np.ndarray):
-                image = self.rescale_image(image.astype(np.float32), 1 / 255.0)
+                image = self.rescale(image.astype(np.float32), 1 / 255.0)
             elif is_torch_tensor(image):
-                image = self.rescale_image(image.float(), 1 / 255.0)
+                image = self.rescale(image.float(), 1 / 255.0)
 
         if isinstance(image, np.ndarray):
             if not isinstance(mean, np.ndarray):

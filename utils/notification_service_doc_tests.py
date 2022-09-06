@@ -167,7 +167,7 @@ class Message:
         if self.n_failures > 0:
             blocks.extend([self.category_failures])
 
-        if self.no_failures == 0:
+        if self.n_failures == 0:
             blocks.append(self.no_failures)
 
         return json.dumps(blocks)

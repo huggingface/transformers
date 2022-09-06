@@ -105,6 +105,7 @@ from . import (
     opt,
     owlvit,
     pegasus,
+    pegasus_x,
     perceiver,
     phobert,
     plbart,
