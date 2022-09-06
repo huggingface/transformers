@@ -46,13 +46,13 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         distribution_output (`string`, *optional* defaults to `student_t`):
             The distribution emission head for the model.
         loss (`string`, *optional* defaults to `nll`):
-            The loss function for the model with corresponding to the `distribution_output` head.
+            The loss function for the model corresponding to the `distribution_output` head. For parametric distributions it is negative log likelihood.
         input_size (`int`, *optional* defaults to 1):
             The size of the target variable which by default is 1 for univariate targets.
         scaling (`bool`, *optional* defaults to `True`):
             Whether to scale the input targets.
-        lags_seq (`list` of `int`):
-            The lags of the input time series as covariates often dictated by the frequency. Default is [1, 2, 3, 4, 5, 6, 7].
+        lags_seq (`list` of `int`  *optional* defaults to `[1, 2, 3, 4, 5, 6, 7]`):
+            The lags of the input time series as covariates often dictated by the frequency. Default is `[1, 2, 3, 4, 5, 6, 7]`.
         num_time_features (`int`, *optional* defaults to 0):
             The number of time features in the input time series.
         num_feat_dynamic_real (`int`, *optional* defaults to `0`):
@@ -65,34 +65,34 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             The cardinality of the categorical features. Cannot be `None` if `num_feat_static_cat` is `> 0`.
         embedding_dimension (`list` of `int`, *optional*):
             The dimension of the embedding for the categorical features. Cannot be `None` if `num_feat_static_cat` is `> 0`.
-        encoder_layers (`int`, *optional*, defaults to 2):
+        encoder_layers (`int`, *optional*, defaults to `2`):
             Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 2):
+        decoder_layers (`int`, *optional*, defaults to `2`):
             Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 2):
+        encoder_attention_heads (`int`, *optional*, defaults to `2`):
             Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 2):
+        decoder_attention_heads (`int`, *optional*, defaults to `2`):
             Number of attention heads for each attention layer in the Transformer decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 32):
+        encoder_ffn_dim (`int`, *optional*, defaults to `32`):
             Dimension of the "intermediate" (often named feed-forward) layer in encoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 32):
+        decoder_ffn_dim (`int`, *optional*, defaults to `32`):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and decoder. If string,
             `"gelu"` and `"relu"` are supported.
-        dropout (`float`, *optional*, defaults to 0.1):
+        dropout (`float`, *optional*, defaults to `0.1`):
             The dropout probability for all fully connected layers in the encoder, and decoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
+        encoder_layerdrop (`float`, *optional*, defaults to `0.1`):
             The dropout probability for the attention and fully connected layers for each encoder layer.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.1):
+        decoder_layerdrop (`float`, *optional*, defaults to `0.1`):
             The dropout probability for the attention and fully connected layers for each decoder layer.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
+        attention_dropout (`float`, *optional*, defaults to `0.1`):
             The dropout probability for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.1):
+        activation_dropout (`float`, *optional*, defaults to `0.1`):
             The dropout probability used between the two layers of the feed-forward networks.
-        num_parallel_samples (`int`, *optional*, defaults to 100):
+        num_parallel_samples (`int`, *optional*, defaults to `100`):
             The number of samples to generate in parallel for each time step of inference.
-        init_std (`float`, *optional*, defaults to 0.01):
+        init_std (`float`, *optional*, defaults to `0.02`):
             The standard deviation of the truncated normal weight initialization distribution.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use the past key/values attentions (if applicable to the model) to speed up decoding.
