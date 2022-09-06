@@ -24,9 +24,9 @@ import gdown
 from huggingface_hub import hf_hub_download
 from transformers import (
     TimeSformerConfig,
-    VideoMAEFeatureExtractor,
     TimeSformerForPreTraining,
     TimeSformerForVideoClassification,
+    VideoMAEFeatureExtractor,
 )
 
 
@@ -283,4 +283,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_timesformer_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.model_name, args.push_to_hub)
+    convert_timesformer_checkpoint(
+        args.checkpoint_url, args.pytorch_dump_folder_path, args.model_name, args.push_to_hub
+    )
