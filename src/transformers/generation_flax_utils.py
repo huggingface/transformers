@@ -161,6 +161,16 @@ class FlaxGenerationMixin:
         """
         return logits
 
+    def _validate_model_class(self):
+        """Confirms that the model class is compatible with generation."""
+        if not hasattr(self, "prepare_inputs_for_generation"):
+            model_class = self.__class__.__name__
+            raise TypeError(
+                f"The current model class ({model_class}) is not compatible with `.generate()`, as it doesn't have a ",
+                "language model head. The following AutoModel classes are compatible: `FlaxAutoModelForCausalLM`, ",
+                "`FlaxAutoModelForSeq2SeqLM`, `FlaxAutoModelForVision2Seq`.",
+            )
+
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         unused_model_args = []
@@ -281,7 +291,8 @@ class FlaxGenerationMixin:
         >>> outputs = model.generate(input_ids=input_ids, max_length=20, top_k=30, do_sample=True)
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ```"""
-        # Validate model kwargs
+        # Validate the `.generate()` call
+        self._validate_model_class()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # set init values

@@ -1290,6 +1290,16 @@ class TFGenerationMixin:
         else:
             return logits
 
+    def _validate_model_class(self):
+        """Confirms that the model class is compatible with generation."""
+        if not hasattr(self, "prepare_inputs_for_generation"):
+            model_class = self.__class__.__name__
+            raise TypeError(
+                f"The current model class ({model_class}) is not compatible with `.generate()`, as it doesn't have a ",
+                "language model head. The following AutoModel classes are compatible: `TFAutoModelForCausalLM`, ",
+                "`TFAutoModelForSeq2SeqLM`, `TFAutoModelForVision2Seq`, `TFAutoModelForSpeechSeq2Seq`.",
+            )
+
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         # Excludes arguments that are handled before calling any model function
@@ -1508,7 +1518,8 @@ class TFGenerationMixin:
         # generate sequences without allowing bad_words to be generated
         outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)
         ```"""
-        # 0. Validate model kwargs
+        # 0. Validate the `.generate()` call
+        self._validate_model_class()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # 1. Set generation parameters if not already defined

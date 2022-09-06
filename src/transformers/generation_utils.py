@@ -841,6 +841,16 @@ class GenerationMixin:
 
         return transition_scores
 
+    def _validate_model_class(self):
+        """Confirms that the model class is compatible with generation."""
+        if not hasattr(self, "prepare_inputs_for_generation"):
+            model_class = self.__class__.__name__
+            raise TypeError(
+                f"The current model class ({model_class}) is not compatible with `.generate()`, as it doesn't have a ",
+                "language model head. The following AutoModel classes are compatible: `AutoModelForCausalLM`, ",
+                "`AutoModelForSeq2SeqLM`, `AutoModelForVision2Seq`, `AutoModelForSpeechSeq2Seq`.",
+            )
+
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         # Excludes arguments that are handled before calling any model function
@@ -1143,7 +1153,8 @@ class GenerationMixin:
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ['Paris ist eines der dichtesten besiedelten Gebiete Europas.']
         ```"""
-        # 0. Validate model kwargs
+        # 0. Validate the `.generate()` call
+        self._validate_model_class()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # 1. Set generation parameters if not already defined
