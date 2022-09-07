@@ -1269,6 +1269,7 @@ class TFMarianModel(TFMarianPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bart.modeling_tf_bart.BiasLayer
 class BiasLayer(tf.keras.layers.Layer):
     """
     Bias as a layer. It is used for serialization purposes: `tf.keras.Model.save_weights` stores on a per-layer basis,

@@ -224,21 +224,19 @@ At this point, only three steps remain:
 ```
 </pt>
 <tf>
-To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`~datasets.Dataset.to_tf_dataset`]. Specify inputs in `columns`, targets in `label_cols`, whether to shuffle the dataset order, batch size, and the data collator:
+To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`~TFPreTrainedModel.prepare_tf_dataset`].
 
 ```py
 >>> data_collator = DataCollatorForMultipleChoice(tokenizer=tokenizer)
->>> tf_train_set = tokenized_swag["train"].to_tf_dataset(
-...     columns=["attention_mask", "input_ids"],
-...     label_cols=["labels"],
+>>> tf_train_set = model.prepare_tf_dataset(
+...     tokenized_swag["train"],
 ...     shuffle=True,
 ...     batch_size=batch_size,
 ...     collate_fn=data_collator,
 ... )
 
->>> tf_validation_set = tokenized_swag["validation"].to_tf_dataset(
-...     columns=["attention_mask", "input_ids"],
-...     label_cols=["labels"],
+>>> tf_validation_set = model.prepare_tf_dataset(
+...     tokenized_swag["validation"],
 ...     shuffle=False,
 ...     batch_size=batch_size,
 ...     collate_fn=data_collator,
@@ -273,10 +271,7 @@ Load BERT with [`TFAutoModelForMultipleChoice`]:
 Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
 
 ```py
->>> model.compile(
-...     optimizer=optimizer,
-...     loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-... )
+>>> model.compile(optimizer=optimizer)
 ```
 
 Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to fine-tune the model:
