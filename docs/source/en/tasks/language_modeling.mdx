@@ -245,20 +245,18 @@ At this point, only three steps remain:
 ```
 </pt>
 <tf>
-To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`~datasets.Dataset.to_tf_dataset`]. Specify inputs and labels in `columns`, whether to shuffle the dataset order, batch size, and the data collator:
+To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`~TFPreTrainedModel.prepare_tf_dataset`].
 
 ```py
->>> tf_train_set = lm_dataset["train"].to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "labels"],
-...     dummy_labels=True,
+>>> tf_train_set = model.prepare_tf_dataset(
+...     lm_dataset["train"],
 ...     shuffle=True,
 ...     batch_size=16,
 ...     collate_fn=data_collator,
 ... )
 
->>> tf_test_set = lm_dataset["test"].to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "labels"],
-...     dummy_labels=True,
+>>> tf_test_set = model.prepare_tf_dataset(
+...     lm_dataset["test"],
 ...     shuffle=False,
 ...     batch_size=16,
 ...     collate_fn=data_collator,
@@ -352,20 +350,18 @@ At this point, only three steps remain:
 ```
 </pt>
 <tf>
-To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`~datasets.Dataset.to_tf_dataset`]. Specify inputs and labels in `columns`, whether to shuffle the dataset order, batch size, and the data collator:
+To fine-tune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`~TFPreTrainedModel.prepare_tf_dataset`].
 
 ```py
->>> tf_train_set = lm_dataset["train"].to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "labels"],
-...     dummy_labels=True,
+>>> tf_train_set = model.prepare_tf_dataset(
+...     lm_dataset["train"],
 ...     shuffle=True,
 ...     batch_size=16,
 ...     collate_fn=data_collator,
 ... )
 
->>> tf_test_set = lm_dataset["test"].to_tf_dataset(
-...     columns=["attention_mask", "input_ids", "labels"],
-...     dummy_labels=True,
+>>> tf_test_set = model.prepare_tf_dataset(
+...     lm_dataset["test"],
 ...     shuffle=False,
 ...     batch_size=16,
 ...     collate_fn=data_collator,
