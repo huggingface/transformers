@@ -499,7 +499,7 @@ class GenerationMixin:
             (eos_token_id is not None) and (pad_token_id != eos_token_id)
         )
         # Check if input is input_ids and padded -> only then is attention_mask defined
-        if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
+        if (is_input_ids and is_pad_token_in_inputs) or is_pad_token_not_equal_to_eos_token_id:
             return inputs.ne(pad_token_id).long()
         else:
             return torch.ones(inputs.shape[:2], dtype=torch.long, device=inputs.device)
