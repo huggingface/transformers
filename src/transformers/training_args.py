@@ -93,7 +93,7 @@ def get_int_from_env(env_keys, default):
     return default
 
 
-def get_xla_device_type(device: torch.device) -> Optional[str]:
+def get_xla_device_type(device: "torch.device") -> Optional[str]:
     """
     Returns the xla device type (CPU|GPU|TPU) or None if the device is a non-xla device.
     """
