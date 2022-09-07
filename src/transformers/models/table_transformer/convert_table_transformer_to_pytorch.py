@@ -27,7 +27,7 @@ from PIL import Image
 from torchvision.transforms import functional as F
 
 from huggingface_hub import hf_hub_download
-from transformers import DetrConfig, DetrForObjectDetection
+from transformers import DetrConfig, DetrFeatureExtractor, DetrForObjectDetection
 from transformers.utils import logging
 
 
@@ -187,17 +187,10 @@ def normalize(image):
 
 
 @torch.no_grad()
-def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub):
+def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub):
     """
     Copy/paste/tweak model's weights to our DETR structure.
     """
-
-    # TODO load feature extractor
-    # feature_extractor = DetrFeatureExtractor(format="coco_detection")
-
-    # # prepare image
-    # encoding = feature_extractor(images=img, return_tensors="pt")
-    # pixel_values = encoding["pixel_values"]
 
     logger.info("Converting model...")
 
@@ -250,6 +243,7 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
 
+    feature_extractor = DetrFeatureExtractor(format="coco_detection", size=800 if "detection" in checkpoint_url else 1000)
     model = DetrForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
@@ -267,24 +261,30 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
         expected_logits = torch.tensor(
             [[-6.7897, -16.9985, 6.7937], [-8.0186, -22.2192, 6.9677], [-7.3117, -21.0708, 7.4055]]
         )
+        expected_boxes = torch.tensor([[0.4867, 0.1767, 0.6732],
+        [0.6718, 0.4479, 0.3830],
+        [0.4716, 0.1760, 0.6364]])
 
     else:
         expected_shape = (1, 125, 7)
         expected_logits = torch.tensor(
             [[-18.1430, -8.3214, 4.8274], [-18.4685, -7.1361, -4.2667], [-26.3693, -9.3429, -4.9962]]
         )
+        expected_boxes = torch.tensor([[0.4983, 0.5595, 0.9440],
+        [0.4916, 0.6315, 0.5954],
+        [0.6108, 0.8637, 0.1135]])
 
     assert outputs.logits.shape == expected_shape
     assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
+    assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
     print("Looks ok!")
-    # assert torch.allclose(outputs.pred_boxes, expected_boxes, atol=1e-4)
 
     if pytorch_dump_folder_path is not None:
         # Save model and feature extractor
         logger.info(f"Saving PyTorch model and feature extractor to {pytorch_dump_folder_path}...")
         Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
         model.save_pretrained(pytorch_dump_folder_path)
-        # feature_extractor.save_pretrained(pytorch_dump_folder_path)
+        feature_extractor.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
         # Push model to HF hub
@@ -295,7 +295,7 @@ def convert_detr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hu
             else "nielsr/detr-table-structure-recognition"
         )
         model.push_to_hub(model_name)
-
+        feature_extractor.push_to_hub(model_name)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -317,4 +317,4 @@ if __name__ == "__main__":
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
     )
     args = parser.parse_args()
-    convert_detr_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_table_transformer_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)

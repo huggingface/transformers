@@ -131,6 +131,7 @@ from . import (
     swin,
     swinv2,
     t5,
+    table_transformer,
     tapas,
     tapex,
     trajectory_transformer,
