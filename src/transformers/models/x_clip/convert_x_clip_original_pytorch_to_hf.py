@@ -52,6 +52,9 @@ def get_xclip_config(model_name, num_frames):
         vision_config.mit_hidden_size = 768
         vision_config.mit_intermediate_size = 3072
 
+    if model_name == "xclip-large-patch14-16-frames":
+        vision_config.image_size = 336
+
     config = XCLIPConfig.from_text_vision_configs(text_config, vision_config)
 
     if "large" in model_name:
@@ -197,7 +200,12 @@ def convert_state_dict(orig_state_dict, config):
 
 
 def prepare_video(num_frames):
-    filename = "eating_spaghetti_8_frames.npy" if num_frames == 8 else "eating_spaghetti.npy"
+    if num_frames == 8:
+        filename = "eating_spaghetti_8_frames.npy"
+    elif num_frames == 16:
+        filename = "eating_spaghetti.npy"
+    elif num_frames == 32:
+        filename = "eating_spaghetti_32_frames.npy"
     file = hf_hub_download(
         repo_id="datasets/hf-internal-testing/spaghetti-video",
         filename=filename,
@@ -206,8 +214,66 @@ def prepare_video(num_frames):
     return list(video)
 
 
-def convert_xclip_checkpoint(checkpoint_url, model_name, num_frames, pytorch_dump_folder_path=None, push_to_hub=False):
-    config = get_xclip_config(model_name, num_frames=num_frames)
+def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
+
+    model_to_url = {
+        # fully supervised kinetics-400 checkpoints
+        "xclip-base-patch32": "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/k400_32_8.pth",
+        "xclip-base-patch32-16-frames": (
+            "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/k400_32_16.pth"
+        ),
+        "xclip-base-patch16": "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/k400_16_8.pth",
+        "xclip-base-patch16-16-frames": (
+            "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/k400_16_16.pth"
+        ),
+        "xclip-large-patch14": "https://drive.google.com/u/0/uc?id=1NUOImq0o5DlQTST17iIP3vG7DgmHQuCx&amp;export=download&amp;confirm=t&amp;uuid=b26caedc-88e2-473e-830a-9d158b653cdb",
+        "xclip-large-patch14-16-frames": "https://drive.google.com/u/0/uc?id=1FOYgnJc097OJ4lGwtRCCydQyVPJEOH7d&amp;export=download&amp;confirm=t&amp;uuid=538fa810-e671-4050-b385-9a623f89804f",
+        # fully supervised kinetics-600 checkpoints
+        "xclip-base-patch16-kinetics-600": (
+            "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/k600_16_8.pth"
+        ),
+        "xclip-base-patch16-kinetics-600-16-frames": (
+            "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/k600_16_16.pth"
+        ),
+        "xclip-large-patch14-kinetics-600": (
+            "https://drive.google.com/file/d/1FV8C1INuM91sLAN4ImjzePLIlpMSihwV/view?usp=sharing"
+        ),
+        # few shot
+        "xclip-base-patch16-hmdb-2-shot": (
+            "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/few_hmdb_2.pth"
+        ),
+        "xclip-base-patch16-hmdb-4-shot": (
+            "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/few_hmdb_4.pth"
+        ),
+        "xclip-base-patch16-hmdb-8-shot": (
+            "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/few_hmdb_8.pth"
+        ),
+        "xclip-base-patch16-hmdb-16-shot": (
+            "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/few_hmdb_16.pth"
+        ),
+        "xclip-base-patch16-ucf-2-shot": (
+            "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/few_ucf_2.pth"
+        ),
+        "xclip-base-patch16-ucf-4-shot": (
+            "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/few_ucf_4.pth"
+        ),
+        "xclip-base-patch16-ucf-8-shot": (
+            "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/few_ucf_8.pth"
+        ),
+        "xclip-base-patch16-ucf-16-shot": (
+            "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/few_ucf_16.pth"
+        ),
+        # zero shot
+    }
+
+    checkpoint_url = model_to_url[model_name]
+    num_frames = 8
+    if "16-frames" in model_name:
+        num_frames = 16
+    elif "shot" in model_name:
+        num_frames = 32
+
+    config = get_xclip_config(model_name, num_frames)
     model = XCLIPModel(config)
     model.eval()
 
@@ -225,7 +291,8 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, num_frames, pytorch_dum
     assert missing_keys == ["text_model.embeddings.position_ids", "vision_model.embeddings.position_ids"]
     model.eval()
 
-    feature_extractor = VideoMAEFeatureExtractor()
+    size = 336 if model_name == "xclip-large-patch14-16-frames" else 224
+    feature_extractor = VideoMAEFeatureExtractor(size=size)
     slow_tokenizer = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
     fast_tokenizer = CLIPTokenizerFast.from_pretrained("openai/clip-vit-base-patch32")
     processor = XCLIPProcessor(feature_extractor=feature_extractor, tokenizer=fast_tokenizer)
@@ -234,6 +301,8 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, num_frames, pytorch_dum
     inputs = processor(
         text=["playing sports", "eating spaghetti", "go shopping"], videos=video, return_tensors="pt", padding=True
     )
+
+    print("Shape of pixel values:", inputs.pixel_values.shape)
 
     with torch.no_grad():
         outputs = model(**inputs)
@@ -252,6 +321,22 @@ def convert_xclip_checkpoint(checkpoint_url, model_name, num_frames, pytorch_dum
         expected_probs = torch.tensor([[7.6937e-04, 9.9728e-01, 1.9473e-03]])
     elif model_name == "xclip-large-patch14":
         expected_probs = torch.tensor([[0.0062, 0.9864, 0.0075]])
+    elif model_name == "xclip-large-patch14-16-frames":
+        expected_probs = torch.tensor([[3.3877e-04, 9.9937e-01, 2.8888e-04]])
+    elif model_name == "xclip-base-patch16-hmdb-2-shot":
+        expected_probs = torch.tensor([[7.1890e-06, 9.9994e-01, 5.6559e-05]])
+    elif model_name == "xclip-base-patch16-hmdb-4-shot":
+        expected_probs = torch.tensor([[1.0320e-05, 9.9993e-01, 6.2435e-05]])
+    elif model_name == "xclip-base-patch16-hmdb-8-shot":
+        expected_probs = torch.tensor([[4.1377e-06, 9.9990e-01, 9.8386e-05]])
+    elif model_name == "xclip-base-patch16-hmdb-16-shot":
+        expected_probs = torch.tensor([[4.1347e-05, 9.9962e-01, 3.3411e-04]])
+    elif model_name == "xclip-base-patch16-ucf-2-shot":
+        expected_probs = torch.tensor([[8.5857e-05, 9.9928e-01, 6.3291e-04]])
+    elif model_name == "xclip-base-patch16-ucf-4-shot":
+        expected_probs = torch.tensor([[8.5857e-05, 9.9928e-01, 6.3291e-04]])
+    elif model_name == "xclip-base-patch16-ucf-8-shot":
+        expected_probs = torch.tensor([[0.0027, 0.9904, 0.0070]])
     else:
         raise ValueError(f"Model name {model_name} not supported")
     assert torch.allclose(probs, expected_probs, atol=1e-3)
@@ -272,18 +357,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--checkpoint_url",
-        default="https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/k400_32_8.pth",
-        type=str,
-        help="URL fo the original PyTorch checkpoint (.pth file).",
-    )
-    parser.add_argument(
         "--model_name",
         default="xclip-base-patch32",
         type=str,
         help="Name of the model.",
     )
-    parser.add_argument("--num_frames", default=8, type=int, help="Number of frames (can be 8 or 16).")
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
@@ -292,6 +370,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_xclip_checkpoint(
-        args.checkpoint_url, args.model_name, args.num_frames, args.pytorch_dump_folder_path, args.push_to_hub
-    )
+    convert_xclip_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
