@@ -1069,8 +1069,7 @@ class ClearMLCallback(TrainerCallback):
                     'ClearML Task has been initialized.'
                 )
 
-            combined_dict = {**args.to_sanitized_dict()}
-            self._clearml_task.connect(combined_dict, "Args")
+            self._clearml_task.connect(args, "Args")
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config.to_dict()
                 self._clearml_task.connect(model_config, "Model Configuration")
