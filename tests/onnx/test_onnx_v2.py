@@ -212,10 +212,10 @@ PYTORCH_EXPORT_MODELS = {
     ("beit", "hf-internal-testing/tiny-random-beit"),
     ("data2vec-text", "hf-internal-testing/tiny-random-data2vec_text"),
     ("data2vec-vision", "hf-internal-testing/tiny-random-data2vec_vision"),
-    ("perceiver", "deepmind/language-perceiver", ("masked-lm", "sequence-classification")),  # TODO
-    ("perceiver", "deepmind/vision-perceiver-conv", ("image-classification",)),  # TODO
+    ("perceiver", "hf-internal-testing/tiny-random-language_perceiver", ("masked-lm", "sequence-classification")),
+    ("perceiver", "hf-internal-testing/tiny-random-vision_perceiver_conv", ("image-classification",)),
     ("longformer", "hf-internal-testing/tiny-random-longformer"),
-    ("yolos", "hustvl/yolos-tiny"),  # TODO
+    ("yolos", "hf-internal-testing/tiny-random-yolos"),
     ("segformer", "nvidia/segformer-b0-finetuned-ade-512-512"),  # TODO
 }
 
