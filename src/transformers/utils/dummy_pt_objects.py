@@ -5505,6 +5505,58 @@ class Speech2Text2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST = None
+
+
+class SpeechT5ForAudioFrameClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SpeechT5ForCTC(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SpeechT5ForPreTraining(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SpeechT5ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SpeechT5ForXVector(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SpeechT5Model(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class SpeechT5PreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
