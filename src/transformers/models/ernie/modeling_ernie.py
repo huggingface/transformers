@@ -17,7 +17,6 @@
 
 
 import math
-import os
 import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
@@ -59,28 +58,9 @@ from .configuration_ernie import ErnieConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "nghuyong/ernie-3.0-base-zh"
+_CHECKPOINT_FOR_DOC = "nghuyong/ernie-1.0-base-zh"
 _CONFIG_FOR_DOC = "ErnieConfig"
 _TOKENIZER_FOR_DOC = "BertTokenizer"
-
-# # TokenClassification docstring
-# _CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "dbmdz/ernie-large-cased-finetuned-conll03-english"
-# _TOKEN_CLASS_EXPECTED_OUTPUT = (
-#     "['O', 'I-ORG', 'I-ORG', 'I-ORG', 'O', 'O', 'O', 'O', 'O', 'I-LOC', 'O', 'I-LOC', 'I-LOC'] "
-# )
-# _TOKEN_CLASS_EXPECTED_LOSS = 0.01
-#
-# # QuestionAnswering docstring
-# _CHECKPOINT_FOR_QA = "deepset/ernie-base-cased-squad2"
-# _QA_EXPECTED_OUTPUT = "'a nice puppet'"
-# _QA_EXPECTED_LOSS = 7.41
-# _QA_TARGET_START_INDEX = 14
-# _QA_TARGET_END_INDEX = 15
-#
-# # SequenceClassification docstring
-# _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "textattack/nghuyong/ernie-3.0-base-zh-yelp-polarity"
-# _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
-# _SEQ_CLASS_EXPECTED_LOSS = 0.01
 
 
 ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -94,7 +74,7 @@ ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "nghuyong/ernie-3.0-nano-zh",
     "nghuyong/ernie-gram-zh",
     "nghuyong/ernie-health-zh",
-    # See all Ernie models at https://huggingface.co/models?filter=ernie
+    # See all ERNIE models at https://huggingface.co/models?filter=ernie
 ]
 
 
@@ -163,7 +143,7 @@ class ErnieEmbeddings(nn.Module):
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
 
-        # add task_type_id for ERNIE model
+        # add `task_type_id` for ERNIE model
         if self.use_task_id:
             if task_type_ids is None:
                 task_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
@@ -175,6 +155,7 @@ class ErnieEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Ernie
 class ErnieSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -302,6 +283,7 @@ class ErnieSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Ernie
 class ErnieSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -780,6 +762,9 @@ ERNIE_INPUTS_DOCSTRING = r"""
             - 1 corresponds to a *sentence B* token.
 
             [What are token type IDs?](../glossary#token-type-ids)
+        task_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+            Indices of task types, the values of `task_type_ids` are usually the same.  Indices are selected in `[0, 
+            config.task_type_vocab_size]`. 
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
@@ -810,7 +795,7 @@ ERNIE_INPUTS_DOCSTRING = r"""
     "The bare Ernie Model transformer outputting raw hidden-states without any specific head on top.",
     ERNIE_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertModel with BERT->ERNIE,Bert->Ernie
+
 class ErnieModel(ErniePreTrainedModel):
     """
 
@@ -862,6 +847,7 @@ class ErnieModel(ErniePreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
+        task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -956,6 +942,7 @@ class ErnieModel(ErniePreTrainedModel):
             input_ids=input_ids,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
+            task_type_ids=task_type_ids,
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
@@ -994,7 +981,7 @@ class ErnieModel(ErniePreTrainedModel):
     """,
     ERNIE_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForPreTraining with BERT->ERNIE,Bert->Ernie,bert->ernie,bert-base-uncased->nghuyong/ernie-3.0-base-zh
+
 class ErnieForPreTraining(ErniePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1018,6 +1005,7 @@ class ErnieForPreTraining(ErniePreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
+        task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -1049,8 +1037,8 @@ class ErnieForPreTraining(ErniePreTrainedModel):
         >>> from transformers import BertTokenizer, ErnieForPreTraining
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained("nghuyong/ernie-3.0-base-zh")
-        >>> model = ErnieForPreTraining.from_pretrained("nghuyong/ernie-3.0-base-zh")
+        >>> tokenizer = BertTokenizer.from_pretrained("nghuyong/ernie-1.0-base-zh")
+        >>> model = ErnieForPreTraining.from_pretrained("nghuyong/ernie-1.0-base-zh")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1065,6 +1053,7 @@ class ErnieForPreTraining(ErniePreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            task_type_ids=task_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1099,7 +1088,6 @@ class ErnieForPreTraining(ErniePreTrainedModel):
 @add_start_docstrings(
     """Ernie Model with a `language modeling` head on top for CLM fine-tuning.""", ERNIE_START_DOCSTRING
 )
-# Copied from transformers.models.bert.modeling_bert.BertLMHeadModel with BERT->ERNIE,Bert->Ernie,bert->ernie
 class ErnieLMHeadModel(ErniePreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1135,6 +1123,7 @@ class ErnieLMHeadModel(ErniePreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
+        task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -1179,6 +1168,7 @@ class ErnieLMHeadModel(ErniePreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            task_type_ids=task_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1235,7 +1225,6 @@ class ErnieLMHeadModel(ErniePreTrainedModel):
 
 
 @add_start_docstrings("""Ernie Model with a `language modeling` head on top.""", ERNIE_START_DOCSTRING)
-# Copied from transformers.models.bert.modeling_bert.BertForMaskedLM with BERT->ERNIE,Bert->Ernie,bert->ernie
 class ErnieForMaskedLM(ErniePreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1276,6 +1265,7 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
+        task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -1299,6 +1289,7 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            task_type_ids=task_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1349,7 +1340,6 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
     """Ernie Model with a `next sentence prediction (classification)` head on top.""",
     ERNIE_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForNextSentencePrediction with BERT->ERNIE,Bert->Ernie,bert->ernie,bert-base-uncased->nghuyong/ernie-3.0-base-zh
 class ErnieForNextSentencePrediction(ErniePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1367,6 +1357,7 @@ class ErnieForNextSentencePrediction(ErniePreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
+        task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -1392,8 +1383,8 @@ class ErnieForNextSentencePrediction(ErniePreTrainedModel):
         >>> from transformers import BertTokenizer, ErnieForNextSentencePrediction
         >>> import torch
 
-        >>> tokenizer = BertTokenizer.from_pretrained("nghuyong/ernie-3.0-base-zh")
-        >>> model = ErnieForNextSentencePrediction.from_pretrained("nghuyong/ernie-3.0-base-zh")
+        >>> tokenizer = BertTokenizer.from_pretrained("nghuyong/ernie-1.0-base-zh")
+        >>> model = ErnieForNextSentencePrediction.from_pretrained("nghuyong/ernie-1.0-base-zh")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
@@ -1419,6 +1410,7 @@ class ErnieForNextSentencePrediction(ErniePreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            task_type_ids=task_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1455,7 +1447,6 @@ class ErnieForNextSentencePrediction(ErniePreTrainedModel):
     """,
     ERNIE_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification with BERT->ERNIE,Bert->Ernie,bert->ernie
 class ErnieForSequenceClassification(ErniePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1478,6 +1469,7 @@ class ErnieForSequenceClassification(ErniePreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
+        task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -1498,6 +1490,7 @@ class ErnieForSequenceClassification(ErniePreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            task_type_ids=task_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1552,7 +1545,6 @@ class ErnieForSequenceClassification(ErniePreTrainedModel):
     """,
     ERNIE_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice with BERT->ERNIE,Bert->Ernie,bert->ernie
 class ErnieForMultipleChoice(ErniePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1579,6 +1571,7 @@ class ErnieForMultipleChoice(ErniePreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
+        task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -1610,6 +1603,7 @@ class ErnieForMultipleChoice(ErniePreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            task_type_ids=task_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1648,7 +1642,6 @@ class ErnieForMultipleChoice(ErniePreTrainedModel):
     """,
     ERNIE_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForTokenClassification with BERT->ERNIE,Bert->Ernie,bert->ernie
 class ErnieForTokenClassification(ErniePreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1673,6 +1666,7 @@ class ErnieForTokenClassification(ErniePreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
+        task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -1691,6 +1685,7 @@ class ErnieForTokenClassification(ErniePreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            task_type_ids=task_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1728,7 +1723,6 @@ class ErnieForTokenClassification(ErniePreTrainedModel):
     """,
     ERNIE_START_DOCSTRING,
 )
-# Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering with BERT->ERNIE,Bert->Ernie,bert->ernie
 class ErnieForQuestionAnswering(ErniePreTrainedModel):
 
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1749,6 +1743,7 @@ class ErnieForQuestionAnswering(ErniePreTrainedModel):
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
+        task_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -1774,6 +1769,7 @@ class ErnieForQuestionAnswering(ErniePreTrainedModel):
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
+            task_type_ids=task_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,

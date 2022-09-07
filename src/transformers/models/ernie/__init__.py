@@ -51,13 +51,6 @@ else:
         "ErniePreTrainedModel",
     ]
 
-try:
-    if not is_tensorflow_text_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_ernie_tf"] = ["TFBertTokenizer"]
 
 if TYPE_CHECKING:
     from .configuration_ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig, ErnieOnnxConfig

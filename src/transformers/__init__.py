@@ -143,10 +143,6 @@ _import_structure = {
         "BertTokenizer",
         "WordpieceTokenizer",
     ],
-    "models.ernie": [
-        "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "ErnieConfig",
-    ],
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": ["BertJapaneseTokenizer", "CharacterTokenizer", "MecabTokenizer"],
     "models.bertweet": ["BertweetTokenizer"],
@@ -206,6 +202,10 @@ _import_structure = {
     "models.dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
+    "models.ernie": [
+        "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ErnieConfig",
+    ],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",

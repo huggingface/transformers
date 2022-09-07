@@ -38,7 +38,6 @@ ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class ErnieConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ErnieModel`] or a [`TFErnieModel`]. It is used to
@@ -165,5 +164,6 @@ class ErnieOnnxConfig(OnnxConfig):
                 ("input_ids", dynamic_axis),
                 ("attention_mask", dynamic_axis),
                 ("token_type_ids", dynamic_axis),
+                ("task_type_ids", dynamic_axis),
             ]
         )
