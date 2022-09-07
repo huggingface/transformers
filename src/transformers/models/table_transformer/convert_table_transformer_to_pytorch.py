@@ -243,7 +243,9 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
 
-    feature_extractor = DetrFeatureExtractor(format="coco_detection", size=800 if "detection" in checkpoint_url else 1000)
+    feature_extractor = DetrFeatureExtractor(
+        format="coco_detection", max_size=800 if "detection" in checkpoint_url else 1000
+    )
     model = DetrForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
@@ -261,18 +263,14 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
         expected_logits = torch.tensor(
             [[-6.7897, -16.9985, 6.7937], [-8.0186, -22.2192, 6.9677], [-7.3117, -21.0708, 7.4055]]
         )
-        expected_boxes = torch.tensor([[0.4867, 0.1767, 0.6732],
-        [0.6718, 0.4479, 0.3830],
-        [0.4716, 0.1760, 0.6364]])
+        expected_boxes = torch.tensor([[0.4867, 0.1767, 0.6732], [0.6718, 0.4479, 0.3830], [0.4716, 0.1760, 0.6364]])
 
     else:
         expected_shape = (1, 125, 7)
         expected_logits = torch.tensor(
             [[-18.1430, -8.3214, 4.8274], [-18.4685, -7.1361, -4.2667], [-26.3693, -9.3429, -4.9962]]
         )
-        expected_boxes = torch.tensor([[0.4983, 0.5595, 0.9440],
-        [0.4916, 0.6315, 0.5954],
-        [0.6108, 0.8637, 0.1135]])
+        expected_boxes = torch.tensor([[0.4983, 0.5595, 0.9440], [0.4916, 0.6315, 0.5954], [0.6108, 0.8637, 0.1135]])
 
     assert outputs.logits.shape == expected_shape
     assert torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
@@ -296,6 +294,7 @@ def convert_table_transformer_checkpoint(checkpoint_url, pytorch_dump_folder_pat
         )
         model.push_to_hub(model_name)
         feature_extractor.push_to_hub(model_name)
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()

@@ -16,9 +16,7 @@
 import unittest
 
 from huggingface_hub import hf_hub_download
-
 from transformers import is_torch_available, is_vision_available
-from transformers.models.detr.feature_extraction_detr import DetrFeatureExtractor
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 
@@ -37,10 +35,9 @@ if is_vision_available():
 @require_vision
 class TableTransformerIntegrationTest(unittest.TestCase):
     @slow
-    def test_for_image_classification(self):
+    def test_table_detection(self):
         # TODO update to microsoft
-        # feature_extractor = AutoFeatureExtractor.from_pretrained("nielsr/detr-table-detection")
-        feature_extractor = DetrFeatureExtractor()
+        feature_extractor = AutoFeatureExtractor.from_pretrained("nielsr/detr-table-detection")
         model = AutoModelForObjectDetection.from_pretrained("nielsr/detr-table-detection")
         model.to(torch_device)
 
@@ -51,17 +48,14 @@ class TableTransformerIntegrationTest(unittest.TestCase):
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
-            logits = outputs.logits
 
         expected_shape = (1, 15, 3)
-        self.assertEqual(logits.shape, expected_shape)
+        self.assertEqual(outputs.logits.shape, expected_shape)
 
         expected_logits = torch.tensor(
-            [[-6.7897, -16.9985, 6.7937], [-8.0186, -22.2192, 6.9677], [-7.3117, -21.0708, 7.4055]]
+            [[-6.7329, -16.9590, 6.7447], [-8.0038, -22.3071, 6.9288], [-7.2445, -20.9855, 7.3465]]
         )
-        self.assertTrue(torch.allclose(logits[0, :3, :3], expected_logits, atol=1e-4))
+        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
 
-        expected_boxes = torch.tensor([[0.4867, 0.1767, 0.6732],
-        [0.6718, 0.4479, 0.3830],
-        [0.4716, 0.1760, 0.6364]])
-        self.assertTrue(torch.allclose(logits[0, :3, 3:], expected_boxes, atol=1e-4))
+        expected_boxes = torch.tensor([[0.4868, 0.1764, 0.6729], [0.6674, 0.4621, 0.3864], [0.4720, 0.1757, 0.6362]])
+        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-3))
