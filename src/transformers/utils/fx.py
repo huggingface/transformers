@@ -36,6 +36,7 @@ from ..models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_FOR_CTC_MAPPING_NAMES,
+    MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
     MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES,
     MODEL_FOR_MASKED_LM_MAPPING_NAMES,
@@ -71,6 +72,7 @@ def _generate_supported_model_class_names(
         "seq2seq-lm": MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES,
         "speech-seq2seq": MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES,
         "multiple-choice": MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES,
+        "document-question-answering": MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES,
         "question-answering": MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES,
         "sequence-classification": MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
         "token-classification": MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
@@ -147,7 +149,6 @@ _SPECIAL_SUPPORTED_MODELS = [
     "GPT2DoubleHeadsModel",
     "Speech2Text2Decoder",
     "TrOCRDecoder",
-    "LayoutLMForQuestionAnswering",
     # TODO: add support for them as it should be quite easy to do so (small blocking issues).
     # XLNetForQuestionAnswering,
 ]
@@ -691,7 +692,7 @@ class HFTracer(Tracer):
                 inputs_dict["labels"] = torch.zeros(batch_size, dtype=torch.long, device=device)
             elif model_class_name in [
                 *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES),
-                "LayoutLMForQuestionAnswering",
+                *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES),
                 "XLNetForQuestionAnswering",
             ]:
                 inputs_dict["start_positions"] = torch.zeros(batch_size, dtype=torch.long, device=device)

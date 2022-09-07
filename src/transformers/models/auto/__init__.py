@@ -47,6 +47,7 @@ else:
         "MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING",
         "MODEL_FOR_CAUSAL_LM_MAPPING",
         "MODEL_FOR_CTC_MAPPING",
+        "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
         "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING",
         "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING",
         "MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING",
@@ -93,6 +94,7 @@ else:
         "AutoModelForVideoClassification",
         "AutoModelForVision2Seq",
         "AutoModelForVisualQuestionAnswering",
+        "AutoModelForDocumentQuestionAnswering",
         "AutoModelWithLMHead",
     ]
 
@@ -111,6 +113,7 @@ else:
         "TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING",
         "TF_MODEL_FOR_PRETRAINING_MAPPING",
         "TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+        "TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING",
         "TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING",
         "TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
         "TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
@@ -127,6 +130,7 @@ else:
         "TFAutoModelForMultipleChoice",
         "TFAutoModelForNextSentencePrediction",
         "TFAutoModelForPreTraining",
+        "TFAutoModelForDocumentQuestionAnswering",
         "TFAutoModelForQuestionAnswering",
         "TFAutoModelForSemanticSegmentation",
         "TFAutoModelForSeq2SeqLM",
@@ -191,6 +195,7 @@ if TYPE_CHECKING:
             MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
             MODEL_FOR_CAUSAL_LM_MAPPING,
             MODEL_FOR_CTC_MAPPING,
+            MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
             MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
             MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
@@ -218,6 +223,7 @@ if TYPE_CHECKING:
             AutoModelForAudioXVector,
             AutoModelForCausalLM,
             AutoModelForCTC,
+            AutoModelForDocumentQuestionAnswering,
             AutoModelForImageClassification,
             AutoModelForImageSegmentation,
             AutoModelForInstanceSegmentation,
@@ -248,6 +254,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_tf_auto import (
             TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+            TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
             TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
             TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
             TF_MODEL_FOR_MASKED_LM_MAPPING,
@@ -266,6 +273,7 @@ if TYPE_CHECKING:
             TF_MODEL_WITH_LM_HEAD_MAPPING,
             TFAutoModel,
             TFAutoModelForCausalLM,
+            TFAutoModelForDocumentQuestionAnswering,
             TFAutoModelForImageClassification,
             TFAutoModelForMaskedLM,
             TFAutoModelForMultipleChoice,
