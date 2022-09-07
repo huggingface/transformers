@@ -171,6 +171,14 @@ Follow these steps to start contributing ([supported Python versions](https://gi
 
    If you have already cloned that repo, you might need to `git pull` to get the most recent changes in the `datasets`
    library.
+   
+   Depending on your OS, you might need to install some external libraries, as well, if the `pip` installation fails.
+   
+   For macOS, you will likely need [MeCab](https://taku910.github.io/mecab/), which can be installed from Homebrew:
+   
+   ```bash
+   brew install mecab
+   ```
 
 5. Develop the features on your branch.
 
