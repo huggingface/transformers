@@ -113,6 +113,82 @@ class OwlViTOutput(ModelOutput):
         )
 
 
+def center_to_corners_format(x):
+    """
+    Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
+    (left, top, right, bottom).
+    """
+    x_center, y_center, width, height = x.unbind(-1)
+    boxes = [(x_center - 0.5 * width), (y_center - 0.5 * height), (x_center + 0.5 * width), (y_center + 0.5 * height)]
+    return torch.stack(boxes, dim=-1)
+
+
+# below: bounding box utilities taken from https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
+
+
+def _upcast(t: torch.Tensor) -> torch.Tensor:
+    # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
+    if t.is_floating_point():
+        return t if t.dtype in (torch.float32, torch.float64) else t.float()
+    else:
+        return t if t.dtype in (torch.int32, torch.int64) else t.int()
+
+
+def box_area(boxes: torch.Tensor) -> torch.Tensor:
+    """
+    Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
+
+    Args:
+        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
+            Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
+            < x2` and `0 <= y1 < y2`.
+
+    Returns:
+        `torch.FloatTensor`: a tensor containing the area for each box.
+    """
+    boxes = _upcast(boxes)
+    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+
+
+# modified from torchvision to also return the union
+def box_iou(boxes1, boxes2):
+    area1 = box_area(boxes1)
+    area2 = box_area(boxes2)
+
+    left_top = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
+    right_bottom = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
+
+    width_height = (right_bottom - left_top).clamp(min=0)  # [N,M,2]
+    inter = width_height[:, :, 0] * width_height[:, :, 1]  # [N,M]
+
+    union = area1[:, None] + area2 - inter
+
+    iou = inter / union
+    return iou, union
+
+
+def generalized_box_iou(boxes1, boxes2):
+    """
+    Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
+
+    Returns:
+        `torch.FloatTensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
+    """
+    # degenerate boxes gives inf / nan results
+    # so do an early check
+    assert (boxes1[:, 2:] >= boxes1[:, :2]).all()
+    assert (boxes2[:, 2:] >= boxes2[:, :2]).all()
+    iou, union = box_iou(boxes1, boxes2)
+
+    lt = torch.min(boxes1[:, None, :2], boxes2[:, :2])
+    rb = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
+
+    wh = (rb - lt).clamp(min=0)  # [N,M,2]
+    area = wh[:, :, 0] * wh[:, :, 1]
+
+    return iou - (area - union) / area
+
+
 @dataclass
 class OwlViTObjectDetectionOutput(ModelOutput):
     """
@@ -1309,12 +1385,34 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         return (text_embeds, image_embeds, text_model_last_hidden_state, vision_model_last_hidden_state)
 
-    def embed_image_query(self, query_pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+    def embed_image_query(
+        self, query_pixel_values: torch.FloatTensor, query_feature_map: torch.FloatTensor, iou_threshold: float = 0.65
+    ) -> torch.FloatTensor:
         (_, class_embeds) = self.class_predictor(query_pixel_values)
-        mean_embeds = torch.mean(class_embeds, axis=1)
-        mean_sim = torch.einsum("bd,bid->bi", mean_embeds, class_embeds)
-        idxs = torch.argmin(mean_sim, axis=1)
-        query_embeds = torch.stack([class_embeds[i][idxs[i]] for i in range(idxs.size()[0])])
+        pred_boxes = self.box_predictor(query_pixel_values, query_feature_map)
+        pred_boxes_as_corners = center_to_corners_format(pred_boxes)
+
+        filtered_embeds = []
+        for i in range(query_pixel_values.shape[0]):
+            each_query_box = torch.tensor([[0, 0, 1, 1]])
+            each_query_pred_boxes = pred_boxes_as_corners[i]
+            ious, _ = box_iou(each_query_box, each_query_pred_boxes)
+            if torch.all(ious[0] == 0.0):
+                ious = generalized_box_iou(each_query_box, each_query_pred_boxes)
+
+            selected_inds = (ious[0] >= iou_threshold).nonzero().squeeze()
+            if selected_inds.numel():
+                selected_embeddings = class_embeds[i][selected_inds]
+                mean_embeds = torch.mean(class_embeds[i], axis=0)
+                mean_sim = torch.einsum("d,id->i", mean_embeds, selected_embeddings)
+                best_box_ind = selected_inds[torch.argmin(mean_sim)]
+                filtered_embeds.append(class_embeds[i][best_box_ind])
+
+        if filtered_embeds:
+            query_embeds = torch.stack(filtered_embeds)
+        else:
+            query_embeds = None
+
         return query_embeds
 
     def image_image_embedder(
@@ -1480,7 +1578,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         else:
             batch_size, num_patches, num_patches, hidden_dim = query_feature_map.shape
             query_image_feats = torch.reshape(query_feature_map, (batch_size, num_patches * num_patches, hidden_dim))
-            query_embeds = self.embed_image_query(query_image_feats)
+            query_embeds = self.embed_image_query(query_image_feats, query_feature_map)
 
         # Predict object classes [batch_size, num_patches, num_queries+1]
         (pred_logits, class_embeds) = self.class_predictor(image_feats, query_embeds, query_mask)
