@@ -500,6 +500,7 @@ class ErnieEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
+
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -653,7 +654,6 @@ class ErniePreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel with Bert->Ernie,bert->ernie
 class ErniePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
