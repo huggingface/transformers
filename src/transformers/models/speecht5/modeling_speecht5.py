@@ -461,18 +461,6 @@ class SpeechT5FeatureEncoder(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureExtractor with Wav2Vec2->SpeechT5
-class SpeechT5FeatureExtractor(SpeechT5FeatureEncoder):
-    def __init__(self, config):
-        super().__init__(config)
-        warnings.warn(
-            f"The class `{self.__class__.__name__}` has been depreciated "
-            "and will be removed in Transformers v5. "
-            f"Use `{self.__class__.__bases__[0].__name__}` instead.",
-            FutureWarning,
-        )
-
-
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureProjection with Wav2Vec2->SpeechT5
 class SpeechT5FeatureProjection(nn.Module):
     def __init__(self, config):
