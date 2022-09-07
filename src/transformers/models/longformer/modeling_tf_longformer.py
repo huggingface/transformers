@@ -467,10 +467,9 @@ class TFLongformerLMHead(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaEmbeddings with Roberta->Longformer
 class TFLongformerEmbeddings(tf.keras.layers.Layer):
     """
-    Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
+    Same as BertEmbeddings with a tiny tweak for positional embeddings indexing and some extra casting.
     """
 
     def __init__(self, config, **kwargs):
@@ -556,7 +555,8 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
                 )
             else:
                 position_ids = tf.expand_dims(
-                    tf.range(start=self.padding_idx + 1, limit=input_shape[-1] + self.padding_idx + 1, dtype=tf.int64), axis=0
+                    tf.range(start=self.padding_idx + 1, limit=input_shape[-1] + self.padding_idx + 1, dtype=tf.int64),
+                    axis=0,
                 )
 
         position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
@@ -2413,7 +2413,7 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
             attention_mask = tf.convert_to_tensor(attention_mask, dtype=tf.int64)
         elif attention_mask is not None:
             attention_mask = tf.cast(attention_mask, tf.int64)
-            
+
         if global_attention_mask is not None and not isinstance(global_attention_mask, tf.Tensor):
             global_attention_mask = tf.convert_to_tensor(global_attention_mask, dtype=tf.int64)
         elif global_attention_mask is not None:

@@ -407,9 +407,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
 
         # last row => [0.0000,  0.0000,  0.0000, 2.0514, -1.1600,  0.5372,  0.2629]
         tf.debugging.assert_near(padded_hidden_states[0, 0, -1, 3:], chunked_hidden_states[0, 0, -1], rtol=1e-3)
-        tf.debugging.assert_near(
-            padded_hidden_states[0, 0, -1, :3], tf.zeros((3,), dtype=tf.float32), rtol=1e-3
-        )
+        tf.debugging.assert_near(padded_hidden_states[0, 0, -1, :3], tf.zeros((3,), dtype=tf.float32), rtol=1e-3)
 
     def test_pad_and_transpose_last_two_dims(self):
         hidden_states = self._get_hidden_states()
@@ -460,7 +458,9 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         expected_slice_along_chunk = tf.convert_to_tensor([0.4983, -1.8348, -0.7584, 2.0514], dtype=tf.float32)
 
         self.assertTrue(shape_list(chunked_hidden_states) == [1, 3, 4, 4])
-        tf.debugging.assert_near(chunked_hidden_states[0, :, 0, 0], expected_slice_along_seq_length, rtol=1e-3, atol=1e-4)
+        tf.debugging.assert_near(
+            chunked_hidden_states[0, :, 0, 0], expected_slice_along_seq_length, rtol=1e-3, atol=1e-4
+        )
         tf.debugging.assert_near(chunked_hidden_states[0, 0, :, 0], expected_slice_along_chunk, rtol=1e-3, atol=1e-4)
 
     def test_layer_local_attn(self):
@@ -584,18 +584,16 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
 
         tf.debugging.assert_near(
             local_attentions[0, 0, 0, :],
-            tf.convert_to_tensor(
-                [0.3328, 0.0000, 0.0000, 0.0000, 0.0000, 0.3355, 0.3318, 0.0000], dtype=tf.float32
-            ),
-            rtol=1e-3, atol=1e-4
+            tf.convert_to_tensor([0.3328, 0.0000, 0.0000, 0.0000, 0.0000, 0.3355, 0.3318, 0.0000], dtype=tf.float32),
+            rtol=1e-3,
+            atol=1e-4,
         )
 
         tf.debugging.assert_near(
             local_attentions[1, 0, 0, :],
-            tf.convert_to_tensor(
-                [0.2492, 0.2502, 0.2502, 0.0000, 0.0000, 0.2505, 0.0000, 0.0000], dtype=tf.float32
-            ),
-            rtol=1e-3, atol=1e-4
+            tf.convert_to_tensor([0.2492, 0.2502, 0.2502, 0.0000, 0.0000, 0.2505, 0.0000, 0.0000], dtype=tf.float32),
+            rtol=1e-3,
+            atol=1e-4,
         )
 
         # All the global attention weights must sum to 1.
@@ -604,12 +602,14 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         tf.debugging.assert_near(
             global_attentions[0, 0, 1, :],
             tf.convert_to_tensor([0.2500, 0.2500, 0.2500, 0.2500], dtype=tf.float32),
-            rtol=1e-3, atol=1e-4
+            rtol=1e-3,
+            atol=1e-4,
         )
         tf.debugging.assert_near(
             global_attentions[1, 0, 0, :],
             tf.convert_to_tensor([0.2497, 0.2500, 0.2499, 0.2504], dtype=tf.float32),
-            rtol=1e-3, atol=1e-4
+            rtol=1e-3,
+            atol=1e-4,
         )
 
     @slow
@@ -623,9 +623,7 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         output = model(input_ids, attention_mask=attention_mask)[0]
         output_without_mask = model(input_ids)[0]
 
-        expected_output_slice = tf.convert_to_tensor(
-            [0.0549, 0.1087, -0.1119, -0.0368, 0.0250], dtype=tf.float32
-        )
+        expected_output_slice = tf.convert_to_tensor([0.0549, 0.1087, -0.1119, -0.0368, 0.0250], dtype=tf.float32)
 
         tf.debugging.assert_near(output[0, 0, -5:], expected_output_slice, rtol=1e-3, atol=1e-4)
         tf.debugging.assert_near(output_without_mask[0, 0, -5:], expected_output_slice, rtol=1e-3, atol=1e-4)
@@ -670,8 +668,12 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
 
         # assert close
         tf.debugging.assert_near(tf.reduce_mean(loss), expected_loss, rtol=1e-4, atol=1e-4)
-        tf.debugging.assert_near(tf.reduce_sum(prediction_scores), expected_prediction_scores_sum, rtol=1e-4, atol=1e-4)
-        tf.debugging.assert_near(tf.reduce_mean(prediction_scores), expected_prediction_scores_mean, rtol=1e-4, atol=1e-4)
+        tf.debugging.assert_near(
+            tf.reduce_sum(prediction_scores), expected_prediction_scores_sum, rtol=1e-4, atol=1e-4
+        )
+        tf.debugging.assert_near(
+            tf.reduce_mean(prediction_scores), expected_prediction_scores_mean, rtol=1e-4, atol=1e-4
+        )
 
     @slow
     def test_inference_masked_lm(self):
