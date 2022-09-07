@@ -397,7 +397,6 @@ class XCLIPVisionEncoderLayer(nn.Module):
     def __init__(self, config: XCLIPConfig):
         super().__init__()
         self.num_frames = config.num_frames
-
         self.embed_dim = config.hidden_size
 
         self.message_fc = nn.Linear(self.embed_dim, self.embed_dim)
@@ -773,15 +772,15 @@ class XCLIPTextTransformer(nn.Module):
 
         hidden_states = self.embeddings(input_ids=input_ids, position_ids=position_ids)
 
-        bsz, seq_len = input_shape
+        batch_size, seq_len = input_shape
         # X_CLIP's text model uses causal mask, prepare it here.
         # https://github.com/openai/CLIP/blob/cfcffb90e69f37bf2ff1e988237a0fbe41f33c04/clip/model.py#L324
-        causal_attention_mask = self._build_causal_attention_mask(bsz, seq_len, hidden_states.dtype).to(
+        causal_attention_mask = self._build_causal_attention_mask(batch_size, seq_len, hidden_states.dtype).to(
             hidden_states.device
         )
         # expand attention_mask
         if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
@@ -810,10 +809,10 @@ class XCLIPTextTransformer(nn.Module):
             attentions=encoder_outputs.attentions,
         )
 
-    def _build_causal_attention_mask(self, bsz, seq_len, dtype):
+    def _build_causal_attention_mask(self, batch_size, seq_len, dtype):
         # lazily create causal attention mask, with full attention between the vision tokens
         # pytorch uses additive attention mask; fill with -inf
-        mask = torch.empty(bsz, seq_len, seq_len, dtype=dtype)
+        mask = torch.empty(batch_size, seq_len, seq_len, dtype=dtype)
         mask.fill_(torch.tensor(torch.finfo(dtype).min))
         mask.triu_(1)  # zero out the lower diagonal
         mask = mask.unsqueeze(1)  # expand mask
@@ -1065,10 +1064,10 @@ class XCLIPVisionModel(XCLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, XCLIPVisionModel
+        >>> from transformers import XCLIPProcessor, XCLIPVisionModel
 
         >>> model = XCLIPVisionModel.from_pretrained("microsoft/xclip-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("microsoft/xclip-base-patch32")
+        >>> processor = XCLIPProcessor.from_pretrained("microsoft/xclip-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1152,8 +1151,8 @@ class XCLIPCrossAttention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(config.prompt_projection_dropout)
 
-    def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
-        return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+    def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
+        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
     def forward(self, queries, keys, values):
         """Input shape: Batch x Time x Channel"""
@@ -1338,10 +1337,10 @@ class XCLIPModel(XCLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, XCLIPModel
+        >>> from transformers import XCLIPProcessor, XCLIPModel
 
         >>> model = XCLIPModel.from_pretrained("microsoft/xclip-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("microsoft/xclip-base-patch32")
+        >>> processor = XCLIPProcessor.from_pretrained("microsoft/xclip-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1403,10 +1402,10 @@ class XCLIPModel(XCLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import requests
-        >>> from transformers import CLIPProcessor, XCLIPModel
+        >>> from transformers import XCLIPProcessor, XCLIPModel
 
         >>> model = XCLIPModel.from_pretrained("microsoft/xclip-base-patch32")
-        >>> processor = CLIPProcessor.from_pretrained("microsoft/xclip-base-patch32")
+        >>> processor = XCLIPProcessor.from_pretrained("microsoft/xclip-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
