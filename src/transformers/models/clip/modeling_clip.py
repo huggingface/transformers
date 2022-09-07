@@ -804,6 +804,8 @@ class CLIPTextModel(CLIPPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled (EOS token) states
         ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         text_outputs = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -821,7 +823,7 @@ class CLIPTextModel(CLIPPreTrainedModel):
 
         if not return_dict:
             outputs = (text_outputs[0], pooled_output, text_embeds) + text_outputs[2:]
-            return (output for output in outputs if output is not None)
+            return tuple(output for output in outputs if output is not None)
 
         return CLIPTextModelOutput(
             last_hidden_state=text_outputs.last_hidden_state,
@@ -940,6 +942,8 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -955,7 +959,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
 
         if not return_dict:
             outputs = (vision_outputs[0], pooled_output, image_embeds) + vision_outputs[2:]
-            return (output for output in outputs if output is not None)
+            return tuple(output for output in outputs if output is not None)
 
         return CLIPVisionModelOutput(
             last_hidden_state=vision_outputs.last_hidden_state,

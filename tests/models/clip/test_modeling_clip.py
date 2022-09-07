@@ -77,6 +77,7 @@ class CLIPVisionModelTester:
         num_channels=3,
         is_training=True,
         hidden_size=32,
+        projection_dim=32,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -92,6 +93,7 @@ class CLIPVisionModelTester:
         self.num_channels = num_channels
         self.is_training = is_training
         self.hidden_size = hidden_size
+        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -116,6 +118,7 @@ class CLIPVisionModelTester:
             patch_size=self.patch_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
+            projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
@@ -136,6 +139,20 @@ class CLIPVisionModelTester:
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+
+    def create_and_check_model_with_projection(self, config, pixel_values):
+        model = CLIPVisionModel(config=config, with_projection=True)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(pixel_values)
+        # expected sequence length = num_patches + 1 (we add 1 for the [CLS] token)
+        image_size = (self.image_size, self.image_size)
+        patch_size = (self.patch_size, self.patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches + 1, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(result.image_embeds.shape, (self.batch_size, self.projection_dim))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -192,6 +209,10 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+    
+    def test_model_with_projection(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
 
     def test_training(self):
         pass
@@ -225,6 +246,7 @@ class CLIPTextModelTester:
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
+        projection_dim=32,
         num_hidden_layers=5,
         num_attention_heads=4,
         intermediate_size=37,
@@ -242,6 +264,7 @@ class CLIPTextModelTester:
         self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.projection_dim = projection_dim
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.intermediate_size = intermediate_size
@@ -273,6 +296,7 @@ class CLIPTextModelTester:
         return CLIPTextConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            projection_dim=self.projection_dim,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
@@ -291,6 +315,17 @@ class CLIPTextModelTester:
             result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+    
+    def create_and_check_model_with_projection(self, config, input_ids, input_mask):
+        model = CLIPTextModel(config=config, with_projection=True)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=input_mask)
+            result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
+        self.parent.assertEqual(result.text_embeds.shape, (self.batch_size, self.projection_dim))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
