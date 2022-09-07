@@ -639,7 +639,9 @@ class TFLongformerModelIntegrationTest(unittest.TestCase):
         global_attention_mask = tf.zeros(shape_list(input_ids), dtype=tf.int64)
         # Set global attention on a few random positions
         global_attention_mask = tf.tensor_scatter_nd_update(
-            global_attention_mask, tf.constant([[0, 1], [0, 4], [0, 21]], dtype=tf.int64), tf.constant([1, 1, 1], dtype=tf.int64)
+            global_attention_mask,
+            tf.constant([[0, 1], [0, 4], [0, 21]], dtype=tf.int64),
+            tf.constant([1, 1, 1], dtype=tf.int64),
         )
 
         output = model(input_ids, attention_mask=attention_mask, global_attention_mask=global_attention_mask)[0]
