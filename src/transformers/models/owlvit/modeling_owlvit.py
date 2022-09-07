@@ -1316,7 +1316,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         (_, class_embeds) = self.class_predictor(query_pixel_values)
         mean_embeds = torch.mean(class_embeds, axis=1)
         mean_sim = torch.einsum("bd,bid->bi", mean_embeds, class_embeds)
-        query_embeds = class_embeds[:, torch.argmin(mean_sim, axis=1)]
+        idxs = torch.argmin(mean_sim, axis=1)
+        query_embeds = torch.stack([class_embeds[i][idxs[i]] for i in range(idxs.size()[0])])
         return query_embeds
 
     def image_image_embedder(
