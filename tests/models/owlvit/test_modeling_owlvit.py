@@ -521,7 +521,7 @@ class OwlViTModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 class OwlViTForObjectDetectionTester:
-    def __init__(self, parent, is_training=True, query_batch_size=12, query_image_size=32, query_num_channels=3):
+    def __init__(self, parent, is_training=True, query_batch_size=2, query_image_size=16, query_num_channels=3):
         self.parent = parent
         self.text_model_tester = OwlViTTextModelTester(parent)
         self.vision_model_tester = OwlViTVisionModelTester(parent)
