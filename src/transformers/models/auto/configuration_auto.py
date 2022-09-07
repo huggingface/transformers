@@ -316,7 +316,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("dpt", "DPT"),
         ("electra", "ELECTRA"),
         ("encoder-decoder", "Encoder decoder"),
-        ("ernie", "Ernie"),
+        ("ernie", "ERNIE"),
         ("flaubert", "FlauBERT"),
         ("flava", "FLAVA"),
         ("fnet", "FNet"),
