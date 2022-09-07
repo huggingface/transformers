@@ -50,6 +50,21 @@ jobs:
           cd tests
           echo "::set-output name=matrix::$(python3 -c 'import os; tests = os.getcwd(); model_tests = os.listdir(os.path.join(tests, "models")); d1 = sorted(list(filter(os.path.isdir, os.listdir(tests)))); d2 = sorted(list(filter(os.path.isdir, [f"models/{x}" for x in model_tests]))); d1.remove("models"); d = d2 + d1; print(d)')"
 
+  run_check_runners:
+    name: Check Runners
+    needs: setup
+    strategy:
+      matrix:
+        machine_type: [single-gpu, multi-gpu]
+    runs-on: ${{ format('{0}-{1}', matrix.machine_type, 'docker-past-ci') }}
+    container:
+      image: huggingface/transformers-${{ inputs.framework }}-past-${{ inputs.version }}-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
   run_tests_single_gpu:
     name: Model tests
     strategy:
@@ -61,7 +76,7 @@ jobs:
     container:
       image: huggingface/transformers-${{ inputs.framework }}-past-${{ inputs.version }}-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
+    needs: [setup, run_check_runners]
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -114,7 +129,7 @@ jobs:
     container:
       image: huggingface/transformers-${{ inputs.framework }}-past-${{ inputs.version }}-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    needs: setup
+    needs: [setup, run_check_runners]
     steps:
       - name: Update clone
         working-directory: /transformers
@@ -160,8 +175,15 @@ jobs:
     name: Send results to webhook
     runs-on: ubuntu-latest
     if: always()
-    needs: [setup, run_tests_single_gpu, run_tests_multi_gpu]
+    needs: [setup, run_check_runners, run_tests_single_gpu, run_tests_multi_gpu]
     steps:
+      - name: Preliminary job status
+        shell: bash
+        # For the meaning of these environment variables, see the job `Setup`
+        run: |
+          echo "Runner status: ${{ needs.run_check_runners.result }}"
+          echo "Setup status: ${{ needs.setup.result }}"
+
       - uses: actions/checkout@v2
       - uses: actions/download-artifact@v2
 
@@ -177,6 +199,8 @@ jobs:
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_PAST_FUTURE }}
           CI_EVENT: Past CI - ${{ inputs.framework }}-${{ inputs.version }}
+          SETUP_STATUS: ${{ needs.setup.result }}
+          RUNNER_STATUS: ${{ needs.run_check_runners.result }}
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
