@@ -940,9 +940,12 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
         ```python
         >>> from decord import VideoReader, cpu
         >>> import torch
+        >>> import numpy as np
 
         >>> from transformers import VideoMAEFeatureExtractor, VideoMAEForVideoClassification
         >>> from huggingface_hub import hf_hub_download
+
+        >>> np.random.seed(0)
 
 
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
