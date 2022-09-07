@@ -2377,17 +2377,17 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
 
         if input_ids is not None and not isinstance(input_ids, tf.Tensor):
             input_ids = tf.convert_to_tensor(input_ids, dtype=tf.int64)
-        else:
+        elif input_ids is not None:
             input_ids = tf.cast(input_ids, tf.int64)
 
         if attention_mask is not None and not isinstance(attention_mask, tf.Tensor):
             attention_mask = tf.convert_to_tensor(attention_mask, dtype=tf.int64)
-        else:
+        elif attention_mask is not None:
             attention_mask = tf.cast(attention_mask, tf.int64)
             
         if global_attention_mask is not None and not isinstance(global_attention_mask, tf.Tensor):
             global_attention_mask = tf.convert_to_tensor(global_attention_mask, dtype=tf.int64)
-        else:
+        elif global_attention_mask is not None:
             global_attention_mask = tf.cast(global_attention_mask, tf.int64)
 
         if global_attention_mask is None and input_ids is not None:
