@@ -61,6 +61,7 @@ if is_tf_available():
 
     from transformers import (
         TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+        TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
         TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
         TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
         TF_MODEL_FOR_MASKED_LM_MAPPING,
@@ -149,7 +150,10 @@ class TFModelTesterMixin:
         if return_labels:
             if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
                 inputs_dict["labels"] = tf.ones(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in get_values(TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING):
+            elif model_class in [
+                *get_values(TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING),
+                *get_values(TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING),
+            ]:
                 inputs_dict["start_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
                 inputs_dict["end_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
             elif model_class in [

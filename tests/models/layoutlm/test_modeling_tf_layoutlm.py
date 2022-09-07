@@ -13,13 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 import unittest
 
 import numpy as np
 
 from transformers import LayoutLMConfig, is_tf_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_tf, slow
 
 from ...test_configuration_common import ConfigTester
@@ -29,11 +27,6 @@ from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_at
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import (
-        TF_MODEL_FOR_MASKED_LM_MAPPING,
-        TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
-    )
     from transformers.models.layoutlm.modeling_tf_layoutlm import (
         TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST,
         TFLayoutLMForMaskedLM,
@@ -262,24 +255,6 @@ class TFLayoutLMModelTest(TFModelTesterMixin, unittest.TestCase):
         for model_name in TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = TFLayoutLMModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = copy.deepcopy(inputs_dict)
-        if return_labels:
-            if model_class in get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
-                inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-            elif model_class in [
-                *get_values(TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
-                *get_values(TF_MODEL_FOR_MASKED_LM_MAPPING),
-            ]:
-                inputs_dict["labels"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
-                )
-            elif model_class.__name__ == "TFLayoutLMForQuestionAnswering":
-                inputs_dict["start_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-                inputs_dict["end_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-
-        return inputs_dict
 
 
 def prepare_layoutlm_batch_inputs():
