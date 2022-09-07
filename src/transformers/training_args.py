@@ -568,7 +568,7 @@ class TrainingArguments:
     warmup_ratio: float = field(
         default=0.0, metadata={"help": "Linear warmup over warmup_ratio fraction of total steps."}
     )
-    warmup_steps: int = field(default=0, metadata={"help": "Linear warmup over warmup_steps."})
+    warmup_steps: int = field(default=10, metadata={"help": "Linear warmup over warmup_steps."})
 
     log_level: Optional[str] = field(
         default="passive",
