@@ -358,6 +358,9 @@ MODEL_FOR_CAUSAL_LM_MAPPING = None
 MODEL_FOR_CTC_MAPPING = None
 
 
+MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING = None
+
+
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING = None
 
 
@@ -457,6 +460,13 @@ class AutoModelForCausalLM(metaclass=DummyObject):
 
 
 class AutoModelForCTC(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForDocumentQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
