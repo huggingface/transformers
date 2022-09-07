@@ -24,7 +24,7 @@ _import_structure = {
     "configuration_speecht5": ["SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "SpeechT5Config"],
     "feature_extraction_speecht5": ["SpeechT5FeatureExtractor"],
     "processing_speecht5": ["SpeechT5Processor"],
-    "tokenization_speecht5": ["SpeechT5Tokenizer", "SpeechT5Tokenizer"],
+    "tokenization_speecht5": ["SpeechT5CTCTokenizer"],
 }
 
 
@@ -49,7 +49,7 @@ if TYPE_CHECKING:
     from .configuration_speecht5 import SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP, SpeechT5Config
     from .feature_extraction_speecht5 import SpeechT5FeatureExtractor
     from .processing_speecht5 import SpeechT5Processor
-    from .tokenization_speecht5 import SpeechT5Tokenizer
+    from .tokenization_speecht5 import SpeechT5CTCTokenizer
 
     try:
         if not is_torch_available():

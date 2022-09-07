@@ -405,10 +405,9 @@ _import_structure = {
     "models.speecht5": [
         "SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "SpeechT5Config",
+        "SpeechT5CTCTokenizer",
         "SpeechT5FeatureExtractor",
         "SpeechT5Processor",
-        "SpeechT5Tokenizer",
-        "SpeechT5Tokenizer",
     ],
     "models.splinter": ["SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP", "SplinterConfig", "SplinterTokenizer"],
     "models.squeezebert": ["SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "SqueezeBertConfig", "SqueezeBertTokenizer"],
@@ -3865,9 +3864,9 @@ if TYPE_CHECKING:
     from .models.speecht5 import (
         SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP,
         SpeechT5Config,
+        SpeechT5CTCTokenizer,
         SpeechT5FeatureExtractor,
         SpeechT5Processor,
-        SpeechT5Tokenizer,
     )
     from .models.splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig, SplinterTokenizer
     from .models.squeezebert import SQUEEZEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, SqueezeBertConfig, SqueezeBertTokenizer

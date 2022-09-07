@@ -20,7 +20,7 @@ from contextlib import contextmanager
 
 from ...processing_utils import ProcessorMixin
 from .feature_extraction_speecht5 import SpeechT5FeatureExtractor
-from .tokenization_speecht5 import SpeechT5Tokenizer
+from .tokenization_speecht5 import SpeechT5CTCTokenizer
 
 
 class SpeechT5Processor(ProcessorMixin):
@@ -53,14 +53,14 @@ class SpeechT5Processor(ProcessorMixin):
             warnings.warn(
                 f"Loading a tokenizer inside {cls.__name__} from a config that does not"
                 " include a `tokenizer_class` attribute is deprecated and will be "
-                "removed in v5. Please add `'tokenizer_class': 'SpeechT5Tokenizer'`"
+                "removed in v5. Please add `'tokenizer_class': 'SpeechT5CTCTokenizer'`"
                 " attribute to either your `config.json` or `tokenizer_config.json` "
                 "file to suppress this warning: ",
                 FutureWarning,
             )
 
             feature_extractor = SpeechT5FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
-            tokenizer = SpeechT5Tokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            tokenizer = SpeechT5CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
             return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 

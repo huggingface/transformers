@@ -25,11 +25,11 @@ from fairseq.data import Dictionary
 
 from transformers import (
     SpeechT5Config,
+    SpeechT5CTCTokenizer,
     SpeechT5FeatureExtractor,
     SpeechT5ForCTC,
     SpeechT5ForPreTraining,
     SpeechT5Processor,
-    SpeechT5Tokenizer,
     logging,
 )
 
@@ -217,7 +217,7 @@ def convert_speecht5_checkpoint(
             vocab_dict["<s>"] = 1
             with open(vocab_path, "w", encoding="utf-8") as vocab_handle:
                 json.dump(vocab_dict, vocab_handle)
-            tokenizer = SpeechT5Tokenizer(
+            tokenizer = SpeechT5CTCTokenizer(
                 vocab_path,
                 unk_token=target_dict.unk_word,
                 pad_token=target_dict.pad_word,

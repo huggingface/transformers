@@ -18,7 +18,7 @@ import shutil
 import tempfile
 import unittest
 
-from transformers.models.speecht5 import SpeechT5FeatureExtractor, SpeechT5Processor, SpeechT5Tokenizer
+from transformers.models.speecht5 import SpeechT5CTCTokenizer, SpeechT5FeatureExtractor, SpeechT5Processor
 from transformers.models.speecht5.tokenization_speecht5 import VOCAB_FILES_NAMES
 from transformers.utils import FEATURE_EXTRACTOR_NAME
 
@@ -56,7 +56,7 @@ class SpeechT5ProcessorTest(unittest.TestCase):
     def get_tokenizer(self, **kwargs_init):
         kwargs = self.add_kwargs_tokens_map.copy()
         kwargs.update(kwargs_init)
-        return SpeechT5Tokenizer.from_pretrained(self.tmpdirname, **kwargs)
+        return SpeechT5CTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
         return SpeechT5FeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
@@ -74,7 +74,7 @@ class SpeechT5ProcessorTest(unittest.TestCase):
         processor = SpeechT5Processor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertIsInstance(processor.tokenizer, SpeechT5Tokenizer)
+        self.assertIsInstance(processor.tokenizer, SpeechT5CTCTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
         self.assertIsInstance(processor.feature_extractor, SpeechT5FeatureExtractor)
@@ -91,7 +91,7 @@ class SpeechT5ProcessorTest(unittest.TestCase):
         )
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer_add_kwargs.get_vocab())
-        self.assertIsInstance(processor.tokenizer, SpeechT5Tokenizer)
+        self.assertIsInstance(processor.tokenizer, SpeechT5CTCTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.feature_extractor, SpeechT5FeatureExtractor)

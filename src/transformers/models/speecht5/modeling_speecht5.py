@@ -30,10 +30,9 @@ from ...deepspeed import is_deepspeed_zero3_enabled
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
-    MaskedLMOutput,
     SequenceClassifierOutput,
-    Wav2Vec2BaseModelOutput,
     TokenClassifierOutput,
+    Wav2Vec2BaseModelOutput,
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
@@ -1194,7 +1193,6 @@ SPEECHT5_INPUTS_DOCSTRING = r"""
     "The bare SpeechT5 Model transformer outputting raw hidden-states without any specific head on top.",
     SPEECHT5_START_DOCSTRING,
 )
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model with Wav2Vec2->SpeechT5,WAV_2_VEC_2->SPEECHT5
 class SpeechT5Model(SpeechT5PreTrainedModel):
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
