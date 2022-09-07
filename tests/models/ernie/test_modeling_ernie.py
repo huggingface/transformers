@@ -427,7 +427,6 @@ class ErnieModelTester:
 
 @require_torch
 class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             ErnieModel,
@@ -560,7 +559,6 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_torchscript_device_change(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
-
             # ErnieForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == ErnieForMultipleChoice:
                 return

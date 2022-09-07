@@ -500,7 +500,6 @@ class ErnieEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -795,7 +794,6 @@ ERNIE_INPUTS_DOCSTRING = r"""
     "The bare Ernie Model transformer outputting raw hidden-states without any specific head on top.",
     ERNIE_START_DOCSTRING,
 )
-
 class ErnieModel(ErniePreTrainedModel):
     """
 
@@ -981,7 +979,6 @@ class ErnieModel(ErniePreTrainedModel):
     """,
     ERNIE_START_DOCSTRING,
 )
-
 class ErnieForPreTraining(ErniePreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1089,7 +1086,6 @@ class ErnieForPreTraining(ErniePreTrainedModel):
     """Ernie Model with a `language modeling` head on top for CLM fine-tuning.""", ERNIE_START_DOCSTRING
 )
 class ErnieLMHeadModel(ErniePreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
@@ -1226,7 +1222,6 @@ class ErnieLMHeadModel(ErniePreTrainedModel):
 
 @add_start_docstrings("""Ernie Model with a `language modeling` head on top.""", ERNIE_START_DOCSTRING)
 class ErnieForMaskedLM(ErniePreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
@@ -1643,7 +1638,6 @@ class ErnieForMultipleChoice(ErniePreTrainedModel):
     ERNIE_START_DOCSTRING,
 )
 class ErnieForTokenClassification(ErniePreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1724,7 +1718,6 @@ class ErnieForTokenClassification(ErniePreTrainedModel):
     ERNIE_START_DOCSTRING,
 )
 class ErnieForQuestionAnswering(ErniePreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
