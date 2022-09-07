@@ -762,8 +762,8 @@ ERNIE_INPUTS_DOCSTRING = r"""
 
             [What are token type IDs?](../glossary#token-type-ids)
         task_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of task types, the values of `task_type_ids` are usually the same.  Indices are selected in `[0, 
-            config.task_type_vocab_size]`. 
+            Indices of task types, the values of `task_type_ids` are usually the same. Indices are selected in `[0,
+            config.task_type_vocab_size]`.
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.

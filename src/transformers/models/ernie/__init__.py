@@ -18,12 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_tensorflow_text_available,
-    is_torch_available,
-)
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tensorflow_text_available, is_torch_available
 
 
 _import_structure = {

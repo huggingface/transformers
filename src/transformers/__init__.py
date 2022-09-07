@@ -3009,10 +3009,6 @@ if TYPE_CHECKING:
         BertTokenizer,
         WordpieceTokenizer,
     )
-    from .models.ernie import (
-        ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        ErnieConfig,
-    )
     from .models.bert_generation import BertGenerationConfig
     from .models.bert_japanese import BertJapaneseTokenizer, CharacterTokenizer, MecabTokenizer
     from .models.bertweet import BertweetTokenizer
@@ -3068,6 +3064,7 @@ if TYPE_CHECKING:
     from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
+    from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -3654,20 +3651,6 @@ if TYPE_CHECKING:
             BertPreTrainedModel,
             load_tf_weights_in_bert,
         )
-        from .models.ernie import (
-            ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ErnieForMaskedLM,
-            ErnieForMultipleChoice,
-            ErnieForNextSentencePrediction,
-            ErnieForPreTraining,
-            ErnieForQuestionAnswering,
-            ErnieForSequenceClassification,
-            ErnieForTokenClassification,
-            ErnieLayer,
-            ErnieLMHeadModel,
-            ErnieModel,
-            ErniePreTrainedModel,
-        )
         from .models.bert_generation import (
             BertGenerationDecoder,
             BertGenerationEncoder,
@@ -3885,6 +3868,20 @@ if TYPE_CHECKING:
             load_tf_weights_in_electra,
         )
         from .models.encoder_decoder import EncoderDecoderModel
+        from .models.ernie import (
+            ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ErnieForMaskedLM,
+            ErnieForMultipleChoice,
+            ErnieForNextSentencePrediction,
+            ErnieForPreTraining,
+            ErnieForQuestionAnswering,
+            ErnieForSequenceClassification,
+            ErnieForTokenClassification,
+            ErnieLayer,
+            ErnieLMHeadModel,
+            ErnieModel,
+            ErniePreTrainedModel,
+        )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             FlaubertForMultipleChoice,
