@@ -762,7 +762,6 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in OWLVIT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
