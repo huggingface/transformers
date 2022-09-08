@@ -43,7 +43,6 @@ else:
         "ErnieForCausalLM",
         "ErnieModel",
         "ErniePreTrainedModel",
-        "ErnieModelErniePreTrainedModel",
     ]
 
 if TYPE_CHECKING:
