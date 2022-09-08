@@ -470,6 +470,8 @@
         title: Vision Text Dual Encoder
       - local: model_doc/visual_bert
         title: VisualBERT
+      - local: model_doc/xclip
+        title: X-CLIP
       title: Multimodal models
     - isExpanded: false
       sections:
