@@ -98,13 +98,22 @@ def convert_data2vec_checkpoint_to_pytorch(
         self_attn: BertSelfAttention = layer.attention.self
         assert data2vec_layer.self_attn.k_proj.weight.data.shape == torch.Size(
             (config.hidden_size, config.hidden_size)
-        ), f"Shape for data2vec_layer.self_attn.k_proj.weight.data should be {torch.Size((config.hidden_size, config.hidden_size))}"
+        ), (
+            "Shape for data2vec_layer.self_attn.k_proj.weight.data should be"
+            f" {torch.Size((config.hidden_size, config.hidden_size))}"
+        )
         assert data2vec_layer.self_attn.q_proj.weight.data.shape == torch.Size(
             (config.hidden_size, config.hidden_size)
-        ), f"Shape for data2vec_layer.self_attn.q_proj.weight.data should be {torch.Size((config.hidden_size, config.hidden_size))}"
+        ), (
+            "Shape for data2vec_layer.self_attn.q_proj.weight.data should be"
+            f" {torch.Size((config.hidden_size, config.hidden_size))}"
+        )
         assert data2vec_layer.self_attn.v_proj.weight.data.shape == torch.Size(
             (config.hidden_size, config.hidden_size)
-        ), f"Shape for data2vec_layer.self_attn.v_proj.weight.data should be {torch.Size((config.hidden_size, config.hidden_size))}"
+        ), (
+            "Shape for data2vec_layer.self_attn.v_proj.weight.data should be"
+            f" {torch.Size((config.hidden_size, config.hidden_size))}"
+        )
 
         self_attn.query.weight.data = data2vec_layer.self_attn.q_proj.weight
         self_attn.query.bias.data = data2vec_layer.self_attn.q_proj.bias

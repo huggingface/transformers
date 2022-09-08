@@ -39,7 +39,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -159,7 +159,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
                 attn_score = attn_score - 1e30 * attn_mask
 
         # attention probability
-        attn_prob = tf.nn.softmax(attn_score, axis=1)
+        attn_prob = stable_softmax(attn_score, axis=1)
 
         attn_prob = self.dropout(attn_prob, training=training)
 
@@ -1192,6 +1192,8 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         super().__init__(config, *inputs, **kwargs)
         self.transformer = TFXLNetMainLayer(config, name="transformer")
         self.lm_loss = TFXLNetLMHead(config, self.transformer.word_embedding, name="lm_loss")
+        # generate fails to convert to a graph with XLNet
+        self.supports_xla_generation = False
 
     def get_lm_head(self):
         return self.lm_loss
@@ -1202,7 +1204,6 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
 
     def prepare_inputs_for_generation(self, inputs, past=None, use_mems=None, **kwargs):
         # Add dummy token at the end (no attention on this one)
-
         effective_batch_size = inputs.shape[0]
         dummy_token = tf.zeros((effective_batch_size, 1), dtype=inputs.dtype)
 
@@ -1212,12 +1213,12 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         offset = 2
 
         if past:
-            inputs = tf.concat([inputs[:, -offset:], dummy_token], axis=1)
+            input_ids = tf.concat([inputs[:, -offset:], dummy_token], axis=1)
         else:
-            inputs = tf.concat([inputs, dummy_token], axis=1)
+            input_ids = tf.concat([inputs, dummy_token], axis=1)
 
         # Build permutation mask so that previous tokens don't see last token
-        sequence_length = inputs.shape[1]
+        sequence_length = input_ids.shape[1]
         perm_mask = tf.zeros((effective_batch_size, sequence_length, sequence_length - 1))
         perm_mask_seq_end = tf.ones((effective_batch_size, sequence_length, 1))
         perm_mask = tf.concat([perm_mask, perm_mask_seq_end], axis=-1)
@@ -1228,7 +1229,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         target_mapping = tf.concat([target_mapping, target_mapping_seq_end], axis=-1)
 
         inputs = {
-            "input_ids": inputs,
+            "input_ids": input_ids,
             "perm_mask": perm_mask,
             "target_mapping": target_mapping,
             "use_mems": use_mems,
@@ -1281,17 +1282,17 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
         >>> # We show how to setup inputs to predict a next token using a bi-directional context.
         >>> input_ids = tf.constant(tokenizer.encode("Hello, my dog is very <mask>", add_special_tokens=True))[
         ...     None, :
-        >>> ]  # We will predict the masked token
+        ... ]  # We will predict the masked token
 
         >>> perm_mask = np.zeros((1, input_ids.shape[1], input_ids.shape[1]))
         >>> perm_mask[:, :, -1] = 1.0  # Previous tokens don't see last token
 
         >>> target_mapping = np.zeros(
         ...     (1, 1, input_ids.shape[1])
-        >>> )  # Shape [1, 1, seq_length] => let's predict one token
+        ... )  # Shape [1, 1, seq_length] => let's predict one token
         >>> target_mapping[
         ...     0, 0, -1
-        >>> ] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
+        ... ] = 1.0  # Our first (and only) prediction will be the last token of the sequence (the masked token)
 
         >>> outputs = model(
         ...     input_ids,
@@ -1301,7 +1302,7 @@ class TFXLNetLMHeadModel(TFXLNetPreTrainedModel, TFCausalLanguageModelingLoss):
 
         >>> next_token_logits = outputs[
         ...     0
-        >>> ]  # Output has shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
+        ... ]  # Output has shape [target_mapping.size(0), target_mapping.size(1), config.vocab_size]
         ```"""
         transformer_outputs = self.transformer(
             input_ids=input_ids,

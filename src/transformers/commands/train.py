@@ -53,8 +53,7 @@ class TrainCommand(BaseTransformersCLICommand):
             "--train_data",
             type=str,
             required=True,
-            help="path to train (and optionally evaluation) dataset as a csv with "
-            "tab separated labels and sentences.",
+            help="path to train (and optionally evaluation) dataset as a csv with tab separated labels and sentences.",
         )
         train_parser.add_argument(
             "--column_label", type=int, default=0, help="Column of the dataset csv file with example labels."
@@ -74,7 +73,7 @@ class TrainCommand(BaseTransformersCLICommand):
             "--validation_split",
             type=float,
             default=0.1,
-            help="if validation dataset is not provided, fraction of train dataset " "to use as validation dataset.",
+            help="if validation dataset is not provided, fraction of train dataset to use as validation dataset.",
         )
 
         train_parser.add_argument("--output", type=str, default="./", help="path to saved the trained model.")

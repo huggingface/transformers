@@ -33,7 +33,7 @@ cmaes==0.8.2
 cmd2==2.4.0
 codecarbon==1.2.0
 colorlog==6.6.0
-cookiecutter==1.7.2
+cookiecutter==2.1.1
 cryptography==36.0.2
 csvw==2.0.0
 cycler==0.11.0
@@ -205,7 +205,7 @@ tensorboard==2.8.0
 tensorboard-data-server==0.6.1
 tensorboard-plugin-wit==1.8.1
 tensorboardX==2.5
-tensorflow==2.8.0
+tensorflow==2.8.1
 tensorflow-io-gcs-filesystem==0.24.0
 termcolor==1.1.0
 text-unidecode==1.3

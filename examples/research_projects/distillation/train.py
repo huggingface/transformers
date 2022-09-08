@@ -207,8 +207,10 @@ def main():
         "--fp16_opt_level",
         type=str,
         default="O1",
-        help="For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
-        "See details at https://nvidia.github.io/apex/amp.html",
+        help=(
+            "For fp16: Apex AMP optimization level selected in ['O0', 'O1', 'O2', and 'O3']."
+            "See details at https://nvidia.github.io/apex/amp.html"
+        ),
     )
     parser.add_argument("--n_gpu", type=int, default=1, help="Number of GPUs in the node.")
     parser.add_argument("--local_rank", type=int, default=-1, help="Distributed training - Local rank")
@@ -226,8 +228,8 @@ def main():
         if os.path.exists(args.dump_path):
             if not args.force:
                 raise ValueError(
-                    f"Serialization dir {args.dump_path} already exists, but you have not precised wheter to overwrite it"
-                    "Use `--force` if you want to overwrite it"
+                    f"Serialization dir {args.dump_path} already exists, but you have not precised wheter to overwrite"
+                    " itUse `--force` if you want to overwrite it"
                 )
             else:
                 shutil.rmtree(args.dump_path)

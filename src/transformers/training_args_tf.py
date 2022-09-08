@@ -14,7 +14,7 @@
 
 import warnings
 from dataclasses import dataclass, field
-from typing import Tuple
+from typing import Optional, Tuple
 
 from .training_args import TrainingArguments
 from .utils import cached_property, is_tf_available, logging, tf_required
@@ -28,6 +28,7 @@ if is_tf_available():
 
 @dataclass
 class TFTrainingArguments(TrainingArguments):
+    framework = "tf"
     """
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
     itself**.
@@ -161,17 +162,17 @@ class TFTrainingArguments(TrainingArguments):
             Whether to activate the XLA compilation or not.
     """
 
-    tpu_name: str = field(
+    tpu_name: Optional[str] = field(
         default=None,
         metadata={"help": "Name of TPU"},
     )
 
-    tpu_zone: str = field(
+    tpu_zone: Optional[str] = field(
         default=None,
         metadata={"help": "Zone of TPU"},
     )
 
-    gcp_project: str = field(
+    gcp_project: Optional[str] = field(
         default=None,
         metadata={"help": "Name of Cloud TPU-enabled project"},
     )
@@ -188,15 +189,11 @@ class TFTrainingArguments(TrainingArguments):
     def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
         logger.info("Tensorflow: setting up strategy")
 
-        if self.xla:
-            tf.config.optimizer.set_jit(True)
-
         gpus = tf.config.list_physical_devices("GPU")
 
         # Set to float16 at first
         if self.fp16:
-            policy = tf.keras.mixed_precision.experimental.Policy("mixed_float16")
-            tf.keras.mixed_precision.experimental.set_policy(policy)
+            tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
         if self.no_cuda:
             strategy = tf.distribute.OneDeviceStrategy(device="/cpu:0")
@@ -217,8 +214,7 @@ class TFTrainingArguments(TrainingArguments):
             if tpu:
                 # Set to bfloat16 in case of TPU
                 if self.fp16:
-                    policy = tf.keras.mixed_precision.experimental.Policy("mixed_bfloat16")
-                    tf.keras.mixed_precision.experimental.set_policy(policy)
+                    tf.keras.mixed_precision.set_global_policy("mixed_bfloat16")
 
                 tf.config.experimental_connect_to_cluster(tpu)
                 tf.tpu.experimental.initialize_tpu_system(tpu)

@@ -148,7 +148,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
     @require_torch
     def test_small_model_pt(self):
-        model_id = "mishig/tiny-detr-mobilenetsv3-panoptic"
+        model_id = "hf-internal-testing/tiny-detr-mobilenetsv3-panoptic"
 
         model = AutoModelForImageSegmentation.from_pretrained(model_id)
         feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
@@ -164,12 +164,12 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             [
                 {
                     "score": 0.004,
-                    "label": "LABEL_0",
+                    "label": "LABEL_215",
                     "mask": "34eecd16bbfb0f476083ef947d81bf66",
                 },
                 {
                     "score": 0.004,
-                    "label": "LABEL_0",
+                    "label": "LABEL_215",
                     "mask": "34eecd16bbfb0f476083ef947d81bf66",
                 },
             ],
@@ -192,24 +192,24 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 [
                     {
                         "score": 0.004,
-                        "label": "LABEL_0",
+                        "label": "LABEL_215",
                         "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                     {
                         "score": 0.004,
-                        "label": "LABEL_0",
+                        "label": "LABEL_215",
                         "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                 ],
                 [
                     {
                         "score": 0.004,
-                        "label": "LABEL_0",
+                        "label": "LABEL_215",
                         "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                     {
                         "score": 0.004,
-                        "label": "LABEL_0",
+                        "label": "LABEL_215",
                         "mask": "34eecd16bbfb0f476083ef947d81bf66",
                     },
                 ],

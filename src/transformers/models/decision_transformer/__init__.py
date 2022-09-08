@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import _LazyModule, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -28,7 +28,12 @@ _import_structure = {
     ],
 }
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_decision_transformer"] = [
         "DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DecisionTransformerGPT2Model",
@@ -44,7 +49,12 @@ if TYPE_CHECKING:
         DecisionTransformerConfig,
     )
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_decision_transformer import (
             DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             DecisionTransformerGPT2Model,

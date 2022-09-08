@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -26,7 +26,12 @@ _import_structure = {
 }
 
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_m2m_100"] = [
         "M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST",
         "M2M100ForConditionalGeneration",
@@ -39,7 +44,12 @@ if TYPE_CHECKING:
     from .configuration_m2m_100 import M2M_100_PRETRAINED_CONFIG_ARCHIVE_MAP, M2M100Config, M2M100OnnxConfig
     from .tokenization_m2m_100 import M2M100Tokenizer
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_m2m_100 import (
             M2M_100_PRETRAINED_MODEL_ARCHIVE_LIST,
             M2M100ForConditionalGeneration,

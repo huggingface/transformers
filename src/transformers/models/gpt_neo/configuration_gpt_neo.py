@@ -36,7 +36,7 @@ class GPTNeoConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`GPTNeoModel`]. It is used to instantiate a GPT
     Neo model according to the specified arguments, defining the model architecture. Instantiating a configuration with
     the defaults will yield a similar configuration to that of the GPTNeo
-    [gpt-neo-1.3B](https://huggingface.co/EleutherAI/gpt-neo-1.3B) architecture.
+    [EleutherAI/gpt-neo-1.3B](https://huggingface.co/EleutherAI/gpt-neo-1.3B) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -233,7 +233,7 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
     ) -> Mapping[str, Any]:
 
         common_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
-            tokenizer, batch_size, seq_length, is_pair, framework
+            tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
         )
 
         # We need to order the input in the way they appears in the forward()
@@ -261,8 +261,9 @@ class GPTNeoOnnxConfig(OnnxConfigWithPast):
 
         ordered_inputs["attention_mask"] = common_inputs["attention_mask"]
         if self.use_past:
+            mask_dtype = ordered_inputs["attention_mask"].dtype
             ordered_inputs["attention_mask"] = torch.cat(
-                [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length)], dim=1
+                [ordered_inputs["attention_mask"], torch.ones(batch, past_key_values_length, dtype=mask_dtype)], dim=1
             )
 
         return ordered_inputs

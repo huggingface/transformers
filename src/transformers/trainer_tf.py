@@ -34,7 +34,14 @@ from tensorflow.python.distribute.values import PerReplica
 
 from .modeling_tf_utils import TFPreTrainedModel
 from .optimization_tf import GradientAccumulator, create_optimizer
-from .trainer_utils import PREFIX_CHECKPOINT_DIR, EvalPrediction, IntervalStrategy, PredictionOutput, set_seed
+from .trainer_utils import (
+    PREFIX_CHECKPOINT_DIR,
+    EvalPrediction,
+    IntervalStrategy,
+    PredictionOutput,
+    enable_full_determinism,
+    set_seed,
+)
 from .training_args_tf import TFTrainingArguments
 from .utils import logging
 
@@ -134,7 +141,7 @@ class TFTrainer:
                 "see https://www.comet.ml/docs/python-sdk/huggingface/"
             )
 
-        set_seed(self.args.seed)
+        enable_full_determinism(self.args.seed) if self.args.full_determinism else set_seed(self.args.seed)
 
     def get_train_tfdataset(self) -> tf.data.Dataset:
         """

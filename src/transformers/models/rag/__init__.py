@@ -18,7 +18,7 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_tf_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_available, is_torch_available
 
 
 _import_structure = {
@@ -27,7 +27,12 @@ _import_structure = {
     "tokenization_rag": ["RagTokenizer"],
 }
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_rag"] = [
         "RagModel",
         "RagPreTrainedModel",
@@ -35,7 +40,12 @@ if is_torch_available():
         "RagTokenForGeneration",
     ]
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_rag"] = [
         "TFRagModel",
         "TFRagPreTrainedModel",
@@ -49,10 +59,20 @@ if TYPE_CHECKING:
     from .retrieval_rag import RagRetriever
     from .tokenization_rag import RagTokenizer
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_rag import RagModel, RagPreTrainedModel, RagSequenceForGeneration, RagTokenForGeneration
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_rag import (
             TFRagModel,
             TFRagPreTrainedModel,

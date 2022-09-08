@@ -36,13 +36,14 @@ The figure below illustrates the architecture of SegFormer. Taken from the [orig
 
 <img width="600" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/segformer_architecture.png"/>
 
-This model was contributed by [nielsr](https://huggingface.co/nielsr). The original code can be found [here](https://github.com/NVlabs/SegFormer).
+This model was contributed by [nielsr](https://huggingface.co/nielsr). The TensorFlow version 
+of the model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). The original code can be found [here](https://github.com/NVlabs/SegFormer).
 
 Tips:
 
-- SegFormer consists of a hierarchical Transformer encoder, and a lightweight all-MLP decode head.
+- SegFormer consists of a hierarchical Transformer encoder, and a lightweight all-MLP decoder head.
   [`SegformerModel`] is the hierarchical Transformer encoder (which in the paper is also referred to
-  as Mix Transformer or MiT). [`SegformerForSemanticSegmentation`] adds the all-MLP decode head on
+  as Mix Transformer or MiT). [`SegformerForSemanticSegmentation`] adds the all-MLP decoder head on
   top to perform semantic segmentation of images. In addition, there's
   [`SegformerForImageClassification`] which can be used to - you guessed it - classify images. The
   authors of SegFormer first pre-trained the Transformer encoder on ImageNet-1k to classify images. Next, they throw
@@ -51,6 +52,9 @@ Tips:
   found on the [hub](https://huggingface.co/models?other=segformer).
 - The quickest way to get started with SegFormer is by checking the [example notebooks](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/SegFormer) (which showcase both inference and
   fine-tuning on custom data). One can also check out the [blog post](https://huggingface.co/blog/fine-tune-segformer) introducing SegFormer and illustrating how it can be fine-tuned on custom data.
+- TensorFlow users should refer to [this repository](https://github.com/deep-diver/segformer-tf-transformers) that shows off-the-shelf inference and fine-tuning.
+- One can also check out [this interactive demo on Hugging Face Spaces](https://huggingface.co/spaces/chansung/segformer-tf-transformers)
+  to try out a SegFormer model on custom images.
 - SegFormer works on any input size, as it pads the input to be divisible by `config.patch_sizes`. 
 - One can use [`SegformerFeatureExtractor`] to prepare images and corresponding segmentation maps
   for the model. Note that this feature extractor is fairly basic and does not include all data augmentations used in
@@ -65,7 +69,8 @@ Tips:
   used by [`SegformerForSemanticSegmentation`]). However, other datasets use the 0 index as
   background class and include this class as part of all labels. In that case, `reduce_labels` should be set to
   `False`, as loss should also be computed for the background class.
-- As most models, SegFormer comes in different sizes, the details of which can be found in the table below.
+- As most models, SegFormer comes in different sizes, the details of which can be found in the table below
+  (taken from Table 7 of the [original paper](https://arxiv.org/abs/2105.15203)).
 
 | **Model variant** | **Depths**    | **Hidden sizes**    | **Decoder hidden size** | **Params (M)** | **ImageNet-1k Top 1** |
 | :---------------: | ------------- | ------------------- | :---------------------: | :------------: | :-------------------: |
@@ -75,6 +80,10 @@ Tips:
 | MiT-b3            | [3, 4, 18, 3] | [64, 128, 320, 512] | 768                     | 45.2           | 83.1                  |
 | MiT-b4            | [3, 8, 27, 3] | [64, 128, 320, 512] | 768                     | 62.6           | 83.6                  |
 | MiT-b5            | [3, 6, 40, 3] | [64, 128, 320, 512] | 768                     | 82.0           | 83.8                  |
+
+Note that MiT in the above table refers to the Mix Transformer encoder backbone introduced in SegFormer. For
+SegFormer's results on the segmentation datasets like ADE20k, refer to the [paper](https://arxiv.org/abs/2105.15203).
+
 
 ## SegformerConfig
 
@@ -104,3 +113,23 @@ Tips:
 
 [[autodoc]] SegformerForSemanticSegmentation
     - forward
+
+## TFSegformerDecodeHead
+
+[[autodoc]] TFSegformerDecodeHead
+    - call
+
+## TFSegformerModel
+
+[[autodoc]] TFSegformerModel
+    - call 
+
+## TFSegformerForImageClassification
+
+[[autodoc]] TFSegformerForImageClassification
+    - call 
+
+## TFSegformerForSemanticSegmentation
+
+[[autodoc]] TFSegformerForSemanticSegmentation
+    - call 

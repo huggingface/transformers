@@ -21,7 +21,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SPEECH_TO_TEXT_2_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/s2t-small-librispeech-asr": "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/config.json",
+    "facebook/s2t-wav2vec2-large-en-de": (
+        "https://huggingface.co/facebook/s2t-wav2vec2-large-en-de/resolve/main/config.json"
+    ),
     # See all Speech2Text models at https://huggingface.co/models?filter=speech2text2
 }
 
@@ -31,7 +33,7 @@ class Speech2Text2Config(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Speech2Text2ForCausalLM`]. It is used to
     instantiate an Speech2Text2 model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Speech2Text2
-    [facebook/s2t-small-librispeech-asr](https://huggingface.co/facebook/s2t-small-librispeech-asr) architecture.
+    [facebook/s2t-wav2vec2-large-en-de](https://huggingface.co/facebook/s2t-wav2vec2-large-en-de) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -62,14 +64,15 @@ class Speech2Text2Config(PretrainedConfig):
             The dropout ratio for classifier.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            https://arxiv.org/abs/1909.11556>`__ for more details. decoder_layerdrop: (`float`, *optional*, defaults to
-            0.0): The LayerDrop probability for the decoder. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
+            https://arxiv.org/abs/1909.11556>`__ for more details.
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         max_source_positions (`int`, *optional*, defaults to 6000):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-        max_target_positions: (`int`, *optional*, defaults to 1024):
+        max_target_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
 

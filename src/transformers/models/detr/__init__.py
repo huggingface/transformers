@@ -18,17 +18,25 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_timm_available, is_vision_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_timm_available, is_vision_available
 
 
-_import_structure = {
-    "configuration_detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig"],
-}
+_import_structure = {"configuration_detr": ["DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DetrConfig", "DetrOnnxConfig"]}
 
-if is_vision_available():
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["feature_extraction_detr"] = ["DetrFeatureExtractor"]
 
-if is_timm_available():
+try:
+    if not is_timm_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_detr"] = [
         "DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DetrForObjectDetection",
@@ -39,12 +47,22 @@ if is_timm_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig
+    from .configuration_detr import DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DetrConfig, DetrOnnxConfig
 
-    if is_vision_available():
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .feature_extraction_detr import DetrFeatureExtractor
 
-    if is_timm_available():
+    try:
+        if not is_timm_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_detr import (
             DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             DetrForObjectDetection,

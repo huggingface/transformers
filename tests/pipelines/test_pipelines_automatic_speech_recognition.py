@@ -141,15 +141,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
     @require_torch
     def test_small_model_pt_seq2seq(self):
-        model_id = "hf-internal-testing/tiny-random-speech-encoder-decoder"
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
-        feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-
         speech_recognizer = pipeline(
-            task="automatic-speech-recognition",
-            model=model_id,
-            tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
+            model="hf-internal-testing/tiny-random-speech-encoder-decoder",
             framework="pt",
         )
 
@@ -184,7 +177,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(
             output,
             {
-                "text": "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumajre"
+                "text": (
+                    "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumajre"
+                )
             },
         )
 
@@ -194,7 +189,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(
             output,
             {
-                "text": "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumajcri",
+                "text": (
+                    "y en las ramas medio sumergidas revoloteaban algunos pájaros de quimérico y legendario plumajcri"
+                ),
                 "chunks": [
                     {"text": "y", "timestamp": (0.52, 0.54)},
                     {"text": "en", "timestamp": (0.6, 0.68)},

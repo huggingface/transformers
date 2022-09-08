@@ -146,6 +146,17 @@ class GPT2TokenizerFast(PreTrainedTokenizerFast):
             **kwargs,
         )
 
+        if kwargs.pop("add_bos_token", False):
+            model_id = kwargs.pop("name_or_path", "")
+            raise ValueError(
+                "Currenty GPT2's fast tokenizer does NOT support adding a BOS token."
+                "Instead you should use GPT2's slow tokenizer class `GPT2Tokenizer` as follows: \n"
+                f"`GPT2Tokenizer.from_pretrained('{model_id}')`\nor\n"
+                f"`AutoTokenizer.from_pretrained('{model_id}', use_fast=False)`\n"
+                "This issue will be fixed soon, see: https://github.com/huggingface/tokenizers/pull/1005."
+                " so that the fast tokenizer works correctly."
+            )
+
         pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
         if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
             pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))

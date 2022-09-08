@@ -115,7 +115,8 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
         if additional_special_tokens is not None:
             if not isinstance(additional_special_tokens, list):
                 raise TypeError(
-                    f"additional_special_tokens should be of type {type(list)}, but is {type(additional_special_tokens)}"
+                    f"additional_special_tokens should be of type {type(list)}, but is"
+                    f" {type(additional_special_tokens)}"
                 )
 
             additional_special_tokens_extended = (
@@ -130,7 +131,8 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
 
             if len(set(additional_special_tokens_extended)) != len(additional_special_tokens_extended):
                 raise ValueError(
-                    f"Please make sure that the provided additional_special_tokens do not contain an incorrectly shifted list of <unk_x> tokens. Found {additional_special_tokens_extended}."
+                    "Please make sure that the provided additional_special_tokens do not contain an incorrectly"
+                    f" shifted list of <unk_x> tokens. Found {additional_special_tokens_extended}."
                 )
             additional_special_tokens = additional_special_tokens_extended
         else:
@@ -158,7 +160,8 @@ class PegasusTokenizerFast(PreTrainedTokenizerFast):
 
         if all_special_ids != set(range(len(self.additional_special_tokens) + 3)):
             raise ValueError(
-                f"There should be 3 special tokens: mask_token, pad_token, and eos_token + {len(self.additional_special_tokens)} additional_special_tokens, but got {all_special_ids}"
+                "There should be 3 special tokens: mask_token, pad_token, and eos_token +"
+                f" {len(self.additional_special_tokens)} additional_special_tokens, but got {all_special_ids}"
             )
 
         return [1 if x in all_special_ids else 0 for x in seq]

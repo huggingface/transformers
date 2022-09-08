@@ -14,7 +14,6 @@
 """Tokenization classes for M2M100."""
 import json
 import os
-from contextlib import contextmanager
 from pathlib import Path
 from shutil import copyfile
 from typing import Any, Dict, List, Optional, Tuple, Union
@@ -116,10 +115,8 @@ class M2M100Tokenizer(PreTrainedTokenizer):
     >>> tokenizer = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M", src_lang="en", tgt_lang="ro")
     >>> src_text = " UN Chief Says There Is No Military Solution in Syria"
     >>> tgt_text = "Şeful ONU declară că nu există o soluţie militară în Siria"
-    >>> model_inputs = tokenizer(src_text, return_tensors="pt")
-    >>> with tokenizer.as_target_tokenizer():
-    ...     labels = tokenizer(tgt_text, return_tensors="pt").input_ids
-    >>> model(**model_inputs, labels=labels)  # should work
+    >>> model_inputs = tokenizer(src_text, text_target=tgt_text, return_tensors="pt")
+    >>> model(**model_inputs)  # should work
     ```"""
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -346,15 +343,11 @@ class M2M100Tokenizer(PreTrainedTokenizer):
         inputs["forced_bos_token_id"] = tgt_lang_id
         return inputs
 
-    @contextmanager
-    def as_target_tokenizer(self):
-        """
-        Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
-        sequence-to-sequence models that need a slightly different processing for the labels.
-        """
-        self.set_tgt_lang_special_tokens(self.tgt_lang)
-        yield
+    def _switch_to_input_mode(self):
         self.set_src_lang_special_tokens(self.src_lang)
+
+    def _switch_to_target_mode(self):
+        self.set_tgt_lang_special_tokens(self.tgt_lang)
 
     def set_src_lang_special_tokens(self, src_lang: str) -> None:
         """Reset the special tokens to the source lang setting. No prefix and suffix=[eos, src_lang_code]."""

@@ -20,8 +20,8 @@ import unittest
 from transformers import is_tf_available, {{cookiecutter.camelcase_modelname}}Config
 from transformers.testing_utils import require_tf, slow
 
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_tf_available():
@@ -711,8 +711,8 @@ from transformers import (
 )
 from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
 
-from ..test_configuration_common import ConfigTester
-from ..test_modeling_tf_common import TFModelTesterMixin, ids_tensor
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
 
 
 if is_tf_available():

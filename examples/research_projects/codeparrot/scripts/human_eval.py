@@ -186,7 +186,8 @@ def main():
         _ = code_eval_metric.compute(references=[""], predictions=[[""]])
     except ValueError as exception:
         print(
-            'Code evaluation not enabled. Read the warning below carefully and then use `--HF_ALLOW_CODE_EVAL="1"` flag to enable code evaluation.'
+            'Code evaluation not enabled. Read the warning below carefully and then use `--HF_ALLOW_CODE_EVAL="1"`'
+            " flag to enable code evaluation."
         )
         raise exception
 

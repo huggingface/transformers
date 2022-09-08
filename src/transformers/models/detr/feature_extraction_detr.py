@@ -538,7 +538,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                     valid_masks_path = True
                 if not valid_masks_path:
                     raise ValueError(
-                        "The path to the directory containing the mask PNG files should be provided as a `pathlib.Path` object."
+                        "The path to the directory containing the mask PNG files should be provided as a"
+                        " `pathlib.Path` object."
                     )
 
         if not is_batched:

@@ -27,7 +27,8 @@ Tips:
 - One can use [`AutoFeatureExtractor`] to prepare images for the model.
 - The huge 10B model from [Self-supervised Pretraining of Visual Features in the Wild](https://arxiv.org/abs/2103.01988), trained on one billion Instagram images, is available on the [hub](https://huggingface.co/facebook/regnet-y-10b-seer)
 
-This model was contributed by [Francesco](https://huggingface.co/Francesco).
+This model was contributed by [Francesco](https://huggingface.co/Francesco). The TensorFlow version of the model
+was contributed by [sayakpaul](https://huggingface.com/sayakpaul) and [ariG23498](https://huggingface.com/ariG23498).
 The original code can be found [here](https://github.com/facebookresearch/pycls).
 
 
@@ -46,3 +47,14 @@ The original code can be found [here](https://github.com/facebookresearch/pycls)
 
 [[autodoc]] RegNetForImageClassification
     - forward
+
+## TFRegNetModel
+
+[[autodoc]] TFRegNetModel
+    - call
+
+
+## TFRegNetForImageClassification
+
+[[autodoc]] TFRegNetForImageClassification
+    - call

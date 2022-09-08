@@ -28,8 +28,9 @@ from typing import Dict, List, Optional, Union
 import datasets
 import numpy as np
 import torch
-from datasets import DatasetDict, load_dataset, load_metric
+from datasets import DatasetDict, load_dataset
 
+import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -44,12 +45,12 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.19.0.dev0")
+check_min_version("4.22.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -101,9 +102,11 @@ class ModelArguments:
     mask_time_prob: float = field(
         default=0.05,
         metadata={
-            "help": "Probability of each feature vector along the time axis to be chosen as the start of the vector"
-            "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
-            "vectors will be masked along the time axis."
+            "help": (
+                "Probability of each feature vector along the time axis to be chosen as the start of the vector"
+                "span to be masked. Approximately ``mask_time_prob * sequence_length // mask_time_length`` feature"
+                "vectors will be masked along the time axis."
+            )
         },
     )
     mask_time_length: int = field(
@@ -113,8 +116,11 @@ class ModelArguments:
     mask_feature_prob: float = field(
         default=0.0,
         metadata={
-            "help": "Probability of each feature vector along the feature axis to be chosen as the start of the vector"
-            "span to be masked. Approximately ``mask_feature_prob * sequence_length // mask_feature_length`` feature bins will be masked along the time axis."
+            "help": (
+                "Probability of each feature vector along the feature axis to be chosen as the start of the vectorspan"
+                " to be masked. Approximately ``mask_feature_prob * sequence_length // mask_feature_length`` feature"
+                " bins will be masked along the time axis."
+            )
         },
     )
     mask_feature_length: int = field(
@@ -146,8 +152,10 @@ class DataTrainingArguments:
     train_split_name: str = field(
         default="train+validation",
         metadata={
-            "help": "The name of the training data set split to use (via the datasets library). Defaults to "
-            "'train+validation'"
+            "help": (
+                "The name of the training data set split to use (via the datasets library). Defaults to "
+                "'train+validation'"
+            )
         },
     )
     eval_split_name: str = field(
@@ -174,15 +182,19 @@ class DataTrainingArguments:
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of validation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of validation examples to this "
+                "value if set."
+            )
         },
     )
     chars_to_ignore: Optional[List[str]] = list_field(
@@ -196,7 +208,10 @@ class DataTrainingArguments:
     max_duration_in_seconds: float = field(
         default=20.0,
         metadata={
-            "help": "Filter audio files that are longer than `max_duration_in_seconds` seconds to 'max_duration_in_seconds`"
+            "help": (
+                "Filter audio files that are longer than `max_duration_in_seconds` seconds to"
+                " 'max_duration_in_seconds`"
+            )
         },
     )
     min_duration_in_seconds: float = field(
@@ -205,17 +220,21 @@ class DataTrainingArguments:
     preprocessing_only: bool = field(
         default=False,
         metadata={
-            "help": "Whether to only do data preprocessing and skip training. "
-            "This is especially useful when data preprocessing errors out in distributed training due to timeout. "
-            "In this case, one should run the preprocessing in a non-distributed setup with `preprocessing_only=True` "
-            "so that the cached datasets can consequently be loaded in distributed training"
+            "help": (
+                "Whether to only do data preprocessing and skip training. This is especially useful when data"
+                " preprocessing errors out in distributed training due to timeout. In this case, one should run the"
+                " preprocessing in a non-distributed setup with `preprocessing_only=True` so that the cached datasets"
+                " can consequently be loaded in distributed training"
+            )
         },
     )
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "If :obj:`True`, will use the token generated when running"
-            ":obj:`transformers-cli login` as HTTP bearer authorization for remote files."
+            "help": (
+                "If :obj:`True`, will use the token generated when running"
+                ":obj:`huggingface-cli login` as HTTP bearer authorization for remote files."
+            )
         },
     )
     unk_token: str = field(
@@ -233,10 +252,12 @@ class DataTrainingArguments:
     phoneme_language: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The target language that should be used be"
-            " passed to the tokenizer for tokenization. Note that"
-            " this is only relevant if the model classifies the"
-            " input audio to a sequence of phoneme sequences."
+            "help": (
+                "The target language that should be used be"
+                " passed to the tokenizer for tokenization. Note that"
+                " this is only relevant if the model classifies the"
+                " input audio to a sequence of phoneme sequences."
+            )
         },
     )
 
@@ -285,13 +306,12 @@ class DataCollatorCTCWithPadding:
             return_tensors="pt",
         )
 
-        with self.processor.as_target_processor():
-            labels_batch = self.processor.pad(
-                label_features,
-                padding=self.padding,
-                pad_to_multiple_of=self.pad_to_multiple_of_labels,
-                return_tensors="pt",
-            )
+        labels_batch = self.processor.pad(
+            labels=label_features,
+            padding=self.padding,
+            pad_to_multiple_of=self.pad_to_multiple_of_labels,
+            return_tensors="pt",
+        )
 
         # replace padding with -100 to ignore loss correctly
         labels = labels_batch["input_ids"].masked_fill(labels_batch.attention_mask.ne(1), -100)
@@ -356,6 +376,10 @@ def main():
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
 
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_speech_recognition_ctc", model_args, data_args)
+
     # Detecting last checkpoint.
     last_checkpoint = None
     if os.path.isdir(training_args.output_dir) and training_args.do_train and not training_args.overwrite_output_dir:
@@ -405,9 +429,9 @@ def main():
 
         if data_args.audio_column_name not in raw_datasets["train"].column_names:
             raise ValueError(
-                f"--audio_column_name '{data_args.audio_column_name}' not found in dataset '{data_args.dataset_name}'. "
-                "Make sure to set `--audio_column_name` to the correct audio column - one of "
-                f"{', '.join(raw_datasets['train'].column_names)}."
+                f"--audio_column_name '{data_args.audio_column_name}' not found in dataset '{data_args.dataset_name}'."
+                " Make sure to set `--audio_column_name` to the correct audio column - one of"
+                f" {', '.join(raw_datasets['train'].column_names)}."
             )
 
         if data_args.text_column_name not in raw_datasets["train"].column_names:
@@ -481,7 +505,12 @@ def main():
 
         with training_args.main_process_first():
             if training_args.overwrite_output_dir and os.path.isfile(vocab_file):
-                os.remove(vocab_file)
+                try:
+                    os.remove(vocab_file)
+                except OSError:
+                    # in shared file-systems it might be the case that
+                    # two processes try to delete the vocab file at the some time
+                    pass
 
         with training_args.main_process_first(desc="dataset map vocabulary creation"):
             if not os.path.isfile(vocab_file):
@@ -615,7 +644,7 @@ def main():
     # instantiate a data collator and the trainer
 
     # Define evaluation metrics during training, *i.e.* word error rate, character error rate
-    eval_metrics = {metric: load_metric(metric) for metric in data_args.eval_metrics}
+    eval_metrics = {metric: evaluate.load(metric) for metric in data_args.eval_metrics}
 
     # for large datasets it is advised to run the preprocessing on a
     # single machine first with ``args.preprocessing_only`` since there will mostly likely
@@ -720,7 +749,10 @@ def main():
         "finetuned_from": model_args.model_name_or_path,
         "tasks": "speech-recognition",
         "tags": ["automatic-speech-recognition", data_args.dataset_name],
-        "dataset_args": f"Config: {config_name}, Training split: {data_args.train_split_name}, Eval split: {data_args.eval_split_name}",
+        "dataset_args": (
+            f"Config: {config_name}, Training split: {data_args.train_split_name}, Eval split:"
+            f" {data_args.eval_split_name}"
+        ),
         "dataset": f"{data_args.dataset_name.upper()} - {config_name.upper()}",
     }
     if "common_voice" in data_args.dataset_name:

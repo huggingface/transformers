@@ -58,7 +58,8 @@ def pick_layers_to_copy(n_student, n_teacher):
     except KeyError:
         if n_student != n_teacher:
             warnings.warn(
-                f"no hardcoded layers to copy for teacher {n_teacher} -> student {n_student}, defaulting to first {n_student}"
+                f"no hardcoded layers to copy for teacher {n_teacher} -> student {n_student}, defaulting to first"
+                f" {n_student}"
             )
         return list(range(n_student))
 
@@ -144,7 +145,8 @@ def create_student_by_copying_alternating_layers(
     if copy_first_teacher_layers:  # Our copying is done. We just log and save
         e_layers_to_copy, d_layers_to_copy = list(range(e)), list(range(d))
         logger.info(
-            f"Copied encoder layers {e_layers_to_copy} and decoder layers {d_layers_to_copy}. Saving them to {save_path}"
+            f"Copied encoder layers {e_layers_to_copy} and decoder layers {d_layers_to_copy}. Saving them to"
+            f" {save_path}"
         )
         student.save_pretrained(save_path)
         return student, e_layers_to_copy, d_layers_to_copy

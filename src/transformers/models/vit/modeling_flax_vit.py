@@ -18,8 +18,9 @@ from typing import Optional, Tuple
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict
+from flax.core.frozen_dict import FrozenDict, freeze, unfreeze
 from flax.linen.attention import dot_product_attention_weights
+from flax.traverse_util import flatten_dict, unflatten_dict
 
 from ...modeling_flax_outputs import FlaxBaseModelOutput, FlaxBaseModelOutputWithPooling, FlaxSequenceClassifierOutput
 from ...modeling_flax_utils import (
@@ -83,7 +84,7 @@ VIT_INPUTS_DOCSTRING = r"""
 """
 
 
-class FlaxPatchEmbeddings(nn.Module):
+class FlaxViTPatchEmbeddings(nn.Module):
 
     config: ViTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
@@ -93,6 +94,7 @@ class FlaxPatchEmbeddings(nn.Module):
         patch_size = self.config.patch_size
         num_patches = (image_size // patch_size) * (image_size // patch_size)
         self.num_patches = num_patches
+        self.num_channels = self.config.num_channels
         self.projection = nn.Conv(
             self.config.hidden_size,
             kernel_size=(patch_size, patch_size),
@@ -103,9 +105,14 @@ class FlaxPatchEmbeddings(nn.Module):
         )
 
     def __call__(self, pixel_values):
-        x = self.projection(pixel_values)
-        batch_size, _, _, channels = x.shape
-        return jnp.reshape(x, (batch_size, -1, channels))
+        num_channels = pixel_values.shape[-1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        embeddings = self.projection(pixel_values)
+        batch_size, _, _, channels = embeddings.shape
+        return jnp.reshape(embeddings, (batch_size, -1, channels))
 
 
 class FlaxViTEmbeddings(nn.Module):
@@ -116,7 +123,7 @@ class FlaxViTEmbeddings(nn.Module):
 
     def setup(self):
         self.cls_token = self.param("cls_token", nn.initializers.zeros, (1, 1, self.config.hidden_size))
-        self.patch_embeddings = FlaxPatchEmbeddings(self.config, dtype=self.dtype)
+        self.patch_embeddings = FlaxViTPatchEmbeddings(self.config, dtype=self.dtype)
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = self.param(
             "position_embeddings", nn.initializers.zeros, (1, num_patches + 1, self.config.hidden_size)
@@ -142,7 +149,8 @@ class FlaxViTSelfAttention(nn.Module):
     def setup(self):
         if self.config.hidden_size % self.config.num_attention_heads != 0:
             raise ValueError(
-                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`: {self.config.num_attention_heads}"
+                "`config.hidden_size`: {self.config.hidden_size} has to be a multiple of `config.num_attention_heads`:"
+                " {self.config.num_attention_heads}"
             )
 
         self.query = nn.Dense(
@@ -407,20 +415,38 @@ class FlaxViTPreTrainedModel(FlaxPreTrainedModel):
     main_input_name = "pixel_values"
     module_class: nn.Module = None
 
-    def __init__(self, config: ViTConfig, input_shape=None, seed: int = 0, dtype: jnp.dtype = jnp.float32, **kwargs):
+    def __init__(
+        self,
+        config: ViTConfig,
+        input_shape=None,
+        seed: int = 0,
+        dtype: jnp.dtype = jnp.float32,
+        _do_init: bool = True,
+        **kwargs
+    ):
         module = self.module_class(config=config, dtype=dtype, **kwargs)
         if input_shape is None:
-            input_shape = (1, config.image_size, config.image_size, 3)
-        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype)
+            input_shape = (1, config.image_size, config.image_size, config.num_channels)
+        super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
-    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple) -> FrozenDict:
+    def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
         pixel_values = jnp.zeros(input_shape, dtype=self.dtype)
 
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        return self.module.init(rngs, pixel_values, return_dict=False)["params"]
+        random_params = self.module.init(rngs, pixel_values, return_dict=False)["params"]
+
+        if params is not None:
+            random_params = flatten_dict(unfreeze(random_params))
+            params = flatten_dict(unfreeze(params))
+            for missing_key in self._missing_keys:
+                params[missing_key] = random_params[missing_key]
+            self._missing_keys = set()
+            return freeze(unflatten_dict(params))
+        else:
+            return random_params
 
     @add_start_docstrings_to_model_forward(VIT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     def __call__(

@@ -42,7 +42,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     add_code_sample_docstrings,
@@ -241,7 +241,7 @@ class TFMPNetSelfAttention(tf.keras.layers.Layer):
         if attention_mask is not None:
             attention_scores = attention_scores + attention_mask
 
-        attention_probs = tf.nn.softmax(attention_scores, axis=-1)
+        attention_probs = stable_softmax(attention_scores, axis=-1)
 
         attention_probs = self.dropout(attention_probs, training=training)
 

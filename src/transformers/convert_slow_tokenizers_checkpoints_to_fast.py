@@ -105,8 +105,10 @@ if __name__ == "__main__":
         "--tokenizer_name",
         default=None,
         type=str,
-        help=f"Optional tokenizer type selected in the list of {list(TOKENIZER_CLASSES.keys())}. If not given, will "
-        "download and convert all the checkpoints from AWS.",
+        help=(
+            f"Optional tokenizer type selected in the list of {list(TOKENIZER_CLASSES.keys())}. If not given, will "
+            "download and convert all the checkpoints from AWS."
+        ),
     )
     parser.add_argument(
         "--checkpoint_name",

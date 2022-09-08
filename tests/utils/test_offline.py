@@ -34,10 +34,60 @@ from transformers import BertConfig, BertModel, BertTokenizer
         """
 
         run = """
-mname = "lysandre/tiny-bert-random"
+mname = "hf-internal-testing/tiny-random-bert"
 BertConfig.from_pretrained(mname)
 BertModel.from_pretrained(mname)
 BertTokenizer.from_pretrained(mname)
+print("success")
+        """
+
+        mock = """
+import socket
+def offline_socket(*args, **kwargs): raise socket.error("Offline mode is enabled")
+socket.socket = offline_socket
+        """
+
+        # baseline - just load from_pretrained with normal network
+        cmd = [sys.executable, "-c", "\n".join([load, run])]
+
+        # should succeed
+        env = self.get_env()
+        result = subprocess.run(cmd, env=env, check=False, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("success", result.stdout.decode())
+
+        # next emulate no network
+        cmd = [sys.executable, "-c", "\n".join([load, mock, run])]
+
+        # Doesn't fail anymore since the model is in the cache due to other tests, so commenting this.
+        # env["TRANSFORMERS_OFFLINE"] = "0"
+        # result = subprocess.run(cmd, env=env, check=False, capture_output=True)
+        # self.assertEqual(result.returncode, 1, result.stderr)
+
+        # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
+        env["TRANSFORMERS_OFFLINE"] = "1"
+        result = subprocess.run(cmd, env=env, check=False, capture_output=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("success", result.stdout.decode())
+
+    @require_torch
+    def test_offline_mode_sharded_checkpoint(self):
+
+        # this test is a bit tricky since TRANSFORMERS_OFFLINE can only be changed before
+        # `transformers` is loaded, and it's too late for inside pytest - so we are changing it
+        # while running an external program
+
+        # python one-liner segments
+
+        # this must be loaded before socket.socket is monkey-patched
+        load = """
+from transformers import BertConfig, BertModel, BertTokenizer
+        """
+
+        run = """
+mname = "hf-internal-testing/tiny-random-bert-sharded"
+BertConfig.from_pretrained(mname)
+BertModel.from_pretrained(mname)
 print("success")
         """
 

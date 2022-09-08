@@ -120,7 +120,6 @@ class NotebookProgressBar:
         The main method to update the progress bar to `value`.
 
         Args:
-
             value (`int`):
                 The value to use. Must be between 0 and `total`.
             force_update (`bool`, *optional*, defaults to `False`):
@@ -174,7 +173,10 @@ class NotebookProgressBar:
         elif self.predicted_remaining is None:
             self.label = f"[{spaced_value}/{self.total} {format_time(self.elapsed_time)}"
         else:
-            self.label = f"[{spaced_value}/{self.total} {format_time(self.elapsed_time)} < {format_time(self.predicted_remaining)}"
+            self.label = (
+                f"[{spaced_value}/{self.total} {format_time(self.elapsed_time)} <"
+                f" {format_time(self.predicted_remaining)}"
+            )
             self.label += f", {1/self.average_time_per_item:.2f} it/s"
         self.label += "]" if self.comment is None or len(self.comment) == 0 else f", {self.comment}]"
         self.display()
@@ -201,7 +203,6 @@ class NotebookTrainingTracker(NotebookProgressBar):
     An object tracking the updates of an ongoing training with progress bars and a nice table reporting metrics.
 
     Args:
-
         num_steps (`int`): The number of steps during training. column_names (`List[str]`, *optional*):
             The list of column names for the metrics table (will be inferred from the first call to
             [`~utils.notebook.NotebookTrainingTracker.write_line`] if not set).
@@ -303,6 +304,11 @@ class NotebookProgressCallback(TrainerCallback):
             self.prediction_bar.update(1)
         else:
             self.prediction_bar.update(self.prediction_bar.value + 1)
+
+    def on_predict(self, args, state, control, **kwargs):
+        if self.prediction_bar is not None:
+            self.prediction_bar.close()
+        self.prediction_bar = None
 
     def on_log(self, args, state, control, logs=None, **kwargs):
         # Only for when there is no evaluation

@@ -24,7 +24,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "facebook/unispeech_sat-base-960h": "https://huggingface.co/facebook/unispeech_sat-base-960h/resolve/main/config.json",
+    "microsoft/unispeech-sat-base-100h-libri-ft": (
+        "https://huggingface.co/microsoft/unispeech-sat-base-100h-libri-ft/resolve/main/config.json"
+    ),
     # See all UniSpeechSat models at https://huggingface.co/models?filter=unispeech_sat
 }
 
@@ -34,7 +36,8 @@ class UniSpeechSatConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`UniSpeechSatModel`]. It is used to instantiate an
     UniSpeechSat model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the UniSpeechSat
-    [facebook/unispeech_sat-base-960h](https://huggingface.co/facebook/unispeech_sat-base-960h) architecture.
+    [microsoft/unispeech-sat-base-100h-libri-ft](https://huggingface.co/microsoft/unispeech-sat-base-100h-libri-ft)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -78,15 +81,15 @@ class UniSpeechSatConfig(PretrainedConfig):
             extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
         feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probabilitiy for quantized feature encoder states.
-        conv_dim (`Tuple[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
+        conv_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
             feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
-        conv_stride (`Tuple[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
+        conv_stride (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
             A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
-            of *conv_stride* defines the number of convolutional layers and has to match the the length of *conv_dim*.
-        conv_kernel (`Tuple[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
+            of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
+        conv_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the feature encoder. The
-            length of *conv_kernel* defines the number of convolutional layers and has to match the the length of
+            length of *conv_kernel* defines the number of convolutional layers and has to match the length of
             *conv_dim*.
         conv_bias (`bool`, *optional*, defaults to `False`):
             Whether the 1D convolutional layers have a bias.
@@ -156,13 +159,13 @@ class UniSpeechSatConfig(PretrainedConfig):
             instance of [`UniSpeechSatForSequenceClassification`].
         classifier_proj_size (`int`, *optional*, defaults to 256):
             Dimensionality of the projection before token mean-pooling for classification.
-        tdnn_dim (`Tuple[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
+        tdnn_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
             A tuple of integers defining the number of output channels of each 1D convolutional layer in the *TDNN*
             module of the *XVector* model. The length of *tdnn_dim* defines the number of *TDNN* layers.
-        tdnn_kernel (`Tuple[int]`, *optional*, defaults to `(5, 3, 3, 1, 1)`):
+        tdnn_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 3, 3, 1, 1)`):
             A tuple of integers defining the kernel size of each 1D convolutional layer in the *TDNN* module of the
             *XVector* model. The length of *tdnn_kernel* has to match the length of *tdnn_dim*.
-        tdnn_dilation (`Tuple[int]`, *optional*, defaults to `(1, 2, 3, 1, 1)`):
+        tdnn_dilation (`Tuple[int]` or `List[int]`, *optional*, defaults to `(1, 2, 3, 1, 1)`):
             A tuple of integers defining the dilation factor of each 1D convolutional layer in *TDNN* module of the
             *XVector* model. The length of *tdnn_dilation* has to match the length of *tdnn_dim*.
         xvector_output_dim (`int`, *optional*, defaults to 512):
@@ -173,10 +176,10 @@ class UniSpeechSatConfig(PretrainedConfig):
     ```python
     >>> from transformers import UniSpeechSatModel, UniSpeechSatConfig
 
-    >>> # Initializing a UniSpeechSat facebook/unispeech_sat-base-960h style configuration
+    >>> # Initializing a UniSpeechSat microsoft/unispeech-sat-base-100h-libri-ft style configuration
     >>> configuration = UniSpeechSatConfig()
 
-    >>> # Initializing a model from the facebook/unispeech_sat-base-960h style configuration
+    >>> # Initializing a model from the microsoft/unispeech-sat-base-100h-libri-ft style configuration
     >>> model = UniSpeechSatModel(configuration)
 
     >>> # Accessing the model configuration
@@ -272,10 +275,10 @@ class UniSpeechSatConfig(PretrainedConfig):
             or (len(self.conv_dim) != self.num_feat_extract_layers)
         ):
             raise ValueError(
-                "Configuration for convolutional layers is incorrect. "
-                "It is required that `len(config.conv_dim)` == `len(config.conv_stride)` == `len(config.conv_kernel)`, "
-                f"but is `len(config.conv_dim) = {len(self.conv_dim)}`, `len(config.conv_stride) "
-                f"= {len(self.conv_stride)}`, `len(config.conv_kernel) = {len(self.conv_kernel)}`."
+                "Configuration for convolutional layers is incorrect. It is required that `len(config.conv_dim)` =="
+                " `len(config.conv_stride)` == `len(config.conv_kernel)`, but is `len(config.conv_dim) ="
+                f" {len(self.conv_dim)}`, `len(config.conv_stride) = {len(self.conv_stride)}`,"
+                f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
             )
 
         # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779

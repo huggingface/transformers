@@ -23,13 +23,19 @@ logger = logging.get_logger(__name__)
 VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "uclanlp/visualbert-vqa": "https://huggingface.co/uclanlp/visualbert-vqa/resolve/main/config.json",
     "uclanlp/visualbert-vqa-pre": "https://huggingface.co/uclanlp/visualbert-vqa-pre/resolve/main/config.json",
-    "uclanlp/visualbert-vqa-coco-pre": "https://huggingface.co/uclanlp/visualbert-vqa-coco-pre/resolve/main/config.json",
+    "uclanlp/visualbert-vqa-coco-pre": (
+        "https://huggingface.co/uclanlp/visualbert-vqa-coco-pre/resolve/main/config.json"
+    ),
     "uclanlp/visualbert-vcr": "https://huggingface.co/uclanlp/visualbert-vcr/resolve/main/config.json",
     "uclanlp/visualbert-vcr-pre": "https://huggingface.co/uclanlp/visualbert-vcr-pre/resolve/main/config.json",
-    "uclanlp/visualbert-vcr-coco-pre": "https://huggingface.co/uclanlp/visualbert-vcr-coco-pre/resolve/main/config.json",
+    "uclanlp/visualbert-vcr-coco-pre": (
+        "https://huggingface.co/uclanlp/visualbert-vcr-coco-pre/resolve/main/config.json"
+    ),
     "uclanlp/visualbert-nlvr2": "https://huggingface.co/uclanlp/visualbert-nlvr2/resolve/main/config.json",
     "uclanlp/visualbert-nlvr2-pre": "https://huggingface.co/uclanlp/visualbert-nlvr2-pre/resolve/main/config.json",
-    "uclanlp/visualbert-nlvr2-coco-pre": "https://huggingface.co/uclanlp/visualbert-nlvr2-coco-pre/resolve/main/config.json"
+    "uclanlp/visualbert-nlvr2-coco-pre": (
+        "https://huggingface.co/uclanlp/visualbert-nlvr2-coco-pre/resolve/main/config.json"
+    )
     # See all VisualBERT models at https://huggingface.co/models?filter=visual_bert
 }
 
@@ -39,7 +45,7 @@ class VisualBertConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`VisualBertModel`]. It is used to instantiate an
     VisualBERT model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the VisualBERT
-    [visualbert-vqa-coco-pre](https://huggingface.co/uclanlp/visualbert-vqa-coco-pre) architecture.
+    [uclanlp/visualbert-vqa-coco-pre](https://huggingface.co/uclanlp/visualbert-vqa-coco-pre) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

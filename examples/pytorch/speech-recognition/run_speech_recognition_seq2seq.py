@@ -27,8 +27,9 @@ from typing import Any, Dict, List, Optional, Union
 
 import datasets
 import torch
-from datasets import DatasetDict, load_dataset, load_metric
+from datasets import DatasetDict, load_dataset
 
+import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -42,12 +43,12 @@ from transformers import (
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint, is_main_process
-from transformers.utils import check_min_version
+from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.19.0.dev0")
+check_min_version("4.22.0.dev0")
 
 require_version("datasets>=1.18.0", "To fix: pip install -r examples/pytorch/speech-recognition/requirements.txt")
 
@@ -87,8 +88,10 @@ class ModelArguments:
     use_auth_token: bool = field(
         default=False,
         metadata={
-            "help": "Will use the token generated when running `transformers-cli login` (necessary to use this script "
-            "with private models)."
+            "help": (
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
+                "with private models)."
+            )
         },
     )
     freeze_feature_encoder: bool = field(
@@ -122,15 +125,19 @@ class DataTrainingArguments:
     max_train_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of training examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of training examples to this "
+                "value if set."
+            )
         },
     )
     max_eval_samples: Optional[int] = field(
         default=None,
         metadata={
-            "help": "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
-            "value if set."
+            "help": (
+                "For debugging purposes or quicker training, truncate the number of evaluation examples to this "
+                "value if set."
+            )
         },
     )
     audio_column_name: str = field(
@@ -144,7 +151,10 @@ class DataTrainingArguments:
     max_duration_in_seconds: float = field(
         default=20.0,
         metadata={
-            "help": "Truncate audio files that are longer than `max_duration_in_seconds` seconds to 'max_duration_in_seconds`"
+            "help": (
+                "Truncate audio files that are longer than `max_duration_in_seconds` seconds to"
+                " 'max_duration_in_seconds`"
+            )
         },
     )
     min_duration_in_seconds: float = field(
@@ -153,10 +163,12 @@ class DataTrainingArguments:
     preprocessing_only: bool = field(
         default=False,
         metadata={
-            "help": "Whether to only do data preprocessing and skip training. "
-            "This is especially useful when data preprocessing errors out in distributed training due to timeout. "
-            "In this case, one should run the preprocessing in a non-distributed setup with `preprocessing_only=True` "
-            "so that the cached datasets can consequently be loaded in distributed training"
+            "help": (
+                "Whether to only do data preprocessing and skip training. This is especially useful when data"
+                " preprocessing errors out in distributed training due to timeout. In this case, one should run the"
+                " preprocessing in a non-distributed setup with `preprocessing_only=True` so that the cached datasets"
+                " can consequently be loaded in distributed training"
+            )
         },
     )
     train_split_name: str = field(
@@ -227,6 +239,10 @@ def main():
         model_args, data_args, training_args = parser.parse_json_file(json_file=os.path.abspath(sys.argv[1]))
     else:
         model_args, data_args, training_args = parser.parse_args_into_dataclasses()
+
+    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
+    # information sent is the one passed as arguments along with your Python/PyTorch versions.
+    send_example_telemetry("run_speech_recognition_seq2seq", model_args, data_args)
 
     # 2. Setup logging
     logging.basicConfig(
@@ -410,7 +426,7 @@ def main():
         return
 
     # 8. Load Metric
-    metric = load_metric("wer")
+    metric = evaluate.load("wer")
 
     def compute_metrics(pred):
         pred_ids = pred.predictions

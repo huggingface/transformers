@@ -493,7 +493,7 @@ TF_DPR_ENCODERS_INPUTS_DOCSTRING = r"""
 
 TF_DPR_READER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids: (`Numpy array` or `tf.Tensor` of shapes `(n_passages, sequence_length)`):
+        input_ids (`Numpy array` or `tf.Tensor` of shapes `(n_passages, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. It has to be a sequence triplet with 1) the question
             and 2) the passages titles and 3) the passages texts To match pretraining, DPR `input_ids` sequence should
             be formatted with [CLS] and [SEP] with the format:

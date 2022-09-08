@@ -84,9 +84,19 @@ class HfArgumentParser(ArgumentParser):
 
         origin_type = getattr(field.type, "__origin__", field.type)
         if origin_type is Union:
-            if len(field.type.__args__) != 2 or type(None) not in field.type.__args__:
-                raise ValueError("Only `Union[X, NoneType]` (i.e., `Optional[X]`) is allowed for `Union`")
-            if bool not in field.type.__args__:
+            if str not in field.type.__args__ and (
+                len(field.type.__args__) != 2 or type(None) not in field.type.__args__
+            ):
+                raise ValueError(
+                    "Only `Union[X, NoneType]` (i.e., `Optional[X]`) is allowed for `Union` because"
+                    " the argument parser only supports one type per argument."
+                    f" Problem encountered in field '{field.name}'."
+                )
+            if type(None) not in field.type.__args__:
+                # filter `str` in Union
+                field.type = field.type.__args__[0] if field.type.__args__[1] == str else field.type.__args__[1]
+                origin_type = getattr(field.type, "__origin__", field.type)
+            elif bool not in field.type.__args__:
                 # filter `NoneType` in Union (except for `Union[bool, NoneType]`)
                 field.type = (
                     field.type.__args__[0] if isinstance(None, field.type.__args__[1]) else field.type.__args__[1]
@@ -103,7 +113,7 @@ class HfArgumentParser(ArgumentParser):
                 kwargs["default"] = field.default
             else:
                 kwargs["required"] = True
-        elif field.type is bool or field.type is Optional[bool]:
+        elif field.type is bool or field.type == Optional[bool]:
             # Copy the currect kwargs to use to instantiate a `no_*` complement argument below.
             # We do not initialize it here because the `no_*` alternative must be instantiated after the real argument
             bool_kwargs = copy(kwargs)
@@ -140,7 +150,7 @@ class HfArgumentParser(ArgumentParser):
         # Order is important for arguments with the same destination!
         # We use a copy of earlier kwargs because the original kwargs have changed a lot before reaching down
         # here and we do not need those changes/additional keys.
-        if field.default is True and (field.type is bool or field.type is Optional[bool]):
+        if field.default is True and (field.type is bool or field.type == Optional[bool]):
             bool_kwargs["default"] = False
             parser.add_argument(f"--no_{field.name}", action="store_false", dest=field.name, **bool_kwargs)
 
@@ -155,8 +165,8 @@ class HfArgumentParser(ArgumentParser):
         except NameError:
             raise RuntimeError(
                 f"Type resolution failed for f{dtype}. Try declaring the class in global scope or "
-                f"removing line of `from __future__ import annotations` which opts in Postponed "
-                f"Evaluation of Annotations (PEP 563)"
+                "removing line of `from __future__ import annotations` which opts in Postponed "
+                "Evaluation of Annotations (PEP 563)"
             )
 
         for field in dataclasses.fields(dtype):
@@ -224,29 +234,60 @@ class HfArgumentParser(ArgumentParser):
 
             return (*outputs,)
 
-    def parse_json_file(self, json_file: str) -> Tuple[DataClass, ...]:
+    def parse_json_file(self, json_file: str, allow_extra_keys: bool = False) -> Tuple[DataClass, ...]:
         """
         Alternative helper method that does not use `argparse` at all, instead loading a json file and populating the
         dataclass types.
+
+        Args:
+            json_file (`str` or `os.PathLike`):
+                File name of the json file to parse
+            allow_extra_keys (`bool`, *optional*, defaults to `False`):
+                Defaults to False. If False, will raise an exception if the json file contains keys that are not
+                parsed.
+
+        Returns:
+            Tuple consisting of:
+
+                - the dataclass instances in the same order as they were passed to the initializer.
         """
         data = json.loads(Path(json_file).read_text())
+        unused_keys = set(data.keys())
         outputs = []
         for dtype in self.dataclass_types:
             keys = {f.name for f in dataclasses.fields(dtype) if f.init}
             inputs = {k: v for k, v in data.items() if k in keys}
+            unused_keys.difference_update(inputs.keys())
             obj = dtype(**inputs)
             outputs.append(obj)
-        return (*outputs,)
+        if not allow_extra_keys and unused_keys:
+            raise ValueError(f"Some keys are not used by the HfArgumentParser: {sorted(unused_keys)}")
+        return tuple(outputs)
 
-    def parse_dict(self, args: dict) -> Tuple[DataClass, ...]:
+    def parse_dict(self, args: Dict[str, Any], allow_extra_keys: bool = False) -> Tuple[DataClass, ...]:
         """
         Alternative helper method that does not use `argparse` at all, instead uses a dict and populating the dataclass
         types.
+
+        Args:
+            args (`dict`):
+                dict containing config values
+            allow_extra_keys (`bool`, *optional*, defaults to `False`):
+                Defaults to False. If False, will raise an exception if the dict contains keys that are not parsed.
+
+        Returns:
+            Tuple consisting of:
+
+                - the dataclass instances in the same order as they were passed to the initializer.
         """
+        unused_keys = set(args.keys())
         outputs = []
         for dtype in self.dataclass_types:
             keys = {f.name for f in dataclasses.fields(dtype) if f.init}
             inputs = {k: v for k, v in args.items() if k in keys}
+            unused_keys.difference_update(inputs.keys())
             obj = dtype(**inputs)
             outputs.append(obj)
-        return (*outputs,)
+        if not allow_extra_keys and unused_keys:
+            raise ValueError(f"Some keys are not used by the HfArgumentParser: {sorted(unused_keys)}")
+        return tuple(outputs)

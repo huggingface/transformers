@@ -326,7 +326,7 @@ class DetrTimmConvEncoder(nn.Module):
 
     """
 
-    def __init__(self, name: str, dilation: bool):
+    def __init__(self, name: str, dilation: bool, use_pretrained_backbone: bool, num_channels: int = 3):
         super().__init__()
 
         kwargs = {}
@@ -335,7 +335,14 @@ class DetrTimmConvEncoder(nn.Module):
 
         requires_backends(self, ["timm"])
 
-        backbone = create_model(name, pretrained=True, features_only=True, out_indices=(1, 2, 3, 4), **kwargs)
+        backbone = create_model(
+            name,
+            pretrained=use_pretrained_backbone,
+            features_only=True,
+            out_indices=(1, 2, 3, 4),
+            in_chans=num_channels,
+            **kwargs,
+        )
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
@@ -489,7 +496,8 @@ class DetrAttention(nn.Module):
         self.head_dim = embed_dim // num_heads
         if self.head_dim * num_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {num_heads})."
             )
         self.scaling = self.head_dim**-0.5
 
@@ -553,7 +561,8 @@ class DetrAttention(nn.Module):
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
             )
 
         if attention_mask is not None:
@@ -582,7 +591,8 @@ class DetrAttention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
             )
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
@@ -1174,7 +1184,9 @@ class DetrModel(DetrPreTrainedModel):
         super().__init__(config)
 
         # Create backbone + positional encoding
-        backbone = DetrTimmConvEncoder(config.backbone, config.dilation)
+        backbone = DetrTimmConvEncoder(
+            config.backbone, config.dilation, config.use_pretrained_backbone, config.num_channels
+        )
         position_embeddings = build_position_encoding(config)
         self.backbone = DetrConvModel(backbone, position_embeddings)
 
@@ -1232,9 +1244,18 @@ class DetrModel(DetrPreTrainedModel):
 
         >>> feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50")
         >>> model = DetrModel.from_pretrained("facebook/detr-resnet-50")
+
+        >>> # prepare image for the model
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
+
+        >>> # forward pass
         >>> outputs = model(**inputs)
+
+        >>> # the last hidden states are the final query embeddings of the Transformer decoder
+        >>> # these are of shape (batch_size, num_queries, hidden_size)
         >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 100, 256]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1382,6 +1403,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 
         ```python
         >>> from transformers import DetrFeatureExtractor, DetrForObjectDetection
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
 
@@ -1393,9 +1415,24 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> # model predicts bounding boxes and corresponding COCO classes
-        >>> logits = outputs.logits
-        >>> bboxes = outputs.pred_boxes
+
+        >>> # convert outputs (bounding boxes and class logits) to COCO API
+        >>> target_sizes = torch.tensor([image.size[::-1]])
+        >>> results = feature_extractor.post_process(outputs, target_sizes=target_sizes)[0]
+
+        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     # let's only keep detections with score > 0.9
+        ...     if score > 0.9:
+        ...         print(
+        ...             f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...             f"{round(score.item(), 3)} at location {box}"
+        ...         )
+        Detected remote with confidence 0.998 at location [40.16, 70.81, 175.55, 117.98]
+        Detected remote with confidence 0.996 at location [333.24, 72.55, 368.33, 187.66]
+        Detected couch with confidence 0.995 at location [-0.02, 1.15, 639.73, 473.76]
+        Detected cat with confidence 0.999 at location [13.24, 52.05, 314.02, 470.93]
+        Detected cat with confidence 0.999 at location [345.4, 23.85, 640.37, 368.72]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1537,9 +1574,14 @@ class DetrForSegmentation(DetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import DetrFeatureExtractor, DetrForSegmentation
-        >>> from PIL import Image
+        >>> import io
         >>> import requests
+        >>> from PIL import Image
+        >>> import torch
+        >>> import numpy
+
+        >>> from transformers import DetrFeatureExtractor, DetrForSegmentation
+        >>> from transformers.models.detr.feature_extraction_detr import rgb_to_id
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -1547,12 +1589,23 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50-panoptic")
         >>> model = DetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic")
 
+        >>> # prepare image for the model
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
+
+        >>> # forward pass
         >>> outputs = model(**inputs)
-        >>> # model predicts COCO classes, bounding boxes, and masks
-        >>> logits = outputs.logits
-        >>> bboxes = outputs.pred_boxes
-        >>> masks = outputs.pred_masks
+
+        >>> # use the `post_process_panoptic` method of `DetrFeatureExtractor` to convert to COCO format
+        >>> processed_sizes = torch.as_tensor(inputs["pixel_values"].shape[-2:]).unsqueeze(0)
+        >>> result = feature_extractor.post_process_panoptic(outputs, processed_sizes)[0]
+
+        >>> # the segmentation is stored in a special-format png
+        >>> panoptic_seg = Image.open(io.BytesIO(result["png_string"]))
+        >>> panoptic_seg = numpy.array(panoptic_seg, dtype=numpy.uint8)
+        >>> # retrieve the ids corresponding to each mask
+        >>> panoptic_seg_id = rgb_to_id(panoptic_seg)
+        >>> panoptic_seg_id.shape
+        (800, 1066)
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1714,7 +1767,8 @@ class DetrMaskHeadSmallConv(nn.Module):
 
         if dim % 8 != 0:
             raise ValueError(
-                "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in GroupNorm is set to 8"
+                "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in"
+                " GroupNorm is set to 8"
             )
 
         inter_dims = [dim, context_dim // 2, context_dim // 4, context_dim // 8, context_dim // 16, context_dim // 64]
@@ -1805,7 +1859,7 @@ class DetrMHAttentionMap(nn.Module):
         weights = torch.einsum("bqnc,bnchw->bqnhw", queries_per_head * self.normalize_fact, keys_per_head)
 
         if mask is not None:
-            weights.masked_fill_(mask.unsqueeze(1).unsqueeze(1), float("-inf"))
+            weights.masked_fill_(mask.unsqueeze(1).unsqueeze(1), torch.finfo(weights.dtype).min)
         weights = nn.functional.softmax(weights.flatten(2), dim=-1).view(weights.size())
         weights = self.dropout(weights)
         return weights
@@ -1865,30 +1919,31 @@ class DetrLoss(nn.Module):
     """
     This class computes the losses for DetrForObjectDetection/DetrForSegmentation. The process happens in two steps: 1)
     we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
-    of matched ground-truth / prediction (supervise class and box)
+    of matched ground-truth / prediction (supervise class and box).
+
+    A note on the `num_classes` argument (copied from original repo in detr.py): "the naming of the `num_classes`
+    parameter of the criterion is somewhat misleading. It indeed corresponds to `max_obj_id` + 1, where `max_obj_id` is
+    the maximum id for a class in your dataset. For example, COCO has a `max_obj_id` of 90, so we pass `num_classes` to
+    be 91. As another example, for a dataset that has a single class with `id` 1, you should pass `num_classes` to be 2
+    (`max_obj_id` + 1). For more details on this, check the following discussion
+    https://github.com/facebookresearch/detr/issues/108#issuecomment-650269223"
+
+
+    Args:
+        matcher (`DetrHungarianMatcher`):
+            Module able to compute a matching between targets and proposals.
+        num_classes (`int`):
+            Number of object categories, omitting the special no-object category.
+        eos_coef (`float`):
+            Relative classification weight applied to the no-object category.
+        losses (`List[str]`):
+            List of all the losses to be applied. See `get_loss` for a list of all available losses.
     """
 
     def __init__(self, matcher, num_classes, eos_coef, losses):
-        """
-        Create the criterion.
-
-        A note on the num_classes parameter (copied from original repo in detr.py): "the naming of the `num_classes`
-        parameter of the criterion is somewhat misleading. it indeed corresponds to `max_obj_id + 1`, where max_obj_id
-        is the maximum id for a class in your dataset. For example, COCO has a max_obj_id of 90, so we pass
-        `num_classes` to be 91. As another example, for a dataset that has a single class with id 1, you should pass
-        `num_classes` to be 2 (max_obj_id + 1). For more details on this, check the following discussion
-        https://github.com/facebookresearch/detr/issues/108#issuecomment-650269223"
-
-        Parameters:
-            matcher: module able to compute a matching between targets and proposals.
-            num_classes: number of object categories, omitting the special no-object category.
-            weight_dict: dict containing as key the names of the losses and as values their relative weight.
-            eos_coef: relative classification weight applied to the no-object category.
-            losses: list of all the losses to be applied. See get_loss for list of available losses.
-        """
         super().__init__()
-        self.num_classes = num_classes
         self.matcher = matcher
+        self.num_classes = num_classes
         self.eos_coef = eos_coef
         self.losses = losses
         empty_weight = torch.ones(self.num_classes + 1)
@@ -2017,17 +2072,19 @@ class DetrLoss(nn.Module):
         """
         This performs the loss computation.
 
-        Parameters:
-             outputs: dict of tensors, see the output specification of the model for the format
-             targets: list of dicts, such that len(targets) == batch_size.
-                      The expected keys in each dict depends on the losses applied, see each loss' doc
+        Args:
+             outputs (`dict`, *optional*):
+                Dictionary of tensors, see the output specification of the model for the format.
+             targets (`List[dict]`, *optional*):
+                List of dicts, such that len(targets) == batch_size. The expected keys in each dict depends on the
+                losses applied, see each loss' doc.
         """
         outputs_without_aux = {k: v for k, v in outputs.items() if k != "auxiliary_outputs"}
 
         # Retrieve the matching between the outputs of the last layer and the targets
         indices = self.matcher(outputs_without_aux, targets)
 
-        # Compute the average number of target boxes accross all nodes, for normalization purposes
+        # Compute the average number of target boxes across all nodes, for normalization purposes
         num_boxes = sum(len(t["class_labels"]) for t in targets)
         num_boxes = torch.as_tensor([num_boxes], dtype=torch.float, device=next(iter(outputs.values())).device)
         # (Niels): comment out function below, distributed training to be added
@@ -2086,50 +2143,48 @@ class DetrHungarianMatcher(nn.Module):
     For efficiency reasons, the targets don't include the no_object. Because of this, in general, there are more
     predictions than targets. In this case, we do a 1-to-1 matching of the best predictions, while the others are
     un-matched (and thus treated as non-objects).
+
+    Args:
+        class_cost:
+            The relative weight of the classification error in the matching cost.
+        bbox_cost:
+            The relative weight of the L1 error of the bounding box coordinates in the matching cost.
+        giou_cost:
+            The relative weight of the giou loss of the bounding box in the matching cost.
     """
 
     def __init__(self, class_cost: float = 1, bbox_cost: float = 1, giou_cost: float = 1):
-        """
-        Creates the matcher.
-
-        Params:
-            class_cost: This is the relative weight of the classification error in the matching cost
-            bbox_cost:
-                This is the relative weight of the L1 error of the bounding box coordinates in the matching cost
-            giou_cost: This is the relative weight of the giou loss of the bounding box in the matching cost
-        """
         super().__init__()
-
         requires_backends(self, ["scipy"])
 
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
         self.giou_cost = giou_cost
-        if class_cost == 0 or bbox_cost == 0 or giou_cost == 0:
+        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
             raise ValueError("All costs of the Matcher can't be 0")
 
     @torch.no_grad()
     def forward(self, outputs, targets):
         """
-        Performs the matching.
-
-        Params:
-            outputs: This is a dict that contains at least these entries:
-                 "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
-                 "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates
-            targets: This is a list of targets (len(targets) = batch_size), where each target is a dict containing:
-                 "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of ground-truth
-                 objects in the target) containing the class labels "boxes": Tensor of dim [num_target_boxes, 4]
-                 containing the target box coordinates
+        Args:
+            outputs (`dict`):
+                A dictionary that contains at least these entries:
+                * "logits": Tensor of dim [batch_size, num_queries, num_classes] with the classification logits
+                * "pred_boxes": Tensor of dim [batch_size, num_queries, 4] with the predicted box coordinates.
+            targets (`List[dict]`):
+                A list of targets (len(targets) = batch_size), where each target is a dict containing:
+                * "class_labels": Tensor of dim [num_target_boxes] (where num_target_boxes is the number of
+                  ground-truth
+                 objects in the target) containing the class labels
+                * "boxes": Tensor of dim [num_target_boxes, 4] containing the target box coordinates.
 
         Returns:
-            A list of size batch_size, containing tuples of (index_i, index_j) where:
-
-                - index_i is the indices of the selected predictions (in order)
-                - index_j is the indices of the corresponding selected targets (in order)
+            `List[Tuple]`: A list of size `batch_size`, containing tuples of (index_i, index_j) where:
+            - index_i is the indices of the selected predictions (in order)
+            - index_j is the indices of the corresponding selected targets (in order)
             For each batch element, it holds: len(index_i) = len(index_j) = min(num_queries, num_target_boxes)
         """
-        bs, num_queries = outputs["logits"].shape[:2]
+        batch_size, num_queries = outputs["logits"].shape[:2]
 
         # We flatten to compute the cost matrices in a batch
         out_prob = outputs["logits"].flatten(0, 1).softmax(-1)  # [batch_size * num_queries, num_classes]
@@ -2152,7 +2207,7 @@ class DetrHungarianMatcher(nn.Module):
 
         # Final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
-        cost_matrix = cost_matrix.view(bs, num_queries, -1).cpu()
+        cost_matrix = cost_matrix.view(batch_size, num_queries, -1).cpu()
 
         sizes = [len(v["boxes"]) for v in targets]
         indices = [linear_sum_assignment(c[i]) for i, c in enumerate(cost_matrix.split(sizes, -1))]
@@ -2175,11 +2230,12 @@ def box_area(boxes: Tensor) -> Tensor:
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
 
     Args:
-        boxes (Tensor[N, 4]): boxes for which the area will be computed. They
-            are expected to be in (x1, y1, x2, y2) format with `0 <= x1 < x2` and `0 <= y1 < y2`.
+        boxes (`torch.FloatTensor` of shape `(number_of_boxes, 4)`):
+            Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
+            < x2` and `0 <= y1 < y2`.
 
     Returns:
-        area (Tensor[N]): area for each box
+        `torch.FloatTensor`: a tensor containing the area for each box.
     """
     boxes = _upcast(boxes)
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
@@ -2190,11 +2246,11 @@ def box_iou(boxes1, boxes2):
     area1 = box_area(boxes1)
     area2 = box_area(boxes2)
 
-    lt = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
-    rb = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
+    left_top = torch.max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
+    right_bottom = torch.min(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
 
-    wh = (rb - lt).clamp(min=0)  # [N,M,2]
-    inter = wh[:, :, 0] * wh[:, :, 1]  # [N,M]
+    width_height = (right_bottom - left_top).clamp(min=0)  # [N,M,2]
+    inter = width_height[:, :, 0] * width_height[:, :, 1]  # [N,M]
 
     union = area1[:, None] + area2 - inter
 
@@ -2207,7 +2263,7 @@ def generalized_box_iou(boxes1, boxes2):
     Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
 
     Returns:
-        a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
+        `torch.FloatTensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
     """
     # degenerate boxes gives inf / nan results
     # so do an early check
@@ -2242,7 +2298,6 @@ class NestedTensor(object):
         self.mask = mask
 
     def to(self, device):
-        # type: (Device) -> NestedTensor # noqa
         cast_tensor = self.tensors.to(device)
         mask = self.mask
         if mask is not None:

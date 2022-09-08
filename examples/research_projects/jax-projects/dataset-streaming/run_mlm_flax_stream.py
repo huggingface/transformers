@@ -75,8 +75,9 @@ class ModelArguments:
     model_name_or_path: Optional[str] = field(
         default=None,
         metadata={
-            "help": "The model checkpoint for weights initialization."
-            "Don't set if you want to train a model from scratch."
+            "help": (
+                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+            )
         },
     )
     model_type: Optional[str] = field(
@@ -99,7 +100,10 @@ class ModelArguments:
     dtype: Optional[str] = field(
         default="float32",
         metadata={
-            "help": "Floating-point format in which the model weights should be initialized and trained. Choose one of `[float32, float16, bfloat16]`."
+            "help": (
+                "Floating-point format in which the model weights should be initialized and trained. Choose one of"
+                " `[float32, float16, bfloat16]`."
+            )
         },
     )
 
@@ -141,8 +145,10 @@ class DataTrainingArguments:
     max_seq_length: Optional[int] = field(
         default=None,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated. Default to the max input length of the model."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated. Default to the max input length of the model."
+            )
         },
     )
     preprocessing_num_workers: Optional[int] = field(
@@ -155,8 +161,10 @@ class DataTrainingArguments:
     pad_to_max_length: bool = field(
         default=False,
         metadata={
-            "help": "Whether to pad all samples to `max_seq_length`. "
-            "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+            "help": (
+                "Whether to pad all samples to `max_seq_length`. "
+                "If False, will pad the samples dynamically when batching to the maximum length in the batch."
+            )
         },
     )
     line_by_line: bool = field(
@@ -256,7 +264,7 @@ class FlaxDataCollatorForLanguageModeling:
         return inputs, labels
 
 
-def generate_batch_splits(samples_idx: jnp.ndarray, batch_size: int) -> jnp.ndarray:
+def generate_batch_splits(samples_idx: np.ndarray, batch_size: int) -> np.ndarray:
     num_samples = len(samples_idx)
     samples_to_remove = num_samples % batch_size
 
@@ -280,8 +288,10 @@ def advance_iter_and_group_samples(train_iterator, num_samples, max_seq_length):
         tokenized_samples = next(train_iterator)
         i += len(tokenized_samples["input_ids"])
 
-        # concatenate tokenized samples to list
-        samples = {k: samples[k] + tokenized_samples[k] for k in tokenized_samples.keys()}
+        # concatenate tokenized samples to list (excluding "id" and "text")
+        samples = {
+            k: samples[k] + tokenized_samples[k] for k in ["input_ids", "attention_mask", "special_tokens_mask"]
+        }
 
     # Concatenated tokens are split to lists of length `max_seq_length`.
     # Note that remainedr of % max_seq_length are thrown away.
@@ -399,10 +409,7 @@ if __name__ == "__main__":
     def tokenize_function(examples):
         return tokenizer(examples[data_args.text_column_name], return_special_tokens_mask=True)
 
-    tokenized_datasets = dataset.map(
-        tokenize_function,
-        batched=True,
-    )
+    tokenized_datasets = dataset.map(tokenize_function, batched=True, remove_columns=list(dataset.features.keys()))
 
     shuffle_seed = training_args.seed
     tokenized_datasets = tokenized_datasets.shuffle(buffer_size=data_args.shuffle_buffer_size, seed=shuffle_seed)
@@ -575,7 +582,8 @@ if __name__ == "__main__":
 
         if step % training_args.logging_steps == 0 and step > 0:
             steps.write(
-                f"Step... ({step} | Loss: {train_metric['loss'].mean()}, Learning Rate: {train_metric['learning_rate'].mean()})"
+                f"Step... ({step} | Loss: {train_metric['loss'].mean()}, Learning Rate:"
+                f" {train_metric['learning_rate'].mean()})"
             )
             train_time += time.time() - train_start
             if has_tensorboard and jax.process_index() == 0:
@@ -584,7 +592,8 @@ if __name__ == "__main__":
 
         # ======================== Evaluating ==============================
         if step % training_args.eval_steps == 0 and step > 0:
-            eval_samples_idx = jnp.arange(data_args.num_eval_samples)
+            # Avoid using jax.numpy here in case of TPU training
+            eval_samples_idx = np.arange(data_args.num_eval_samples)
             eval_batch_idx = generate_batch_splits(eval_samples_idx, eval_batch_size)
 
             for i, batch_idx in enumerate(tqdm(eval_batch_idx, desc="Evaluating ...", position=1)):
@@ -604,7 +613,10 @@ if __name__ == "__main__":
             eval_metrics = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics)
 
             # Update progress bar
-            steps.desc = f"Step... ({step + 1}/{num_train_steps} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['accuracy']})"
+            steps.desc = (
+                f"Step... ({step + 1}/{num_train_steps} | Loss: {eval_metrics['loss']}, Acc:"
+                f" {eval_metrics['accuracy']})"
+            )
 
             if has_tensorboard and jax.process_index() == 0:
                 write_eval_metric(summary_writer, eval_metrics, step)

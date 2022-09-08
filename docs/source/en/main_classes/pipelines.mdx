@@ -25,10 +25,12 @@ There are two categories of pipeline abstractions to be aware about:
   - [`AudioClassificationPipeline`]
   - [`AutomaticSpeechRecognitionPipeline`]
   - [`ConversationalPipeline`]
+  - [`DocumentQuestionAnsweringPipeline`]
   - [`FeatureExtractionPipeline`]
   - [`FillMaskPipeline`]
   - [`ImageClassificationPipeline`]
   - [`ImageSegmentationPipeline`]
+  - [`ImageToTextPipeline`]
   - [`ObjectDetectionPipeline`]
   - [`QuestionAnsweringPipeline`]
   - [`SummarizationPipeline`]
@@ -38,6 +40,7 @@ There are two categories of pipeline abstractions to be aware about:
   - [`Text2TextGenerationPipeline`]
   - [`TokenClassificationPipeline`]
   - [`TranslationPipeline`]
+  - [`VisualQuestionAnsweringPipeline`]
   - [`ZeroShotClassificationPipeline`]
   - [`ZeroShotImageClassificationPipeline`]
 
@@ -340,6 +343,12 @@ That should enable you to do all the custom code you want.
     - __call__
     - all
 
+### DocumentQuestionAnsweringPipeline
+
+[[autodoc]] DocumentQuestionAnsweringPipeline
+    - __call__
+    - all
+
 ### FeatureExtractionPipeline
 
 [[autodoc]] FeatureExtractionPipeline
@@ -361,6 +370,12 @@ That should enable you to do all the custom code you want.
 ### ImageSegmentationPipeline
 
 [[autodoc]] ImageSegmentationPipeline
+    - __call__
+    - all
+
+### ImageToTextPipeline
+
+[[autodoc]] ImageToTextPipeline
     - __call__
     - all
 
@@ -420,6 +435,12 @@ See [`TokenClassificationPipeline`] for all details.
 ### TranslationPipeline
 
 [[autodoc]] TranslationPipeline
+    - __call__
+    - all
+
+### VisualQuestionAnsweringPipeline
+
+[[autodoc]] VisualQuestionAnsweringPipeline
     - __call__
     - all
 

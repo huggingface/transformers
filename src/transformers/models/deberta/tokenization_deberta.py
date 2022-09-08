@@ -32,7 +32,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "microsoft/deberta-xlarge": "https://huggingface.co/microsoft/deberta-xlarge/resolve/main/vocab.json",
         "microsoft/deberta-base-mnli": "https://huggingface.co/microsoft/deberta-base-mnli/resolve/main/vocab.json",
         "microsoft/deberta-large-mnli": "https://huggingface.co/microsoft/deberta-large-mnli/resolve/main/vocab.json",
-        "microsoft/deberta-xlarge-mnli": "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/vocab.json",
+        "microsoft/deberta-xlarge-mnli": (
+            "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/vocab.json"
+        ),
     },
     "merges_file": {
         "microsoft/deberta-base": "https://huggingface.co/microsoft/deberta-base/resolve/main/merges.txt",
@@ -40,7 +42,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "microsoft/deberta-xlarge": "https://huggingface.co/microsoft/deberta-xlarge/resolve/main/merges.txt",
         "microsoft/deberta-base-mnli": "https://huggingface.co/microsoft/deberta-base-mnli/resolve/main/merges.txt",
         "microsoft/deberta-large-mnli": "https://huggingface.co/microsoft/deberta-large-mnli/resolve/main/merges.txt",
-        "microsoft/deberta-xlarge-mnli": "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/merges.txt",
+        "microsoft/deberta-xlarge-mnli": (
+            "https://huggingface.co/microsoft/deberta-xlarge-mnli/resolve/main/merges.txt"
+        ),
     },
 }
 
@@ -210,7 +214,7 @@ class DebertaTokenizer(GPT2Tokenizer):
 
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep + token_ids_1 + sep) * [0]
+        return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
     def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
         add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)

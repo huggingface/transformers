@@ -22,6 +22,7 @@ import math
 import os
 import sys
 import warnings
+from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass
 from logging import StreamHandler
@@ -42,7 +43,7 @@ from .utils import is_sagemaker_mp_enabled, is_torch_tpu_available, is_training_
 if is_training_run_on_sagemaker():
     logging.add_handler(StreamHandler(sys.stdout))
 
-if is_torch_tpu_available():
+if is_torch_tpu_available(check_device=False):
     import torch_xla.core.xla_model as xm
 
 # this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
@@ -54,8 +55,22 @@ except ImportError:
 logger = logging.get_logger(__name__)
 
 
+def atleast_1d(tensor_or_array: Union[torch.Tensor, np.ndarray]):
+    if isinstance(tensor_or_array, torch.Tensor):
+        if hasattr(torch, "atleast_1d"):
+            tensor_or_array = torch.atleast_1d(tensor_or_array)
+        elif tensor_or_array.ndim < 1:
+            tensor_or_array = tensor_or_array[None]
+    else:
+        tensor_or_array = np.atleast_1d(tensor_or_array)
+    return tensor_or_array
+
+
 def torch_pad_and_concatenate(tensor1, tensor2, padding_index=-100):
     """Concatenates `tensor1` and `tensor2` on first axis, applying padding on the second if necessary."""
+    tensor1 = atleast_1d(tensor1)
+    tensor2 = atleast_1d(tensor2)
+
     if len(tensor1.shape) == 1 or tensor1.shape[1] == tensor2.shape[1]:
         return torch.cat((tensor1, tensor2), dim=0)
 
@@ -71,6 +86,9 @@ def torch_pad_and_concatenate(tensor1, tensor2, padding_index=-100):
 
 def numpy_pad_and_concatenate(array1, array2, padding_index=-100):
     """Concatenates `array1` and `array2` on first axis, applying padding on the second if necessary."""
+    array1 = atleast_1d(array1)
+    array2 = atleast_1d(array2)
+
     if len(array1.shape) == 1 or array1.shape[1] == array2.shape[1]:
         return np.concatenate((array1, array2), axis=0)
 
@@ -111,7 +129,7 @@ def find_batch_size(tensors):
             result = find_batch_size(t)
             if result is not None:
                 return result
-    elif isinstance(tensors, (dict, BatchEncoding)):
+    elif isinstance(tensors, Mapping):
         for key, value in tensors.items():
             result = find_batch_size(value)
             if result is not None:
@@ -148,8 +166,7 @@ def nested_xla_mesh_reduce(tensors, name):
 
         if isinstance(tensors, (list, tuple)):
             return type(tensors)(nested_xla_mesh_reduce(t, f"{name}_{i}") for i, t in enumerate(tensors))
-        if tensors.ndim == 0:
-            tensors = tensors[None]
+        tensors = atleast_1d(tensors)
         return xm.mesh_reduce(name, tensors, torch.cat)
     else:
         raise ImportError("Torch xla must be installed to use `nested_xla_mesh_reduce`")
@@ -159,8 +176,8 @@ def distributed_concat(tensor: Any, num_total_examples: Optional[int] = None) ->
     try:
         if isinstance(tensor, (tuple, list)):
             return type(tensor)(distributed_concat(t, num_total_examples) for t in tensor)
+        tensor = atleast_1d(tensor)
         output_tensors = [tensor.clone() for _ in range(dist.get_world_size())]
-        output_tensors = [t if len(t.shape) > 0 else t[None] for t in output_tensors]
         dist.all_gather(output_tensors, tensor)
         concat = torch.cat(output_tensors, dim=0)
 
@@ -360,7 +377,6 @@ class DistributedTensorGatherer:
     For some reason, that's not going to roll their boat. This class is there to solve that problem.
 
     Args:
-
         world_size (`int`):
             The number of processes used in the distributed training.
         num_samples (`int`):
@@ -449,8 +465,12 @@ class LabelSmoother:
     epsilon: float = 0.1
     ignore_index: int = -100
 
-    def __call__(self, model_output, labels):
+    def __call__(self, model_output, labels, shift_labels=False):
         logits = model_output["logits"] if isinstance(model_output, dict) else model_output[0]
+        if shift_labels:
+            logits = logits[..., :-1, :].contiguous()
+            labels = labels[..., 1:].contiguous()
+
         log_probs = -nn.functional.log_softmax(logits, dim=-1)
         if labels.dim() == log_probs.dim() - 1:
             labels = labels.unsqueeze(-1)
@@ -537,6 +557,12 @@ class LengthGroupedSampler(Sampler):
                     f"'{model_input_name}' key."
                 )
             lengths = [len(feature[model_input_name]) for feature in dataset]
+        elif isinstance(lengths, torch.Tensor):
+            logger.info(
+                "If lengths is a torch.Tensor, LengthGroupedSampler will be slow. Converting lengths to List[int]..."
+            )
+            lengths = lengths.tolist()
+
         self.lengths = lengths
         self.generator = generator
 
@@ -593,6 +619,13 @@ class DistributedLengthGroupedSampler(DistributedSampler):
                     f"'{model_input_name}' key."
                 )
             lengths = [len(feature[model_input_name]) for feature in dataset]
+        elif isinstance(lengths, torch.Tensor):
+            logger.info(
+                "If lengths is a torch.Tensor, DistributedLengthGroupedSampler will be slow. Converting lengths to"
+                " List[int]..."
+            )
+            lengths = lengths.tolist()
+
         self.lengths = lengths
 
         # If the dataset length is evenly divisible by # of replicas, then there
@@ -801,9 +834,11 @@ def _get_learning_rate(self):
         last_lr = (
             # backward compatibility for pytorch schedulers
             self.lr_scheduler.get_last_lr()[0]
-            if version.parse(torch.__version__) >= version.parse("1.4")
+            if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.4")
             else self.lr_scheduler.get_lr()[0]
         )
+        if torch.is_tensor(last_lr):
+            last_lr = last_lr.item()
     return last_lr
 
 
@@ -999,19 +1034,34 @@ def get_parameter_names(model, forbidden_layer_types):
     return result
 
 
+def get_module_class_from_name(module, name):
+    """
+    Gets a class from a module by its name.
+
+    Args:
+        module (`torch.nn.Module`): The module to get the class from.
+        name (`str`): The name of the class.
+    """
+    modules_children = list(module.children())
+    if module.__class__.__name__ == name:
+        return module.__class__
+    elif len(modules_children) == 0:
+        return
+    else:
+        for child_module in modules_children:
+            module_class = get_module_class_from_name(child_module, name)
+            if module_class is not None:
+                return module_class
+
+
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
 
     @smp.step()
-    def smp_forward_backward(model, inputs, gradient_accumulation_steps=1, scaler=None):
-        with torch.cuda.amp.autocast(enabled=(scaler is not None)):
-            outputs = model(**inputs)
-
+    def smp_forward_backward(model, inputs, gradient_accumulation_steps=1):
+        outputs = model(**inputs)
         loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
         loss /= gradient_accumulation_steps
-        if scaler is not None:
-            loss = scaler.scale(loss).squeeze()
-
         model.backward(loss)
         return loss
 
@@ -1029,7 +1079,7 @@ if is_sagemaker_mp_enabled():
                 f"Can't gather the values of type {type(tensor)}, only of nested list/tuple/dicts of tensors."
             )
         all_tensors = smp.allgather(tensor, smp.CommGroup.DP_GROUP)
-        all_tensors = [t if len(t.shape) > 0 else t[None] for t in all_tensors]
+        all_tensors = [atleast_1d(t) for t in all_tensors]
         return torch.cat([t.cpu() for t in all_tensors], dim=0)
 
     def smp_nested_concat(tensor):

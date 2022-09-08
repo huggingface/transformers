@@ -25,8 +25,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 XLM_ROBERTA_XL_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "xlm-roberta-xl": "https://huggingface.co/facebook/xlm-roberta-xl/resolve/main/config.json",
-    "xlm-roberta-xxl": "https://huggingface.co/facebook/xlm-roberta-xxl/resolve/main/config.json",
+    "facebook/xlm-roberta-xl": "https://huggingface.co/facebook/xlm-roberta-xl/resolve/main/config.json",
+    "facebook/xlm-roberta-xxl": "https://huggingface.co/facebook/xlm-roberta-xxl/resolve/main/config.json",
     # See all XLM-RoBERTa-XL models at https://huggingface.co/models?filter=xlm-roberta-xl
 }
 
@@ -36,7 +36,7 @@ class XLMRobertaXLConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`XLMRobertaXLModel`] or a [`TFXLMRobertaXLModel`].
     It is used to instantiate a XLM_ROBERTA_XL model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    XLM_ROBERTA_XL [bert-base-uncased](https://huggingface.co/bert-base-uncased) architecture.
+    XLM_ROBERTA_XL [facebook/xlm-roberta-xl](https://huggingface.co/facebook/xlm-roberta-xl) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -143,9 +143,13 @@ class XLMRobertaXLConfig(PretrainedConfig):
 class XLMRobertaXLOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task == "multiple-choice":
+            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
+        else:
+            dynamic_axis = {0: "batch", 1: "sequence"}
         return OrderedDict(
             [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
+                ("input_ids", dynamic_axis),
+                ("attention_mask", dynamic_axis),
             ]
         )

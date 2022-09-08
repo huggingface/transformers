@@ -113,16 +113,17 @@ else:
 
 ACT2FN = {
     "gelu": gelu,
-    "relu": tf.keras.activations.relu,
-    "swish": tf.keras.activations.swish,
-    "silu": tf.keras.activations.swish,
-    "gelu_new": gelu_new,
-    "mish": mish,
-    "tanh": tf.keras.activations.tanh,
-    "gelu_fast": gelu_fast,
-    "quick_gelu": quick_gelu,
     "gelu_10": gelu_10,
+    "gelu_fast": gelu_fast,
+    "gelu_new": gelu_new,
     "glu": glu,
+    "mish": mish,
+    "quick_gelu": quick_gelu,
+    "relu": tf.keras.activations.relu,
+    "sigmoid": tf.keras.activations.sigmoid,
+    "silu": tf.keras.activations.swish,
+    "swish": tf.keras.activations.swish,
+    "tanh": tf.keras.activations.tanh,
 }
 
 

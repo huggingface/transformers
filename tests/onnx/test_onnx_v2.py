@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 from unittest import TestCase
@@ -6,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from parameterized import parameterized
-from transformers import AutoConfig, AutoFeatureExtractor, AutoTokenizer, is_tf_available, is_torch_available
+from transformers import AutoConfig, PreTrainedTokenizerBase, is_tf_available, is_torch_available
 from transformers.onnx import (
     EXTERNAL_DATA_FORMAT_SIZE_LIMIT,
     OnnxConfig,
@@ -15,12 +16,21 @@ from transformers.onnx import (
     export,
     validate_model_outputs,
 )
-from transformers.onnx.utils import compute_effective_axis_dimension, compute_serialized_parameters_size
-from transformers.testing_utils import require_onnx, require_tf, require_torch, require_vision, slow
+from transformers.onnx.utils import (
+    compute_effective_axis_dimension,
+    compute_serialized_parameters_size,
+    get_preprocessor,
+)
+from transformers.testing_utils import require_onnx, require_rjieba, require_tf, require_torch, require_vision, slow
 
 
 if is_torch_available() or is_tf_available():
     from transformers.onnx.features import FeaturesManager
+
+if is_torch_available():
+    import torch
+
+    from transformers.models.deberta import modeling_deberta
 
 
 @require_onnx
@@ -172,19 +182,45 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
 PYTORCH_EXPORT_MODELS = {
     ("albert", "hf-internal-testing/tiny-albert"),
     ("bert", "bert-base-cased"),
-    ("bigbird", "google/bigbird-roberta-base"),
+    ("big-bird", "google/bigbird-roberta-base"),
     ("ibert", "kssteven/ibert-roberta-base"),
     ("camembert", "camembert-base"),
+    ("clip", "openai/clip-vit-base-patch32"),
+    ("convbert", "YituTech/conv-bert-base"),
+    ("codegen", "Salesforce/codegen-350M-multi"),
+    ("deberta", "microsoft/deberta-base"),
+    ("deberta-v2", "microsoft/deberta-v2-xlarge"),
+    ("convnext", "facebook/convnext-tiny-224"),
+    ("detr", "facebook/detr-resnet-50"),
     ("distilbert", "distilbert-base-cased"),
     ("electra", "google/electra-base-generator"),
+    ("resnet", "microsoft/resnet-50"),
     ("roberta", "roberta-base"),
+    ("roformer", "junnyu/roformer_chinese_base"),
+    ("squeezebert", "squeezebert/squeezebert-uncased"),
+    ("mobilebert", "google/mobilebert-uncased"),
+    ("mobilevit", "apple/mobilevit-small"),
+    ("xlm", "xlm-clm-ende-1024"),
     ("xlm-roberta", "xlm-roberta-base"),
     ("layoutlm", "microsoft/layoutlm-base-uncased"),
+    ("layoutlmv3", "microsoft/layoutlmv3-base"),
+    ("groupvit", "nvidia/groupvit-gcc-yfcc"),
+    ("levit", "facebook/levit-128S"),
+    ("owlvit", "google/owlvit-base-patch32"),
     ("vit", "google/vit-base-patch16-224"),
+    ("deit", "facebook/deit-small-patch16-224"),
     ("beit", "microsoft/beit-base-patch16-224"),
+    ("data2vec-text", "facebook/data2vec-text-base"),
+    ("data2vec-vision", "facebook/data2vec-vision-base"),
+    ("perceiver", "deepmind/language-perceiver", ("masked-lm", "sequence-classification")),
+    ("perceiver", "deepmind/vision-perceiver-conv", ("image-classification",)),
+    ("longformer", "allenai/longformer-base-4096"),
+    ("yolos", "hustvl/yolos-tiny"),
+    ("segformer", "nvidia/segformer-b0-finetuned-ade-512-512"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
+    ("bloom", "bigscience/bloom-560m"),
     ("gpt2", "gpt2"),
     ("gpt-neo", "EleutherAI/gpt-neo-125M"),
 }
@@ -194,9 +230,15 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("mbart", "sshleifer/tiny-mbart"),
     ("t5", "t5-small"),
     ("marian", "Helsinki-NLP/opus-mt-en-de"),
+    ("mt5", "google/mt5-base"),
     ("m2m-100", "facebook/m2m100_418M"),
     ("blenderbot-small", "facebook/blenderbot_small-90M"),
     ("blenderbot", "facebook/blenderbot-400M-distill"),
+    ("bigbird-pegasus", "google/bigbird-pegasus-large-arxiv"),
+    ("longt5", "google/long-t5-local-base"),
+    # Disable for now as it causes fatal error `Floating point exception (core dumped)` and the subsequential tests are
+    # not run.
+    # ("longt5", "google/long-t5-tglobal-base"),
 }
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_MODELS` once TensorFlow has parity with the PyTorch model implementations.
@@ -218,10 +260,15 @@ TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {}
 def _get_models_to_test(export_models_list):
     models_to_test = []
     if is_torch_available() or is_tf_available():
-        for (name, model) in export_models_list:
-            for feature, onnx_config_class_constructor in FeaturesManager.get_supported_features_for_model_type(
-                name
-            ).items():
+        for name, model, *features in export_models_list:
+            if features:
+                feature_config_mapping = {
+                    feature: FeaturesManager.get_config(name, feature) for _ in features for feature in _
+                }
+            else:
+                feature_config_mapping = FeaturesManager.get_supported_features_for_model_type(name)
+
+            for feature, onnx_config_class_constructor in feature_config_mapping.items():
                 models_to_test.append((f"{name}_{feature}", name, model, feature, onnx_config_class_constructor))
         return sorted(models_to_test)
     else:
@@ -236,12 +283,18 @@ class OnnxExportTestCaseV2(TestCase):
     Integration tests ensuring supported models are correctly exported
     """
 
-    def _onnx_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
+    def _onnx_export(self, test_name, name, model_name, feature, onnx_config_class_constructor, device="cpu"):
         from transformers.onnx import export
 
         model_class = FeaturesManager.get_model_class_for_feature(feature)
         config = AutoConfig.from_pretrained(model_name)
         model = model_class.from_config(config)
+
+        # Dynamic axes aren't supported for YOLO-like models. This means they cannot be exported to ONNX on CUDA devices.
+        # See: https://github.com/ultralytics/yolov5/pull/8378
+        if model.__class__.__name__.startswith("Yolos") and device != "cpu":
+            return
+
         onnx_config = onnx_config_class_constructor(model.config)
 
         if is_torch_available():
@@ -249,24 +302,20 @@ class OnnxExportTestCaseV2(TestCase):
 
             if torch_version < onnx_config.torch_onnx_minimum_version:
                 pytest.skip(
-                    f"Skipping due to incompatible PyTorch version. Minimum required is {onnx_config.torch_onnx_minimum_version}, got: {torch_version}"
+                    "Skipping due to incompatible PyTorch version. Minimum required is"
+                    f" {onnx_config.torch_onnx_minimum_version}, got: {torch_version}"
                 )
 
-        # Check the modality of the inputs and instantiate the appropriate preprocessor
-        if model.main_input_name == "input_ids":
-            preprocessor = AutoTokenizer.from_pretrained(model_name)
-            # Useful for causal lm models that do not use pad tokens.
-            if not getattr(config, "pad_token_id", None):
-                config.pad_token_id = preprocessor.eos_token_id
-        elif model.main_input_name == "pixel_values":
-            preprocessor = AutoFeatureExtractor.from_pretrained(model_name)
-        else:
-            raise ValueError(f"Unsupported model input name: {model.main_input_name}")
+        preprocessor = get_preprocessor(model_name)
+
+        # Useful for causal lm models that do not use pad tokens.
+        if isinstance(preprocessor, PreTrainedTokenizerBase) and not getattr(config, "pad_token_id", None):
+            config.pad_token_id = preprocessor.eos_token_id
 
         with NamedTemporaryFile("w") as output:
             try:
                 onnx_inputs, onnx_outputs = export(
-                    preprocessor, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name)
+                    preprocessor, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name), device=device
                 )
                 validate_model_outputs(
                     onnx_config,
@@ -283,8 +332,17 @@ class OnnxExportTestCaseV2(TestCase):
     @slow
     @require_torch
     @require_vision
+    @require_rjieba
     def test_pytorch_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+
+    @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_MODELS))
+    @slow
+    @require_torch
+    @require_vision
+    @require_rjieba
+    def test_pytorch_export_on_cuda(self, test_name, name, model_name, feature, onnx_config_class_constructor):
+        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor, device="cuda")
 
     @parameterized.expand(_get_models_to_test(PYTORCH_EXPORT_WITH_PAST_MODELS))
     @slow
@@ -320,3 +378,40 @@ class OnnxExportTestCaseV2(TestCase):
         self, test_name, name, model_name, feature, onnx_config_class_constructor
     ):
         self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+
+
+class StableDropoutTestCase(TestCase):
+    """Tests export of StableDropout module."""
+
+    @require_torch
+    @pytest.mark.filterwarnings("ignore:.*Dropout.*:UserWarning:torch.onnx.*")  # torch.onnx is spammy.
+    def test_training(self):
+        """Tests export of StableDropout in training mode."""
+        devnull = open(os.devnull, "wb")
+        # drop_prob must be > 0 for the test to be meaningful
+        sd = modeling_deberta.StableDropout(0.1)
+        # Avoid warnings in training mode
+        do_constant_folding = False
+        # Dropout is a no-op in inference mode
+        training = torch.onnx.TrainingMode.PRESERVE
+        input = (torch.randn(2, 2),)
+
+        torch.onnx.export(
+            sd,
+            input,
+            devnull,
+            opset_version=12,  # Minimum supported
+            do_constant_folding=do_constant_folding,
+            training=training,
+        )
+
+        # Expected to fail with opset_version < 12
+        with self.assertRaises(Exception):
+            torch.onnx.export(
+                sd,
+                input,
+                devnull,
+                opset_version=11,
+                do_constant_folding=do_constant_folding,
+                training=training,
+            )

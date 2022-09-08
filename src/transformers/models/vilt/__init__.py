@@ -18,22 +18,31 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import _LazyModule, is_torch_available, is_vision_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {
-    "configuration_vilt": ["VILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViltConfig"],
-}
+_import_structure = {"configuration_vilt": ["VILT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViltConfig"]}
 
-if is_vision_available():
+try:
+    if not is_vision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["feature_extraction_vilt"] = ["ViltFeatureExtractor"]
     _import_structure["processing_vilt"] = ["ViltProcessor"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_vilt"] = [
         "VILT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ViltForImageAndTextRetrieval",
         "ViltForImagesAndTextClassification",
+        "ViltForTokenClassification",
         "ViltForMaskedLM",
         "ViltForQuestionAnswering",
         "ViltLayer",
@@ -45,17 +54,28 @@ if is_torch_available():
 if TYPE_CHECKING:
     from .configuration_vilt import VILT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViltConfig
 
-    if is_vision_available():
+    try:
+        if not is_vision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .feature_extraction_vilt import ViltFeatureExtractor
         from .processing_vilt import ViltProcessor
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_vilt import (
             VILT_PRETRAINED_MODEL_ARCHIVE_LIST,
             ViltForImageAndTextRetrieval,
             ViltForImagesAndTextClassification,
             ViltForMaskedLM,
             ViltForQuestionAnswering,
+            ViltForTokenClassification,
             ViltLayer,
             ViltModel,
             ViltPreTrainedModel,

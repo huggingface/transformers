@@ -13,15 +13,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ MobileBERT model configuration"""
+from collections import OrderedDict
+from typing import Mapping
 
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 MOBILEBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "mobilebert-uncased": "https://huggingface.co/google/mobilebert-uncased/resolve/main/config.json"
+    "google/mobilebert-uncased": "https://huggingface.co/google/mobilebert-uncased/resolve/main/config.json"
 }
 
 
@@ -29,6 +32,8 @@ class MobileBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MobileBertModel`] or a [`TFMobileBertModel`]. It
     is used to instantiate a MobileBERT model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the MobileBERT
+    [google/mobilebert-uncased](https://huggingface.co/google/mobilebert-uncased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -163,3 +168,20 @@ class MobileBertConfig(PretrainedConfig):
             self.true_hidden_size = hidden_size
 
         self.classifier_dropout = classifier_dropout
+
+
+# Copied from transformers.models.bert.configuration_bert.BertOnnxConfig with Bert->MobileBert
+class MobileBertOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task == "multiple-choice":
+            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
+        else:
+            dynamic_axis = {0: "batch", 1: "sequence"}
+        return OrderedDict(
+            [
+                ("input_ids", dynamic_axis),
+                ("attention_mask", dynamic_axis),
+                ("token_type_ids", dynamic_axis),
+            ]
+        )
