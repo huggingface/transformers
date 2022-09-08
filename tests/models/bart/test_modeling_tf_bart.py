@@ -635,7 +635,7 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
 
     def test_xsum_1_1_generation(self):
         model = self.xsum_1_1_model
-        assert model.model.decoder.embed_tokens._layer == model.model.shared
+        assert model.model.decoder.embed_tokens == model.model.shared
         ARTICLE = (
             "The Palestinian Authority officially became the 123rd member of the International Criminal Court on"
             " Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian territories. The"
@@ -685,7 +685,7 @@ class FasterTFBartModelIntegrationTests(unittest.TestCase):
     def test_xsum_1_1_xla_generation(self):
         # same test as above, but with `no_repeat_ngram_size=0` (not compatible with XLA) and XLA comparison enabled
         model = self.xsum_1_1_model
-        assert model.model.decoder.embed_tokens._layer == model.model.shared
+        assert model.model.decoder.embed_tokens == model.model.shared
         ARTICLE = (
             "The Palestinian Authority officially became the 123rd member of the International Criminal Court on"
             " Wednesday, a step that gives the court jurisdiction over alleged crimes in Palestinian territories. The"
