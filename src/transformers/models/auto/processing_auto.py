@@ -58,6 +58,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("wav2vec2-conformer", "Wav2Vec2Processor"),
         ("wav2vec2_with_lm", "Wav2Vec2ProcessorWithLM"),
         ("wavlm", "Wav2Vec2Processor"),
+        ("xclip", "CLIPProcessor"),
     ]
 )
 
