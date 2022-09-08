@@ -1156,6 +1156,7 @@ else:
     _import_structure["models.ernie"].extend(
         [
             "ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ErnieForCausalLM",
             "ErnieForMaskedLM",
             "ErnieForMultipleChoice",
             "ErnieForNextSentencePrediction",
@@ -1163,7 +1164,6 @@ else:
             "ErnieForQuestionAnswering",
             "ErnieForSequenceClassification",
             "ErnieForTokenClassification",
-            "ErnieForCausalLM",
             "ErnieModel",
             "ErniePreTrainedModel",
         ]
