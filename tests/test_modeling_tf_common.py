@@ -142,6 +142,7 @@ def _return_type_has_loss(model):
     elif isinstance(return_type, ModelOutput):
         class_fields = fields(return_type)
         return "loss" in class_fields
+    return False
 
 
 @require_tf
