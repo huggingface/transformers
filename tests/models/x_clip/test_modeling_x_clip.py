@@ -644,8 +644,7 @@ def prepare_video():
 class XCLIPModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
-        # TODO update organization
-        model_name = "nielsr/xclip-base-patch32"
+        model_name = "microsoft/xclip-base-patch32"
         model = XCLIPModel.from_pretrained(model_name).to(torch_device)
         processor = XCLIPProcessor.from_pretrained(model_name)
 

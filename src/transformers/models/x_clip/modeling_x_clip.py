@@ -41,8 +41,7 @@ logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "microsoft/xclip-base-patch32"
 
 XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    # TODO update to appropriate organization
-    "nielsr/xclip-base-patch32",
+    "microsoft/xclip-base-patch32",
     # See all X-CLIP models at https://huggingface.co/models?filter=x-clip
 ]
 
