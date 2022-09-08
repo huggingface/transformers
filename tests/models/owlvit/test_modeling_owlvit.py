@@ -683,7 +683,7 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
             try:
                 input_ids = inputs_dict["input_ids"]
                 pixel_values = inputs_dict["pixel_values"]  # OWLVIT needs pixel_values
-                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
+                traced_model = torch.jit.trace(model, (pixel_values, input_ids))
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
