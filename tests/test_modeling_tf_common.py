@@ -1162,7 +1162,7 @@ class TFModelTesterMixin:
                         self.assertEqual(new_weight.shape[-1], assert_size)
 
                         models_equal = True
-                        for p1, p2 in zip(old_weight.value()[0], new_weight.value()[0]):
+                        for p1, p2 in zip(tf.squeeze(old_weight), tf.squeeze(new_weight)):
                             if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                                 models_equal = False
                         self.assertTrue(models_equal)
