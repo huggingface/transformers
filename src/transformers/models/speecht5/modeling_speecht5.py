@@ -88,6 +88,34 @@ class SpeechT5NoLayerNormConvLayer(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2LayerNormConvLayer with Wav2Vec2->SpeechT5
+class SpeechT5LayerNormConvLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
+        self.out_conv_dim = config.conv_dim[layer_id]
+
+        self.conv = nn.Conv1d(
+            self.in_conv_dim,
+            self.out_conv_dim,
+            kernel_size=config.conv_kernel[layer_id],
+            stride=config.conv_stride[layer_id],
+            bias=config.conv_bias,
+        )
+        self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
+        self.activation = ACT2FN[config.feat_extract_activation]
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+
+        hidden_states = hidden_states.transpose(-2, -1)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = hidden_states.transpose(-2, -1)
+
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
+
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2GroupNormConvLayer with Wav2Vec2->SpeechT5
 class SpeechT5GroupNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
@@ -124,10 +152,10 @@ class SpeechT5FeatureEncoder(nn.Module):
             conv_layers = [SpeechT5GroupNormConvLayer(config, layer_id=0)] + [
                 SpeechT5NoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
             ]
-        # elif config.feat_extract_norm == "layer":
-        #     conv_layers = [
-        #         SpeechT5LayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)
-        #     ]
+        elif config.feat_extract_norm == "layer":
+            conv_layers = [
+                SpeechT5LayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)
+            ]
         else:
             raise ValueError(
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
@@ -165,6 +193,15 @@ class SpeechT5FeatureEncoder(nn.Module):
                 hidden_states = conv_layer(hidden_states)
 
         return hidden_states
+
+
+class SpeechT5SpeechEncoderPrenet(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.feature_encoder = SpeechT5FeatureEncoder(config)
+
+    def forward(self, input_values):
+        return self.feature_encoder(input_values)
 
 
 class SpeechT5PreTrainedModel(PreTrainedModel):
@@ -314,7 +351,10 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
         self.config = config
-        self.feature_extractor = SpeechT5FeatureEncoder(config)
+
+        self.speech_encoder_prenet = SpeechT5SpeechEncoderPrenet(config)
+
+        #self.feature_extractor = SpeechT5FeatureEncoder(config)
         # self.feature_projection = SpeechT5FeatureProjection(config)
 
         # # model only needs masking vector if mask prob is > 0.0
@@ -331,12 +371,12 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        self.feature_extractor._freeze_parameters()
+    # def freeze_feature_encoder(self):
+    #     """
+    #     Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+    #     not be updated during training.
+    #     """
+    #     self.feature_extractor._freeze_parameters()
 
     # def _mask_hidden_states(
     #     self,
@@ -388,7 +428,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_PROCESSOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Wav2Vec2BaseModelOutput,
+        output_type=Wav2Vec2BaseModelOutput,  # TODO: probably different output type
         config_class=_CONFIG_FOR_DOC,
         modality="audio",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -408,7 +448,10 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        extract_features = self.feature_extractor(input_values)
+        encoder_input = self.speech_encoder_prenet(input_values)
+
+        extract_features = encoder_input  # TODO: temporary
+        # extract_features = self.feature_extractor(input_values)
         # extract_features = extract_features.transpose(1, 2)
 
         hidden_states = ()
@@ -458,19 +501,19 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         super().__init__(config)
 
         self.speecht5 = SpeechT5Model(config)
-        self.dropout = nn.Dropout(config.final_dropout)
+        # self.dropout = nn.Dropout(config.final_dropout)
 
-        if config.vocab_size is None:
-            raise ValueError(
-                f"You are trying to instantiate {self.__class__} with a configuration that "
-                "does not define the vocabulary size of the language model head. Please "
-                "instantiate the model as follows: `SpeechT5ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
-                "or define `vocab_size` of your model's configuration."
-            )
-        output_hidden_size = (
-            config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
-        )
-        self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
+        # if config.vocab_size is None:
+        #     raise ValueError(
+        #         f"You are trying to instantiate {self.__class__} with a configuration that "
+        #         "does not define the vocabulary size of the language model head. Please "
+        #         "instantiate the model as follows: `SpeechT5ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+        #         "or define `vocab_size` of your model's configuration."
+        #     )
+        # output_hidden_size = (
+        #     config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
+        # )
+        # self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -519,45 +562,46 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        hidden_states = self.dropout(hidden_states)
+        # hidden_states = self.dropout(hidden_states)
 
-        logits = self.lm_head(hidden_states)
+        logits = None
+        # logits = self.lm_head(hidden_states)
 
         loss = None
-        if labels is not None:
+        # if labels is not None:
 
-            if labels.max() >= self.config.vocab_size:
-                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
+        #     if labels.max() >= self.config.vocab_size:
+        #         raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
-            # retrieve loss input_lengths from attention_mask
-            attention_mask = (
-                attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
-            )
-            input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+        #     # retrieve loss input_lengths from attention_mask
+        #     attention_mask = (
+        #         attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
+        #     )
+        #     input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
 
-            # assuming that padded tokens are filled with -100
-            # when not being attended to
-            labels_mask = labels >= 0
-            target_lengths = labels_mask.sum(-1)
-            flattened_targets = labels.masked_select(labels_mask)
+        #     # assuming that padded tokens are filled with -100
+        #     # when not being attended to
+        #     labels_mask = labels >= 0
+        #     target_lengths = labels_mask.sum(-1)
+        #     flattened_targets = labels.masked_select(labels_mask)
 
-            # ctc_loss doesn't support fp16
-            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
+        #     # ctc_loss doesn't support fp16
+        #     log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
 
-            with torch.backends.cudnn.flags(enabled=False):
-                loss = nn.functional.ctc_loss(
-                    log_probs,
-                    flattened_targets,
-                    input_lengths,
-                    target_lengths,
-                    blank=self.config.pad_token_id,
-                    reduction=self.config.ctc_loss_reduction,
-                    zero_infinity=self.config.ctc_zero_infinity,
-                )
+        #     with torch.backends.cudnn.flags(enabled=False):
+        #         loss = nn.functional.ctc_loss(
+        #             log_probs,
+        #             flattened_targets,
+        #             input_lengths,
+        #             target_lengths,
+        #             blank=self.config.pad_token_id,
+        #             reduction=self.config.ctc_loss_reduction,
+        #             zero_infinity=self.config.ctc_zero_infinity,
+        #         )
 
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
+        # if not return_dict:
+        #     output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
+        #     return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
