@@ -117,7 +117,7 @@ The [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset has a sam
 The preprocessing function needs to:
 
 1. Call the `audio` column to load and if necessary resample the audio file.
-2. Check the sampling rate of the audio file matches the sampling rate of the audio data a model was pretrained with. You can find this information on the Wav2Vec2 [model card]((https://huggingface.co/facebook/wav2vec2-base)).
+2. Check the sampling rate of the audio file matches the sampling rate of the audio data a model was pretrained with. You can find this information on the Wav2Vec2 [model card](https://huggingface.co/facebook/wav2vec2-base).
 3. Set a maximum input length so longer inputs are batched without being truncated.
 
 ```py
