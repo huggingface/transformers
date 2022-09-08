@@ -137,7 +137,7 @@ class TFMBartLearnedPositionalEmbedding(TFSharedEmbeddings):
             position_ids = tf.range(seq_len, delta=1, name="range")
             position_ids += past_key_values_length
 
-        return super().call(position_ids + tf.constant(self.offset, dtype=tf.int32))
+        return super().call(position_ids + tf.constant(self.offset, dtype=position_ids.dtype))
 
 
 # Copied from transformers.models.bart.modeling_tf_bart.TFBartAttention with Bart->MBart
