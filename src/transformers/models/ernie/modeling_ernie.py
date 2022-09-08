@@ -807,6 +807,7 @@ class ErnieModel(ErniePreTrainedModel):
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
     """
 
+    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Ernie
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -819,12 +820,15 @@ class ErnieModel(ErniePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.bert.modeling_bert.BertModel.get_input_embeddings
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
+    # Copied from transformers.models.bert.modeling_bert.BertModel.set_input_embeddings
     def set_input_embeddings(self, value):
         self.embeddings.word_embeddings = value
 
+    # Copied from transformers.models.bert.modeling_bert.BertModel._prune_heads
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
@@ -980,6 +984,7 @@ class ErnieModel(ErniePreTrainedModel):
     ERNIE_START_DOCSTRING,
 )
 class ErnieForPreTraining(ErniePreTrainedModel):
+    # Copied from transformers.models.bert.modeling_bert.BertForPreTraining.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
         super().__init__(config)
 
@@ -989,9 +994,11 @@ class ErnieForPreTraining(ErniePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.bert.modeling_bert.BertForPreTraining.get_output_embeddings
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
+    # Copied from transformers.models.bert.modeling_bert.BertForPreTraining.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
@@ -1089,6 +1096,7 @@ class ErnieLMHeadModel(ErniePreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
+    # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
         super().__init__(config)
 
@@ -1101,9 +1109,11 @@ class ErnieLMHeadModel(ErniePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.get_output_embeddings
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
+    # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
@@ -1201,6 +1211,7 @@ class ErnieLMHeadModel(ErniePreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.prepare_inputs_for_generation
     def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -1213,6 +1224,7 @@ class ErnieLMHeadModel(ErniePreTrainedModel):
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
 
+    # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel._reorder_cache
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
@@ -1225,6 +1237,7 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
+    # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
         super().__init__(config)
 
@@ -1240,9 +1253,11 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM.get_output_embeddings
     def get_output_embeddings(self):
         return self.cls.predictions.decoder
 
+    # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM.set_output_embeddings
     def set_output_embeddings(self, new_embeddings):
         self.cls.predictions.decoder = new_embeddings
 
@@ -1314,6 +1329,7 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         effective_batch_size = input_shape[0]
@@ -1336,6 +1352,7 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
     ERNIE_START_DOCSTRING,
 )
 class ErnieForNextSentencePrediction(ErniePreTrainedModel):
+    # Copied from transformers.models.bert.modeling_bert.BertForNextSentencePrediction.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
         super().__init__(config)
 
@@ -1443,6 +1460,7 @@ class ErnieForNextSentencePrediction(ErniePreTrainedModel):
     ERNIE_START_DOCSTRING,
 )
 class ErnieForSequenceClassification(ErniePreTrainedModel):
+    # Copied from transformers.models.bert.modeling_bert.BertForSequenceClassification.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1541,6 +1559,7 @@ class ErnieForSequenceClassification(ErniePreTrainedModel):
     ERNIE_START_DOCSTRING,
 )
 class ErnieForMultipleChoice(ErniePreTrainedModel):
+    # Copied from transformers.models.bert.modeling_bert.BertForMultipleChoice.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
         super().__init__(config)
 
@@ -1640,6 +1659,7 @@ class ErnieForMultipleChoice(ErniePreTrainedModel):
 class ErnieForTokenClassification(ErniePreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
+    # Copied from transformers.models.bert.modeling_bert.BertForTokenClassification.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1720,6 +1740,7 @@ class ErnieForTokenClassification(ErniePreTrainedModel):
 class ErnieForQuestionAnswering(ErniePreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
+    # Copied from transformers.models.bert.modeling_bert.BertForQuestionAnswering.__init__ with Bert->Ernie,bert->ernie
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
