@@ -1039,7 +1039,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        return_projected: Optional[bool] = True,
         return_base_image_embeds: Optional[bool] = None,
     ) -> torch.FloatTensor:
         r"""
@@ -1074,16 +1073,14 @@ class OwlViTModel(OwlViTPreTrainedModel):
             return_dict=return_dict,
         )
 
-        pooled_output = vision_outputs[1]  # pooled_output
-
-        # Return projected output
-        if return_projected:
-            image_features = self.visual_projection(pooled_output)
-        else:
-            image_features = pooled_output
+        # Apply post_layernorm to last_hidden_state, return non-projected output
         if return_base_image_embeds:
             last_hidden_state = vision_outputs[0]
             image_features = self.vision_model.post_layernorm(last_hidden_state)
+        # Unmodified CLIP embeddings
+        else: 
+            pooled_output = vision_outputs[1]
+            image_features = self.visual_projection(pooled_output)
 
         return image_features
 
