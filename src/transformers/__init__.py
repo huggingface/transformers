@@ -892,21 +892,6 @@ else:
             "load_tf_weights_in_bert",
         ]
     )
-    _import_structure["models.ernie"].extend(
-        [
-            "ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ErnieForMaskedLM",
-            "ErnieForMultipleChoice",
-            "ErnieForNextSentencePrediction",
-            "ErnieForPreTraining",
-            "ErnieForQuestionAnswering",
-            "ErnieForSequenceClassification",
-            "ErnieForTokenClassification",
-            "ErnieForCausalLM",
-            "ErnieModel",
-            "ErniePreTrainedModel",
-        ]
-    )
     _import_structure["models.bert_generation"].extend(
         [
             "BertGenerationDecoder",
@@ -1168,6 +1153,21 @@ else:
         ]
     )
     _import_structure["models.encoder_decoder"].append("EncoderDecoderModel")
+    _import_structure["models.ernie"].extend(
+        [
+            "ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ErnieForMaskedLM",
+            "ErnieForMultipleChoice",
+            "ErnieForNextSentencePrediction",
+            "ErnieForPreTraining",
+            "ErnieForQuestionAnswering",
+            "ErnieForSequenceClassification",
+            "ErnieForTokenClassification",
+            "ErnieForCausalLM",
+            "ErnieModel",
+            "ErniePreTrainedModel",
+        ]
+    )
     _import_structure["models.flaubert"].extend(
         [
             "FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
