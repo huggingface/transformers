@@ -264,6 +264,7 @@ def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
             "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/few_ucf_16.pth"
         ),
         # zero shot
+        "xclip-base-patch16-zero-shot": "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/zero.pth",
     }
 
     checkpoint_url = model_to_url[model_name]
@@ -337,6 +338,10 @@ def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
         expected_probs = torch.tensor([[8.5857e-05, 9.9928e-01, 6.3291e-04]])
     elif model_name == "xclip-base-patch16-ucf-8-shot":
         expected_probs = torch.tensor([[0.0027, 0.9904, 0.0070]])
+    elif model_name == "xclip-base-patch16-ucf-16-shot":
+        expected_probs = torch.tensor([[9.8219e-04, 9.9593e-01, 3.0863e-03]])
+    elif model_name == "xclip-base-patch16-zero-shot":
+        expected_probs = torch.tensor([[3.5082e-04, 9.9785e-01, 1.7966e-03]])
     else:
         raise ValueError(f"Model name {model_name} not supported")
     assert torch.allclose(probs, expected_probs, atol=1e-3)
