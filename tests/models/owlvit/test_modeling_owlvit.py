@@ -631,9 +631,7 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        config_and_inputs_image_guided = self.model_tester.prepare_config_and_inputs_image_guided()
         self.model_tester.create_and_check_model(*config_and_inputs)
-        self.model_tester.create_and_check_model_image_guided(*config_and_inputs_image_guided)
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -720,10 +718,6 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
 
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        (
-            config_image_guided,
-            inputs_dict_image_guided,
-        ) = self.model_tester.prepare_config_and_inputs_for_common_image_guided()
 
         def set_nan_tensor_to_zero(t):
             t[t != t] = 0
@@ -768,12 +762,6 @@ class OwlViTForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
             dict_inputs = self._prepare_for_class(inputs_dict, model_class)
             check_equivalence(model, tuple_inputs, dict_inputs)
 
-            model_image_guided = model_class(config_image_guided).to(torch_device)
-            model_image_guided.eval()
-
-            tuple_inputs = self._prepare_for_class(inputs_dict_image_guided, model_class)
-            dict_inputs = self._prepare_for_class(inputs_dict_image_guided, model_class)
-            check_equivalence(model_image_guided, tuple_inputs, dict_inputs)
 
     @slow
     def test_model_from_pretrained(self):
