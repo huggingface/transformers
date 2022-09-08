@@ -88,6 +88,7 @@ TF_MOBILEBERT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPreTrainingLoss
 class TFMobileBertPreTrainingLoss:
     """
     Loss function suitable for BERT-like pretraining, that is, the task of pretraining a language model by combining
@@ -95,7 +96,6 @@ class TFMobileBertPreTrainingLoss:
     computation.
     """
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertPreTrainingLoss.hf_compute_loss
     def hf_compute_loss(self, labels: tf.Tensor, logits: tf.Tensor) -> tf.Tensor:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
