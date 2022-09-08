@@ -235,9 +235,7 @@ def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
         "xclip-base-patch16-kinetics-600-16-frames": (
             "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/k600_16_16.pth"
         ),
-        "xclip-large-patch14-kinetics-600": (
-            "https://drive.google.com/file/d/1FV8C1INuM91sLAN4ImjzePLIlpMSihwV/view?usp=sharing"
-        ),
+        "xclip-large-patch14-kinetics-600": "https://drive.google.com/u/0/uc?id=1FV8C1INuM91sLAN4ImjzePLIlpMSihwV&amp;export=download&amp;confirm=t&amp;uuid=141d4977-4a65-44ae-864f-4b0c19f838be",
         # few shot
         "xclip-base-patch16-hmdb-2-shot": (
             "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/few_hmdb_2.pth"
@@ -312,6 +310,7 @@ def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
     logits_per_video = outputs.logits_per_video
     probs = logits_per_video.softmax(dim=1)
     print("Probs:", probs)
+    # kinetics-400
     if model_name == "xclip-base-patch32":
         expected_probs = torch.tensor([[0.0019, 0.9951, 0.0030]])
     elif model_name == "xclip-base-patch32-16-frames":
@@ -324,6 +323,14 @@ def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
         expected_probs = torch.tensor([[0.0062, 0.9864, 0.0075]])
     elif model_name == "xclip-large-patch14-16-frames":
         expected_probs = torch.tensor([[3.3877e-04, 9.9937e-01, 2.8888e-04]])
+    # kinetics-600
+    elif model_name == "xclip-base-patch16-kinetics-600":
+        expected_probs = torch.tensor([[0.0555, 0.8914, 0.0531]])
+    elif model_name == "xclip-base-patch16-kinetics-600-16-frames":
+        expected_probs = torch.tensor([[3.8554e-04, 9.9929e-01, 3.2754e-04]])
+    elif model_name == "xclip-large-patch14-kinetics-600":
+        expected_probs = torch.tensor([[0.0036, 0.9920, 0.0045]])
+    # few shot
     elif model_name == "xclip-base-patch16-hmdb-2-shot":
         expected_probs = torch.tensor([[7.1890e-06, 9.9994e-01, 5.6559e-05]])
     elif model_name == "xclip-base-patch16-hmdb-4-shot":
@@ -340,6 +347,7 @@ def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
         expected_probs = torch.tensor([[0.0027, 0.9904, 0.0070]])
     elif model_name == "xclip-base-patch16-ucf-16-shot":
         expected_probs = torch.tensor([[9.8219e-04, 9.9593e-01, 3.0863e-03]])
+    # zero shot
     elif model_name == "xclip-base-patch16-zero-shot":
         expected_probs = torch.tensor([[3.5082e-04, 9.9785e-01, 1.7966e-03]])
     else:
