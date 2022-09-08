@@ -205,9 +205,9 @@ class FeatureEmbedder(nn.Module):
         self.embedders = nn.ModuleList([nn.Embedding(c, d) for c, d in zip(cardinalities, embedding_dims)])
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
-        if self._num_features > 1:
+        if self.num_features > 1:
             # we slice the last dimension, giving an array of length
-            # self._num_features with shape (N,T) or (N)
+            # self.num_features with shape (N,T) or (N)
             cat_feature_slices = torch.chunk(features, self.num_features, dim=-1)
         else:
             cat_feature_slices = [features]
