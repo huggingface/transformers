@@ -33,6 +33,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_ernie"] = [
         "ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "ErnieForCausalLM",
         "ErnieForMaskedLM",
         "ErnieForMultipleChoice",
         "ErnieForNextSentencePrediction",
@@ -40,7 +41,6 @@ else:
         "ErnieForQuestionAnswering",
         "ErnieForSequenceClassification",
         "ErnieForTokenClassification",
-        "ErnieForCausalLM",
         "ErnieModel",
         "ErniePreTrainedModel",
     ]
