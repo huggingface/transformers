@@ -42,9 +42,9 @@ else:
         "ErnieForTokenClassification",
         "ErnieForCausalLM",
         "ErnieModel",
+        "ErniePreTrainedModel",
         "ErnieModelErniePreTrainedModel",
     ]
-
 
 if TYPE_CHECKING:
     from .configuration_ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig, ErnieOnnxConfig
