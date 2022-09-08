@@ -22,6 +22,11 @@ logger = logging.get_logger(__name__)
 
 FAN_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "nvidia/fan": "https://huggingface.co/nvidia/fan/resolve/main/config.json",
+    "ksmcg/fan_tiny_12_p16_224": "https://huggingface.co/ksmcg/fan_tiny_12_p16_224/resolve/main/config.json",
+    "ksmcg/fan_small_12_p16_224_se_attn": "https://huggingface.co/ksmcg/fan_small_12_p16_224_se_attn/resolve/main/config.json",
+    "ksmcg/fan_small_12_p16_224": "https://huggingface.co/ksmcg/fan_small_12_p16_224/resolve/main/config.json",
+    "ksmcg/fan_base_18_p16_224": "https://huggingface.co/ksmcg/fan_base_18_p16_224/resolve/main/config.json",
+    "ksmcg/fan_large_24_p16_224": "https://huggingface.co/ksmcg/fan_large_24_p16_224/resolve/main/config.json",
     # See all FAN models at https://huggingface.co/models?filter=fan
 }
 
@@ -84,50 +89,69 @@ class FANConfig(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-"""
+    ```"""
     model_type = "fan"
-    
 
     def __init__(
         self,
-        vocab_size=30522,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
-        type_vocab_size=2,
-        initializer_range=0.02,
-        layer_norm_eps=1e-12,
-        use_cache=True,
-        is_encoder_decoder=False,
-        pad_token_id=1,
-        bos_token_id=0,
-        eos_token_id=2,
+        patch_size=16,
+        embed_dim=384,
+        depth=12,
+        num_heads=8,
+        eta=1.0,
+        tokens_norm=True,
+        sharpen_attn=False,
+        se_mlp=False,
+        sr_ratio=None,
+        initializer_range=1.0,
+        img_size=(224, 224),
+        in_chans=3,
+        num_classes=1000,
+        backbone=None,
+        use_checkpoint=False,
+        use_pos_embed=True,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        drop_rate=0.0,
+        attn_drop_rate=0.0,
+        drop_path_rate=0.0,
+        act_layer=None,
+        norm_layer=None,
+        cls_attn_layers=2,
+        c_head_num=None,
+        hybrid_patch_size=2,
+        head_init_scale=1.0,
+        channel_dims=None,
         **kwargs
     ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
-        self.type_vocab_size = type_vocab_size
-        self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs
-        )
 
-    
+        self.patch_size = patch_size
+        self.embed_dim = embed_dim
+        head_init_scale = head_init_scale
+        self.depth = depth
+        self.num_heads = num_heads
+        self.eta = eta
+        self.tokens_norm = tokens_norm
+        self.sharpen_attn = sharpen_attn
+        self.se_mlp = se_mlp
+        self.sr_ratio = sr_ratio if sr_ratio else [1] * (depth // 2) + [1] * (depth // 2)
+        self.initializer_range = initializer_range
+        self.img_size = img_size
+        self.in_chans = in_chans
+        self.num_classes = num_classes
+        self.backbone = backbone
+        self.use_checkpoint = use_checkpoint
+        self.use_pos_embed = use_pos_embed
+        self.mlp_ratio = mlp_ratio
+        self.qkv_bias = qkv_bias
+        self.drop_rate = drop_rate
+        self.attn_drop_rate = attn_drop_rate
+        self.drop_path_rate = drop_path_rate
+        self.norm_layer = norm_layer
+        self.act_layer = act_layer
+        self.cls_attn_layers = cls_attn_layers
+        self.norm_layer = norm_layer
+        self.c_head_num = c_head_num
+        self.hybrid_patch_size = hybrid_patch_size
+        self.channel_dims = channel_dims
+        super().__init__(**kwargs)

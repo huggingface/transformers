@@ -15,24 +15,17 @@
 """ PyTorch FAN model. """
 
 
-
-
 import math
 import os
+from functools import partial
+from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
-from typing import Optional, Tuple, Union
 
 from ...activations import ACT2FN
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -46,11 +39,26 @@ from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...pytorch_utils import (
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
-    prune_linear_layer,
     is_torch_greater_than_1_6,
+    prune_linear_layer,
 )
-from ...utils import logging
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_timm_available,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_fan import FANConfig
+
+
+if is_timm_available():
+    from timm import create_model
+    from timm.models.cait import ClassAttn
+    from timm.models.layers import DropPath, to_2tuple, trunc_normal_
+    from timm.models.registry import register_model
+    from timm.models.vision_transformer import Mlp as MlpOri
 
 
 logger = logging.get_logger(__name__)
@@ -64,584 +72,955 @@ FAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     # See all FAN models at https://huggingface.co/models?filter=fan
 ]
 
-
-def load_tf_weights_in_fan(model, config, tf_checkpoint_path):
-    """Load tf checkpoints in a pytorch model."""
-    try:
-        import re
-
-        import numpy as np
-        import tensorflow as tf
-    except ImportError:
-        logger.error(
-            "Loading a TensorFlow model in PyTorch, requires TensorFlow to be installed. Please see "
-            "https://www.tensorflow.org/install/ for installation instructions."
-        )
-        raise
-    tf_path = os.path.abspath(tf_checkpoint_path)
-    logger.info(f"Converting TensorFlow checkpoint from {tf_path}")
-    # Load weights from TF model
-    init_vars = tf.train.list_variables(tf_path)
-    names = []
-    arrays = []
-    for name, shape in init_vars:
-        logger.info(f"Loading TF weight {name} with shape {shape}")
-        array = tf.train.load_variable(tf_path, name)
-        names.append(name)
-        arrays.append(array)
-
-    for name, array in zip(names, arrays):
-        name = name.split("/")
-        # adam_v and adam_m are variables used in AdamWeightDecayOptimizer to calculated m and v
-        # which are not required for using pretrained model
-        if any(
-            n in ["adam_v", "adam_m", "AdamWeightDecayOptimizer", "AdamWeightDecayOptimizer_1", "global_step"]
-            for n in name
-        ):
-            logger.info(f"Skipping {'/'.join(name)}")
-            continue
-        pointer = model
-        for m_name in name:
-            if re.fullmatch(r"[A-Za-z]+_\d+", m_name):
-                scope_names = re.split(r"_(\d+)", m_name)
-            else:
-                scope_names = [m_name]
-            if scope_names[0] == "kernel" or scope_names[0] == "gamma":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "output_bias" or scope_names[0] == "beta":
-                pointer = getattr(pointer, "bias")
-            elif scope_names[0] == "output_weights":
-                pointer = getattr(pointer, "weight")
-            elif scope_names[0] == "squad":
-                pointer = getattr(pointer, "classifier")
-            else:
-                try:
-                    pointer = getattr(pointer, scope_names[0])
-                except AttributeError:
-                    logger.info(f"Skipping {'/'.join(name)}")
-                    continue
-            if len(scope_names) >= 2:
-                num = int(scope_names[1])
-                pointer = pointer[num]
-        if m_name[-11:] == "_embeddings":
-            pointer = getattr(pointer, "weight")
-        elif m_name == "kernel":
-            array = np.transpose(array)
-        try:
-            assert (
-                pointer.shape == array.shape
-            ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
-        except AssertionError as e:
-            e.args += (pointer.shape, array.shape)
-            raise
-        logger.info(f"Initialize PyTorch weight {name}")
-        pointer.data = torch.from_numpy(array)
-    return model
+# BELOW: utilities copied from
+# https://github.com/NVlabs/FAN/blob/master/models/fan.py
 
 
-class FANEmbeddings(nn.Module):
-    """Construct the embeddings from word, position and token_type embeddings."""
+class PositionalEncodingFourier(nn.Module):
+    """
+    Positional encoding relying on a fourier kernel matching the one used in the "Attention is all of Need" paper.
+    """
 
-    def __init__(self, config):
+    def __init__(self, hidden_dim=32, dim=768, temperature=10000):
         super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
+        self.token_projection = nn.Conv2d(hidden_dim * 2, dim, kernel_size=1)
+        self.scale = 2 * math.pi
+        self.temperature = temperature
+        self.hidden_dim = hidden_dim
+        self.dim = dim
+        self.eps = 1e-6
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+    def forward(self, B: int, H: int, W: int):
+        device = self.token_projection.weight.device
+        y_embed = torch.arange(1, H + 1, dtype=torch.float32, device=device).unsqueeze(1).repeat(1, 1, W)
+        x_embed = torch.arange(1, W + 1, dtype=torch.float32, device=device).repeat(1, H, 1)
+        y_embed = y_embed / (y_embed[:, -1:, :] + self.eps) * self.scale
+        x_embed = x_embed / (x_embed[:, :, -1:] + self.eps) * self.scale
+        dim_t = torch.arange(self.hidden_dim, dtype=torch.float32, device=device)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.hidden_dim)
+        pos_x = x_embed[:, :, :, None] / dim_t
+        pos_y = y_embed[:, :, :, None] / dim_t
+        pos_x = torch.stack([pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()], dim=4).flatten(3)
+        pos_y = torch.stack([pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()], dim=4).flatten(3)
+        pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+        pos = self.token_projection(pos)
+        return pos.repeat(B, 1, 1, 1)  # (B, C, H, W)
 
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if is_torch_greater_than_1_6:
-            self.register_buffer(
-                "token_type_ids",
-                torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
-                persistent=False,
+
+def conv3x3(in_planes, out_planes, stride=1):
+    """3x3 convolution + batch norm"""
+    return torch.nn.Sequential(
+        nn.Conv2d(in_planes, out_planes, kernel_size=3, stride=stride, padding=1, bias=False),
+        nn.BatchNorm2d(out_planes),
+    )
+
+
+def sigmoid(x, inplace=False):
+    return x.sigmoid_() if inplace else x.sigmoid()
+
+
+def make_divisible(v, divisor=8, min_value=None):
+    min_value = min_value or divisor
+    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
+    # Make sure that round down does not go down by more than 10%.
+    if new_v < 0.9 * v:
+        new_v += divisor
+    return new_v
+
+
+class SqueezeExcite(nn.Module):
+    def __init__(
+        self,
+        in_chs,
+        se_ratio=0.25,
+        reduced_base_chs=None,
+        act_layer=nn.ReLU,
+        gate_fn=sigmoid,
+        divisor=1,
+        **_,
+    ):
+        super(SqueezeExcite, self).__init__()
+        self.gate_fn = gate_fn
+        reduced_chs = make_divisible((reduced_base_chs or in_chs) * se_ratio, divisor)
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.conv_reduce = nn.Conv2d(in_chs, reduced_chs, 1, bias=True)
+        self.act1 = act_layer(inplace=True)
+        self.conv_expand = nn.Conv2d(reduced_chs, in_chs, 1, bias=True)
+
+    def forward(self, x):
+        x_se = self.avg_pool(x)
+        x_se = self.conv_reduce(x_se)
+        x_se = self.act1(x_se)
+        x_se = self.conv_expand(x_se)
+        x = x * self.gate_fn(x_se)
+        return x
+
+
+class SEMlp(nn.Module):
+    def __init__(
+        self,
+        in_features,
+        hidden_features=None,
+        out_features=None,
+        act_layer=nn.GELU,
+        drop=0.0,
+        linear=False,
+        use_se=True,
+    ):
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        # self.dwconv = DWConv(hidden_features)
+        self.dwconv = DWConv(hidden_features)
+        self.gamma = nn.Parameter(torch.ones(hidden_features), requires_grad=True)
+        self.act = act_layer()
+        self.fc2 = nn.Linear(hidden_features, out_features)
+        self.drop = nn.Dropout(drop)
+        self.linear = linear
+        if self.linear:
+            self.relu = nn.ReLU(inplace=True)
+        self.se = SqueezeExcite(out_features, se_ratio=0.25) if use_se else nn.Identity()
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=0.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            fan_out //= m.groups
+            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+            if m.bias is not None:
+                m.bias.data.zero_()
+
+    def forward(self, x, H, W):
+        B, N, C = x.shape
+        x = self.fc1(x)
+        if self.linear:
+            x = self.relu(x)
+        # import pdb; pdb.set_trace()
+        x = self.drop(self.gamma * self.dwconv(x, H, W)) + x
+        x = self.fc2(x)
+        x = self.drop(x)
+        x = self.se(x.permute(0, 2, 1).reshape(B, C, H, W)).reshape(B, C, N).permute(0, 2, 1)
+        return x, H, W
+
+
+class Mlp(nn.Module):
+    def __init__(
+        self,
+        in_features,
+        hidden_features=None,
+        out_features=None,
+        act_layer=nn.GELU,
+        drop=0.0,
+        linear=False,
+    ):
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.dwconv = DWConv(hidden_features)
+        self.gamma = nn.Parameter(torch.ones(hidden_features), requires_grad=True)
+        self.act = act_layer()
+        self.fc2 = nn.Linear(hidden_features, out_features)
+        self.drop = nn.Dropout(drop)
+        self.linear = linear
+        if self.linear:
+            self.relu = nn.ReLU(inplace=True)
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=0.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            fan_out //= m.groups
+            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+            if m.bias is not None:
+                m.bias.data.zero_()
+
+    def forward(self, x, H, W):
+        x = self.fc1(x)
+        if self.linear:
+            x = self.relu(x)
+        x = self.drop(self.gamma * self.dwconv(x, H, W)) + x
+        x = self.fc2(x)
+        x = self.drop(x)
+        return x
+
+
+class ConvPatchEmbed(nn.Module):
+    """Image to Patch Embedding using multiple convolutional layers"""
+
+    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768, act_layer=nn.GELU):
+        super().__init__()
+        img_size = to_2tuple(img_size)
+        num_patches = (img_size[1] // patch_size) * (img_size[0] // patch_size)
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.num_patches = num_patches
+        #         import pdb; pdb.set_trace()
+
+        if patch_size == 16:
+            self.proj = torch.nn.Sequential(
+                conv3x3(in_chans, embed_dim // 8, 2),
+                act_layer(),
+                conv3x3(embed_dim // 8, embed_dim // 4, 2),
+                act_layer(),
+                conv3x3(embed_dim // 4, embed_dim // 2, 2),
+                act_layer(),
+                conv3x3(embed_dim // 2, embed_dim, 2),
             )
-
-    def forward(
-        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
-    ):
-        if input_ids is not None:
-            input_shape = input_ids.size()
+        elif patch_size == 8:
+            self.proj = torch.nn.Sequential(
+                conv3x3(in_chans, embed_dim // 4, 2),
+                act_layer(),
+                conv3x3(embed_dim // 4, embed_dim // 2, 2),
+                act_layer(),
+                conv3x3(embed_dim // 2, embed_dim, 2),
+            )
+        elif patch_size == 4:
+            self.proj = torch.nn.Sequential(
+                conv3x3(in_chans, embed_dim // 4, 2),
+                act_layer(),
+                conv3x3(embed_dim // 4, embed_dim // 1, 2),
+                # act_layer(),
+                # conv3x3(embed_dim // 2, embed_dim, 2),
+            )
         else:
-            input_shape = inputs_embeds.size()[:-1]
+            raise ("For convolutional projection, patch size has to be in [8, 16]")
 
-        seq_length = input_shape[1]
+    def forward(self, x):
+        x = self.proj(x)
+        Hp, Wp = x.shape[2], x.shape[3]
+        x = x.flatten(2).transpose(1, 2)  # (B, N, C)
+        return x, (Hp, Wp)
 
-        if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
-        # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
-        # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
-        # issue #5664
-        if token_type_ids is None:
-            if hasattr(self, "token_type_ids"):
-                buffered_token_type_ids = self.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
+class DWConv(nn.Module):
+    def __init__(self, in_features, out_features=None, act_layer=nn.GELU, kernel_size=3):
+        super().__init__()
+        out_features = out_features or in_features
+
+        padding = kernel_size // 2
+
+        self.conv1 = torch.nn.Conv2d(
+            in_features,
+            in_features,
+            kernel_size=kernel_size,
+            padding=padding,
+            groups=in_features,
+        )
+        self.act = act_layer()
+        self.bn = nn.BatchNorm2d(in_features)
+        self.conv2 = torch.nn.Conv2d(
+            in_features,
+            out_features,
+            kernel_size=kernel_size,
+            padding=padding,
+            groups=out_features,
+        )
+
+    def forward(self, x, H: int, W: int):
+        B, N, C = x.shape
+        x = x.permute(0, 2, 1).reshape(B, C, H, W)
+        x = self.conv1(x)
+        x = self.act(x)
+        x = self.bn(x)
+
+        x = self.conv2(x)
+        x = x.reshape(B, C, N).permute(0, 2, 1)
+        return x
+
+
+class ClassAttentionBlock(nn.Module):
+    """Class Attention Layer as in CaiT https://arxiv.org/abs/2103.17239"""
+
+    def __init__(
+        self,
+        dim,
+        num_heads,
+        mlp_ratio=4.0,
+        qkv_bias=False,
+        drop=0.0,
+        attn_drop=0.0,
+        drop_path=0.0,
+        act_layer=nn.GELU,
+        norm_layer=nn.LayerNorm,
+        eta=1.0,
+        tokens_norm=False,
+    ):
+        super().__init__()
+        self.norm1 = norm_layer(dim)
+
+        self.attn = ClassAttn(
+            dim,
+            num_heads=num_heads,
+            qkv_bias=qkv_bias,
+            attn_drop=attn_drop,
+            proj_drop=drop,
+        )
+
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.norm2 = norm_layer(dim)
+        self.mlp = MlpOri(
+            in_features=dim,
+            hidden_features=int(dim * mlp_ratio),
+            act_layer=act_layer,
+            drop=drop,
+        )
+
+        if eta is not None:  # LayerScale Initialization (no layerscale when None)
+            self.gamma1 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
+            self.gamma2 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
+        else:
+            self.gamma1, self.gamma2 = 1.0, 1.0
+        self.tokens_norm = tokens_norm
+
+    def forward(self, x, return_attention=False):
+        x_norm1 = self.norm1(x)
+        if return_attention:
+            x1, attn = self.attn(x_norm1, use_attn=return_attention)
+        else:
+            x1 = self.attn(x_norm1)
+        x_attn = torch.cat([x1, x_norm1[:, 1:]], dim=1)
+        x = x + self.drop_path(self.gamma1 * x_attn)
+        if self.tokens_norm:
+            x = self.norm2(x)
+        else:
+            x = torch.cat([self.norm2(x[:, 0:1]), x[:, 1:]], dim=1)
+        x_res = x
+        cls_token = x[:, 0:1]
+        cls_token = self.gamma2 * self.mlp(cls_token)
+        x = torch.cat([cls_token, x[:, 1:]], dim=1)
+        x = x_res + self.drop_path(x)
+        if return_attention:
+            return attn
+        return x
+
+
+class TokenMixing(nn.Module):
+    def __init__(
+        self,
+        dim,
+        num_heads=8,
+        qkv_bias=False,
+        qk_scale=None,
+        attn_drop=0.0,
+        proj_drop=0.0,
+        sr_ratio=1,
+        linear=False,
+        share_atten=False,
+        drop_path=0.0,
+        emlp=False,
+        sharpen_attn=False,
+        mlp_hidden_dim=None,
+        act_layer=nn.GELU,
+        drop=None,
+        norm_layer=nn.LayerNorm,
+    ):
+        super().__init__()
+        assert dim % num_heads == 0, f"dim {dim} should be divided by num_heads {num_heads}."
+
+        self.dim = dim
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = qk_scale or head_dim**-0.5
+
+        self.share_atten = share_atten
+        self.emlp = emlp
+
+        cha_sr = 1
+        self.q = nn.Linear(dim, dim // cha_sr, bias=qkv_bias)
+        self.kv = nn.Linear(dim, dim * 2 // cha_sr, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+        self.linear = linear
+        self.sr_ratio = sr_ratio
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=0.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            fan_out //= m.groups
+            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+            if m.bias is not None:
+                m.bias.data.zero_()
+
+    def forward(self, x, H, W, atten=None, return_attention=False):
+        B, N, C = x.shape
+        q = self.q(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+
+        # import pdb;pdb.set_trace()
+        kv = self.kv(x).reshape(B, -1, 2, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+
+        k, v = kv[0], kv[1]
+        attn = q * self.scale @ k.transpose(-2, -1)  # * self.scale
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
+        x = self.proj(x)
+        x = self.proj_drop(x)
+        return x, attn @ v
+
+
+class HybridEmbed(nn.Module):
+    """CNN Feature Map Embedding
+    Extract feature map from CNN, flatten, project to embedding dim.
+    """
+
+    def __init__(
+        self,
+        backbone,
+        img_size=224,
+        patch_size=2,
+        feature_size=None,
+        in_chans=3,
+        embed_dim=384,
+    ):
+        super().__init__()
+        assert isinstance(backbone, nn.Module)
+        img_size = to_2tuple(img_size)
+        patch_size = to_2tuple(patch_size)
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.backbone = backbone
+        if feature_size is None:
+            with torch.no_grad():
+                # NOTE Most reliable way of determining output dims is to run forward pass
+                training = backbone.training
+                if training:
+                    backbone.eval()
+                o = self.backbone.forward_features(torch.zeros(1, in_chans, img_size[0], img_size[1]))
+                if isinstance(o, (list, tuple)):
+                    o = o[-1]  # last feature if backbone outputs list/tuple of features
+                feature_size = o.shape[-2:]
+                feature_dim = o.shape[1]
+                backbone.train(training)
+        else:
+            feature_size = to_2tuple(feature_size)
+            if hasattr(self.backbone, "feature_info"):
+                feature_dim = self.backbone.feature_info.channels()[-1]
             else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
-                
-        if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
+                feature_dim = self.backbone.num_features
+        assert feature_size[0] % patch_size[0] == 0 and feature_size[1] % patch_size[1] == 0
+        self.grid_size = (
+            feature_size[0] // patch_size[0],
+            feature_size[1] // patch_size[1],
+        )
+        self.num_patches = self.grid_size[0] * self.grid_size[1]
+        self.proj = nn.Conv2d(feature_dim, embed_dim, kernel_size=patch_size, stride=patch_size)
 
-        embeddings = inputs_embeds + token_type_embeddings
-        if self.position_embedding_type == "absolute":
-            position_embeddings = self.position_embeddings(position_ids)
-            embeddings += position_embeddings
-        embeddings = self.LayerNorm(embeddings)
-        embeddings = self.dropout(embeddings)
-        return embeddings
+    def forward(self, x):
+        x = self.backbone.forward_features(x)
+        B, C, H, W = x.shape
+        if isinstance(x, (list, tuple)):
+            x = x[-1]  # last feature if backbone outputs list/tuple of features
+        x = self.proj(x).flatten(2).transpose(1, 2)
+        return x, (H // self.patch_size[0], W // self.patch_size[1])
 
 
-class FANSelfAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
+class ChannelProcessing(nn.Module):
+    def __init__(
+        self,
+        dim,
+        num_heads=8,
+        qkv_bias=False,
+        attn_drop=0.0,
+        linear=False,
+        drop_path=0.0,
+        mlp_hidden_dim=None,
+        act_layer=nn.GELU,
+        drop=None,
+        norm_layer=nn.LayerNorm,
+        cha_sr_ratio=1,
+        c_head_num=None,
+    ):
         super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({config.num_attention_heads})"
+        assert dim % num_heads == 0, f"dim {dim} should be divided by num_heads {num_heads}."
+
+        self.dim = dim
+        num_heads = c_head_num or num_heads
+        self.num_heads = num_heads
+        self.temperature = nn.Parameter(torch.ones(num_heads, 1, 1))
+
+        self.cha_sr_ratio = cha_sr_ratio if num_heads > 1 else 1
+
+        # config of mlp for v processing
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+        self.mlp_v = Mlp(
+            in_features=dim // self.cha_sr_ratio,
+            hidden_features=mlp_hidden_dim,
+            act_layer=act_layer,
+            drop=drop,
+            linear=linear,
+        )
+        self.norm_v = norm_layer(dim // self.cha_sr_ratio)
+
+        self.q = nn.Linear(dim, dim, bias=qkv_bias)
+
+        self.attn_drop = nn.Dropout(attn_drop)
+
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=0.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            fan_out //= m.groups
+            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+            if m.bias is not None:
+                m.bias.data.zero_()
+
+    def _gen_attn(self, q, k):
+        q = q.softmax(-2).transpose(-1, -2)
+        _, _, N, _ = k.shape
+        k = torch.nn.functional.adaptive_avg_pool2d(k.softmax(-2), (N, 1))
+
+        attn = torch.nn.functional.sigmoid(q @ k)
+        return attn * self.temperature
+
+    def forward(self, x, H, W, atten=None):
+        B, N, C = x.shape
+        v = x.reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+
+        q = self.q(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        k = x.reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+
+        attn = self._gen_attn(q, k)
+        attn = self.attn_drop(attn)
+
+        Bv, Hd, Nv, Cv = v.shape
+        v = (
+            self.norm_v(self.mlp_v(v.transpose(1, 2).reshape(Bv, Nv, Hd * Cv), H, W))
+            .reshape(Bv, Nv, Hd, Cv)
+            .transpose(1, 2)
+        )
+
+        repeat_time = N // attn.shape[-1]
+        attn = attn.repeat_interleave(repeat_time, dim=-1) if attn.shape[-1] > 1 else attn
+        x = (attn * v.transpose(-1, -2)).permute(0, 3, 1, 2).reshape(B, N, C)
+        return x, (attn * v.transpose(-1, -2)).transpose(-1, -2)  # attn
+
+    @torch.jit.ignore
+    def no_weight_decay(self):
+        return {"temperature"}
+
+
+class FANBlock_SE(nn.Module):
+    def __init__(
+        self,
+        dim,
+        num_heads,
+        mlp_ratio=4.0,
+        qkv_bias=False,
+        drop=0.0,
+        attn_drop=0.0,
+        sharpen_attn=False,
+        use_se=False,
+        drop_path=0.0,
+        act_layer=nn.GELU,
+        norm_layer=nn.LayerNorm,
+        eta=1.0,
+        sr_ratio=1.0,
+        qk_scale=None,
+        linear=False,
+        downsample=None,
+        c_head_num=None,
+    ):
+        super().__init__()
+        self.norm1 = norm_layer(dim)
+        self.attn = TokenMixing(
+            dim,
+            num_heads=num_heads,
+            qkv_bias=qkv_bias,
+            mlp_hidden_dim=int(dim * mlp_ratio),
+            sharpen_attn=sharpen_attn,
+            attn_drop=attn_drop,
+            proj_drop=drop,
+            drop=drop,
+            drop_path=drop_path,
+            sr_ratio=sr_ratio,
+            linear=linear,
+            emlp=False,
+        )
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+
+        self.norm2 = norm_layer(dim)
+        self.mlp = SEMlp(
+            in_features=dim,
+            hidden_features=int(dim * mlp_ratio),
+            act_layer=act_layer,
+            drop=drop,
+        )
+
+        self.gamma1 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
+        self.gamma2 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
+
+    def forward(self, x, H: int, W: int, attn=None):
+        x_new, _ = self.attn(self.norm1(x), H, W)
+        x = x + self.drop_path(self.gamma1 * x_new)
+        x_new, H, W = self.mlp(self.norm2(x), H, W)
+        x = x + self.drop_path(self.gamma2 * x_new)
+        return x, H, W
+
+
+class FANBlock(nn.Module):
+    def __init__(
+        self,
+        dim,
+        num_heads,
+        mlp_ratio=4.0,
+        qkv_bias=False,
+        drop=0.0,
+        attn_drop=0.0,
+        sharpen_attn=False,
+        drop_path=0.0,
+        act_layer=nn.GELU,
+        norm_layer=nn.LayerNorm,
+        eta=1.0,
+        sr_ratio=1.0,
+        downsample=None,
+        c_head_num=None,
+    ):
+        super().__init__()
+        self.norm1 = norm_layer(dim)
+        self.attn = TokenMixing(
+            dim,
+            num_heads=num_heads,
+            qkv_bias=qkv_bias,
+            mlp_hidden_dim=int(dim * mlp_ratio),
+            sharpen_attn=sharpen_attn,
+            attn_drop=attn_drop,
+            proj_drop=drop,
+            drop=drop,
+            drop_path=drop_path,
+            sr_ratio=sr_ratio,
+        )
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+
+        self.norm2 = norm_layer(dim)
+        self.mlp = ChannelProcessing(
+            dim,
+            num_heads=num_heads,
+            qkv_bias=qkv_bias,
+            attn_drop=attn_drop,
+            drop_path=drop_path,
+            drop=drop,
+            mlp_hidden_dim=int(dim * mlp_ratio),
+            c_head_num=c_head_num,
+        )
+
+        self.gamma1 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
+        self.gamma2 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
+
+        self.downsample = downsample
+        self.H = None
+        self.W = None
+
+    def forward(self, x, attn=None, return_attention=False):
+        H, W = self.H, self.W
+
+        x_new, attn_s = self.attn(self.norm1(x), H, W)
+        x = x + self.drop_path(self.gamma1 * x_new)
+
+        x_new, attn_c = self.mlp(self.norm2(x), H, W, atten=attn)
+        x = x + self.drop_path(self.gamma2 * x_new)
+        if return_attention:
+            return x, attn_s
+
+        if self.downsample is not None:
+            x, H, W = self.downsample(x, H, W)
+        self.H, self.W = H, W
+        return x
+
+
+class OverlapPatchEmbed(nn.Module):
+    """Image to Patch Embedding"""
+
+    def __init__(self, img_size=224, patch_size=7, stride=4, in_chans=3, embed_dim=768):
+        super().__init__()
+        img_size = to_2tuple(img_size)
+        patch_size = to_2tuple(patch_size)
+
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.H, self.W = img_size[0] // patch_size[0], img_size[1] // patch_size[1]
+        self.num_patches = self.H * self.W
+        self.proj = nn.Conv2d(
+            in_chans,
+            embed_dim,
+            kernel_size=patch_size,
+            stride=stride,
+            padding=(patch_size[0] // 2, patch_size[1] // 2),
+        )
+        self.norm = nn.LayerNorm(embed_dim)
+
+        self.apply(self._init_weights)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=0.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+        elif isinstance(m, nn.Conv2d):
+            fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+            fan_out //= m.groups
+            m.weight.data.normal_(0, math.sqrt(2.0 / fan_out))
+            if m.bias is not None:
+                m.bias.data.zero_()
+
+    def forward(self, x, H, W):
+        B, N, C = x.shape
+        x = x.transpose(-1, -2).reshape(B, C, H, W)
+        x = self.proj(x)
+        _, _, H, W = x.shape
+
+        x = x.flatten(2).transpose(1, 2)
+        x = self.norm(x)
+
+        return x, H, W
+
+
+class FAN(nn.Module):
+    """
+    Based on timm code bases
+    https://github.com/rwightman/pytorch-image-models/tree/master/timm
+    """
+
+    def __init__(
+        self,
+        img_size=224,
+        patch_size=16,
+        in_chans=3,
+        num_classes=1000,
+        embed_dim=768,
+        depth=12,
+        sharpen_attn=False,
+        channel_dims=None,
+        num_heads=12,
+        mlp_ratio=4.0,
+        qkv_bias=True,
+        drop_rate=0.0,
+        attn_drop_rate=0.0,
+        drop_path_rate=0.0,
+        sr_ratio=None,
+        backbone=None,
+        use_checkpoint=False,
+        act_layer=None,
+        norm_layer=None,
+        se_mlp=False,
+        cls_attn_layers=2,
+        use_pos_embed=True,
+        eta=1.0,
+        tokens_norm=False,
+        c_head_num=None,
+        hybrid_patch_size=2,
+        head_init_scale=1.0,
+    ):
+
+        super().__init__()
+        img_size = to_2tuple(img_size)
+        self.use_checkpoint = use_checkpoint
+        assert (img_size[0] % patch_size == 0) and (
+            img_size[0] % patch_size == 0
+        ), "`patch_size` should divide image dimensions evenly"
+
+        self.num_classes = num_classes
+        num_heads = [num_heads] * depth if not isinstance(num_heads, list) else num_heads
+
+        channel_dims = [embed_dim] * depth if channel_dims is None else channel_dims
+        norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6)
+        act_layer = act_layer or nn.GELU
+        if backbone == None:
+            self.patch_embed = ConvPatchEmbed(
+                img_size=img_size,
+                patch_size=patch_size,
+                in_chans=in_chans,
+                embed_dim=embed_dim,
+                act_layer=act_layer,
             )
-
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-        self.position_embedding_type = position_embedding_type or getattr(config, "position_embedding_type", "absolute")
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
-
-        self.is_decoder = config.is_decoder
-
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(*new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
-        output_attentions=False,
-    ):
-        mixed_query_layer = self.query(hidden_states)
-
-        # If this is instantiated as a cross-attention module, the keys
-        # and values come from an encoder; the attention mask needs to be
-        # such that the encoder's padding tokens are not attended to.
-        is_cross_attention = encoder_hidden_states is not None
-
-        if is_cross_attention and past_key_value is not None:
-            # reuse k,v, cross_attentions
-            key_layer = past_key_value[0]
-            value_layer = past_key_value[1]
-            attention_mask = encoder_attention_mask
-        elif is_cross_attention:
-            key_layer = self.transpose_for_scores(self.key(encoder_hidden_states))
-            value_layer = self.transpose_for_scores(self.value(encoder_hidden_states))
-            attention_mask = encoder_attention_mask
-        elif past_key_value is not None:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
-            key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
-            value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
         else:
-            key_layer = self.transpose_for_scores(self.key(hidden_states))
-            value_layer = self.transpose_for_scores(self.value(hidden_states))
+            self.patch_embed = HybridEmbed(backbone=backbone, patch_size=hybrid_patch_size, embed_dim=embed_dim)
 
-        query_layer = self.transpose_for_scores(mixed_query_layer)
+        self.use_pos_embed = use_pos_embed
+        if use_pos_embed:
+            self.pos_embed = PositionalEncodingFourier(dim=embed_dim)
+        self.pos_drop = nn.Dropout(p=drop_rate)
 
-        if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
-            # Further calls to cross_attention layer can then reuse all cross-attention
-            # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
-            # all previous decoder key/value_states. Further calls to uni-directional self-attention
-            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
-            # if encoder bi-directional self-attention `past_key_value` is always `None`
-            past_key_value = (key_layer, value_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
-
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
-            position_ids_l = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(-1, 1)
-            position_ids_r = torch.arange(seq_length, dtype=torch.long, device=hidden_states.device).view(1, -1)
-            distance = position_ids_l - position_ids_r
-            positional_embedding = self.distance_embedding(distance + self.max_position_embeddings - 1)
-            positional_embedding = positional_embedding.to(dtype=query_layer.dtype)  # fp16 compatibility
-
-            if self.position_embedding_type == "relative_key":
-                relative_position_scores = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores
-            elif self.position_embedding_type == "relative_key_query":
-                relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
-                relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
-                attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
-
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-        if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in FANModel forward() function)
-            attention_scores = attention_scores + attention_mask
-
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
-
-        context_layer = torch.matmul(attention_probs, value_layer)
-
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(*new_context_layer_shape)
-
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
-        if self.is_decoder:
-            outputs = outputs + (past_key_value,)
-        return outputs
-
-
-class FANSelfOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states, input_tensor):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
-
-
-class FANAttention(nn.Module):
-    def __init__(self, config, position_embedding_type=None):
-        super().__init__()
-        self.self = FANSelfAttention(config, position_embedding_type=position_embedding_type)
-        self.output = FANSelfOutput(config)
-        self.pruned_heads = set()
-
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
-        output_attentions=False,
-    ):
-        self_outputs = self.self(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_value,
-            output_attentions,
-        )
-        attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
-        return outputs
-
-
-class FANIntermediate(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        if se_mlp:
+            build_block = FANBlock_SE
         else:
-            self.intermediate_act_fn = config.hidden_act
-
-    def forward(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        return hidden_states
-
-
-class FANOutput(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states, input_tensor):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states + input_tensor)
-        return hidden_states
-
-
-class FANLayer(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.seq_len_dim = 1
-        self.attention = FANAttention(config)
-        self.is_decoder = config.is_decoder
-        self.add_cross_attention = config.add_cross_attention
-        if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
-            self.crossattention = FANAttention(config, position_embedding_type="absolute")
-        self.intermediate = FANIntermediate(config)
-        self.output = FANOutput(config)
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_value=None,
-        output_attentions=False,
-    ):
-        # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
-        self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
-        self_attention_outputs = self.attention(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions=output_attentions,
-            past_key_value=self_attn_past_key_value,
-        )
-        attention_output = self_attention_outputs[0]
-
-        # if decoder, the last output is tuple of self-attn cache
-        if self.is_decoder:
-            outputs = self_attention_outputs[1:-1]
-            present_key_value = self_attention_outputs[-1]
-        else:
-            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
-
-        cross_attn_present_key_value = None
-        if self.is_decoder and encoder_hidden_states is not None:
-            assert hasattr(
-                self, "crossattention"
-            ), f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
-
-            # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
-            cross_attn_past_key_value = past_key_value[-2:] if past_key_value is not None else None
-            cross_attention_outputs = self.crossattention(
-                attention_output,
-                attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                encoder_attention_mask,
-                cross_attn_past_key_value,
-                output_attentions,
-            )
-            attention_output = cross_attention_outputs[0]
-            outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
-
-            # add cross-attn cache to positions 3,4 of present_key_value tuple
-            cross_attn_present_key_value = cross_attention_outputs[-1]
-            present_key_value = present_key_value + cross_attn_present_key_value
-
-        layer_output = apply_chunking_to_forward(
-            self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
-        )
-        outputs = (layer_output,) + outputs
-
-        # if decoder, return the attn key/values as the last output
-        if self.is_decoder:
-            outputs = outputs + (present_key_value,)
-
-        return outputs
-
-    def feed_forward_chunk(self, attention_output):
-        intermediate_output = self.intermediate(attention_output)
-        layer_output = self.output(intermediate_output, attention_output)
-        return layer_output
-
-
-class FANEncoder(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([FANLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-        all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
-
-        next_decoder_cache = () if use_cache else None
-        for i, layer_module in enumerate(self.layer):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_head_mask = head_mask[i] if head_mask is not None else None
-            past_key_value = past_key_values[i] if past_key_values is not None else None
-
-            if self.gradient_checkpointing and self.training:
-
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
-                    )
-                    use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
+            build_block = FANBlock
+        self.blocks = nn.ModuleList([])
+        for i in range(depth):
+            if i < depth - 1 and channel_dims[i] != channel_dims[i + 1]:
+                downsample = OverlapPatchEmbed(
+                    img_size=img_size,
+                    patch_size=3,
+                    stride=2,
+                    in_chans=channel_dims[i],
+                    embed_dim=channel_dims[i + 1],
                 )
             else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
+                downsample = None
+            self.blocks.append(
+                build_block(
+                    dim=channel_dims[i],
+                    num_heads=num_heads[i],
+                    mlp_ratio=mlp_ratio,
+                    qkv_bias=qkv_bias,
+                    drop=drop_rate,
+                    sr_ratio=sr_ratio[i],
+                    attn_drop=attn_drop_rate,
+                    drop_path=drop_path_rate,
+                    act_layer=act_layer,
+                    norm_layer=norm_layer,
+                    eta=eta,
+                    downsample=downsample,
+                    c_head_num=c_head_num[i] if c_head_num is not None else None,
                 )
-
-            hidden_states = layer_outputs[0]
-            if use_cache:
-                next_decoder_cache += (layer_outputs[-1],)
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-                if self.config.add_cross_attention:
-                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    next_decoder_cache,
-                    all_hidden_states,
-                    all_self_attentions,
-                    all_cross_attentions,
-                ]
-                if v is not None
             )
-        return BaseModelOutputWithPastAndCrossAttentions(
-            last_hidden_state=hidden_states,
-            past_key_values=next_decoder_cache,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-            cross_attentions=all_cross_attentions,
+        self.num_features = self.embed_dim = channel_dims[i]
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, channel_dims[i]))
+        self.cls_attn_blocks = nn.ModuleList(
+            [
+                ClassAttentionBlock(
+                    dim=channel_dims[-1],
+                    num_heads=num_heads[-1],
+                    mlp_ratio=mlp_ratio,
+                    qkv_bias=qkv_bias,
+                    drop=drop_rate,
+                    attn_drop=attn_drop_rate,
+                    act_layer=act_layer,
+                    norm_layer=norm_layer,
+                    eta=eta,
+                    tokens_norm=tokens_norm,
+                )
+                for _ in range(cls_attn_layers)
+            ]
         )
 
+        # Classifier head
+        self.norm = norm_layer(channel_dims[i])
+        self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
 
-class FANPredictionHeadTransform(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        if isinstance(config.hidden_act, str):
-            self.transform_act_fn = ACT2FN[config.hidden_act]
+        # Init weights
+        trunc_normal_(self.cls_token, std=0.02)
+        self.apply(self._init_weights)
+        self.head.weight.data.mul_(head_init_scale)
+        self.head.bias.data.mul_(head_init_scale)
+
+    def _init_weights(self, m):
+        if isinstance(m, nn.Linear):
+            trunc_normal_(m.weight, std=0.02)
+            if isinstance(m, nn.Linear) and m.bias is not None:
+                nn.init.constant_(m.bias, 0)
+        elif isinstance(m, nn.LayerNorm):
+            nn.init.constant_(m.bias, 0)
+            nn.init.constant_(m.weight, 1.0)
+
+    @torch.jit.ignore
+    def no_weight_decay(self):
+        return {"pos_embed", "cls_token"}  # , 'patch_embed'}
+
+    def get_classifier(self):
+        return self.head
+
+    def reset_classifier(self, num_classes, global_pool=""):
+        self.num_classes = num_classes
+        self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
+
+    def forward_features(self, x):
+        B = x.shape[0]
+        x, (Hp, Wp) = self.patch_embed(x)
+
+        if self.use_pos_embed:
+            pos_encoding = self.pos_embed(B, Hp, Wp).reshape(B, -1, x.shape[1]).permute(0, 2, 1)
+            x = x + pos_encoding
+
+        x = self.pos_drop(x)
+        H, W = Hp, Wp
+        for blk in self.blocks:
+            blk.H, blk.W = H, W
+            if self.use_checkpoint:
+                x = torch.utils.checkpoint.checkpoint(blk, x)
+            else:
+                x = blk(x)
+            H, W = blk.H, blk.W
+
+        cls_tokens = self.cls_token.expand(B, -1, -1)
+        x = torch.cat((cls_tokens, x), dim=1)
+
+        for blk in self.cls_attn_blocks:
+            x = blk(x)
+
+        x = self.norm(x)[:, 0]
+        return x
+
+    def forward(self, x):
+        x = self.forward_features(x)
+        x = self.head(x)
+        return x
+
+    def get_last_selfattention(self, x, use_cls_attn=False, layer_idx=11):
+        B = x.shape[0]
+        x, (Hp, Wp) = self.patch_embed(x)
+
+        if self.use_pos_embed:
+            pos_encoding = self.pos_embed(B, Hp, Wp).reshape(B, -1, x.shape[1]).permute(0, 2, 1)
+            x = x + pos_encoding
+
+        x = self.pos_drop(x)
+
+        return_idx = layer_idx or len(self.blocks) - 1
+
+        for i, blk in enumerate(self.blocks):
+            if i == return_idx:
+                x, attn = blk(x, Hp, Wp, return_attention=True)
+            else:
+                x, Hp, Wp = blk(x, Hp, Wp)
+
+        if use_cls_attn:
+            cls_tokens = self.cls_token.expand(B, -1, -1)
+            x = torch.cat((cls_tokens, x), dim=1)
+
+            for i, blk in enumerate(self.cls_attn_blocks):
+                if i < len(self.cls_attn_blocks) - 1:
+                    x = blk(x)
+                else:
+                    attn = blk(x, return_attention=True)
+                    return attn
         else:
-            self.transform_act_fn = config.hidden_act
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-    def forward(self, hidden_states):
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states)
-        return hidden_states
-
-
-class FANLMPredictionHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.transform = FANPredictionHeadTransform(config)
-
-        # The output weights are the same as the input embeddings, but there is
-        # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def forward(self, hidden_states):
-        hidden_states = self.transform(hidden_states)
-        hidden_states = self.decoder(hidden_states)
-        return hidden_states
-
-
-class FANOnlyMLMHead(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.predictions = FANLMPredictionHead(config)
-
-    def forward(self, sequence_output):
-        prediction_scores = self.predictions(sequence_output)
-        return prediction_scores
+            return attn
 
 
 class FANPreTrainedModel(PreTrainedModel):
@@ -651,13 +1030,13 @@ class FANPreTrainedModel(PreTrainedModel):
     """
 
     config_class = FANConfig
-    load_tf_weights = load_tf_weights_in_fan
-    base_model_prefix = "fan"
+    base_model_prefix = "fan"  # TODO: FAN or model?
+    main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def _init_weights(self, module):
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, nn.Linear):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
@@ -762,8 +1141,103 @@ class FANModel(FANPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = FANEmbeddings(config)
-        self.encoder = FANEncoder(config)
+        img_size = to_2tuple(self.config.img_size)
+        self.use_checkpoint = self.config.use_checkpoint
+        assert (img_size[0] % self.config.patch_size == 0) and (
+            img_size[0] % self.config.patch_size == 0
+        ), "`patch_size` should divide image dimensions evenly"
+
+        self.num_classes = self.config.num_classes
+        num_heads = (
+            [self.config.num_heads] * self.config.depth
+            if not isinstance(self.config.num_heads, list)
+            else self.config.num_heads
+        )
+
+        channel_dims = (
+            [self.config.embed_dim] * self.config.depth
+            if self.config.channel_dims is None
+            else self.config.channel_dims
+        )
+        norm_layer = self.config.norm_layer or partial(nn.LayerNorm, eps=1e-6)  # TODO : Add NORM2FUN
+        act_layer = self.config.act_layer or nn.GELU  # TODO : Add ACT2FUN
+        if self.config.backbone == None:
+            self.patch_embed = ConvPatchEmbed(
+                img_size=img_size,
+                patch_size=self.config.patch_size,
+                in_chans=self.config.in_chans,
+                embed_dim=self.config.embed_dim,
+                act_layer=act_layer,
+            )
+        else:
+            self.patch_embed = HybridEmbed(
+                backbone=self.config.backbone,
+                patch_size=self.config.hybrid_patch_size,
+                embed_dim=self.config.embed_dim,
+            )
+
+        if self.config.use_pos_embed:
+            self.pos_embed = PositionalEncodingFourier(dim=self.config.embed_dim)
+        self.pos_drop = nn.Dropout(p=self.config.drop_rate)
+
+        if self.config.se_mlp:
+            build_block = FANBlock_SE
+        else:
+            build_block = FANBlock
+        self.blocks = nn.ModuleList([])
+        for i in range(self.config.depth):
+            if i < self.config.depth - 1 and channel_dims[i] != channel_dims[i + 1]:
+                downsample = OverlapPatchEmbed(
+                    img_size=img_size,
+                    patch_size=3,
+                    stride=2,
+                    in_chans=channel_dims[i],
+                    embed_dim=channel_dims[i + 1],
+                )
+            else:
+                downsample = None
+            self.blocks.append(
+                build_block(
+                    dim=channel_dims[i],
+                    num_heads=num_heads[i],
+                    mlp_ratio=self.config.mlp_ratio,
+                    qkv_bias=self.config.qkv_bias,
+                    drop=self.config.drop_rate,
+                    sr_ratio=self.config.sr_ratio[i],
+                    attn_drop=self.config.attn_drop_rate,
+                    drop_path=self.config.drop_path_rate,
+                    act_layer=act_layer,
+                    norm_layer=norm_layer,
+                    eta=self.config.eta,
+                    downsample=downsample,
+                    c_head_num=self.config.c_head_num[i] if self.config.c_head_num is not None else None,
+                )
+            )
+        self.num_features = self.embed_dim = channel_dims[i]
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, channel_dims[i]))
+        self.cls_attn_blocks = nn.ModuleList(
+            [
+                ClassAttentionBlock(
+                    dim=channel_dims[-1],
+                    num_heads=num_heads[-1],
+                    mlp_ratio=self.config.mlp_ratio,
+                    qkv_bias=self.config.qkv_bias,
+                    drop=self.config.drop_rate,
+                    attn_drop=self.config.attn_drop_rate,
+                    act_layer=act_layer,
+                    norm_layer=norm_layer,
+                    eta=self.config.eta,
+                    tokens_norm=self.config.tokens_norm,
+                )
+                for _ in range(self.config.cls_attn_layers)
+            ]
+        )
+
+        # Classifier head
+        self.norm = norm_layer(channel_dims[i])
+        self.head = (
+            nn.Linear(self.num_features, self.config.num_classes) if self.config.num_classes > 0 else nn.Identity()
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -850,7 +1324,6 @@ class FANModel(FANPreTrainedModel):
 
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
 
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
@@ -1048,22 +1521,22 @@ class FANForCausalLM(FANPreTrainedModel):
     @add_start_docstrings_to_model_forward(FAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            inputs_embeds=None,
-            encoder_hidden_states=None,
-            encoder_attention_mask=None,
-            head_mask=None,
-            cross_attn_head_mask=None,
-            past_key_values=None,
-            labels=None,
-            use_cache=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
+        encoder_hidden_states=None,
+        encoder_attention_mask=None,
+        head_mask=None,
+        cross_attn_head_mask=None,
+        past_key_values=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -1114,8 +1587,7 @@ class FANForCausalLM(FANPreTrainedModel):
         >>> outputs = model(**inputs)
 
         >>> prediction_logits = outputs.logits
-        ```
-"""
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.fan(
@@ -1174,8 +1646,11 @@ class FANForCausalLM(FANPreTrainedModel):
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
-            reordered_past += (tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],)
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
+            )
         return reordered_past
+
 
 class FANClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
@@ -1221,17 +1696,17 @@ class FANForSequenceClassification(FANPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -1290,6 +1765,7 @@ class FANForSequenceClassification(FANPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 @add_start_docstrings(
     """FAN Model with a multiple choice classification head on top (a linear layer on top of
     the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
@@ -1314,17 +1790,17 @@ class FANForMultipleChoice(FANPreTrainedModel):
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
-            self,
-            input_ids=None,
-            attention_mask=None,
-            token_type_ids=None,
-            position_ids=None,
-            head_mask=None,
-            inputs_embeds=None,
-            labels=None,
-            output_attentions=None,
-            output_hidden_states=None,
-            return_dict=None,
+        self,
+        input_ids=None,
+        attention_mask=None,
+        token_type_ids=None,
+        position_ids=None,
+        head_mask=None,
+        inputs_embeds=None,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
