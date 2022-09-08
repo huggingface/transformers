@@ -18,6 +18,8 @@ from functools import lru_cache
 from typing import Iterable, List, Optional
 
 import pandas as pd
+from torch.utils.data import DataLoader
+
 from gluonts.dataset.field_names import FieldName
 from gluonts.itertools import Cyclic, IterableSlice, PseudoShuffled
 from gluonts.time_feature import time_features_from_frequency_str
@@ -39,7 +41,6 @@ from gluonts.transform import (
     VstackFeatures,
 )
 from gluonts.transform.sampler import InstanceSampler
-from torch.utils.data import DataLoader
 
 
 @lru_cache(10_000)
