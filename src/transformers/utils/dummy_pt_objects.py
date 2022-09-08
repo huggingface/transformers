@@ -1868,6 +1868,13 @@ class EncoderDecoderModel(metaclass=DummyObject):
 ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
+class ErnieForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ErnieForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -1911,20 +1918,6 @@ class ErnieForSequenceClassification(metaclass=DummyObject):
 
 
 class ErnieForTokenClassification(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class ErnieLayer(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class ErnieForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
