@@ -165,6 +165,7 @@ _import_structure = {
     "models.clip": [
         "CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "CLIPConfig",
+        "CLIPProcessor",
         "CLIPTextConfig",
         "CLIPTokenizer",
         "CLIPVisionConfig",
@@ -367,6 +368,13 @@ _import_structure = {
     "models.wavlm": [
         "WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "WavLMConfig",
+    ],
+    "models.x_clip": [
+        "XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "XCLIPConfig",
+        "XCLIPProcessor",
+        "XCLIPTextConfig",
+        "XCLIPVisionConfig",
     ],
     "models.xglm": ["XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XGLMConfig"],
     "models.xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMTokenizer"],
@@ -641,7 +649,6 @@ else:
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
-    _import_structure["models.clip"].append("CLIPProcessor")
     _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
@@ -986,6 +993,15 @@ else:
             "CLIPPreTrainedModel",
             "CLIPTextModel",
             "CLIPVisionModel",
+        ]
+    )
+    _import_structure["models.x_clip"].extend(
+        [
+            "XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "XCLIPModel",
+            "XCLIPPreTrainedModel",
+            "XCLIPTextModel",
+            "XCLIPVisionModel",
         ]
     )
     _import_structure["models.convbert"].extend(
@@ -3012,6 +3028,7 @@ if TYPE_CHECKING:
     from .models.clip import (
         CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         CLIPConfig,
+        CLIPProcessor,
         CLIPTextConfig,
         CLIPTokenizer,
         CLIPVisionConfig,
@@ -3189,6 +3206,13 @@ if TYPE_CHECKING:
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
+    from .models.x_clip import (
+        XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        XCLIPConfig,
+        XCLIPProcessor,
+        XCLIPTextConfig,
+        XCLIPVisionConfig,
+    )
     from .models.xglm import XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XGLMConfig
     from .models.xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMTokenizer
     from .models.xlm_prophetnet import XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMProphetNetConfig
@@ -3428,7 +3452,7 @@ if TYPE_CHECKING:
     else:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
-        from .models.clip import CLIPFeatureExtractor, CLIPProcessor
+        from .models.clip import CLIPFeatureExtractor
         from .models.convnext import ConvNextFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
@@ -4498,6 +4522,13 @@ if TYPE_CHECKING:
             WavLMForXVector,
             WavLMModel,
             WavLMPreTrainedModel,
+        )
+        from .models.x_clip import (
+            XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
+            XCLIPModel,
+            XCLIPPreTrainedModel,
+            XCLIPTextModel,
+            XCLIPVisionModel,
         )
         from .models.xglm import XGLM_PRETRAINED_MODEL_ARCHIVE_LIST, XGLMForCausalLM, XGLMModel, XGLMPreTrainedModel
         from .models.xlm import (

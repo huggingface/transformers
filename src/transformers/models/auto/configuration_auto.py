@@ -144,6 +144,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2Config"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerConfig"),
         ("wavlm", "WavLMConfig"),
+        ("xclip", "XCLIPConfig"),
         ("xglm", "XGLMConfig"),
         ("xlm", "XLMConfig"),
         ("xlm-prophetnet", "XLMProphetNetConfig"),
@@ -259,6 +260,7 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("vit_mae", "VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2", "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("wav2vec2-conformer", "WAV2VEC2_CONFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
+        ("xclip", "X_CLIP_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("xglm", "XGLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("xlm", "XLM_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("xlm-prophetnet", "XLM_PROPHETNET_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -408,6 +410,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("wav2vec2-conformer", "Wav2Vec2-Conformer"),
         ("wav2vec2_phoneme", "Wav2Vec2Phoneme"),
         ("wavlm", "WavLM"),
+        ("xclip", "X-CLIP"),
         ("xglm", "XGLM"),
         ("xlm", "XLM"),
         ("xlm-prophetnet", "XLM-ProphetNet"),
@@ -428,6 +431,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("data2vec-text", "data2vec"),
         ("data2vec-vision", "data2vec"),
         ("donut-swin", "donut"),
+        ("xclip", "x_clip"),
     ]
 )
 

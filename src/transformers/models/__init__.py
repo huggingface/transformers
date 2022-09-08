@@ -151,6 +151,7 @@ from . import (
     wav2vec2_phoneme,
     wav2vec2_with_lm,
     wavlm,
+    x_clip,
     xglm,
     xlm,
     xlm_prophetnet,
