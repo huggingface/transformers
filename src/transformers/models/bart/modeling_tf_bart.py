@@ -1244,7 +1244,7 @@ class BiasLayer(tf.keras.layers.Layer):
     BART_START_DOCSTRING,
 )
 class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageModelingLoss):
-    _keys_to_ignore_on_load_missing = [r"final_logits_bias", r"lm_head.weight"]
+    _keys_to_ignore_on_load_missing = [r"final_logits_bias"]
     _requires_load_weight_prefix = True
 
     def __init__(self, config, load_weight_prefix=None, *inputs, **kwargs):
@@ -1270,10 +1270,10 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         self.set_input_embeddings(value)
 
     def get_bias(self):
-        return {"final_logits_bias": self.final_logits_bias}
+        return {"final_logits_bias": self.bias_layer.bias}
 
     def set_bias(self, value):
-        self.final_logits_bias = value["final_logits_bias"]
+        self.bias_layer.bias = value["final_logits_bias"]
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1341,7 +1341,8 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
             return_dict=return_dict,
             training=training,
         )
-        # The output layer ("lm_head" in pytorch) is a dense layer whose weights are tied to the input embeddings.
+        # TODO (joao): the line below is for models with tied embeddings. The previous TFBart had tied embeddings.
+        # The PT Bart does not have tied embeddings. Untie the weights while keeping loading retrocompatibility.
         lm_logits = tf.matmul(outputs[0], self.model.shared.weights, transpose_b=True)
         lm_logits = self.bias_layer(lm_logits)
         masked_lm_loss = None if labels is None else self.hf_compute_loss(labels, lm_logits)
