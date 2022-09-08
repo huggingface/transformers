@@ -41,6 +41,7 @@ else:
         "ErnieForSequenceClassification",
         "ErnieForTokenClassification",
         "ErnieForCausalLM",
+        "ErnieModel",
         "ErnieModelErniePreTrainedModel",
     ]
 
