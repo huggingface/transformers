@@ -26,7 +26,7 @@ from fairseq.data import Dictionary
 from transformers import (
     SpeechT5Config,
     SpeechT5CTCTokenizer,
-    SpeechT5FeatureExtractor,
+    Wav2Vec2FeatureExtractor,
     SpeechT5ForCTC,
     SpeechT5ForPreTraining,
     SpeechT5Processor,
@@ -227,7 +227,7 @@ def convert_speecht5_checkpoint(
                 do_lower_case=False,
             )
             return_attention_mask = True if config.feat_extract_norm == "layer" else False
-            feature_extractor = SpeechT5FeatureExtractor(
+            feature_extractor = Wav2Vec2FeatureExtractor(
                 feature_size=1,
                 sampling_rate=16000,
                 padding_value=0,

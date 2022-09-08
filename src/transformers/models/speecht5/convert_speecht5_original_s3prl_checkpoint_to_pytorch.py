@@ -21,7 +21,7 @@ import torch
 
 from transformers import (
     SpeechT5Config,
-    SpeechT5FeatureExtractor,
+    Wav2Vec2FeatureExtractor,
     SpeechT5ForAudioFrameClassification,
     SpeechT5ForSequenceClassification,
     SpeechT5ForXVector,
@@ -77,7 +77,7 @@ def convert_s3prl_checkpoint(base_model_name, config_path, checkpoint_path, mode
     downstream_dict = checkpoint["Downstream"]
 
     hf_config = SpeechT5Config.from_pretrained(config_path)
-    hf_feature_extractor = SpeechT5FeatureExtractor.from_pretrained(
+    hf_feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
         base_model_name, return_attention_mask=True, do_normalize=False
     )
 

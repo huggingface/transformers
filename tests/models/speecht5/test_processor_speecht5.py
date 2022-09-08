@@ -18,11 +18,12 @@ import shutil
 import tempfile
 import unittest
 
-from transformers.models.speecht5 import SpeechT5CTCTokenizer, SpeechT5FeatureExtractor, SpeechT5Processor
+from transformers.models.wav2vec2 import Wav2Vec2FeatureExtractor
+from transformers.models.speecht5 import SpeechT5CTCTokenizer, SpeechT5Processor
 from transformers.models.speecht5.tokenization_speecht5 import VOCAB_FILES_NAMES
 from transformers.utils import FEATURE_EXTRACTOR_NAME
 
-from .test_feature_extraction_speecht5 import floats_list
+from ..wav2vec2.test_feature_extraction_wav2vec2 import floats_list
 
 
 class SpeechT5ProcessorTest(unittest.TestCase):
@@ -59,7 +60,7 @@ class SpeechT5ProcessorTest(unittest.TestCase):
         return SpeechT5CTCTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return SpeechT5FeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
+        return Wav2Vec2FeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -77,7 +78,7 @@ class SpeechT5ProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, SpeechT5CTCTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, SpeechT5FeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, Wav2Vec2FeatureExtractor)
 
     def test_save_load_pretrained_additional_features(self):
         processor = SpeechT5Processor(tokenizer=self.get_tokenizer(), feature_extractor=self.get_feature_extractor())
@@ -94,7 +95,7 @@ class SpeechT5ProcessorTest(unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, SpeechT5CTCTokenizer)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, SpeechT5FeatureExtractor)
+        self.assertIsInstance(processor.feature_extractor, Wav2Vec2FeatureExtractor)
 
     def test_feature_extractor(self):
         feature_extractor = self.get_feature_extractor()

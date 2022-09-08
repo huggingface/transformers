@@ -47,7 +47,7 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        SpeechT5FeatureExtractor,
+        Wav2Vec2FeatureExtractor,
         SpeechT5ForAudioFrameClassification,
         SpeechT5ForCTC,
         SpeechT5ForPreTraining,
@@ -1187,7 +1187,7 @@ class SpeechT5ModelIntegrationTest(unittest.TestCase):
     def test_inference_integration(self):
         model = SpeechT5ForPreTraining.from_pretrained("facebook/speecht5-base")
         model.to(torch_device)
-        feature_extractor = SpeechT5FeatureExtractor.from_pretrained("facebook/speecht5-base")
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained("facebook/speecht5-base")
         input_speech = self._load_datasamples(2)
 
         inputs_dict = feature_extractor(input_speech, return_tensors="pt", padding=True)
@@ -1235,7 +1235,7 @@ class SpeechT5ModelIntegrationTest(unittest.TestCase):
     def test_inference_pretrained(self):
         model = SpeechT5ForPreTraining.from_pretrained("facebook/speecht5-base")
         model.to(torch_device)
-        feature_extractor = SpeechT5FeatureExtractor.from_pretrained(
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
             "facebook/speecht5-base", return_attention_mask=True
         )
         input_speech = self._load_datasamples(2)
@@ -1306,7 +1306,7 @@ class SpeechT5ModelIntegrationTest(unittest.TestCase):
         )
         model.to(torch_device).train()
 
-        feature_extractor = SpeechT5FeatureExtractor.from_pretrained(
+        feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(
             "facebook/speecht5-base", return_attention_mask=True
         )
         input_speech = self._load_datasamples(2)
@@ -1354,7 +1354,7 @@ class SpeechT5ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_keyword_spotting(self):
         model = SpeechT5ForSequenceClassification.from_pretrained("superb/speecht5-base-superb-ks").to(torch_device)
-        processor = SpeechT5FeatureExtractor.from_pretrained("superb/speecht5-base-superb-ks")
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/speecht5-base-superb-ks")
         input_data = self._load_superb("ks", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
@@ -1373,7 +1373,7 @@ class SpeechT5ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_intent_classification(self):
         model = SpeechT5ForSequenceClassification.from_pretrained("superb/speecht5-base-superb-ic").to(torch_device)
-        processor = SpeechT5FeatureExtractor.from_pretrained("superb/speecht5-base-superb-ic")
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/speecht5-base-superb-ic")
         input_data = self._load_superb("ic", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
@@ -1403,7 +1403,7 @@ class SpeechT5ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_speaker_identification(self):
         model = SpeechT5ForSequenceClassification.from_pretrained("superb/speecht5-base-superb-sid").to(torch_device)
-        processor = SpeechT5FeatureExtractor.from_pretrained("superb/speecht5-base-superb-sid")
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/speecht5-base-superb-sid")
         input_data = self._load_superb("si", 4)
 
         output_logits = []
@@ -1424,7 +1424,7 @@ class SpeechT5ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_emotion_recognition(self):
         model = SpeechT5ForSequenceClassification.from_pretrained("superb/speecht5-base-superb-er").to(torch_device)
-        processor = SpeechT5FeatureExtractor.from_pretrained("superb/speecht5-base-superb-er")
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("superb/speecht5-base-superb-er")
         input_data = self._load_superb("er", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True)
 
@@ -1502,7 +1502,7 @@ class SpeechT5ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_diarization(self):
         model = SpeechT5ForAudioFrameClassification.from_pretrained("anton-l/speecht5-base-superb-sd").to(torch_device)
-        processor = SpeechT5FeatureExtractor.from_pretrained("anton-l/speecht5-base-superb-sd")
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/speecht5-base-superb-sd")
         input_data = self._load_superb("sd", 4)
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True, sampling_rate=16_000)
 
@@ -1530,7 +1530,7 @@ class SpeechT5ModelIntegrationTest(unittest.TestCase):
 
     def test_inference_speaker_verification(self):
         model = SpeechT5ForXVector.from_pretrained("anton-l/speecht5-base-superb-sv").to(torch_device)
-        processor = SpeechT5FeatureExtractor.from_pretrained("anton-l/speecht5-base-superb-sv")
+        processor = Wav2Vec2FeatureExtractor.from_pretrained("anton-l/speecht5-base-superb-sv")
         input_data = self._load_superb("si", 4)
 
         inputs = processor(input_data["speech"], return_tensors="pt", padding=True, sampling_rate=16_000)

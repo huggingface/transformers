@@ -22,7 +22,6 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 _import_structure = {
     "configuration_speecht5": ["SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP", "SpeechT5Config"],
-    "feature_extraction_speecht5": ["SpeechT5FeatureExtractor"],
     "processing_speecht5": ["SpeechT5Processor"],
     "tokenization_speecht5": ["SpeechT5CTCTokenizer"],
 }
@@ -47,7 +46,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_speecht5 import SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP, SpeechT5Config
-    from .feature_extraction_speecht5 import SpeechT5FeatureExtractor
     from .processing_speecht5 import SpeechT5Processor
     from .tokenization_speecht5 import SpeechT5CTCTokenizer
 

@@ -19,7 +19,7 @@ import warnings
 from contextlib import contextmanager
 
 from ...processing_utils import ProcessorMixin
-from .feature_extraction_speecht5 import SpeechT5FeatureExtractor
+from ..wav2vec2 import Wav2Vec2FeatureExtractor
 from .tokenization_speecht5 import SpeechT5CTCTokenizer
 
 
@@ -28,16 +28,16 @@ class SpeechT5Processor(ProcessorMixin):
     Constructs a SpeechT5 processor which wraps a SpeechT5 feature extractor and a SpeechT5 CTC tokenizer into a single
     processor.
 
-    [`SpeechT5Processor`] offers all the functionalities of [`SpeechT5FeatureExtractor`] and [`PreTrainedTokenizer`].
+    [`SpeechT5Processor`] offers all the functionalities of [`Wav2Vec2FeatureExtractor`] and [`PreTrainedTokenizer`].
     See the docstring of [`~SpeechT5Processor.__call__`] and [`~SpeechT5Processor.decode`] for more information.
 
     Args:
-        feature_extractor (`SpeechT5FeatureExtractor`):
-            An instance of [`SpeechT5FeatureExtractor`]. The feature extractor is a required input.
+        feature_extractor (`Wav2Vec2FeatureExtractor`):
+            An instance of [`Wav2Vec2FeatureExtractor`]. The feature extractor is a required input.
         tokenizer ([`PreTrainedTokenizer`]):
             An instance of [`PreTrainedTokenizer`]. The tokenizer is a required input.
     """
-    feature_extractor_class = "SpeechT5FeatureExtractor"
+    feature_extractor_class = "Wav2Vec2FeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
     def __init__(self, feature_extractor, tokenizer):
@@ -59,15 +59,15 @@ class SpeechT5Processor(ProcessorMixin):
                 FutureWarning,
             )
 
-            feature_extractor = SpeechT5FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            feature_extractor = Wav2Vec2FeatureExtractor.from_pretrained(pretrained_model_name_or_path, **kwargs)
             tokenizer = SpeechT5CTCTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
 
             return cls(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
     def __call__(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to SpeechT5FeatureExtractor's
-        [`~SpeechT5FeatureExtractor.__call__`] and returns its output. If used in the context
+        When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
+        [`~Wav2Vec2FeatureExtractor.__call__`] and returns its output. If used in the context
         [`~SpeechT5Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
         [`~PreTrainedTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
@@ -103,8 +103,8 @@ class SpeechT5Processor(ProcessorMixin):
 
     def pad(self, *args, **kwargs):
         """
-        When used in normal mode, this method forwards all its arguments to SpeechT5FeatureExtractor's
-        [`~SpeechT5FeatureExtractor.pad`] and returns its output. If used in the context
+        When used in normal mode, this method forwards all its arguments to Wav2Vec2FeatureExtractor's
+        [`~Wav2Vec2FeatureExtractor.pad`] and returns its output. If used in the context
         [`~SpeechT5Processor.as_target_processor`] this method forwards all its arguments to PreTrainedTokenizer's
         [`~PreTrainedTokenizer.pad`]. Please refer to the docstring of the above two methods for more information.
         """
