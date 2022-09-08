@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Transformations for Time Series Transformers. """
+""" Transformations Utilities for Time Series Transformers. """
 
 from functools import lru_cache
 from typing import Iterable, List, Optional
@@ -53,7 +53,7 @@ def transform_start_field(batch, freq):
     return batch
 
 
-def create_transformation(config) -> Transformation:
+def create_transformation(freq, config) -> Transformation:
     remove_field_names = []
     if config.num_feat_static_real == 0:
         remove_field_names.append(FieldName.FEAT_STATIC_REAL)
@@ -90,7 +90,7 @@ def create_transformation(config) -> Transformation:
                 start_field=FieldName.START,
                 target_field=FieldName.TARGET,
                 output_field=FieldName.FEAT_TIME,
-                time_features=time_features_from_frequency_str(config.freq),
+                time_features=time_features_from_frequency_str(freq),
                 pred_length=config.prediction_length,
             ),
             AddAgeFeature(
@@ -138,6 +138,7 @@ def create_instance_splitter(
 
 
 def create_training_data_loader(
+    freq,
     config,
     data,
     batch_size: int,
@@ -159,7 +160,7 @@ def create_training_data_loader(
         "future_" + FieldName.OBSERVED_VALUES,
     ]
 
-    transformation = create_transformation(config)
+    transformation = create_transformation(freq, config)
     transformed_data = transformation.apply(data, is_train=True)
 
     instance_splitter = create_instance_splitter(config, "train") + SelectFields(TRAINING_INPUT_NAMES)
@@ -187,6 +188,7 @@ def create_training_data_loader(
 
 
 def create_validation_data_loader(
+    freq,
     config,
     data,
     batch_size,
@@ -205,7 +207,7 @@ def create_validation_data_loader(
         "future_" + FieldName.TARGET,
         "future_" + FieldName.OBSERVED_VALUES,
     ]
-    transformation = create_transformation(config)
+    transformation = create_transformation(freq, config)
     transformed_data = transformation.apply(data, is_train=True)
 
     instance_splitter = create_instance_splitter(config, "validation") + SelectFields(TRAINING_INPUT_NAMES)
@@ -219,6 +221,7 @@ def create_validation_data_loader(
 
 
 def create_test_data_loader(
+    freq,
     config,
     data,
     batch_size,
@@ -232,7 +235,7 @@ def create_test_data_loader(
         "past_" + FieldName.OBSERVED_VALUES,
         "future_" + FieldName.FEAT_TIME,
     ]
-    transformation = create_transformation(config)
+    transformation = create_transformation(freq, config)
     transformed_data = transformation.apply(data, is_train=False)
     instance_splitter = create_instance_splitter(config, "test") + SelectFields(PREDICTION_INPUT_NAMES)
     test_instances = instance_splitter.apply(transformed_data, is_tran=False)
