@@ -141,6 +141,125 @@ class SpeechT5GroupNormConvLayer(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding with Speech2Text->SpeechT5
+class SpeechT5SinusoidalPositionalEmbedding(nn.Module):
+    """This module produces sinusoidal positional embeddings of any length."""
+
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
+        super().__init__()
+        self.offset = 2
+        self.embedding_dim = embedding_dim
+        self.padding_idx = padding_idx
+        self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
+
+    def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+        emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
+        if hasattr(self, "weights"):
+            # in forward put the weights on the correct dtype and device of the param
+            emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
+
+        self.weights = nn.Parameter(emb_weights)
+        self.weights.requires_grad = False
+        self.weights.detach_()
+
+    @staticmethod
+    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+        """
+        Build sinusoidal embeddings. This matches the implementation in tensor2tensor, but differs slightly from the
+        description in Section 3.5 of "Attention Is All You Need".
+        """
+        half_dim = embedding_dim // 2
+        emb = math.log(10000) / (half_dim - 1)
+        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
+        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
+        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
+        if embedding_dim % 2 == 1:
+            # zero pad
+            emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
+        if padding_idx is not None:
+            emb[padding_idx, :] = 0
+        return emb
+
+    @torch.no_grad()
+    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
+        bsz, seq_len = input_ids.size()
+        # Create the position ids from the input token ids. Any padded tokens remain padded.
+        position_ids = self.create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
+            input_ids.device
+        )
+
+        # expand embeddings if needed
+        max_pos = self.padding_idx + 1 + seq_len
+        if max_pos > self.weights.size(0):
+            self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
+
+        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
+
+    def create_position_ids_from_input_ids(
+        self, input_ids: torch.Tensor, padding_idx: int, past_key_values_length: Optional[int] = 0
+    ):
+        """
+        Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
+        symbols are ignored. This is modified from fairseq's `utils.make_positions`.
+
+        Args:
+            x: torch.Tensor x:
+        Returns: torch.Tensor
+        """
+        # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
+        mask = input_ids.ne(padding_idx).int()
+        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
+        return incremental_indices.long() + padding_idx
+
+
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PositionalConvEmbedding with Wav2Vec2->SpeechT5
+class SpeechT5PositionalConvEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.conv = nn.Conv1d(
+            config.hidden_size,
+            config.hidden_size,
+            kernel_size=config.num_conv_pos_embeddings,
+            padding=config.num_conv_pos_embeddings // 2,
+            groups=config.num_conv_pos_embedding_groups,
+        )
+
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
+                self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+            deepspeed.zero.register_external_parameter(self, self.conv.weight_v)
+            deepspeed.zero.register_external_parameter(self, self.conv.weight_g)
+        else:
+            self.conv = nn.utils.weight_norm(self.conv, name="weight", dim=2)
+
+        self.padding = SpeechT5SamePadLayer(config.num_conv_pos_embeddings)
+        self.activation = ACT2FN[config.feat_extract_activation]
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.transpose(1, 2)
+
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.padding(hidden_states)
+        hidden_states = self.activation(hidden_states)
+
+        hidden_states = hidden_states.transpose(1, 2)
+        return hidden_states
+
+
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2SamePadLayer with Wav2Vec2->SpeechT5
+class SpeechT5SamePadLayer(nn.Module):
+    def __init__(self, num_conv_pos_embeddings):
+        super().__init__()
+        self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
+
+    def forward(self, hidden_states):
+        if self.num_pad_remove > 0:
+            hidden_states = hidden_states[:, :, : -self.num_pad_remove]
+        return hidden_states
+
+
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureEncoder with Wav2Vec2->SpeechT5
 class SpeechT5FeatureEncoder(nn.Module):
     """Construct the features from raw audio waveform"""
@@ -195,13 +314,104 @@ class SpeechT5FeatureEncoder(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeatureProjection with Wav2Vec2->SpeechT5
+class SpeechT5FeatureProjection(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
+        self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
+        self.dropout = nn.Dropout(config.feat_proj_dropout)
+
+    def forward(self, hidden_states):
+        # non-projected hidden states are needed for quantization
+        norm_hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.projection(norm_hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states, norm_hidden_states
+
+
 class SpeechT5SpeechEncoderPrenet(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.feature_encoder = SpeechT5FeatureEncoder(config)
+        self.feature_projection = SpeechT5FeatureProjection(config)
+        self.pos_conv_embed = SpeechT5PositionalConvEmbedding(config)
+        self.embed_positions = SpeechT5SinusoidalPositionalEmbedding(
+            config.max_source_positions + config.pad_token_id + 1,
+            config.hidden_size,
+            config.pad_token_id,
+        )
 
-    def forward(self, input_values):
-        return self.feature_encoder(input_values)
+    def forward(
+        self,
+        input_values: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+    ):
+        extract_features = self.feature_encoder(input_values)
+        extract_features = extract_features.transpose(1, 2)
+
+        # TODO: original implementation does the following which is only
+        # used when the argument `require_feat_pen=True`
+        # x = x.transpose(1, 2) # [batch, hidden_size, length]
+        # if target_list is not None:
+        #     x, target_list = self.forward_targets(x, target_list)
+        # features_pen = x.float().pow(2).mean()
+        # x = x.transpose(1, 2) # [batch, length, hidden_size]
+
+        # TODO: note that Wav2Vec2Model calls `_get_feature_vector_attention_mask` at this point
+
+        hidden_states, extract_features = self.feature_projection(extract_features)
+
+        # TODO: original implementation does the following when `mask=True`
+        # note that `x` here is the same as `extract_features`, i.e. after the
+        # layer norm from `feature_projection` but before the conv + dropout!
+        # encoder_padding_mask = padding_mask
+        # encoder_padding_mask = self.forward_padding_mask(x, encoder_padding_mask)
+
+        # TODO: original implementation does the following when `mask=True`
+        # if mask:
+        #     x, mask_indices = self.apply_hubert_mask(
+        #         x, encoder_padding_mask
+        #     )
+        # else:
+        #     x = x
+        #     mask_indices = None
+
+        # TODO: note that Wav2Vec2Model calls `_mask_hidden_states` at this point
+
+        # TODO: Wav2Vec2Encoder does the following at this point
+        # if attention_mask is not None:
+        #     # make sure padded tokens output 0
+        #     expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+        #     hidden_states[~expand_attention_mask] = 0
+
+        #     # extend attention_mask
+        #     attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+        #     attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
+        #     attention_mask = attention_mask.expand(
+        #         attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+        #     )
+
+        position_embeddings = self.pos_conv_embed(hidden_states)
+        hidden_states = hidden_states + position_embeddings
+
+        # TODO: this is how Speech2TextEncoder does it
+        # if attention_mask is not None:
+        #     attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
+        #     padding_mask = attention_mask.ne(1).long()
+        # else:
+        #     padding_mask = torch.zeros(inputs_embeds.shape[:2], dtype=torch.long, device=inputs_embeds.device)
+        #embed_pos = self.embed_positions(padding_mask)
+
+        # TODO: for now I'm just faking the size of the attention mask
+        attention_mask = torch.ones(hidden_states.shape[:2]).long()
+
+        # TODO: the sinusoidal embeddings are incorrect currently, not sure why yet
+        positions = self.embed_positions(attention_mask)
+        #print("positions", positions.shape, positions)
+        hidden_states = hidden_states + positions
+
+        return hidden_states, extract_features
 
 
 class SpeechT5PreTrainedModel(PreTrainedModel):
@@ -273,25 +483,25 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
 
     #     return input_lengths
 
-    # def _get_feature_vector_attention_mask(
-    #     self, feature_vector_length: int, attention_mask: torch.LongTensor, add_adapter=None
-    # ):
-    #     # Effectively attention_mask.sum(-1), but not inplace to be able to run
-    #     # on inference mode.
-    #     non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
+    def _get_feature_vector_attention_mask(
+        self, feature_vector_length: int, attention_mask: torch.LongTensor, add_adapter=None
+    ):
+        # Effectively attention_mask.sum(-1), but not inplace to be able to run
+        # on inference mode.
+        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
 
-    #     output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
-    #     output_lengths = output_lengths.to(torch.long)
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
+        output_lengths = output_lengths.to(torch.long)
 
-    #     batch_size = attention_mask.shape[0]
+        batch_size = attention_mask.shape[0]
 
-    #     attention_mask = torch.zeros(
-    #         (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-    #     )
-    #     # these two operations makes sure that all values before the output lengths idxs are attended to
-    #     attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
-    #     attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
-    #     return attention_mask
+        attention_mask = torch.zeros(
+            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
+        # these two operations makes sure that all values before the output lengths idxs are attended to
+        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
+        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+        return attention_mask
 
     # def _set_gradient_checkpointing(self, module, value=False):
     #     if isinstance(module, (SpeechT5Encoder, SpeechT5EncoderStableLayerNorm, SpeechT5FeatureEncoder)):
@@ -353,9 +563,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         self.config = config
 
         self.speech_encoder_prenet = SpeechT5SpeechEncoderPrenet(config)
-
-        #self.feature_extractor = SpeechT5FeatureEncoder(config)
-        # self.feature_projection = SpeechT5FeatureProjection(config)
 
         # # model only needs masking vector if mask prob is > 0.0
         # if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
@@ -448,22 +655,18 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        encoder_input = self.speech_encoder_prenet(input_values)
+        hidden_states, extract_features = self.speech_encoder_prenet(input_values, attention_mask)
 
-        extract_features = encoder_input  # TODO: temporary
-        # extract_features = self.feature_extractor(input_values)
-        # extract_features = extract_features.transpose(1, 2)
-
-        hidden_states = ()
-        encoder_outputs = ()
-
+        # TODO: not sure if this should go into SpeechEncoderPrenet too
+        #       is this equivalent to `forward_padding_mask` from the original SpeechEncoderPrenet?
         # if attention_mask is not None:
         #     # compute reduced attention_mask corresponding to feature vectors
         #     attention_mask = self._get_feature_vector_attention_mask(
         #         extract_features.shape[1], attention_mask, add_adapter=False
         #     )
 
-        # hidden_states, extract_features = self.feature_projection(extract_features)
+        # TODO: not sure if this should go into SpeechEncoderPrenet too
+        #       is this equivalent to `apply_hubert_mask` from the original SpeechEncoderPrenet?
         # hidden_states = self._mask_hidden_states(
         #     hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
         # )
@@ -497,6 +700,14 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     SPEECHT5_START_DOCSTRING,
 )
 class SpeechT5ForCTC(SpeechT5PreTrainedModel):
+    base_model_prefix = "speecht5"
+    _keys_to_ignore_on_load_missing = [
+        r"speecht5.speech_encoder_prenet.embed_positions.weights",
+    ]
+    _keys_to_ignore_on_save = [
+        r"speecht5.speech_encoder_prenet.embed_positions.weights",
+    ]
+
     def __init__(self, config):
         super().__init__(config)
 

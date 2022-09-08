@@ -182,6 +182,9 @@ class SpeechT5Config(PretrainedConfig):
         output_hidden_size (`int`, *optional*):
             Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
             if `add_adapter is True`.
+        max_source_positions (`int`, *optional*, defaults to 4000):
+            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+            TODO: they're not actually log-mel features in this model!
 
     Example:
 
@@ -210,20 +213,20 @@ class SpeechT5Config(PretrainedConfig):
         # hidden_dropout=0.1,
         # activation_dropout=0.1,
         # attention_dropout=0.1,
-        # feat_proj_dropout=0.0,
+        feat_proj_dropout=0.0,
         # feat_quantizer_dropout=0.0,
         # final_dropout=0.1,
         # layerdrop=0.1,
         # initializer_range=0.02,
-        # layer_norm_eps=1e-5,
+        layer_norm_eps=1e-5,
         feat_extract_norm="group",
         feat_extract_activation="gelu",
         conv_dim=(512, 512, 512, 512, 512, 512, 512),
         conv_stride=(5, 2, 2, 2, 2, 2, 2),
         conv_kernel=(10, 3, 3, 3, 3, 2, 2),
         conv_bias=False,
-        # num_conv_pos_embeddings=128,
-        # num_conv_pos_embedding_groups=16,
+        num_conv_pos_embeddings=128,
+        num_conv_pos_embedding_groups=16,
         # do_stable_layer_norm=False,
         # apply_spec_augment=True,
         # mask_time_prob=0.05,
@@ -247,9 +250,10 @@ class SpeechT5Config(PretrainedConfig):
         # tdnn_kernel=(5, 3, 3, 1, 1),
         # tdnn_dilation=(1, 2, 3, 1, 1),
         # xvector_output_dim=512,
-        pad_token_id=0,
-        bos_token_id=1,
+        pad_token_id=1,
+        bos_token_id=0,
         eos_token_id=2,
+        max_source_positions=4000,
         # add_adapter=False,
         # adapter_kernel_size=3,
         # adapter_stride=2,
@@ -265,8 +269,8 @@ class SpeechT5Config(PretrainedConfig):
         self.conv_stride = list(conv_stride)
         self.conv_kernel = list(conv_kernel)
         self.conv_bias = conv_bias
-        # self.num_conv_pos_embeddings = num_conv_pos_embeddings
-        # self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
+        self.num_conv_pos_embeddings = num_conv_pos_embeddings
+        self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
         self.num_feat_extract_layers = len(self.conv_dim)
         # self.num_hidden_layers = num_hidden_layers
         # self.intermediate_size = intermediate_size
@@ -275,14 +279,15 @@ class SpeechT5Config(PretrainedConfig):
         # self.hidden_dropout = hidden_dropout
         # self.attention_dropout = attention_dropout
         # self.activation_dropout = activation_dropout
-        # self.feat_proj_dropout = feat_proj_dropout
+        self.feat_proj_dropout = feat_proj_dropout
         # self.final_dropout = final_dropout
         # self.layerdrop = layerdrop
-        # self.layer_norm_eps = layer_norm_eps
+        self.layer_norm_eps = layer_norm_eps
         # self.initializer_range = initializer_range
         # self.vocab_size = vocab_size
         # self.do_stable_layer_norm = do_stable_layer_norm
         # self.use_weighted_layer_sum = use_weighted_layer_sum
+        self.max_source_positions = max_source_positions
 
         # if (
         #     (len(self.conv_stride) != self.num_feat_extract_layers)

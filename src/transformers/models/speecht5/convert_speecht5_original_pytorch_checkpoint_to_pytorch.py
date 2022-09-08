@@ -45,6 +45,15 @@ def rename_key(name):
         name = name.replace(".0.2.bias", ".0.layer_norm.bias")
         name = name.replace(".0.weight", ".conv.weight")
 
+    if "speech_encoder_prenet." in name:
+        name = name.replace("speech_encoder_prenet.post_extract_proj.", "speecht5.speech_encoder_prenet.feature_projection.projection.")
+        name = name.replace("speech_encoder_prenet.layer_norm.", "speecht5.speech_encoder_prenet.feature_projection.layer_norm.")
+        name = name.replace("speech_encoder_prenet.pos_conv.0.", "speecht5.speech_encoder_prenet.pos_conv_embed.conv.")
+
+    # Can ignore the following keys:
+    # "speech_encoder_prenet.embed_positions._float_tensor"
+    # "speech_encoder_prenet.mask_emb"
+
     return name
 
 
