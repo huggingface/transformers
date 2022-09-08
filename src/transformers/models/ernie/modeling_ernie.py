@@ -1,6 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The Google AI Language Team Authors and The HuggingFace Inc. team.
-# Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -762,8 +761,10 @@ ERNIE_INPUTS_DOCSTRING = r"""
 
             [What are token type IDs?](../glossary#token-type-ids)
         task_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Indices of task types, the values of `task_type_ids` are usually the same. Indices are selected in `[0,
-            config.task_type_vocab_size]`.
+            Task type embedding is a special embedding to represent the characteristic of different tasks, such as 
+            word-aware pre-training task, structure-aware pre-training task and semantic-aware pre-training task. 
+            We assign a `task_type_id` to each task and the `task_type_id` is in the range 
+            `[0, config.task_type_vocab_size-1]
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
@@ -1092,7 +1093,7 @@ class ErnieForPreTraining(ErniePreTrainedModel):
 @add_start_docstrings(
     """Ernie Model with a `language modeling` head on top for CLM fine-tuning.""", ERNIE_START_DOCSTRING
 )
-class ErnieLMHeadModel(ErniePreTrainedModel):
+class ErnieForCausalLM(ErniePreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
@@ -1101,7 +1102,7 @@ class ErnieLMHeadModel(ErniePreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `ErnieLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `ErnieForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.ernie = ErnieModel(config, add_pooling_layer=False)
         self.cls = ErnieOnlyMLMHead(config)

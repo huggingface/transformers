@@ -40,9 +40,7 @@ else:
         "ErnieForQuestionAnswering",
         "ErnieForSequenceClassification",
         "ErnieForTokenClassification",
-        "ErnieLayer",
-        "ErnieLMHeadModel",
-        "ErnieModel",
+        "ErnieForCausalLM",
         "ErniePreTrainedModel",
     ]
 
@@ -65,8 +63,7 @@ if TYPE_CHECKING:
             ErnieForQuestionAnswering,
             ErnieForSequenceClassification,
             ErnieForTokenClassification,
-            ErnieLayer,
-            ErnieLMHeadModel,
+            ErnieForCausalLM,
             ErnieModel,
             ErniePreTrainedModel,
         )

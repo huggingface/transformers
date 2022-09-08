@@ -37,7 +37,7 @@ if is_torch_available():
         ErnieForQuestionAnswering,
         ErnieForSequenceClassification,
         ErnieForTokenClassification,
-        ErnieLMHeadModel,
+        ErnieForCausalLM,
         ErnieModel,
     )
     from transformers.models.ernie.modeling_ernie import ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST
@@ -218,7 +218,7 @@ class ErnieModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = ErnieLMHeadModel(config=config)
+        model = ErnieForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -246,7 +246,7 @@ class ErnieModelTester:
         encoder_attention_mask,
     ):
         config.add_cross_attention = True
-        model = ErnieLMHeadModel(config=config)
+        model = ErnieForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(
@@ -280,7 +280,7 @@ class ErnieModelTester:
     ):
         config.is_decoder = True
         config.add_cross_attention = True
-        model = ErnieLMHeadModel(config=config).to(torch_device).eval()
+        model = ErnieForCausalLM(config=config).to(torch_device).eval()
 
         # first forward pass
         outputs = model(
@@ -430,7 +430,7 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     all_model_classes = (
         (
             ErnieModel,
-            ErnieLMHeadModel,
+            ErnieForCausalLM,
             ErnieForMaskedLM,
             ErnieForMultipleChoice,
             ErnieForNextSentencePrediction,
@@ -442,7 +442,7 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (ErnieLMHeadModel,) if is_torch_available() else ()
+    all_generative_model_classes = (ErnieForCausalLM,) if is_torch_available() else ()
     fx_compatible = False
 
     # special case for ForPreTraining model
