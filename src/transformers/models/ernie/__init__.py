@@ -41,8 +41,7 @@ else:
         "ErnieForSequenceClassification",
         "ErnieForTokenClassification",
         "ErnieForCausalLM",
-        "ErnieModel"
-        "ErniePreTrainedModel",
+        "ErnieModelErniePreTrainedModel",
     ]
 
 
@@ -57,6 +56,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_ernie import (
             ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ErnieForCausalLM,
             ErnieForMaskedLM,
             ErnieForMultipleChoice,
             ErnieForNextSentencePrediction,
@@ -64,7 +64,6 @@ if TYPE_CHECKING:
             ErnieForQuestionAnswering,
             ErnieForSequenceClassification,
             ErnieForTokenClassification,
-            ErnieForCausalLM,
             ErnieModel,
             ErniePreTrainedModel,
         )

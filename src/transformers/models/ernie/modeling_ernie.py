@@ -761,10 +761,10 @@ ERNIE_INPUTS_DOCSTRING = r"""
 
             [What are token type IDs?](../glossary#token-type-ids)
         task_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Task type embedding is a special embedding to represent the characteristic of different tasks, such as 
-            word-aware pre-training task, structure-aware pre-training task and semantic-aware pre-training task. 
-            We assign a `task_type_id` to each task and the `task_type_id` is in the range 
-            `[0, config.task_type_vocab_size-1]
+            Task type embedding is a special embedding to represent the characteristic of different tasks, such as
+            word-aware pre-training task, structure-aware pre-training task and semantic-aware pre-training task. We
+            assign a `task_type_id` to each task and the `task_type_id` is in the range `[0,
+            config.task_type_vocab_size-1]
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.

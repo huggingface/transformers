@@ -30,6 +30,7 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
+        ErnieForCausalLM,
         ErnieForMaskedLM,
         ErnieForMultipleChoice,
         ErnieForNextSentencePrediction,
@@ -37,7 +38,6 @@ if is_torch_available():
         ErnieForQuestionAnswering,
         ErnieForSequenceClassification,
         ErnieForTokenClassification,
-        ErnieForCausalLM,
         ErnieModel,
     )
     from transformers.models.ernie.modeling_ernie import ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST

@@ -3869,6 +3869,7 @@ if TYPE_CHECKING:
         from .models.encoder_decoder import EncoderDecoderModel
         from .models.ernie import (
             ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ErnieForCausalLM,
             ErnieForMaskedLM,
             ErnieForMultipleChoice,
             ErnieForNextSentencePrediction,
@@ -3876,7 +3877,6 @@ if TYPE_CHECKING:
             ErnieForQuestionAnswering,
             ErnieForSequenceClassification,
             ErnieForTokenClassification,
-            ErnieForCausalLM,
             ErnieModel,
             ErniePreTrainedModel,
         )
