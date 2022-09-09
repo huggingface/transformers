@@ -43,7 +43,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("canine", "CanineConfig"),
         ("clip", "CLIPConfig"),
         ("codegen", "CodeGenConfig"),
-        ("conditional_detr", "ConditionalDETRConfig"),
+        ("conditional_detr", "ConditionalDetrConfig"),
         ("convbert", "ConvBertConfig"),
         ("convnext", "ConvNextConfig"),
         ("ctrl", "CTRLConfig"),
