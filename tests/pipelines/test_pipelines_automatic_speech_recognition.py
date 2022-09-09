@@ -24,6 +24,8 @@ from transformers import (
     MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
     AutoFeatureExtractor,
     AutoTokenizer,
+    MCTCTForCTC,
+    MCTCTProcessor,
     Speech2TextForConditionalGeneration,
     Wav2Vec2ForCTC,
 )
@@ -376,6 +378,33 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         output = speech_recognizer([audio_tiled], batch_size=2)
         self.assertEqual(output, [{"text": ANY(str)}])
         self.assertEqual(output[0]["text"][:6], "ZBT ZC")
+
+    @require_torch
+    def test_chunking_fast_for_mctct(self):
+        model = MCTCTForCTC.from_pretrained("speechbrain/m-ctc-t-large")
+        processor = MCTCTProcessor.from_pretrained("speechbrain/m-ctc-t-large")
+        speech_recognizer = AutomaticSpeechRecognitionPipeline(
+            feature_extractor=processor.feature_extractor,
+            tokenizer=processor.tokenizer,
+            model=model,
+            chunk_length_s=10.0,
+            framework="pt",
+        )
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        # It should work for a single non-batched input
+        output = speech_recognizer(audio)
+        self.assertEqual(output, {"text": ANY(str)})
+        self.assertEqual(output["text"][:26], "A man said to the universe")
+
+        # And also for multiple batched inputs
+        n_repeats = 2
+        audio_tiled = np.tile(audio, n_repeats)
+        output = speech_recognizer([audio_tiled], batch_size=2)
+        self.assertEqual(output, [{"text": ANY(str)}])
+        self.assertEqual(output[0]["text"][:26], "A man said to the universe")
 
     @require_torch
     def test_return_timestamps_ctc_fast(self):

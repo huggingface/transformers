@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections import defaultdict
-from typing import TYPE_CHECKING, Dict, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -30,18 +30,33 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_CTC_MAPPING, MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING
 
 
-def rescale_stride(tokens_or_logits, stride, ratio):
+def rescale_stride(
+    tokens_or_logits: Any,
+    stride: List[Tuple[int, int, int]],
+    ratio: List[Union[int, float]],
+):
     """
     Rescales the stride values from audio space to tokens/logits space.
 
     (160_000, 16_000, 16_000) -> (2000, 200, 200) for instance.
+
+    Args:
+        tokens_or_logits: Unused but retained for backward compatibility.
+        stride: List of tuples shaped like `(length, left_stride, right_stride)`.
+        ratio: List of rescaling factors corresponding to the strides. Should be the
+            same length as `stride`.
     """
+    # For backwards compatibility; this function originally took `ratio` as a
+    # single number, not a list of numbers.
+    if not isinstance(ratio, list):
+        ratio = [ratio] * len(stride)
+
     # Shape is [B, SEQ] for tokens
     # [B, SEQ, V] for logits
 
     new_strides = []
-    for input_n, left, right in stride:
-        token_n = int(round(input_n * ratio))
+    for (input_n, left, right), stride_ratio in zip(stride, ratio):
+        token_n = int(round(input_n * stride_ratio))
         left = int(round(left / input_n * token_n))
         right = int(round(right / input_n * token_n))
         new_stride = (token_n, left, right)
@@ -326,22 +341,29 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             else:
                 out = {"tokens": logits.argmax(dim=-1)}
             if stride is not None:
+                # The stride is either a 3-tuple or a list of 3-tuples representing a batch
+                is_batched = not isinstance(stride, tuple)
+                batch_length = len(stride) if is_batched else 1
+
                 # If the proportion of input feature frames to logit frames can be statically
                 # determined based on convolution strides, use that. Otherwise, we need to
                 # calculate it here dynamically.
-                inputs_to_logits_ratio = getattr(
-                    self.model.config,
-                    "inputs_to_logits_ratio",
-                    stride[0] / outputs.logits.shape[1],
-                )
+                inputs_to_logits_ratio = getattr(self.model.config, "inputs_to_logits_ratio", None)
+                if inputs_to_logits_ratio is not None:
+                    stride_ratios = [1 / inputs_to_logits_ratio] * batch_length
+                else:
+                    stride_ratios = [
+                        1 / (single_stride[0] / outputs.logits.shape[1])
+                        for single_stride in (stride if is_batched else [stride])
+                    ]
+
                 # Send stride to `postprocess`.
                 # it needs to be handled there where
                 # the pieces are to be concatenated.
-                ratio = 1 / inputs_to_logits_ratio
                 if isinstance(stride, tuple):
-                    out["stride"] = rescale_stride(logits, [stride], ratio)[0]
+                    out["stride"] = rescale_stride(logits, [stride], stride_ratios)[0]
                 else:
-                    out["stride"] = rescale_stride(logits, stride, ratio)
+                    out["stride"] = rescale_stride(logits, stride, stride_ratios)
         # Leftover
         extra = model_inputs
         return {"is_last": is_last, **out, **extra}
