@@ -41,7 +41,9 @@ class DecoderConfig(PretrainedConfig):
 class FSMTConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FSMTModel`]. It is used to instantiate a FSMT
-    model according to the specified arguments, defining the model architecture.
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the FSMT
+    [facebook/wmt19-en-ru](https://huggingface.co/facebook/wmt19-en-ru) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -93,9 +95,9 @@ class FSMTConfig(PretrainedConfig):
             End of stream token id.
         decoder_start_token_id (`int`, *optional*):
             This model starts decoding with `eos_token_id`
-        encoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
-        decoder_layerdrop: (`float`, *optional*, defaults to 0.0):
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             Google "layerdrop arxiv", as its not explainable in one line.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether this is an encoder/decoder model.

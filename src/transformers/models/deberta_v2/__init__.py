@@ -18,15 +18,34 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_tf_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
-    "configuration_deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config"],
+    "configuration_deberta_v2": ["DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP", "DebertaV2Config", "DebertaV2OnnxConfig"],
     "tokenization_deberta_v2": ["DebertaV2Tokenizer"],
 }
 
-if is_tf_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_deberta_v2_fast"] = ["DebertaV2TokenizerFast"]
+
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_deberta_v2"] = [
         "TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFDebertaV2ForMaskedLM",
@@ -37,10 +56,16 @@ if is_tf_available():
         "TFDebertaV2PreTrainedModel",
     ]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_deberta_v2"] = [
         "DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
         "DebertaV2ForMaskedLM",
+        "DebertaV2ForMultipleChoice",
         "DebertaV2ForQuestionAnswering",
         "DebertaV2ForSequenceClassification",
         "DebertaV2ForTokenClassification",
@@ -50,10 +75,27 @@ if is_torch_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_deberta_v2 import DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP, DebertaV2Config
+    from .configuration_deberta_v2 import (
+        DEBERTA_V2_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        DebertaV2Config,
+        DebertaV2OnnxConfig,
+    )
     from .tokenization_deberta_v2 import DebertaV2Tokenizer
 
-    if is_tf_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_deberta_v2_fast import DebertaV2TokenizerFast
+
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_deberta_v2 import (
             TF_DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFDebertaV2ForMaskedLM,
@@ -64,10 +106,16 @@ if TYPE_CHECKING:
             TFDebertaV2PreTrainedModel,
         )
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_deberta_v2 import (
             DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
             DebertaV2ForMaskedLM,
+            DebertaV2ForMultipleChoice,
             DebertaV2ForQuestionAnswering,
             DebertaV2ForSequenceClassification,
             DebertaV2ForTokenClassification,

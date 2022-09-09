@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
-from packaging import version
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -31,10 +30,11 @@ from ...modeling_outputs import (
     MaskedLMOutput,
     ModelOutput,
 )
-from ...modeling_utils import (
-    PreTrainedModel,
+from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import (
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
+    is_torch_greater_than_1_6,
     prune_linear_layer,
 )
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -185,7 +185,7 @@ class RealmEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        if version.parse(torch.__version__) > version.parse("1.6.0"):
+        if is_torch_greater_than_1_6:
             self.register_buffer(
                 "token_type_ids",
                 torch.zeros(self.position_ids.size(), dtype=torch.long),
@@ -193,8 +193,13 @@ class RealmEmbeddings(nn.Module):
             )
 
     def forward(
-        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
-    ):
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values_length: int = 0,
+    ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
         else:
@@ -257,7 +262,7 @@ class RealmSelfAttention(nn.Module):
 
         self.is_decoder = config.is_decoder
 
-    def transpose_for_scores(self, x):
+    def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
@@ -271,7 +276,7 @@ class RealmSelfAttention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple:
+    ) -> Tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -407,7 +412,7 @@ class RealmAttention(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple:
+    ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
             attention_mask,
@@ -478,7 +483,7 @@ class RealmLayer(nn.Module):
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple:
+    ) -> Tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
         self_attention_outputs = self.attention(
@@ -501,7 +506,8 @@ class RealmLayer(nn.Module):
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
                 raise ValueError(
-                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers by setting `config.add_cross_attention=True`"
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated with cross-attention layers"
+                    " by setting `config.add_cross_attention=True`"
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
@@ -559,7 +565,7 @@ class RealmEncoder(nn.Module):
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if output_attentions and self.config.add_cross_attention else None
@@ -867,8 +873,8 @@ class RealmReaderProjection(nn.Module):
 
             return starts, ends, span_masks
 
-        def mask_to_score(mask):
-            return (1.0 - mask.type(torch.float32)) * -10000.0
+        def mask_to_score(mask, dtype=torch.float32):
+            return (1.0 - mask.type(dtype)) * torch.finfo(dtype).min
 
         # [reader_beam_size, max_sequence_len, span_hidden_size * 2]
         hidden_states = self.dense_intermediate(hidden_states)
@@ -888,7 +894,7 @@ class RealmReaderProjection(nn.Module):
         # [reader_beam_size, num_candidates]
         reader_logits = self.dense_output(candidate_hidden).squeeze(-1)
         # [reader_beam_size, num_candidates]
-        reader_logits += mask_to_score(candidate_mask)
+        reader_logits += mask_to_score(candidate_mask, dtype=reader_logits.dtype)
 
         return reader_logits, candidate_starts, candidate_ends
 
@@ -1082,7 +1088,7 @@ class RealmBertModel(RealmPreTrainedModel):
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape, device)
+        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -1365,7 +1371,8 @@ class RealmScorer(RealmPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The knowledge-augmented encoder of REALM outputting masked language model logits and marginal log-likelihood loss.",
+    "The knowledge-augmented encoder of REALM outputting masked language model logits and marginal log-likelihood"
+    " loss.",
     REALM_START_DOCSTRING,
 )
 class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
@@ -1631,11 +1638,11 @@ class RealmReader(RealmPreTrainedModel):
             def marginal_log_loss(logits, is_correct):
                 """Loss based on the negative marginal log-likelihood."""
 
-                def mask_to_score(mask):
-                    return (1.0 - mask.type(torch.float32)) * -10000.0
+                def mask_to_score(mask, dtype=torch.float32):
+                    return (1.0 - mask.type(dtype)) * torch.finfo(dtype).min
 
                 # []
-                log_numerator = torch.logsumexp(logits + mask_to_score(is_correct), dim=-1)
+                log_numerator = torch.logsumexp(logits + mask_to_score(is_correct, dtype=logits.dtype), dim=-1)
                 log_denominator = torch.logsumexp(logits, dim=-1)
                 return log_denominator - log_numerator
 
@@ -1786,7 +1793,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
         ...     add_special_tokens=False,
         ...     return_token_type_ids=False,
         ...     return_attention_mask=False,
-        >>> ).input_ids
+        ... ).input_ids
 
         >>> reader_output, predicted_answer_ids = model(**question_ids, answer_ids=answer_ids, return_dict=False)
         >>> predicted_answer = tokenizer.decode(predicted_answer_ids)

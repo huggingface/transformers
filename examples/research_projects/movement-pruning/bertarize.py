@@ -103,15 +103,20 @@ if __name__ == "__main__":
         choices=["l0", "magnitude", "topK", "sigmoied_threshold"],
         type=str,
         required=True,
-        help="Pruning Method (l0 = L0 regularization, magnitude = Magnitude pruning, topK = Movement pruning, sigmoied_threshold = Soft movement pruning)",
+        help=(
+            "Pruning Method (l0 = L0 regularization, magnitude = Magnitude pruning, topK = Movement pruning,"
+            " sigmoied_threshold = Soft movement pruning)"
+        ),
     )
     parser.add_argument(
         "--threshold",
         type=float,
         required=False,
-        help="For `magnitude` and `topK`, it is the level of remaining weights (in %) in the fine-pruned model."
-        "For `sigmoied_threshold`, it is the threshold \tau against which the (sigmoied) scores are compared."
-        "Not needed for `l0`",
+        help=(
+            "For `magnitude` and `topK`, it is the level of remaining weights (in %) in the fine-pruned model."
+            "For `sigmoied_threshold`, it is the threshold \tau against which the (sigmoied) scores are compared."
+            "Not needed for `l0`"
+        ),
     )
     parser.add_argument(
         "--model_name_or_path",

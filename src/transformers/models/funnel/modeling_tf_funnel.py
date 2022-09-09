@@ -42,7 +42,7 @@ from ...modeling_tf_utils import (
     keras_serializable,
     unpack_inputs,
 )
-from ...tf_utils import shape_list
+from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
     MULTIPLE_CHOICE_DUMMY_INPUTS,
     ModelOutput,
@@ -84,7 +84,7 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
 
         self.vocab_size = config.vocab_size
         self.hidden_size = config.hidden_size
-        self.initializer_range = config.initializer_range
+        self.initializer_std = 1.0 if config.initializer_std is None else config.initializer_std
 
         self.LayerNorm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
         self.dropout = tf.keras.layers.Dropout(rate=config.hidden_dropout)
@@ -94,7 +94,7 @@ class TFFunnelEmbeddings(tf.keras.layers.Layer):
             self.weight = self.add_weight(
                 name="weight",
                 shape=[self.vocab_size, self.hidden_size],
-                initializer=get_initializer(initializer_range=self.initializer_range),
+                initializer=get_initializer(initializer_range=self.initializer_std),
             )
 
         super().build(input_shape)
@@ -530,7 +530,7 @@ class TFFunnelRelMultiheadAttention(tf.keras.layers.Layer):
             attn_score = attn_score - (INF * (1 - attention_mask[:, None, None]))
 
         # attention probability
-        attn_prob = tf.nn.softmax(attn_score, axis=-1)
+        attn_prob = stable_softmax(attn_score, axis=-1)
         attn_prob = self.attention_dropout(attn_prob, training=training)
 
         # attention output, shape batch_size x seq_len x n_head x d_head
@@ -623,7 +623,7 @@ class TFFunnelEncoder(tf.keras.layers.Layer):
                     hidden, attention_inputs
                 )
 
-            for (layer_index, layer) in enumerate(block):
+            for layer_index, layer in enumerate(block):
                 for repeat_index in range(self.block_repeats[block_index]):
                     do_pooling = (repeat_index == 0) and (layer_index == 0) and pooling_flag
                     if do_pooling:
@@ -761,7 +761,6 @@ class TFFunnelBaseLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
 
         if input_ids is not None and inputs_embeds is not None:
@@ -835,7 +834,6 @@ class TFFunnelMainLayer(tf.keras.layers.Layer):
         output_hidden_states=None,
         return_dict=None,
         training=False,
-        **kwargs,
     ):
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
@@ -1117,7 +1115,6 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFBaseModelOutput]:
         return self.funnel(
             input_ids=input_ids,
@@ -1130,12 +1127,14 @@ class TFFunnelBaseModel(TFFunnelPreTrainedModel):
             training=training,
         )
 
-    # Copied from transformers.models.distilbert.modeling_tf_distilbert.TFDistilBertModel.serving_output
     def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -1165,7 +1164,6 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFBaseModelOutput]:
 
         return self.funnel(
@@ -1179,12 +1177,14 @@ class TFFunnelModel(TFFunnelPreTrainedModel):
             training=training,
         )
 
-    # Copied from transformers.models.distilbert.modeling_tf_distilbert.TFDistilBertModel.serving_output
     def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns)
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
+        return TFBaseModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
+        )
 
 
 @add_start_docstrings(
@@ -1253,10 +1253,11 @@ class TFFunnelForPreTraining(TFFunnelPreTrainedModel):
         )
 
     def serving_output(self, output):
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFFunnelForPreTrainingOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
+        return TFFunnelForPreTrainingOutput(
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
+        )
 
 
 @add_start_docstrings("""Funnel Model with a `language modeling` head on top.""", FUNNEL_START_DOCSTRING)
@@ -1293,7 +1294,6 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFMaskedLMOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1327,12 +1327,10 @@ class TFFunnelForMaskedLM(TFFunnelPreTrainedModel, TFMaskedLanguageModelingLoss)
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
     def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFMaskedLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
+        return TFMaskedLMOutput(logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions)
 
 
 @add_start_docstrings(
@@ -1369,7 +1367,6 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFSequenceClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1404,12 +1401,12 @@ class TFFunnelForSequenceClassification(TFFunnelPreTrainedModel, TFSequenceClass
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
+        return TFSequenceClassifierOutput(
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
+        )
 
 
 @add_start_docstrings(
@@ -1455,7 +1452,6 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFMultipleChoiceModelOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1510,9 +1506,9 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None, None), tf.int32, name="token_type_ids"),
+                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.float32, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
             }
         ]
     )
@@ -1521,12 +1517,12 @@ class TFFunnelForMultipleChoice(TFFunnelPreTrainedModel, TFMultipleChoiceLoss):
 
         return self.serving_output(output=output)
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMultipleChoice.serving_output
     def serving_output(self, output: TFMultipleChoiceModelOutput) -> TFMultipleChoiceModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFMultipleChoiceModelOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
+        return TFMultipleChoiceModelOutput(
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
+        )
 
 
 @add_start_docstrings(
@@ -1566,7 +1562,6 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFTokenClassifierOutput]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1600,12 +1595,12 @@ class TFFunnelForTokenClassification(TFFunnelPreTrainedModel, TFTokenClassificat
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
     def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
-        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
+        return TFTokenClassifierOutput(
+            logits=output.logits, hidden_states=output.hidden_states, attentions=output.attentions
+        )
 
 
 @add_start_docstrings(
@@ -1645,7 +1640,6 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
         start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
         training: bool = False,
-        **kwargs,
     ) -> Union[Tuple[tf.Tensor], TFQuestionAnsweringModelOutput]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1692,11 +1686,12 @@ class TFFunnelForQuestionAnswering(TFFunnelPreTrainedModel, TFQuestionAnsweringL
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForQuestionAnswering.serving_output
     def serving_output(self, output: TFQuestionAnsweringModelOutput) -> TFQuestionAnsweringModelOutput:
-        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
-        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
-
+        # hidden_states and attentions not converted to Tensor with tf.convert_to_tensor as they are all of
+        # different dimensions
         return TFQuestionAnsweringModelOutput(
-            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
+            start_logits=output.start_logits,
+            end_logits=output.end_logits,
+            hidden_states=output.hidden_states,
+            attentions=output.attentions,
         )

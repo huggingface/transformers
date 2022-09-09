@@ -15,7 +15,13 @@
 import unittest
 
 from transformers import MODEL_FOR_CAUSAL_LM_MAPPING, TF_MODEL_FOR_CAUSAL_LM_MAPPING, TextGenerationPipeline, pipeline
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch
+from transformers.testing_utils import (
+    is_pipeline_test,
+    require_accelerate,
+    require_tf,
+    require_torch,
+    require_torch_gpu,
+)
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -34,7 +40,10 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             outputs,
             [
                 {
-                    "generated_text": "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope. oscope. FiliFili@@"
+                    "generated_text": (
+                        "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope."
+                        " oscope. FiliFili@@"
+                    )
                 }
             ],
         )
@@ -45,13 +54,50 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             [
                 [
                     {
-                        "generated_text": "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope. oscope. FiliFili@@"
+                        "generated_text": (
+                            "This is a test ☃ ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope."
+                            " oscope. FiliFili@@"
+                        )
                     }
                 ],
                 [
                     {
-                        "generated_text": "This is a second test ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy oscope. oscope. FiliFili@@"
+                        "generated_text": (
+                            "This is a second test ☃ segmental segmental segmental 议议eski eski flutter flutter Lacy"
+                            " oscope. oscope. FiliFili@@"
+                        )
                     }
+                ],
+            ],
+        )
+
+        outputs = text_generator("This is a test", do_sample=True, num_return_sequences=2, return_tensors=True)
+        self.assertEqual(
+            outputs,
+            [
+                {"generated_token_ids": ANY(list)},
+                {"generated_token_ids": ANY(list)},
+            ],
+        )
+        text_generator.tokenizer.pad_token_id = text_generator.model.config.eos_token_id
+        text_generator.tokenizer.pad_token = "<pad>"
+        outputs = text_generator(
+            ["This is a test", "This is a second test"],
+            do_sample=True,
+            num_return_sequences=2,
+            batch_size=2,
+            return_tensors=True,
+        )
+        self.assertEqual(
+            outputs,
+            [
+                [
+                    {"generated_token_ids": ANY(list)},
+                    {"generated_token_ids": ANY(list)},
+                ],
+                [
+                    {"generated_token_ids": ANY(list)},
+                    {"generated_token_ids": ANY(list)},
                 ],
             ],
         )
@@ -66,7 +112,10 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             outputs,
             [
                 {
-                    "generated_text": "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵 please,"
+                    "generated_text": (
+                        "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵"
+                        " please,"
+                    )
                 }
             ],
         )
@@ -77,12 +126,18 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             [
                 [
                     {
-                        "generated_text": "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵 please,"
+                        "generated_text": (
+                            "This is a test FeyFeyFey(Croatis.), s.), Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵"
+                            " please,"
+                        )
                     }
                 ],
                 [
                     {
-                        "generated_text": "This is a second test Chieftain Chieftain prefecture prefecture prefecture Cannes Cannes Cannes 閲閲Cannes Cannes Cannes 攵 please,"
+                        "generated_text": (
+                            "This is a second test Chieftain Chieftain prefecture prefecture prefecture Cannes Cannes"
+                            " Cannes 閲閲Cannes Cannes Cannes 攵 please,"
+                        )
                     }
                 ],
             ],
@@ -166,3 +221,63 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
                     handle_long_generation="hole",
                     max_new_tokens=tokenizer.model_max_length + 10,
                 )
+
+    @require_torch
+    @require_accelerate
+    @require_torch_gpu
+    def test_small_model_pt_bloom_accelerate(self):
+        import torch
+
+        # Classic `model_kwargs`
+        pipe = pipeline(
+            model="hf-internal-testing/tiny-random-bloom",
+            model_kwargs={"device_map": "auto", "torch_dtype": torch.bfloat16},
+        )
+        self.assertEqual(pipe.model.device, torch.device(0))
+        self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
+        out = pipe("This is a test")
+        self.assertEqual(
+            out,
+            [
+                {
+                    "generated_text": (
+                        "This is a test test test test test test test test test test test test test test test test"
+                        " test"
+                    )
+                }
+            ],
+        )
+
+        # Upgraded those two to real pipeline arguments (they just get sent for the model as they're unlikely to mean anything else.)
+        pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto", torch_dtype=torch.bfloat16)
+        self.assertEqual(pipe.model.device, torch.device(0))
+        self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
+        out = pipe("This is a test")
+        self.assertEqual(
+            out,
+            [
+                {
+                    "generated_text": (
+                        "This is a test test test test test test test test test test test test test test test test"
+                        " test"
+                    )
+                }
+            ],
+        )
+
+        # torch_dtype not necessary
+        pipe = pipeline(model="hf-internal-testing/tiny-random-bloom", device_map="auto")
+        self.assertEqual(pipe.model.device, torch.device(0))
+        self.assertEqual(pipe.model.lm_head.weight.dtype, torch.bfloat16)
+        out = pipe("This is a test")
+        self.assertEqual(
+            out,
+            [
+                {
+                    "generated_text": (
+                        "This is a test test test test test test test test test test test test test test test test"
+                        " test"
+                    )
+                }
+            ],
+        )

@@ -24,13 +24,6 @@ class CLIPFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class CLIPProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class ConvNextFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -52,7 +45,28 @@ class DetrFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class DonutFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class DPTFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class FlavaFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class FlavaProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -80,14 +94,14 @@ class LayoutLMv2FeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class LayoutLMv2Processor(metaclass=DummyObject):
+class LayoutLMv3FeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision"])
 
 
-class LayoutXLMProcessor(metaclass=DummyObject):
+class LevitFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -95,6 +109,20 @@ class LayoutXLMProcessor(metaclass=DummyObject):
 
 
 class MaskFormerFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class MobileViTFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class OwlViTFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -122,6 +150,13 @@ class SegformerFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class VideoMAEFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class ViltFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -137,6 +172,13 @@ class ViltProcessor(metaclass=DummyObject):
 
 
 class ViTFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class YolosFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

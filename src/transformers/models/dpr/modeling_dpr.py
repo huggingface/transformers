@@ -176,7 +176,8 @@ class DPREncoder(DPRPreTrainedModel):
     def __init__(self, config: DPRConfig):
         super().__init__(config)
         self.bert_model = BertModel(config, add_pooling_layer=False)
-        assert self.bert_model.config.hidden_size > 0, "Encoder hidden_size can't be zero"
+        if self.bert_model.config.hidden_size <= 0:
+            raise ValueError("Encoder hidden_size can't be zero")
         self.projection_dim = config.projection_dim
         if self.projection_dim > 0:
             self.encode_proj = nn.Linear(self.bert_model.config.hidden_size, config.projection_dim)
@@ -403,7 +404,7 @@ DPR_ENCODERS_INPUTS_DOCSTRING = r"""
 
 DPR_READER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids: (`Tuple[torch.LongTensor]` of shapes `(n_passages, sequence_length)`):
+        input_ids (`Tuple[torch.LongTensor]` of shapes `(n_passages, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. It has to be a sequence triplet with 1) the question
             and 2) the passages titles and 3) the passages texts To match pretraining, DPR `input_ids` sequence should
             be formatted with [CLS] and [SEP] with the format:

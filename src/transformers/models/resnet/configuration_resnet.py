@@ -14,14 +14,20 @@
 # limitations under the License.
 """ ResNet model configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
+from packaging import version
+
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 RESNET_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "resnet-50": "https://huggingface.co/microsoft/resnet-50/blob/main/config.json",
+    "microsoft/resnet-50": "https://huggingface.co/microsoft/resnet-50/blob/main/config.json",
 }
 
 
@@ -29,8 +35,8 @@ class ResNetConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ResNetModel`]. It is used to instantiate an
     ResNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the
-    [resnet-50](https://huggingface.co/microsoft/resnet-50) architecture.
+    with the defaults will yield a similar configuration to that of the ResNet
+    [microsoft/resnet-50](https://huggingface.co/microsoft/resnet-50) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -89,3 +95,20 @@ class ResNetConfig(PretrainedConfig):
         self.layer_type = layer_type
         self.hidden_act = hidden_act
         self.downsample_in_first_stage = downsample_in_first_stage
+
+
+class ResNetOnnxConfig(OnnxConfig):
+
+    torch_onnx_minimum_version = version.parse("1.11")
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-3

@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     TestCasePlus,
     execute_subprocess_async,
     get_gpu_count,
+    get_tests_dir,
     require_deepspeed,
     require_torch_gpu,
     slow,
@@ -41,51 +42,100 @@ if is_torch_available():
 
 set_seed(42)
 
+FIXTURE_DIRECTORY = get_tests_dir("fixtures")
+ROOT_DIRECTORY = os.path.join(dirname(get_tests_dir()))
+DS_TESTS_DIRECTORY = dirname(os.path.abspath(__file__))
+
 # default torch.distributed port
 DEFAULT_MASTER_PORT = "10999"
 
-# translation
-FSMT_TINY = "stas/tiny-wmt19-en-de"
-BART_TINY = "sshleifer/bart-tiny-random"
 T5_SMALL = "t5-small"
-T5_TINY = "patrickvonplaten/t5-tiny-random"
-MBART_TINY = "sshleifer/tiny-mbart"
-MARIAN_TINY = "sshleifer/tiny-marian-en-de"
 
-# summarization
-PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
-
-# causal lm
-GPT2_TINY = "sshleifer/tiny-gpt2"
-XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
-
-# question-answering
-ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
-
-# masked lm
+# *** Working Models ***
+ALBERT_TINY = "hf-internal-testing/tiny-albert"
+BART_TINY = "sshleifer/bart-tiny-random"
+BERT_TINY = "hf-internal-testing/tiny-bert"
+BIGBIRD_PEGASUS_TINY = "hf-internal-testing/tiny-random-bigbird_pegasus"
+BIG_BIRD_TINY = "hf-internal-testing/tiny-random-big_bird"
+BLENDERBOT_TINY = "hf-internal-testing/tiny-random-blenderbot"
+BLOOM_TINY = "bigscience/bigscience-small-testing"
+DEBERTA_TINY = "hf-internal-testing/tiny-random-deberta"
+DEBERTA_V2_TINY = "hf-internal-testing/tiny-random-deberta-v2"
 DISTILBERT_TINY = "sshleifer/tiny-distilbert-base-cased"
 ELECTRA_TINY = "hf-internal-testing/tiny-electra"
-
-# classification
+FLAUBERT_TINY = "hf-internal-testing/tiny-random-flaubert"
+FSMT_TINY = "stas/tiny-wmt19-en-de"
+FUNNEL_TINY = "hf-internal-testing/tiny-random-funnel"
+GPT2_TINY = "sshleifer/tiny-gpt2"
+GPTJ_TINY = "hf-internal-testing/tiny-random-gptj"
+GPT_NEO_TINY = "hf-internal-testing/tiny-random-gpt_neo"
+LAYOUTLM_TINY = "hf-internal-testing/tiny-layoutlm"
+LED_TINY = "hf-internal-testing/tiny-random-led"
+LONGFORMER_TINY = "hf-internal-testing/tiny-random-longformer"
+M2M_100_TINY = "stas/tiny-m2m_100"  # hf tiny model is unsuitable
+MARIAN_TINY = "sshleifer/tiny-marian-en-de"
+MBART_TINY = "sshleifer/tiny-mbart"
+MOBILEBERT_TINY = "hf-internal-testing/tiny-random-mobilebert"
+MPNET_TINY = "hf-internal-testing/tiny-random-mpnet"
+PEGASUS_TINY = "stas/pegasus-cnn_dailymail-tiny-random"
+PROPHETNET_TINY = "hf-internal-testing/tiny-random-prophetnet"
+ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
+SQUEEZEBERT_TINY = "hf-internal-testing/tiny-random-squeezebert"
+T5_TINY = "patrickvonplaten/t5-tiny-random"
+T5_V1_TINY = "hf-internal-testing/tiny-random-t5-v1.1"
+VIT_TINY = "hf-internal-testing/tiny-random-vit"
+XLM_ROBERTA_TINY = "hf-internal-testing/tiny-xlm-roberta"
 XLNET_TINY = "sshleifer/tiny-xlnet-base-cased"
-BERT_TINY = "hf-internal-testing/tiny-bert"
 
-FIXTURE_DIRECTORY = os.path.join(dirname(dirname(os.path.abspath(__file__))), "fixtures")
-ROOT_DIRECTORY = os.path.join(dirname(dirname(dirname(os.path.abspath(__file__)))))
 
-# TODO: to add:
-# albert
-# deberta
-# funnel
-# longformer
-# dpr
-# gpt_neo
-# camembert
-# deberta-v2
-# m2m_100
-# tapas
-# vit
-# big_bird
+# *** To Fix ***
+
+
+# *** tiny model issues ***
+# missing model files:
+MT5_TINY = "hf-internal-testing/tiny-random-mt5"
+CAMEMBERT_TINY = "hf-internal-testing/tiny-random-camembert"
+OPENAI_GPT_TINY = "hf-internal-testing/tiny-random-openai-gpt"
+
+# missing tokenizer files
+CONVBERT_TINY = "hf-internal-testing/tiny-random-convbert"
+LAYOUTLMV2_TINY = "hf-internal-testing/tiny-random-layoutlmv2"
+HUBERT_TINY = "hf-internal-testing/tiny-random-hubert"
+
+# issues with tokenizer
+CTRL_TINY = "hf-internal-testing/tiny-random-ctrl"
+TRANSFO_XL_TINY = "hf-internal-testing/tiny-random-transfo-xl"  # same as ctrl
+
+# other issues with tiny models
+IBERT_TINY = "hf-internal-testing/tiny-random-ibert"  # multiple issues with either mlm/qa/clas
+REFORMER_TINY = "hf-internal-testing/tiny-random-reformer"  # multiple issues with either mlm/qa/clas
+
+# *** Lacking official examples to test with ***
+# or not working with examples
+DPR_TINY = "hf-internal-testing/tiny-random-dpr"
+# - "dpr"  examples/research_projects/rag-end2end-retriever/
+RAG_TINY = "hf-internal-testing/tiny-random-rag"
+# - "rag" research_projects
+LUKE_TINY = ""
+# - "luke" Entities classes - no plan to make such example
+LXMERT_TINY = "hf-internal-testing/tiny-random-lxmert"
+# - "lxmert" doesn't work with run_qa.py
+CLIP_TINY = "hf-internal-testing/tiny-random-clip"
+# - "clip" nothing under pytorch examples - XXX: Suraj is working on adding some - check by end of Sep
+SPEECH_TO_TEXT_TINY = "hf-internal-testing/tiny-random-speech_to_text"
+# - "speech_to_text", nothing under pytorch examples
+
+
+# *** Reactive mode ***
+# models with low usage, unstable API, things about to change - do nothing about the following until someone runs into a problem
+TAPAS_TINY = "hf-internal-testing/tiny-random-tapas"
+# additional notes on tapas
+# 1. requires torch_scatter - skip if it's not installed?
+# 2. "Table must be of type pd.DataFrame" failure
+
+
+# TODO: new models to add:
+#
 
 
 def get_launcher(distributed=False):
@@ -112,35 +162,69 @@ def make_task_cmds():
         --overwrite_output_dir
         """.split()
 
-    # XXX: try to cover as many models as possible once (it's enough to run on one task per model)
+    # try to cover as many models as possible once (it's enough to run on one task per model)
     # but need a tiny model for each
     #
-    # should have T5_TINY, etc. global var defined
+    # should have "{model_type.upper()}_TINY" corresponding vars defined, e.g., T5_TINY, etc.
     tasks2models = dict(
         trans=[
             "bart",
             "fsmt",
+            "m2m_100",
             "marian",
             "mbart",
             "t5",
+            "t5_v1",
+            # "mt5", missing model files
         ],
         sum=[
             "pegasus",
         ],
         clm=[
+            "big_bird",
+            "bigbird_pegasus",
+            "blenderbot",
+            "bloom",
             "gpt2",
+            "gpt_neo",
+            "gptj",
             "xlm-roberta",
+            "prophetnet",
+            # "camembert", missing model files
         ],
         mlm=[
-            "electra",
+            "albert",
+            "deberta",
+            "deberta-v2",
             "distilbert",
+            "electra",
+            "flaubert",
+            "funnel",
+            "layoutlm",
+            # "reformer", # multiple issues with either mlm/qa/clas
         ],
         qa=[
+            "led",
+            "longformer",
+            "mobilebert",
+            "mpnet",
             "roberta",
+            "squeezebert",
+            # "convbert", # missing tokenizer files
+            # "layoutlmv2", missing model files
         ],
         clas=[
             "bert",
             "xlnet",
+            # "hubert", # missing tokenizer files
+            # "ibert", # multiple issues with either mlm/qa/clas
+            # "transfo-xl", # tokenizer issues as ctrl
+            # "ctrl", # tokenizer issues
+            # "openai-gpt", missing model files
+            # "tapas", multiple issues
+        ],
+        img_clas=[
+            "vit",
         ],
     )
 
@@ -179,6 +263,13 @@ def make_task_cmds():
         --max_seq_length 12
         --task_name MRPC
         """,
+        img_clas=f"""
+        {scripts_dir}/image-classification/run_image_classification.py
+            --dataset_name hf-internal-testing/cats_vs_dogs_sample
+            --remove_unused_columns False
+            --max_steps 10
+            --feature_extractor_name {DS_TESTS_DIRECTORY}/vit_feature_extractor.json
+        """,
     )
 
     launcher = get_launcher(distributed=True)
@@ -215,7 +306,7 @@ stages = [ZERO2, ZERO3]
 #
 # dtypes = [FP16]
 # so just hardcoding --fp16 for now
-# if is_torch_bf16_available():
+# if is_torch_bf16_gpu_available():
 #     dtypes += [BF16]
 
 

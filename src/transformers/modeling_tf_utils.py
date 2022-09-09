@@ -16,12 +16,16 @@
 """TF general model utils."""
 
 import functools
+import gc
 import inspect
+import json
 import os
 import pickle
 import re
 import warnings
-from typing import Dict, List, Optional, Union
+from collections.abc import Mapping
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 import h5py
 import numpy as np
@@ -32,32 +36,35 @@ from tensorflow.python.keras.engine.keras_tensor import KerasTensor
 from tensorflow.python.keras.saving import hdf5_format
 
 from huggingface_hub import Repository, list_repo_files
-from requests import HTTPError
+from keras.saving.hdf5_format import save_attributes_to_hdf5_group
+from transformers.utils.hub import convert_file_size_to_int, get_checkpoint_shard_files
 
+from . import DataCollatorWithPadding, DefaultDataCollator
 from .activations_tf import get_tf_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation_tf_utils import TFGenerationMixin
-from .modeling_tf_outputs import TFSeq2SeqLMOutput
 from .tf_utils import shape_list
-from .tokenization_utils_base import BatchEncoding
 from .utils import (
     DUMMY_INPUTS,
+    TF2_WEIGHTS_INDEX_NAME,
     TF2_WEIGHTS_NAME,
+    WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
-    EntryNotFoundError,
     ModelOutput,
     PushToHubMixin,
-    RepositoryNotFoundError,
-    RevisionNotFoundError,
-    cached_path,
-    copy_func,
+    cached_file,
+    find_labels,
     has_file,
-    hf_bucket_url,
     is_offline_mode,
-    is_remote_url,
     logging,
+    requires_backends,
+    working_or_temp_dir,
 )
+
+
+if TYPE_CHECKING:
+    from . import PreTrainedTokenizerBase
 
 
 logger = logging.get_logger(__name__)
@@ -182,11 +189,20 @@ class TFCausalLanguageModelingLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
+        if self.config.tf_legacy_loss:
+            # make sure only labels that are not equal to -100 affect the loss
+            active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
+            reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
+            labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
+            return loss_fn(labels, reduced_logits)
+
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_loss = loss_fn(tf.nn.relu(labels), logits)
         # make sure only labels that are not equal to -100 affect the loss
-        active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
-        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
-        labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
-        return loss_fn(labels, reduced_logits)
+        loss_mask = tf.cast(labels != -100, dtype=unmasked_loss.dtype)
+        masked_loss = unmasked_loss * loss_mask
+        reduced_masked_loss = tf.reduce_sum(masked_loss) / tf.reduce_sum(loss_mask)
+        return tf.reshape(reduced_masked_loss, (1,))
 
 
 class TFQuestionAnsweringLoss:
@@ -219,17 +235,33 @@ class TFTokenClassificationLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
-        # make sure only labels that are not equal to -100
-        # are taken into account as loss
-        if tf.math.reduce_any(labels == -1):
-            tf.print("Using `-1` to mask the loss for the token is deprecated. Please use `-100` instead.")
-            active_loss = tf.reshape(labels, (-1,)) != -1
-        else:
-            active_loss = tf.reshape(labels, (-1,)) != -100
-        reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
-        labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
+        if tf.executing_eagerly():  # Data-dependent conditionals are forbidden in XLA
+            if tf.math.reduce_any(labels == -1):
+                tf.print("Using `-1` to mask the loss for the token is deprecated. Please use `-100` instead.")
 
-        return loss_fn(labels, reduced_logits)
+        if self.config.tf_legacy_loss:
+            # make sure only labels that are not equal to -100
+            # are taken into account as loss
+            if tf.math.reduce_any(labels == -1):
+                tf.print("Using `-1` to mask the loss for the token is deprecated. Please use `-100` instead.")
+                active_loss = tf.reshape(labels, (-1,)) != -1
+            else:
+                active_loss = tf.reshape(labels, (-1,)) != -100
+            reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, shape_list(logits)[2])), active_loss)
+            labels = tf.boolean_mask(tf.reshape(labels, (-1,)), active_loss)
+
+            return loss_fn(labels, reduced_logits)
+
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_loss = loss_fn(tf.nn.relu(labels), logits)
+        # make sure only labels that are not equal to -100 or -1
+        # are taken into account as loss
+        loss_mask = tf.cast(labels >= 0, dtype=unmasked_loss.dtype)
+        # Avoid possible division by zero later
+        # Masked positions will have a loss of NaN because -100 and -1 are not valid labels
+        masked_loss = unmasked_loss * loss_mask
+        reduced_masked_loss = tf.reduce_sum(masked_loss) / tf.reduce_sum(loss_mask)
+        return tf.reshape(reduced_masked_loss, (1,))
 
 
 class TFSequenceClassificationLoss:
@@ -238,7 +270,7 @@ class TFSequenceClassificationLoss:
     """
 
     def hf_compute_loss(self, labels, logits):
-        if len(shape_list(logits)) == 1 or shape_list(logits)[1] == 1:
+        if logits.shape.rank == 1 or logits.shape[1] == 1:
             loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
         else:
             loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
@@ -285,19 +317,30 @@ class TFNextSentencePredictionLoss:
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
             from_logits=True, reduction=tf.keras.losses.Reduction.NONE
         )
+        if self.config.tf_legacy_loss:
+            # make sure only labels that are not equal to -100
+            # are taken into account as loss
+            next_sentence_active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
+            next_sentence_reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, 2)), next_sentence_active_loss)
+            next_sentence_label = tf.boolean_mask(tf.reshape(labels, (-1,)), next_sentence_active_loss)
+
+            return loss_fn(next_sentence_label, next_sentence_reduced_logits)
+
         # make sure only labels that are not equal to -100
         # are taken into account as loss
-        next_sentence_active_loss = tf.not_equal(tf.reshape(labels, (-1,)), -100)
-        next_sentence_reduced_logits = tf.boolean_mask(tf.reshape(logits, (-1, 2)), next_sentence_active_loss)
-        next_sentence_label = tf.boolean_mask(tf.reshape(labels, (-1,)), next_sentence_active_loss)
 
-        return loss_fn(next_sentence_label, next_sentence_reduced_logits)
+        # Clip negative labels to zero here to avoid NaNs and errors - those positions will get masked later anyway
+        unmasked_ns_loss = loss_fn(y_true=tf.nn.relu(labels), y_pred=logits)
+        ns_loss_mask = tf.cast(labels != -100, dtype=unmasked_ns_loss.dtype)
+        # Just zero out samples where label is -100, no reduction
+        masked_ns_loss = unmasked_ns_loss * ns_loss_mask
+
+        return masked_ns_loss
 
 
 def booleans_processing(config, **kwargs):
     """
-    Process the input booleans of each model in order to be sure they are compliant with the execution mode (eager or
-    graph)
+    Process the input booleans of each model.
 
     Args:
         config ([`PretrainedConfig`]):
@@ -310,37 +353,21 @@ def booleans_processing(config, **kwargs):
     """
     final_booleans = {}
 
-    if tf.executing_eagerly():
-        # Pure conv models (such as ConvNext) do not have `output_attentions`
-        final_booleans["output_attentions"] = kwargs.get("output_attentions", None)
-        if final_booleans["output_attentions"] is None:
-            final_booleans["output_attentions"] = config.output_attentions
-        final_booleans["output_hidden_states"] = (
-            kwargs["output_hidden_states"]
-            if kwargs["output_hidden_states"] is not None
-            else config.output_hidden_states
+    # Pure conv models (such as ConvNext) do not have `output_attentions`. If the signature has
+    # `output_attentions`, it will be present here in `kwargs`, even if unset (in that case, as `None`)
+    if "output_attentions" in kwargs:
+        final_booleans["output_attentions"] = (
+            kwargs["output_attentions"] if kwargs["output_attentions"] is not None else config.output_attentions
         )
-        final_booleans["return_dict"] = (
-            kwargs["return_dict"] if kwargs["return_dict"] is not None else config.return_dict
+    final_booleans["output_hidden_states"] = (
+        kwargs["output_hidden_states"] if kwargs["output_hidden_states"] is not None else config.output_hidden_states
+    )
+    final_booleans["return_dict"] = kwargs["return_dict"] if kwargs["return_dict"] is not None else config.return_dict
+
+    if "use_cache" in kwargs:
+        final_booleans["use_cache"] = (
+            kwargs["use_cache"] if kwargs["use_cache"] is not None else getattr(config, "use_cache", None)
         )
-
-        if "use_cache" in kwargs:
-            final_booleans["use_cache"] = (
-                kwargs["use_cache"] if kwargs["use_cache"] is not None else getattr(config, "use_cache", None)
-            )
-    else:
-        final_booleans["output_attentions"] = config.output_attentions
-        final_booleans["output_hidden_states"] = config.output_hidden_states
-
-        if kwargs.get("return_dict", None) not in (None, True):
-            tf_logger.warning(
-                "The parameter `return_dict` cannot be set in graph mode and will always be set to `True`."
-            )
-        final_booleans["return_dict"] = True
-
-        if "use_cache" in kwargs:
-            final_booleans["use_cache"] = getattr(config, "use_cache", None)
-
     return final_booleans
 
 
@@ -370,10 +397,13 @@ def unpack_inputs(func):
         # move any arg into kwargs, if they exist
         fn_args_and_kwargs.update(dict(zip(func.__code__.co_varnames[1:], args)))
 
-        # process the inputs and call the wrapped function
-        main_input_name = getattr(self, "main_input_name", func.__code__.co_varnames[1])
-        main_input = fn_args_and_kwargs.pop(main_input_name, None)
-        unpacked_inputs = input_processing(func, self.config, main_input, **fn_args_and_kwargs)
+        # Encoder Decoder models delegate the application of the configuration options to their inner models.
+        if "EncoderDecoder" in self.__class__.__name__:
+            config = None
+        else:
+            config = self.config
+
+        unpacked_inputs = input_processing(func, config, **fn_args_and_kwargs)
         return func(self, **unpacked_inputs)
 
     # Keras enforces the first layer argument to be passed, and checks it through `inspect.getfullargspec()`. This
@@ -384,7 +414,7 @@ def unpack_inputs(func):
     return run_call_with_unpacked_inputs
 
 
-def input_processing(func, config, input_ids, **kwargs):
+def input_processing(func, config, **kwargs):
     """
     Process the input of each TensorFlow model including the booleans. In case of a list of symbolic inputs, each input
     has to be named accordingly to the parameters name, i.e. `input_ids = tf.keras.Input(shape=(128,), dtype='int32',
@@ -402,9 +432,11 @@ def input_processing(func, config, input_ids, **kwargs):
         Two lists, one for the missing layers, and another one for the unexpected layers.
     """
     signature = dict(inspect.signature(func).parameters)
-    signature.pop("kwargs", None)
+    has_kwargs = bool(signature.pop("kwargs", None))
     signature.pop("self", None)
     parameter_names = list(signature.keys())
+    main_input_name = parameter_names[0]
+    main_input = kwargs.pop(main_input_name, None)
     output = {}
     allowed_types = (tf.Tensor, bool, int, ModelOutput, tuple, list, dict, np.ndarray, KerasTensor)
 
@@ -418,26 +450,31 @@ def input_processing(func, config, input_ids, **kwargs):
 
     if "decoder_cached_states" in kwargs["kwargs_call"]:
         warnings.warn(
-            "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+            "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use"
+            " `past_key_values` instead.",
             FutureWarning,
         )
         output["past_key_values"] = kwargs["kwargs_call"].pop("decoder_cached_states")
 
     if "past" in kwargs["kwargs_call"] and "past_key_values" in parameter_names:
         warnings.warn(
-            "The `past` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+            "The `past` argument is deprecated and will be removed in a future version, use `past_key_values`"
+            " instead.",
             FutureWarning,
         )
         kwargs["past_key_values"] = kwargs["kwargs_call"].pop("past")
     elif "past_key_values" in kwargs["kwargs_call"] and "past" in parameter_names:
         kwargs["past"] = kwargs["kwargs_call"].pop("past_key_values")
 
-    if len(kwargs["kwargs_call"]) > 0:
-        raise ValueError(
-            f"The following keyword arguments are not supported by this model: {list(kwargs['kwargs_call'].keys())}."
-        )
-
-    kwargs.pop("kwargs_call")
+    if has_kwargs:
+        output["kwargs"] = kwargs.pop("kwargs_call", {})
+    else:
+        if len(kwargs["kwargs_call"]) > 0:
+            raise ValueError(
+                "The following keyword arguments are not supported by this model:"
+                f" {list(kwargs['kwargs_call'].keys())}."
+            )
+        kwargs.pop("kwargs_call")
 
     for k, v in kwargs.items():
         if isinstance(v, allowed_types) or v is None:
@@ -445,8 +482,8 @@ def input_processing(func, config, input_ids, **kwargs):
         else:
             raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
 
-    if isinstance(input_ids, (tuple, list)):
-        for i, input in enumerate(input_ids):
+    if isinstance(main_input, (tuple, list)):
+        for i, input in enumerate(main_input):
             # EagerTensors don't allow to use the .name property so we check for a real Tensor
             if type(input) == tf.Tensor:
                 # Tensor names have always the pattern `name:id` then we check only the
@@ -461,25 +498,28 @@ def input_processing(func, config, input_ids, **kwargs):
                 output[parameter_names[i]] = input
             else:
                 raise ValueError(
-                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for {parameter_names[i]}."
+                    f"Data of type {type(input)} is not allowed only {allowed_types} is accepted for"
+                    f" {parameter_names[i]}."
                 )
-    elif isinstance(input_ids, (dict, BatchEncoding)):
-        if "inputs" in input_ids:
+    elif isinstance(main_input, Mapping):
+        if "inputs" in main_input:
             warnings.warn(
-                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids` instead.",
+                "The `inputs` argument is deprecated and will be removed in a future version, use `input_ids`"
+                " instead.",
                 FutureWarning,
             )
 
-            output["input_ids"] = input_ids.pop("inputs")
+            output["input_ids"] = main_input.pop("inputs")
 
-        if "decoder_cached_states" in input_ids:
+        if "decoder_cached_states" in main_input:
             warnings.warn(
-                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use `past_key_values` instead.",
+                "The `decoder_cached_states` argument is deprecated and will be removed in a future version, use"
+                " `past_key_values` instead.",
                 FutureWarning,
             )
-            output["past_key_values"] = input_ids.pop("decoder_cached_states")
+            output["past_key_values"] = main_input.pop("decoder_cached_states")
 
-        for k, v in dict(input_ids).items():
+        for k, v in dict(main_input).items():
             if isinstance(v, allowed_types) or v is None:
                 output[k] = v
             elif k not in parameter_names and "args" not in parameter_names:
@@ -490,11 +530,12 @@ def input_processing(func, config, input_ids, **kwargs):
             else:
                 raise ValueError(f"Data of type {type(v)} is not allowed only {allowed_types} is accepted for {k}.")
     else:
-        if isinstance(input_ids, (tf.Tensor, KerasTensor)) or input_ids is None:
-            output[parameter_names[0]] = input_ids
+        if isinstance(main_input, (tf.Tensor, KerasTensor)) or main_input is None:
+            output[main_input_name] = main_input
         else:
             raise ValueError(
-                f"Data of type {type(input_ids)} is not allowed only {allowed_types} is accepted for {parameter_names[0]}."
+                f"Data of type {type(main_input)} is not allowed only {allowed_types} is accepted for"
+                f" {main_input_name}."
             )
 
     # Populates any unspecified argument with their default value, according to the signature.
@@ -517,25 +558,260 @@ def input_processing(func, config, input_ids, **kwargs):
     if "kwargs" in output:
         del output["kwargs"]
 
-    boolean_dict = {
-        k: v
-        for k, v in output.items()
-        if k in ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
-    }
+    if config is not None:
+        boolean_dict = {
+            k: v
+            for k, v in output.items()
+            if k in ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
+        }
 
-    output.update(
-        booleans_processing(
-            config=config,
-            **boolean_dict,
+        output.update(
+            booleans_processing(
+                config=config,
+                **boolean_dict,
+            )
         )
-    )
 
     return output
 
 
+def dtype_byte_size(dtype):
+    """
+    Returns the size (in bytes) occupied by one parameter of type `dtype`.
+
+    Example:
+
+    ```py
+    >>> dtype_byte_size(tf.float32)
+    4
+    ```
+    """
+    if dtype == tf.bool:
+        return 1 / 8
+    bit_search = re.search("[^\d](\d+)$", dtype.name)
+    if bit_search is None:
+        raise ValueError(f"`dtype` is not a valid dtype: {dtype}.")
+    bit_size = int(bit_search.groups()[0])
+    return bit_size // 8
+
+
+def tf_shard_checkpoint(weights, max_shard_size="10GB"):
+    """
+    Splits a model state dictionary in sub-checkpoints so that the final size of each sub-checkpoint does not exceed a
+    given size.
+
+    The sub-checkpoints are determined by iterating through the `state_dict` in the order of its keys, so there is no
+    optimization made to make each sub-checkpoint as close as possible to the maximum size passed. For example, if the
+    limit is 10GB and we have weights of sizes [6GB, 6GB, 2GB, 6GB, 2GB, 2GB] they will get sharded as [6GB], [6+2GB],
+    [6+2+2GB] and not [6+2+2GB], [6+2GB], [6GB].
+
+    <Tip warning={true}>
+
+    If one of the model's weight is bigger that `max_shard_size`, it will end up in its own sub-checkpoint which will
+    have a size greater than `max_shard_size`.
+
+    </Tip>
+
+    Args:
+        weights (`Dict[str, tf.RessourceVariable]`): The list of tf.RessourceVariable of a model to save.
+        max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+            The maximum size of each sub-checkpoint. If expressed as a string, needs to be digits followed by a unit
+            (like `"5MB"`).
+    """
+    max_shard_size = convert_file_size_to_int(max_shard_size)
+
+    sharded_state_dicts = []
+    current_block = []
+    current_block_size = 0
+    total_size = 0
+
+    for item in weights:
+        weight_size = item.numpy().size * dtype_byte_size(item.dtype)
+
+        # If this weight is going to tip up over the maximal size, we split.
+        if current_block_size + weight_size > max_shard_size:
+            sharded_state_dicts.append(current_block)
+            current_block = []
+            current_block_size = 0
+
+        current_block.append(item)
+        current_block_size += weight_size
+        total_size += weight_size
+
+    # Add the last block
+    sharded_state_dicts.append(current_block)
+
+    # If we only have one shard, we return it
+    if len(sharded_state_dicts) == 1:
+        return {TF2_WEIGHTS_NAME: sharded_state_dicts[0]}, None
+
+    # Otherwise, let's build the index
+    weight_map = {}
+    shards = {}
+    for idx, shard in enumerate(sharded_state_dicts):
+        shard_file = TF2_WEIGHTS_NAME.replace(".h5", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.h5")
+        shards[shard_file] = shard
+        for weight in shard:
+            weight_name = weight.name
+            weight_map[weight_name] = shard_file
+
+    # Add the metadata
+    metadata = {"total_size": total_size}
+    index = {"metadata": metadata, "weight_map": weight_map}
+    return shards, index
+
+
+def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, strict=True):
+    """
+    This is the same as `load_tf_weights` but for a sharded checkpoint. Detect missing and unexpected layers and load
+    the TF weights from the shard file accordingly to their names and shapes.
+
+    This load is performed efficiently: each checkpoint shard is loaded one by one in RAM and deleted after being
+    loaded in the model.
+
+    Args:
+        model (`tf.keras.models.Model`): The model in which to load the checkpoint.
+        shard_files (`str` or `os.PathLike`): A list containing the sharded checkpoint names.
+        ignore_mismatched_sizes`bool`, *optional`, defaults to `True`):
+            Whether or not to ignore the mismatch between the sizes
+        strict (`bool`, *optional*, defaults to `True`):
+            Whether to strictly enforce that the keys in the model state dict match the keys in the sharded checkpoint.
+
+    Returns:
+        Three lists, one for the missing layers, another one for the unexpected layers, and a last one for the
+        mismatched layers.
+    """
+
+    # Load the index
+    missing_keys = []
+    unexpected_keys = set()
+    saved_keys = set()
+    missmatched_keys = set()
+
+    # Since TF adds the name of the class to its weights, and uses the index and not the name of the layer to load
+    # the weight, we have to get rid of the first prefix of the name of the layer.
+    model_keys = set("/".join(k.name.split("/")[1:]) for k in model.weights)
+    model_layer_map = {"/".join(k.name.split("/")[1:]): i for i, k in enumerate(model.weights)}
+
+    for shard_file in shard_files:
+        state_dict = tf.io.read_file(shard_file)
+        saved_weight_names_set, unexpected_keys_set, missmatched_keys_set = load_tf_shard(
+            model, model_layer_map, shard_file, ignore_mismatched_sizes=ignore_mismatched_sizes
+        )
+        saved_keys.update(saved_weight_names_set)
+        unexpected_keys.update(unexpected_keys_set)
+        missmatched_keys.update(missmatched_keys_set)
+        del state_dict
+        gc.collect()
+
+    missing_keys = model_keys - saved_keys
+    if strict and (len(missing_keys) > 0 or len(unexpected_keys) > 0):
+        error_message = f"Error(s) in loading state_dict for {model.__class__.__name__}"
+        if len(missing_keys) > 0:
+            str_missing_keys = ",".join([f'"{k}"' for k in missing_keys])
+            error_message += f"\nMissing key(s): {str_missing_keys}."
+        if len(unexpected_keys) > 0:
+            str_unexpected_keys = ",".join([f'"{k}"' for k in unexpected_keys])
+            error_message += f"\nMissing key(s): {str_unexpected_keys}."
+        raise RuntimeError(error_message)
+
+    return missing_keys, unexpected_keys, missmatched_keys
+
+
+def load_tf_shard(model, model_layer_map, resolved_archive_file, ignore_mismatched_sizes=False):
+    """
+    Loads a shard from a sharded checkpoint file. Handles the missing keys and unexpected keys.
+
+    Args:
+        model (`tf.keras.models.Model`): Model in which the weights are loaded
+        model_layer_map (`Dict`): A dictionnary mapping the layer name to the index of the layer in the model.
+        resolved_archive_file (`str`): Path to the checkpoint file from which the weights will be loaded
+        ignore_mismatched_sizes (`bool`, *optional*, defaults to `False`): Whether to ignore the mismatched keys
+
+    Returns:
+        `tf.keras.models.Model`: Three lists, one for the layers that were found and succesfully restored (from the
+        shard file), one for the missmatched layers, and another one for the unexpected layers.
+    """
+    saved_weight_names_set = set()
+    saved_weights = {}
+    missmatched_keys = set()
+    unexpected_keys = set()
+    # Read the H5 file
+    try:
+        with h5py.File(resolved_archive_file, "r") as sharded_checkpoint_file:
+            # Retrieve the name of each layer from the H5 file
+            saved_h5_model_layers_name = set(
+                hdf5_format.load_attributes_from_hdf5_group(sharded_checkpoint_file, "layer_names")
+            )
+            weight_value_tuples = []
+
+            # Compute missing and unexpected sub layers
+            # Store the weights in list of tuples that looks like [(weight_object, value_of_weight),...]
+            for layer_name in saved_h5_model_layers_name:
+                h5_layer_object = sharded_checkpoint_file[layer_name]
+                saved_weights[layer_name] = np.asarray(h5_layer_object)
+
+                saved_weight_names_set.add(layer_name)
+
+                if layer_name not in model_layer_map:
+                    unexpected_keys.add(layer_name)
+                else:
+                    symbolic_weight = model.weights[model_layer_map[layer_name]]
+
+                    saved_weight_value = saved_weights[layer_name]
+                    # If the current weight is found
+                    if saved_weight_value is not None:
+                        # Check if the shape of the current weight and the one from the H5 file are different
+                        if K.int_shape(symbolic_weight) != saved_weight_value.shape:
+                            # If yes we reshape the weight from the H5 file accordingly to the current weight
+                            # If the two shapes are not compatible we raise an issue
+                            try:
+                                array = np.reshape(saved_weight_value, K.int_shape(symbolic_weight))
+                            except ValueError as e:
+                                if ignore_mismatched_sizes:
+                                    missmatched_keys.add(
+                                        (layer_name, saved_weight_value.shape, K.int_shape(symbolic_weight))
+                                    )
+                                    continue
+                                else:
+                                    raise e
+                        else:
+                            array = saved_weight_value
+
+                    # We create the tuple that will be loaded and add it to the final list
+                    weight_value_tuples.append((symbolic_weight, array))
+
+        K.batch_set_value(weight_value_tuples)
+
+        return saved_weight_names_set, unexpected_keys, missmatched_keys
+
+    except Exception as e:
+        try:
+            with open(resolved_archive_file) as f:
+                if f.read().startswith("version"):
+                    raise OSError(
+                        "You seem to have cloned a repository without having git-lfs installed. Please install "
+                        "git-lfs and run `git lfs install` followed by `git lfs pull` in the folder "
+                        "you cloned."
+                    )
+                else:
+                    raise ValueError(
+                        f"Unable to locate the file {resolved_archive_file} which is necessary to load this pretrained"
+                        " model. Make sure you have saved the model properly."
+                    ) from e
+        except (UnicodeDecodeError, ValueError):
+            raise OSError(
+                f"Unable to load weights from TF checkpoint file for '{resolved_archive_file}' "
+                f"at '{resolved_archive_file}'. "
+                "If you tried to load a TF model from a sharded checkpoint, you should try converting the model"
+                "by loading it in pytorch and saving it localy. A convertion script should be realeased soon."
+            )
+
+
 def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False, _prefix=None):
     """
-    Detect missing and unexpected layers and load the TF weights accordingly to their names and shapes.
+    Detect missing and unexpected layers and load the TF weights from the shard file accordingly to their names and
+    shapes.
 
     Args:
         model (`tf.keras.models.Model`):
@@ -554,9 +830,11 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
     mismatched_layers = []
 
     # Read the H5 file
-    with h5py.File(resolved_archive_file, "r") as f:
+    with h5py.File(resolved_archive_file, "r") as sharded_checkpoint_file:
         # Retrieve the name of each layer from the H5 file
-        saved_h5_model_layers_name = set(hdf5_format.load_attributes_from_hdf5_group(f, "layer_names"))
+        saved_h5_model_layers_name = set(
+            hdf5_format.load_attributes_from_hdf5_group(sharded_checkpoint_file, "layer_names")
+        )
 
         # Find the missing layers from the high level list of layers
         missing_layers = list(set([layer.name for layer in model.layers]) - saved_h5_model_layers_name)
@@ -573,7 +851,7 @@ def load_tf_weights(model, resolved_archive_file, ignore_mismatched_sizes=False,
             # if layer_name from the H5 file belongs to the layers from the instantiated model
             if layer.name in saved_h5_model_layers_name:
                 # Get the H5 layer object from its name
-                h5_layer_object = f[layer.name]
+                h5_layer_object = sharded_checkpoint_file[layer.name]
                 # Get all the weights as a list from the layer object
                 symbolic_weights = layer.trainable_weights + layer.non_trainable_weights
                 saved_weights = {}
@@ -707,6 +985,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     base_model_prefix = ""
     main_input_name = "input_ids"
     _auto_class = None
+    _using_dummy_loss = None
+    _label_to_output_map = None
 
     # a list of re pattern of tensor names to ignore from the model when loading the model weights
     # (and avoid unnecessary warnings).
@@ -875,6 +1155,105 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # set it directly, but the user can pass it to fit().
         return {"epoch": extra_data["epoch"]}
 
+    def prepare_tf_dataset(
+        self,
+        dataset: "datasets.Dataset",  # noqa:F821
+        batch_size: int = 8,
+        shuffle: bool = True,
+        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        collate_fn: Optional[Callable] = None,
+        collate_fn_args: Optional[Dict[str, Any]] = None,
+        drop_remainder: Optional[bool] = None,
+        prefetch: bool = True,
+    ):
+        """
+        Wraps a HuggingFace [`~datasets.Dataset`] as a `tf.data.Dataset` with collation and batching. This method is
+        designed to create a "ready-to-use" dataset that can be passed directly to Keras methods like `fit()` without
+        further modification. The method will drop columns from the dataset if they don't match input names for the
+        model. If you want to specify the column names to return rather than using the names that match this model, we
+        recommend using `Dataset.to_tf_dataset()` instead.
+
+        Args:
+            dataset (`Any`):
+                A [~`datasets.Dataset`] to be wrapped as a `tf.data.Dataset`.
+            batch_size (`int`, defaults to 8):
+                The size of batches to return.
+            shuffle (`bool`, defaults to `True`):
+                Whether to return samples from the dataset in random order. Usually `True` for training datasets and
+                `False` for validation/test datasets.
+            tokenizer ([`PreTrainedTokenizerBase`], *optional*):
+                A `PreTrainedTokenizer` that will be used to pad samples to create batches. Has no effect if a specific
+                `collate_fn` is passed instead.
+            collate_fn (`Callable`, *optional*):
+                A function that collates samples from the dataset into a single batch. Defaults to
+                `DefaultDataCollator` if no `tokenizer` is supplied or `DataCollatorWithPadding` if a `tokenizer` is
+                passed.
+            collate_fn_args (`Dict[str, Any]`, *optional*):
+                A dict of arguments to pass to the `collate_fn` alongside the list of samples.
+            drop_remainder (`bool`, *optional*):
+                Whether to drop the final batch, if the batch_size does not evenly divide the dataset length. Defaults
+                to the same setting as `shuffle`.
+            prefetch (`bool`, defaults to `True`):
+                Whether to add prefetching to the end of the `tf.data` pipeline. This is almost always beneficial for
+                performance, but can be disabled in edge cases.
+
+
+        Returns:
+            `Dataset`: A `tf.data.Dataset` which is ready to pass to the Keras API.
+        """
+        requires_backends(self, ["datasets"])
+        import datasets
+
+        if collate_fn is None:
+            if tokenizer is None:
+                collate_fn = DefaultDataCollator(return_tensors="tf")
+            else:
+                collate_fn = DataCollatorWithPadding(tokenizer=tokenizer, return_tensors="tf")
+        if collate_fn_args is None:
+            collate_fn_args = dict()
+
+        if not isinstance(dataset, datasets.Dataset):
+            raise TypeError("Dataset argument should be a datasets.Dataset!")
+        model_inputs = list(dict(inspect.signature(self.call).parameters).keys())
+        model_labels = find_labels(self.__class__)
+        if "cols_to_retain" in list(inspect.signature(dataset._get_output_signature).parameters.keys()):
+            output_signature, _ = dataset._get_output_signature(
+                dataset,
+                batch_size=None,
+                collate_fn=collate_fn,
+                collate_fn_args=collate_fn_args,
+                cols_to_retain=model_inputs,
+            )
+        else:
+            # TODO Matt: This is a workaround for older versions of datasets that are missing the `cols_to_retain`
+            #            argument. We should remove this once the minimum supported version of datasets is > 2.3.2
+            unwanted_columns = [
+                feature
+                for feature in dataset.features
+                if feature not in model_inputs and feature not in ("label_ids", "label")
+            ]
+            dataset = dataset.remove_columns(unwanted_columns)
+            output_signature, _ = dataset._get_output_signature(
+                dataset, batch_size=None, collate_fn=collate_fn, collate_fn_args=collate_fn_args
+            )
+        output_columns = list(output_signature.keys())
+        feature_cols = [col for col in output_columns if col in model_inputs and col not in model_labels]
+        label_cols = [col for col in output_columns if col in model_labels]
+
+        if drop_remainder is None:
+            drop_remainder = shuffle
+        tf_dataset = dataset.to_tf_dataset(
+            columns=feature_cols,
+            label_cols=label_cols,
+            batch_size=batch_size,
+            shuffle=shuffle,
+            drop_remainder=drop_remainder,
+            collate_fn=collate_fn,
+            collate_fn_args=collate_fn_args,
+            prefetch=prefetch,
+        )
+        return tf_dataset
+
     def compile(
         self,
         optimizer="rmsprop",
@@ -894,21 +1273,37 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             logger.warning(
                 "No loss specified in compile() - the model's internal loss computation will be used as the "
                 "loss. Don't panic - this is a common way to train TensorFlow models in Transformers! "
-                "Please ensure your labels are passed as keys in the input dict so that they are "
-                "accessible to the model during the forward pass. To disable this behaviour, please pass a "
-                "loss argument, or explicitly pass loss=None if you do not want your model to compute a loss."
+                "To disable this behaviour please pass a loss argument, or explicitly pass "
+                "`loss=None` if you do not want your model to compute a loss."
             )
-            loss = {"loss": dummy_loss}
-        super().compile(
-            optimizer=optimizer,
-            loss=loss,
-            metrics=metrics,
-            loss_weights=loss_weights,
-            weighted_metrics=weighted_metrics,
-            run_eagerly=run_eagerly,
-            steps_per_execution=steps_per_execution,
-            **kwargs,
-        )
+            loss = dummy_loss
+            self._using_dummy_loss = True
+        else:
+            self._using_dummy_loss = False
+        parent_args = list(inspect.signature(tf.keras.Model.compile).parameters.keys())
+        # This argument got renamed, we need to support both versions
+        if "steps_per_execution" in parent_args:
+            super().compile(
+                optimizer=optimizer,
+                loss=loss,
+                metrics=metrics,
+                loss_weights=loss_weights,
+                weighted_metrics=weighted_metrics,
+                run_eagerly=run_eagerly,
+                steps_per_execution=steps_per_execution,
+                **kwargs,
+            )
+        else:
+            super().compile(
+                optimizer=optimizer,
+                loss=loss,
+                metrics=metrics,
+                loss_weights=loss_weights,
+                weighted_metrics=weighted_metrics,
+                run_eagerly=run_eagerly,
+                experimental_steps_per_execution=steps_per_execution,
+                **kwargs,
+            )
 
     def compute_loss(self, *args, **kwargs):
         if hasattr(tf.keras.Model, "compute_loss"):
@@ -924,42 +1319,115 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             )
             return self.hf_compute_loss(*args, **kwargs)
 
+    def get_label_to_output_name_mapping(self):
+        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        if self._label_to_output_map is not None:
+            return self._label_to_output_map
+        elif "start_positions" in arg_names:
+            return {"start_positions": "start_logits", "end_positions": "end_logits"}
+        elif "sentence_order_label" in arg_names:
+            return {"labels": "prediction_logits", "sentence_order_label": "sop_logits"}
+        elif "next_sentence_label" in arg_names:
+            return {"labels": "prediction_logits", "next_sentence_label": "seq_relationship_logits"}
+        elif "mc_labels" in arg_names:
+            return {"labels": "logits", "mc_labels": "mc_logits"}
+        else:
+            return dict()
+
     def train_step(self, data):
         """
-        A modification of Keras's default `train_step` that cleans up the printed metrics when we use a dummy loss. If
-        a user specifies a loss at model compile time, this function behaves as the original Keras `train_step`. In
-        this case, it expects the same `data` as the original function (i.e. `(inputs, labels)`).
-
-        However, when the model is compiled without specifying the loss AND the expected label columns are passed as
-        part of the input dictionary, the loss is computed internally (inside the model class) and is used in the
-        backwards pass. In this case, `data` is a singleton tuple containing `(inputs,)`.
-
-        This is possible under the aforementioned circumstances because our overriden compile function can set an
-        additional loss function that reduces a `loss` output, and the model will output a `loss` component (notice the
-        name matching) containing the loss that was used to train the pre-trained model.
+        A modification of Keras's default `train_step` that correctly handles matching outputs to labels for our models
+        and supports directly training on the loss output head. In addition, it ensures input keys are copied to the
+        labels where appropriate. It will also copy label keys into the input dict when using the dummy loss, to ensure
+        that they are available to the model during the forward pass.
         """
-        # These are the only transformations `Model.fit` applies to user-input
-        # data when a `tf.data.Dataset` is provided.
-        data = data_adapter.expand_1d(data)
+
+        # We hardcode the most common renamings; models with weirder names can set `self._label_to_output_map`
+        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        label_kwargs = find_labels(self.__class__)
+        label_to_output = self.get_label_to_output_name_mapping()
+        output_to_label = {val: key for key, val in label_to_output.items()}
+        if not self._using_dummy_loss:
+            data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
-        # These next two lines differ from the base method - they avoid issues when the labels are in
-        # the input dict (and loss is computed internally)
-        if y is None and "labels" in x:
-            y = x["labels"]  # Stops confusion with metric computations
-        elif y is None and "input_ids" in x:
-            # Just make any kind of dummy array to make loss work
-            y = tf.zeros(tf.shape(x["input_ids"])[0], dtype=tf.int64)
+        # If the inputs are mutable dictionaries, make a shallow copy of them because we will modify
+        # them during input/label pre-processing. This avoids surprising the user by wrecking their data.
+        # In addition, modifying mutable Python inputs makes XLA compilation impossible.
+        if isinstance(x, dict):
+            x = x.copy()
+        if isinstance(y, dict):
+            y = y.copy()
+
+        # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
+        # if those keys are not already present in the input dict
+        if self._using_dummy_loss and y is not None:
+
+            # If y is a tensor and the model only has one label-like input, map y to that input
+            if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[0]: x}
+                label_kwarg = next(iter(label_kwargs))
+                if label_kwarg not in x:
+                    x[label_kwarg] = y
+            # Otherwise, copy keys from y to x as long as they weren't already present in x
+            elif isinstance(y, dict):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[0]: x}
+                for key, val in y.items():
+                    if key in arg_names and key not in x:
+                        x[key] = val
+                    elif output_to_label.get(key, None) in arg_names and key not in x:
+                        x[output_to_label[key]] = val
+        if y is None:
+            y = {key: val for key, val in x.items() if key in label_kwargs}
+            if not y and not self._using_dummy_loss:
+                raise ValueError("Could not find label column(s) in input dict and no separate labels were provided!")
+
+        if isinstance(y, dict):
+            # Rename labels at this point to match output heads
+            y = {label_to_output.get(key, key): val for key, val in y.items()}
+
         # Run forward pass.
         with tf.GradientTape() as tape:
             y_pred = self(x, training=True)
-            loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+            if self._using_dummy_loss:
+                loss = self.compiled_loss(y_pred.loss, y_pred.loss, sample_weight, regularization_losses=self.losses)
+            else:
+                loss = None
+
+            # This next block matches outputs to label keys. Tensorflow's standard method for doing this
+            # can get very confused if any of the keys contain nested values (e.g. lists/tuples of Tensors)
+            if isinstance(y, dict) and len(y) == 1:
+                if list(y.keys())[0] in y_pred.keys():
+                    y_pred = y_pred[list(y.keys())[0]]
+                elif list(y_pred.keys())[0] == "loss":
+                    y_pred = y_pred[1]
+                else:
+                    y_pred = y_pred[0]
+                _, y = y.popitem()
+            elif isinstance(y, dict):
+                # If the labels are a dict, match keys from the output by name
+                y_pred = {key: val for key, val in y_pred.items() if key in y}
+            elif isinstance(y, tuple) or isinstance(y, list):
+                # If the labels are a tuple/list, match keys to the output by order, skipping the loss.
+                if list(y_pred.keys())[0] == "loss":
+                    y_pred = y_pred.to_tuple()[1:]
+                else:
+                    y_pred = y_pred.to_tuple()
+                y_pred = y_pred[: len(y)]  # Remove unused fields in case those cause problems
+            else:
+                # If the labels are a single tensor, match them to the first non-loss tensor in the output
+                if list(y_pred.keys())[0] == "loss":
+                    y_pred = y_pred[1]
+                else:
+                    y_pred = y_pred[0]
+
+            if loss is None:
+                loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+
         # Run backwards pass.
         self.optimizer.minimize(loss, self.trainable_variables, tape=tape)
-        # When y_pred is a ModelOutput and y is a tf.Tensor the metrics update
-        # should be done only with the relevant ModelOutput param that is
-        # considered by the loss.
-        if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
-            y_pred = y_pred["logits"]
+
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
         return_metrics = {}
@@ -969,30 +1437,97 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return_metrics.update(result)
             else:
                 return_metrics[metric.name] = result
-        # These next two lines are also not in the base method - they correct the displayed metrics
-        # when we're using a dummy loss, to avoid a bogus "loss_loss" value being shown.
-        if "loss" in return_metrics and "loss_loss" in return_metrics:
-            del return_metrics["loss_loss"]
         return return_metrics
 
     def test_step(self, data):
         """
-        A modification of Keras's default test_step that cleans up the printed metrics when we use a dummy loss.
+        A modification of Keras's default `train_step` that correctly handles matching outputs to labels for our models
+        and supports directly training on the loss output head. In addition, it ensures input keys are copied to the
+        labels where appropriate. It will also copy label keys into the input dict when using the dummy loss, to ensure
+        that they are available to the model during the forward pass.
         """
-        data = data_adapter.expand_1d(data)
+        # We hardcode the most common renamings; models with weirder names can set `self._label_to_output_map`
+        arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+        label_kwargs = find_labels(self.__class__)
+        label_to_output = self.get_label_to_output_name_mapping()
+        output_to_label = {val: key for key, val in label_to_output.items()}
+        if not self._using_dummy_loss:
+            data = data_adapter.expand_1d(data)
         x, y, sample_weight = data_adapter.unpack_x_y_sample_weight(data)
-        # These next two lines differ from the base method - they avoid issues when the labels are in
-        # the input dict (and loss is computed internally)
-        if y is None and "labels" in x:
-            y = x["labels"]  # Stops confusion with metric computations
-        elif y is None and "input_ids" in x:
-            # Just make any kind of dummy array to make loss work
-            y = tf.zeros(tf.shape(x["input_ids"])[0], dtype=tf.int64)
+        # If the inputs are mutable dictionaries, make a shallow copy of them because we will modify
+        # them during input/label pre-processing. This avoids surprising the user by wrecking their data.
+        # In addition, modifying mutable Python inputs makes XLA compilation impossible.
+        if isinstance(x, dict):
+            x = x.copy()
+        if isinstance(y, dict):
+            y = y.copy()
+
+        # When using a dummy loss, we ensure that separate labels are copied to the correct model arguments,
+        # if those keys are not already present in the input dict
+        if self._using_dummy_loss and y is not None:
+            arg_names = list(dict(inspect.signature(self.call).parameters).keys())
+            # If y is a tensor and the model only has one label-like input, map y to that input
+            if len(label_kwargs) == 1 and isinstance(y, tf.Tensor):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[0]: x}
+                label_kwarg = next(iter(label_kwargs))
+                if label_kwarg not in x:
+                    x[label_kwarg] = y
+            # Otherwise, copy keys from y to x as long as they weren't already present in x
+            elif isinstance(y, dict):
+                if isinstance(x, tf.Tensor):
+                    x = {arg_names[0]: x}
+                for key, val in y.items():
+                    if key in arg_names and key not in x:
+                        x[key] = val
+                    elif output_to_label.get(key, None) in arg_names and key not in x:
+                        x[output_to_label[key]] = val
+        if y is None:
+            y = {key: val for key, val in x.items() if key in label_kwargs}
+            if not y and not self._using_dummy_loss:
+                raise ValueError("Could not find label column(s) in input dict and no separate labels were provided!")
+
+        if isinstance(y, dict):
+            # Rename labels at this point to match output heads
+            y = {label_to_output.get(key, key): val for key, val in y.items()}
+
+        # Run forward pass.
         y_pred = self(x, training=False)
-        self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
-        # Updates stateful loss metrics.
-        if isinstance(y_pred, TFSeq2SeqLMOutput) and isinstance(y, tf.Tensor):
-            y_pred = y_pred["logits"]
+        if self._using_dummy_loss:
+            loss = self.compiled_loss(y_pred.loss, y_pred.loss, sample_weight, regularization_losses=self.losses)
+        else:
+            loss = None
+
+        # This next block matches outputs to label keys. Tensorflow's standard method for doing this
+        # can get very confused if any of the keys contain nested values (e.g. lists/tuples of Tensors)
+        if isinstance(y, dict) and len(y) == 1:
+            if list(y.keys())[0] in y_pred.keys():
+                y_pred = y_pred[list(y.keys())[0]]
+            elif list(y_pred.keys())[0] == "loss":
+                y_pred = y_pred[1]
+            else:
+                y_pred = y_pred[0]
+            _, y = y.popitem()
+        elif isinstance(y, dict):
+            # If the labels are a dict, match keys from the output by name
+            y_pred = {key: val for key, val in y_pred.items() if key in y}
+        elif isinstance(y, tuple) or isinstance(y, list):
+            # If the labels are a tuple/list, match keys to the output by order, skipping the loss.
+            if list(y_pred.keys())[0] == "loss":
+                y_pred = y_pred.to_tuple()[1:]
+            else:
+                y_pred = y_pred.to_tuple()
+            y_pred = y_pred[: len(y)]  # Remove unused fields in case those cause problems
+        else:
+            # If the labels are a single tensor, match them to the first non-loss tensor in the output
+            if list(y_pred.keys())[0] == "loss":
+                y_pred = y_pred[1]
+            else:
+                y_pred = y_pred[0]
+
+        if loss is None:
+            loss = self.compiled_loss(y, y_pred, sample_weight, regularization_losses=self.losses)
+
         self.compiled_metrics.update_state(y, y_pred, sample_weight)
         # Collect metrics to return
         return_metrics = {}
@@ -1002,10 +1537,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return_metrics.update(result)
             else:
                 return_metrics[metric.name] = result
-        # These next two lines are also not in the base method - they correct the displayed metrics
-        # when we're using a dummy loss, to avoid a bogus "loss_loss" value being shown.
-        if "loss" in return_metrics and "loss_loss" in return_metrics:
-            del return_metrics["loss_loss"]
         return return_metrics
 
     def create_model_card(
@@ -1022,7 +1553,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         dataset_args: Optional[Union[str, List[str]]] = None,
     ):
         # Avoids a circular import by doing this when necessary.
-        from .modelcard import TrainingSummary
+        from .modelcard import TrainingSummary  # tests_ignore
 
         training_summary = TrainingSummary.from_keras(
             self,
@@ -1342,7 +1873,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
                 Increasing the size will add newly initialized vectors at the end. Reducing the size will remove
                 vectors from the end. If not provided or `None`, just returns a pointer to the input tokens
-                ``tf.Variable``` module of the model without doing anything.
+                `tf.Variable` module of the model without doing anything.
 
         Return:
             `tf.Variable`: Pointer to the resized Embedding Module or the old Embedding Module if `new_num_tokens` is
@@ -1375,7 +1906,16 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         raise NotImplementedError
 
-    def save_pretrained(self, save_directory, saved_model=False, version=1, push_to_hub=False, **kwargs):
+    def save_pretrained(
+        self,
+        save_directory,
+        saved_model=False,
+        version=1,
+        push_to_hub=False,
+        max_shard_size: Union[int, str] = "10GB",
+        create_pr: bool = False,
+        **kwargs
+    ):
         """
         Save a model and its configuration file to a directory, so that it can be re-loaded using the
         [`~TFPreTrainedModel.from_pretrained`] class method.
@@ -1390,15 +1930,22 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 TensorFlow Serving as detailed in the official documentation
                 https://www.tensorflow.org/tfx/serving/serving_basic
             push_to_hub (`bool`, *optional*, defaults to `False`):
-                Whether or not to push your model to the Hugging Face model hub after saving it.
+                Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
+                repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
+                namespace).
+            max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+                The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
+                lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
 
                 <Tip warning={true}>
 
-                Using `push_to_hub=True` will synchronize the repository you are pushing to with `save_directory`,
-                which requires `save_directory` to be a local clone of the repo you are pushing to if it's an existing
-                folder. Pass along `temp_dir=True` to use a temporary directory instead.
+                If a single weight of the model is bigger than `max_shard_size`, it will be in its own checkpoint shard
+                which will be bigger than `max_shard_size`.
 
                 </Tip>
+
+            create_pr (`bool`, *optional*, defaults to `False`):
+                Whether or not to create a PR with the uploaded files or directly commit.
 
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
@@ -1407,11 +1954,13 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
 
+        os.makedirs(save_directory, exist_ok=True)
+
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo = self._create_or_get_repo(save_directory, **kwargs)
-
-        os.makedirs(save_directory, exist_ok=True)
+            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id, token = self._create_repo(repo_id, **kwargs)
+            files_timestamps = self._get_files_timestamps(save_directory)
 
         if saved_model:
             saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
@@ -1430,12 +1979,53 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         # If we save using the predefined names, we can load using `from_pretrained`
         output_model_file = os.path.join(save_directory, TF2_WEIGHTS_NAME)
-        self.save_weights(output_model_file)
-        logger.info(f"Model weights saved in {output_model_file}")
+
+        shards, index = tf_shard_checkpoint(self.weights, max_shard_size)
+
+        # Clean the folder from a previous save
+        for filename in os.listdir(save_directory):
+            full_filename = os.path.join(save_directory, filename)
+            # If we have a shard file that is not going to be replaced, we delete it, but only from the main process
+            # in distributed settings to avoid race conditions.
+            if (
+                filename.startswith(TF2_WEIGHTS_NAME[:-4])
+                and os.path.isfile(full_filename)
+                and filename not in shards.keys()
+            ):
+                os.remove(full_filename)
+
+        if index is None:
+            self.save_weights(output_model_file)
+            logger.info(f"Model weights saved in {output_model_file}")
+        else:
+            save_index_file = os.path.join(save_directory, TF2_WEIGHTS_INDEX_NAME)
+            # Save the index as well
+            with open(save_index_file, "w", encoding="utf-8") as index_file:
+                content = json.dumps(index, indent=2, sort_keys=True) + "\n"
+                index_file.write(content)
+            logger.info(
+                f"The model is bigger than the maximum size per checkpoint ({max_shard_size}) and is going to be "
+                f"split in {len(shards)} checkpoint shards. You can find where each parameters has been saved in the "
+                f"index located at {save_index_file}."
+            )
+            for shard_file, shard in shards.items():
+                with h5py.File(os.path.join(save_directory, shard_file), mode="w") as shard_file:
+                    save_attributes_to_hdf5_group(
+                        shard_file,
+                        "layer_names",
+                        ["/".join(layer.name.split("/")[1:]).encode("utf8") for layer in shard],
+                    )
+
+                    for layer in sorted(shard, key=lambda x: x.name):
+                        param_dset = shard_file.create_dataset(
+                            "/".join(layer.name.split("/")[1:]), layer.numpy().shape, dtype=layer.numpy().dtype
+                        )
+                        param_dset[:] = layer.numpy()
 
         if push_to_hub:
-            url = self._push_to_hub(repo, commit_message=commit_message)
-            logger.info(f"Model pushed to the hub in this commit: {url}")
+            self._upload_modified_files(
+                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+            )
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
@@ -1506,7 +2096,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 Whether or not to only look at local files (e.g., not try doanloading the model).
             use_auth_token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `transformers-cli login` (stored in `~/.huggingface`).
+                when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -1515,6 +2105,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 Mirror source to accelerate downloads in China. If you are from China and have an accessibility
                 problem, you can set this option to resolve it. Note that we do not guarantee the timeliness or safety.
                 Please refer to the mirror site for more information.
+            subfolder (`str`, *optional*, defaults to `""`):
+                In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+                specify the folder name here.
             kwargs (remaining dictionary of keyword arguments, *optional*):
                 Can be used to update the configuration object (after it being loaded) and initiate the model (e.g.,
                 `output_attentions=True`). Behaves differently depending on whether a `config` is provided or
@@ -1562,10 +2155,19 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         local_files_only = kwargs.pop("local_files_only", False)
         use_auth_token = kwargs.pop("use_auth_token", None)
         revision = kwargs.pop("revision", None)
-        mirror = kwargs.pop("mirror", None)
+        trust_remote_code = kwargs.pop("trust_remote_code", None)
+        _ = kwargs.pop("mirror", None)
         load_weight_prefix = kwargs.pop("load_weight_prefix", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
+        subfolder = kwargs.pop("subfolder", "")
+        commit_hash = kwargs.pop("_commit_hash", None)
+
+        if trust_remote_code is True:
+            logger.warning(
+                "The argument `trust_remote_code` is to be used with Auto classes. It has no effect here and is"
+                " ignored."
+            )
 
         user_agent = {"file_type": "model", "framework": "tensorflow", "from_auto_class": from_auto_class}
         if from_pipeline is not None:
@@ -1590,20 +2192,37 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 revision=revision,
                 _from_auto=from_auto_class,
                 _from_pipeline=from_pipeline,
+                _commit_hash=commit_hash,
                 **kwargs,
             )
         else:
             model_kwargs = kwargs
 
+        if commit_hash is None:
+            commit_hash = getattr(config, "_commit_hash", None)
+
+        # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
+        # index of the files.
+        is_sharded = False
         # Load model
         if pretrained_model_name_or_path is not None:
+            pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+            is_local = os.path.isdir(pretrained_model_name_or_path)
             if os.path.isdir(pretrained_model_name_or_path):
                 if from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
                     # Load from a PyTorch checkpoint in priority if from_pt
                     archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)
+                elif from_pt and os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)):
+                    # Load from a sharded PyTorch checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, WEIGHTS_INDEX_NAME)
+                    is_sharded = True
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)):
                     # Load from a TF 2.0 checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_NAME)
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_INDEX_NAME)):
+                    # Load from a sharded TF 2.0 checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, TF2_WEIGHTS_INDEX_NAME)
+                    is_sharded = True
                 # At this stage we don't have a weight file so we will raise an error.
                 elif os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME):
                     raise EnvironmentError(
@@ -1616,95 +2235,99 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         f"Error no file named {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME} found in directory "
                         f"{pretrained_model_name_or_path}."
                     )
-            elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
+            elif os.path.isfile(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
+                is_local = True
             elif os.path.isfile(pretrained_model_name_or_path + ".index"):
                 archive_file = pretrained_model_name_or_path + ".index"
+                is_local = True
             else:
+                # set correct filename
                 filename = WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME
-                archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path,
-                    filename=filename,
-                    revision=revision,
-                    mirror=mirror,
-                )
 
-            try:
-                # Load from URL or cache if already cached
-                resolved_archive_file = cached_path(
-                    archive_file,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    use_auth_token=use_auth_token,
-                    user_agent=user_agent,
-                )
-
-            except RepositoryNotFoundError:
-                raise EnvironmentError(
-                    f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
-                    "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a "
-                    "token having permission to this repo with `use_auth_token` or log in with `huggingface-cli "
-                    "login` and pass `use_auth_token=True`."
-                )
-            except RevisionNotFoundError:
-                raise EnvironmentError(
-                    f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists for "
-                    "this model name. Check the model page at "
-                    f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
-                )
-            except EntryNotFoundError:
-                if filename == TF2_WEIGHTS_NAME:
-                    has_file_kwargs = {
-                        "revision": revision,
-                        "mirror": mirror,
-                        "proxies": proxies,
-                        "use_auth_token": use_auth_token,
-                    }
-                    if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
-                        raise EnvironmentError(
-                            f"{pretrained_model_name_or_path} does not appear to have a file named {TF2_WEIGHTS_NAME} "
-                            "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from "
-                            "those weights."
-                        )
-                    else:
-                        raise EnvironmentError(
-                            f"{pretrained_model_name_or_path} does not appear to have a file named {TF2_WEIGHTS_NAME} "
-                            f"or {WEIGHTS_NAME}."
-                        )
-                else:
-                    raise EnvironmentError(
-                        f"{pretrained_model_name_or_path} does not appear to have a file named {filename}."
+                try:
+                    # Load from URL or cache if already cached
+                    cached_file_kwargs = dict(
+                        cache_dir=cache_dir,
+                        force_download=force_download,
+                        proxies=proxies,
+                        resume_download=resume_download,
+                        local_files_only=local_files_only,
+                        use_auth_token=use_auth_token,
+                        user_agent=user_agent,
+                        revision=revision,
+                        subfolder=subfolder,
+                        _raise_exceptions_for_missing_entries=False,
+                        _commit_hash=commit_hash,
                     )
-            except HTTPError as err:
-                raise EnvironmentError(
-                    f"There was a specific connection error when trying to load {pretrained_model_name_or_path}:\n"
-                    f"{err}"
-                )
-            except ValueError:
-                raise EnvironmentError(
-                    "We couldn't connect to 'https://huggingface.co/' to load this model, couldn't find it in the cached "
-                    f"files and it looks like {pretrained_model_name_or_path} is not the path to a directory "
-                    f"containing a file named {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}.\n"
-                    "Checkout your internet connection or see how to run the library in offline mode at "
-                    "'https://huggingface.co/docs/transformers/installation#offline-mode'."
-                )
-            except EnvironmentError:
-                raise EnvironmentError(
-                    f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it from "
-                    "'https://huggingface.co/models', make sure you don't have a local directory with the same name. "
-                    f"Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a directory "
-                    f"containing a file named {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}."
-                )
+                    resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
-            if resolved_archive_file == archive_file:
+                    # Since we set _raise_exceptions_for_missing_entries=False, we don't get an expection but a None
+                    # result when internet is up, the repo and revision exist, but the file does not.
+                    if resolved_archive_file is None and filename == TF2_WEIGHTS_NAME:
+                        # Maybe the checkpoint is sharded, we try to grab the index name in this case.
+                        resolved_archive_file = cached_file(
+                            pretrained_model_name_or_path, TF2_WEIGHTS_INDEX_NAME, **cached_file_kwargs
+                        )
+                        if resolved_archive_file is not None:
+                            is_sharded = True
+                    if resolved_archive_file is None:
+                        # Otherwise, maybe there is a PyTorch or Flax model file.  We try those to give a helpful error
+                        # message.
+                        has_file_kwargs = {
+                            "revision": revision,
+                            "proxies": proxies,
+                            "use_auth_token": use_auth_token,
+                        }
+                        if has_file(pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs):
+                            raise EnvironmentError(
+                                f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                f" {TF2_WEIGHTS_NAME} but there is a file for PyTorch weights. Use `from_pt=True` to"
+                                " load this model from those weights."
+                            )
+                        else:
+                            raise EnvironmentError(
+                                f"{pretrained_model_name_or_path} does not appear to have a file named"
+                                f" {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}."
+                            )
+
+                except EnvironmentError:
+                    # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
+                    # to the original exception.
+                    raise
+                except Exception:
+                    # For any other exception, we throw a generic error.
+
+                    raise EnvironmentError(
+                        f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it"
+                        " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
+                        f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
+                        f" directory containing a file named {TF2_WEIGHTS_NAME} or {WEIGHTS_NAME}."
+                    )
+            if is_local:
                 logger.info(f"loading weights file {archive_file}")
+                resolved_archive_file = archive_file
             else:
-                logger.info(f"loading weights file {archive_file} from cache at {resolved_archive_file}")
+                logger.info(f"loading weights file {filename} from cache at {resolved_archive_file}")
         else:
             resolved_archive_file = None
+
+        # We'll need to download and cache each checkpoint shard if the checkpoint is sharded.
+        if is_sharded:
+            # resolved_archive_file becomes a list of files that point to the different checkpoint shards in this case.
+            resolved_archive_file, _ = get_checkpoint_shard_files(
+                pretrained_model_name_or_path,
+                resolved_archive_file,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                resume_download=resume_download,
+                local_files_only=local_files_only,
+                use_auth_token=use_auth_token,
+                user_agent=user_agent,
+                revision=revision,
+                _commit_hash=commit_hash,
+            )
 
         config.name_or_path = pretrained_model_name_or_path
 
@@ -1720,7 +2343,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             from .modeling_tf_pytorch_utils import load_pytorch_checkpoint_in_tf2_model
 
             # Load from a PyTorch checkpoint
-            return load_pytorch_checkpoint_in_tf2_model(model, resolved_archive_file, allow_missing_keys=True)
+            return load_pytorch_checkpoint_in_tf2_model(
+                model, resolved_archive_file, allow_missing_keys=True, output_loading_info=output_loading_info
+            )
 
         # we might need to extend the variable scope for composite models
         if load_weight_prefix is not None:
@@ -1729,16 +2354,25 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         else:
             model(model.dummy_inputs)  # build the network with dummy inputs
 
-        assert os.path.isfile(resolved_archive_file), f"Error retrieving file {resolved_archive_file}"
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
         try:
-            missing_keys, unexpected_keys, mismatched_keys = load_tf_weights(
-                model,
-                resolved_archive_file,
-                ignore_mismatched_sizes=ignore_mismatched_sizes,
-                _prefix=load_weight_prefix,
-            )
+            if is_sharded:
+                for file in resolved_archive_file:
+                    os.path.isfile(file), f"Error retrieving files {file}"
+
+                missing_keys, unexpected_keys, mismatched_keys = load_tf_sharded_weights(
+                    model,
+                    resolved_archive_file,
+                    ignore_mismatched_sizes=ignore_mismatched_sizes,
+                )
+            else:
+                missing_keys, unexpected_keys, mismatched_keys = load_tf_weights(
+                    model,
+                    resolved_archive_file,
+                    ignore_mismatched_sizes=ignore_mismatched_sizes,
+                    _prefix=load_weight_prefix,
+                )
         except OSError as e:
             try:
                 with open(resolved_archive_file) as f:
@@ -1768,27 +2402,29 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         if len(unexpected_keys) > 0:
             logger.warning(
-                f"Some layers from the model checkpoint at {pretrained_model_name_or_path} were not used when "
-                f"initializing {model.__class__.__name__}: {unexpected_keys}\n"
-                f"- This IS expected if you are initializing {model.__class__.__name__} from the checkpoint of a model trained on another task "
-                f"or with another architecture (e.g. initializing a BertForSequenceClassification model from a BertForPreTraining model).\n"
-                f"- This IS NOT expected if you are initializing {model.__class__.__name__} from the checkpoint of a model that you expect "
-                f"to be exactly identical (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
+                f"Some layers from the model checkpoint at {pretrained_model_name_or_path} were not used when"
+                f" initializing {model.__class__.__name__}: {unexpected_keys}\n- This IS expected if you are"
+                f" initializing {model.__class__.__name__} from the checkpoint of a model trained on another task or"
+                " with another architecture (e.g. initializing a BertForSequenceClassification model from a"
+                " BertForPreTraining model).\n- This IS NOT expected if you are initializing"
+                f" {model.__class__.__name__} from the checkpoint of a model that you expect to be exactly identical"
+                " (initializing a BertForSequenceClassification model from a BertForSequenceClassification model)."
             )
         else:
             logger.warning(f"All model checkpoint layers were used when initializing {model.__class__.__name__}.\n")
 
         if len(missing_keys) > 0:
             logger.warning(
-                f"Some layers of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"and are newly initialized: {missing_keys}\n"
-                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                f"Some layers of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path} and are newly initialized: {missing_keys}\nYou should probably"
+                " TRAIN this model on a down-stream task to be able to use it for predictions and inference."
             )
         elif len(mismatched_keys) == 0:
             logger.warning(
-                f"All the layers of {model.__class__.__name__} were initialized from the model checkpoint at {pretrained_model_name_or_path}.\n"
-                f"If your task is similar to the task the model of the checkpoint was trained on, "
-                f"you can already use {model.__class__.__name__} for predictions without further training."
+                f"All the layers of {model.__class__.__name__} were initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path}.\nIf your task is similar to the task the model of the checkpoint"
+                f" was trained on, you can already use {model.__class__.__name__} for predictions without further"
+                " training."
             )
         if len(mismatched_keys) > 0:
             mismatched_warning = "\n".join(
@@ -1798,9 +2434,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 ]
             )
             logger.warning(
-                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at {pretrained_model_name_or_path} "
-                f"and are newly initialized because the shapes did not match:\n{mismatched_warning}\n"
-                f"You should probably TRAIN this model on a down-stream task to be able to use it for predictions and inference."
+                f"Some weights of {model.__class__.__name__} were not initialized from the model checkpoint at"
+                f" {pretrained_model_name_or_path} and are newly initialized because the shapes did not"
+                f" match:\n{mismatched_warning}\nYou should probably TRAIN this model on a down-stream task to be able"
+                " to use it for predictions and inference."
             )
 
         if output_loading_info:
@@ -1814,12 +2451,121 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         return model
 
+    def push_to_hub(
+        self,
+        repo_id: str,
+        use_temp_dir: Optional[bool] = None,
+        commit_message: Optional[str] = None,
+        private: Optional[bool] = None,
+        use_auth_token: Optional[Union[bool, str]] = None,
+        max_shard_size: Optional[Union[int, str]] = "10GB",
+        **model_card_kwargs
+    ) -> str:
+        """
+        Upload the model files to the 🤗 Model Hub while synchronizing a local clone of the repo in `repo_path_or_name`.
 
-# To update the docstring, we need to copy the method, otherwise we change the original docstring.
-TFPreTrainedModel.push_to_hub = copy_func(TFPreTrainedModel.push_to_hub)
-TFPreTrainedModel.push_to_hub.__doc__ = TFPreTrainedModel.push_to_hub.__doc__.format(
-    object="model", object_class="TFAutoModel", object_files="model checkpoint"
-)
+        Parameters:
+            repo_id (`str`):
+                The name of the repository you want to push your model to. It should contain your organization name
+                when pushing to a given organization.
+            use_temp_dir (`bool`, *optional*):
+                Whether or not to use a temporary directory to store the files saved before they are pushed to the Hub.
+                Will default to `True` if there is no directory named like `repo_id`, `False` otherwise.
+            commit_message (`str`, *optional*):
+                Message to commit while pushing. Will default to `"Upload model"`.
+            private (`bool`, *optional*):
+                Whether or not the repository created should be private (requires a paying subscription).
+            use_auth_token (`bool` or `str`, *optional*):
+                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+                when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
+                is not specified.
+            max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
+                Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
+                will then be each of size lower than this size. If expressed as a string, needs to be digits followed
+                by a unit (like `"5MB"`).
+            model_card_kwargs:
+                Additional keyword arguments passed along to the [`~TFPreTrainedModel.create_model_card`] method.
+
+        Examples:
+
+        ```python
+        from transformers import TFAutoModel
+
+        model = TFAutoModel.from_pretrained("bert-base-cased")
+
+        # Push the model to your namespace with the name "my-finetuned-bert".
+        model.push_to_hub("my-finetuned-bert")
+
+        # Push the model to an organization with the name "my-finetuned-bert".
+        model.push_to_hub("huggingface/my-finetuned-bert")
+        ```
+        """
+        if "repo_path_or_name" in model_card_kwargs:
+            warnings.warn(
+                "The `repo_path_or_name` argument is deprecated and will be removed in v5 of Transformers. Use "
+                "`repo_id` instead."
+            )
+            repo_id = model_card_kwargs.pop("repo_path_or_name")
+        # Deprecation warning will be sent after for repo_url and organization
+        repo_url = model_card_kwargs.pop("repo_url", None)
+        organization = model_card_kwargs.pop("organization", None)
+
+        if os.path.isdir(repo_id):
+            working_dir = repo_id
+            repo_id = repo_id.split(os.path.sep)[-1]
+        else:
+            working_dir = repo_id.split("/")[-1]
+
+        repo_id, token = self._create_repo(
+            repo_id, private=private, use_auth_token=use_auth_token, repo_url=repo_url, organization=organization
+        )
+
+        if use_temp_dir is None:
+            use_temp_dir = not os.path.isdir(working_dir)
+
+        with working_or_temp_dir(working_dir=working_dir, use_temp_dir=use_temp_dir) as work_dir:
+            files_timestamps = self._get_files_timestamps(work_dir)
+
+            # Save all files.
+            self.save_pretrained(work_dir, max_shard_size=max_shard_size)
+            if hasattr(self, "history") and hasattr(self, "create_model_card"):
+                # This is a Keras model and we might be able to fish out its History and make a model card out of it
+                base_model_card_args = {
+                    "output_dir": work_dir,
+                    "model_name": Path(repo_id).name,
+                }
+                base_model_card_args.update(model_card_kwargs)
+                self.create_model_card(**base_model_card_args)
+
+            self._upload_modified_files(
+                work_dir, repo_id, files_timestamps, commit_message=commit_message, token=token
+            )
+
+    @classmethod
+    def register_for_auto_class(cls, auto_class="TFAutoModel"):
+        """
+        Register this class with a given auto class. This should only be used for custom models as the ones in the
+        library are already mapped with an auto class.
+
+        <Tip warning={true}>
+
+        This API is experimental and may have some slight breaking changes in the next releases.
+
+        </Tip>
+
+        Args:
+            auto_class (`str` or `type`, *optional*, defaults to `"TFAutoModel"`):
+                The auto class to register this new model with.
+        """
+        if not isinstance(auto_class, str):
+            auto_class = auto_class.__name__
+
+        import transformers.models.auto as auto_module
+
+        if not hasattr(auto_module, auto_class):
+            raise ValueError(f"{auto_class} is not a valid auto class.")
+
+        cls._auto_class = auto_class
 
 
 class TFConv1D(tf.keras.layers.Layer):
@@ -2074,32 +2820,6 @@ class TFSequenceSummary(tf.keras.layers.Layer):
             output = self.last_dropout(output, training=training)
 
         return output
-
-    @classmethod
-    def register_for_auto_class(cls, auto_class="TFAutoModel"):
-        """
-        Register this class with a given auto class. This should only be used for custom models as the ones in the
-        library are already mapped with an auto class.
-
-        <Tip warning={true}>
-
-        This API is experimental and may have some slight breaking changes in the next releases.
-
-        </Tip>
-
-        Args:
-            auto_class (`str` or `type`, *optional*, defaults to `"TFAutoModel"`):
-                The auto class to register this new model with.
-        """
-        if not isinstance(auto_class, str):
-            auto_class = auto_class.__name__
-
-        import transformers.models.auto as auto_module
-
-        if not hasattr(auto_module, auto_class):
-            raise ValueError(f"{auto_class} is not a valid auto class.")
-
-        cls._auto_class = auto_class
 
 
 def get_initializer(initializer_range: float = 0.02) -> tf.initializers.TruncatedNormal:

@@ -81,7 +81,8 @@ class ModuleTransfer:
 
         if len(dest_traced) != len(src_traced):
             raise Exception(
-                f"Numbers of operations are different. Source module has {len(src_traced)} operations while destination module has {len(dest_traced)}."
+                f"Numbers of operations are different. Source module has {len(src_traced)} operations while"
+                f" destination module has {len(dest_traced)}."
             )
 
         for dest_m, src_m in zip(dest_traced, src_traced):
@@ -173,7 +174,10 @@ if __name__ == "__main__":
         "--model_name",
         default=None,
         type=str,
-        help="The name of the model you wish to convert, it must be one of the supported resnet* architecture, currently: resnet18,26,34,50,101,152. If `None`, all of them will the converted.",
+        help=(
+            "The name of the model you wish to convert, it must be one of the supported resnet* architecture,"
+            " currently: resnet18,26,34,50,101,152. If `None`, all of them will the converted."
+        ),
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",

@@ -103,7 +103,8 @@ class TextGenerationPipeline(Pipeline):
         if handle_long_generation is not None:
             if handle_long_generation not in {"hole"}:
                 raise ValueError(
-                    f"{handle_long_generation} is not a valid value for `handle_long_generation` parameter expected [None, 'hole']"
+                    f"{handle_long_generation} is not a valid value for `handle_long_generation` parameter expected"
+                    " [None, 'hole']"
                 )
             preprocess_params["handle_long_generation"] = handle_long_generation
 
@@ -192,7 +193,8 @@ class TextGenerationPipeline(Pipeline):
                 keep_length = self.tokenizer.model_max_length - new_tokens
                 if keep_length <= 0:
                     raise ValueError(
-                        "We cannot use `hole` to handle this generation the number of desired tokens exceeds the models max length"
+                        "We cannot use `hole` to handle this generation the number of desired tokens exceeds the"
+                        " models max length"
                     )
 
                 inputs["input_ids"] = inputs["input_ids"][:, -keep_length:]
@@ -203,14 +205,17 @@ class TextGenerationPipeline(Pipeline):
 
     def _forward(self, model_inputs, **generate_kwargs):
         input_ids = model_inputs["input_ids"]
+        attention_mask = model_inputs.get("attention_mask", None)
         # Allow empty prompts
         if input_ids.shape[1] == 0:
             input_ids = None
+            attention_mask = None
             in_b = 1
         else:
             in_b = input_ids.shape[0]
         prompt_text = model_inputs.pop("prompt_text")
-        generated_sequence = self.model.generate(input_ids=input_ids, **generate_kwargs)  # BS x SL
+        # BS x SL
+        generated_sequence = self.model.generate(input_ids=input_ids, attention_mask=attention_mask, **generate_kwargs)
         out_b = generated_sequence.shape[0]
         if self.framework == "pt":
             generated_sequence = generated_sequence.reshape(in_b, out_b // in_b, *generated_sequence.shape[1:])
@@ -226,7 +231,7 @@ class TextGenerationPipeline(Pipeline):
         records = []
         for sequence in generated_sequence:
             if return_type == ReturnType.TENSORS:
-                record = {"generated_token_ids": generated_sequence}
+                record = {"generated_token_ids": sequence}
             elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
                 # Decode text
                 text = self.tokenizer.decode(

@@ -22,6 +22,8 @@ if is_torch_available():
 if is_tf_available():
     import tensorflow as tf
 
+    from ..tf_utils import stable_softmax
+
 logger = logging.get_logger(__name__)
 
 
@@ -119,7 +121,7 @@ class ZeroShotImageClassificationPipeline(ChunkPipeline):
             scores = probs.tolist()
         else:
             logits = tf.concat([output["logits_per_image"] for output in model_outputs], axis=0)
-            probs = tf.nn.softmax(logits, axis=0)
+            probs = stable_softmax(logits, axis=0)
             scores = probs.numpy().tolist()
 
         result = [

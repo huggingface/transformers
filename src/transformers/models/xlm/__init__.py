@@ -18,15 +18,20 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_tf_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tf_available, is_torch_available
 
 
 _import_structure = {
-    "configuration_xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig"],
+    "configuration_xlm": ["XLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "XLMConfig", "XLMOnnxConfig"],
     "tokenization_xlm": ["XLMTokenizer"],
 }
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_xlm"] = [
         "XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "XLMForMultipleChoice",
@@ -39,7 +44,12 @@ if is_torch_available():
         "XLMWithLMHeadModel",
     ]
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_xlm"] = [
         "TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFXLMForMultipleChoice",
@@ -54,10 +64,15 @@ if is_tf_available():
 
 
 if TYPE_CHECKING:
-    from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig
+    from .configuration_xlm import XLM_PRETRAINED_CONFIG_ARCHIVE_MAP, XLMConfig, XLMOnnxConfig
     from .tokenization_xlm import XLMTokenizer
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_xlm import (
             XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             XLMForMultipleChoice,
@@ -70,7 +85,12 @@ if TYPE_CHECKING:
             XLMWithLMHeadModel,
         )
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_xlm import (
             TF_XLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFXLMForMultipleChoice,

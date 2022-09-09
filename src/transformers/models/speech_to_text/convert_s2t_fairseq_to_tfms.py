@@ -102,7 +102,8 @@ def convert_fairseq_s2t_checkpoint_to_tfms(checkpoint_path, pytorch_dump_folder_
         ]
     ):
         raise ValueError(
-            f"Only `encoder.embed_positions.weights` and `decoder.embed_positions.weights`  are allowed to be missing, but all the following weights are missing {missing}"
+            "Only `encoder.embed_positions.weights` and `decoder.embed_positions.weights`  are allowed to be missing,"
+            f" but all the following weights are missing {missing}"
         )
 
     if tie_embeds:

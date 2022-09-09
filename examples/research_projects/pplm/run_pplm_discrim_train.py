@@ -175,8 +175,7 @@ def evaluate_performance(data_loader, discriminator, device="cpu"):
     test_loss /= len(data_loader.dataset)
 
     print(
-        "Performance on test set: "
-        "Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)".format(
+        "Performance on test set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)".format(
             test_loss, correct, len(data_loader.dataset), 100.0 * correct / len(data_loader.dataset)
         )
     )
@@ -309,7 +308,7 @@ def train_discriminator(
                     x.append(seq)
                     y.append(d["label"])
                 except Exception:
-                    print("Error evaluating / tokenizing" " line {}, skipping it".format(i))
+                    print("Error evaluating / tokenizing line {}, skipping it".format(i))
                     pass
 
         full_dataset = Dataset(x, y)
@@ -349,7 +348,7 @@ def train_discriminator(
                     x.append(seq)
                     y.append(int(np.sum(d["label"]) > 0))
                 except Exception:
-                    print("Error evaluating / tokenizing" " line {}, skipping it".format(i))
+                    print("Error evaluating / tokenizing line {}, skipping it".format(i))
                     pass
 
         full_dataset = Dataset(x, y)
@@ -370,7 +369,7 @@ def train_discriminator(
         # class \t text
 
         if dataset_fp is None:
-            raise ValueError("When generic dataset is selected, " "dataset_fp needs to be specified aswell.")
+            raise ValueError("When generic dataset is selected, dataset_fp needs to be specified aswell.")
 
         classes = set()
         with open(dataset_fp) as f:
@@ -490,15 +489,17 @@ if __name__ == "__main__":
         type=str,
         default="SST",
         choices=("SST", "clickbait", "toxic", "generic"),
-        help="dataset to train the discriminator on."
-        "In case of generic, the dataset is expected"
-        "to be a TSBV file with structure: class \\t text",
+        help=(
+            "dataset to train the discriminator on."
+            "In case of generic, the dataset is expected"
+            "to be a TSBV file with structure: class \\t text"
+        ),
     )
     parser.add_argument(
         "--dataset_fp",
         type=str,
         default="",
-        help="File path of the dataset to use. " "Needed only in case of generic datadset",
+        help="File path of the dataset to use. Needed only in case of generic datadset",
     )
     parser.add_argument(
         "--pretrained_model", type=str, default="gpt2-medium", help="Pretrained model to use as encoder"

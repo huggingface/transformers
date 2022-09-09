@@ -50,8 +50,10 @@ class SquadDataTrainingArguments:
     max_seq_length: int = field(
         default=128,
         metadata={
-            "help": "The maximum total input sequence length after tokenization. Sequences longer "
-            "than this will be truncated, sequences shorter will be padded."
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated, sequences shorter will be padded."
+            )
         },
     )
     doc_stride: int = field(
@@ -61,15 +63,19 @@ class SquadDataTrainingArguments:
     max_query_length: int = field(
         default=64,
         metadata={
-            "help": "The maximum number of tokens for the question. Questions longer than this will "
-            "be truncated to this length."
+            "help": (
+                "The maximum number of tokens for the question. Questions longer than this will "
+                "be truncated to this length."
+            )
         },
     )
     max_answer_length: int = field(
         default=30,
         metadata={
-            "help": "The maximum length of an answer that can be generated. This is needed because the start "
-            "and end predictions are not conditioned on one another."
+            "help": (
+                "The maximum length of an answer that can be generated. This is needed because the start "
+                "and end predictions are not conditioned on one another."
+            )
         },
     )
     overwrite_cache: bool = field(
@@ -87,7 +93,10 @@ class SquadDataTrainingArguments:
     lang_id: int = field(
         default=0,
         metadata={
-            "help": "language id of input for language-specific xlm models (see tokenization_xlm.PRETRAINED_INIT_CONFIGURATION)"
+            "help": (
+                "language id of input for language-specific xlm models (see"
+                " tokenization_xlm.PRETRAINED_INIT_CONFIGURATION)"
+            )
         },
     )
     threads: int = field(default=1, metadata={"help": "multiple threads for converting example to features"})
@@ -153,7 +162,8 @@ class SquadDataset(Dataset):
 
                 if self.dataset is None or self.examples is None:
                     logger.warning(
-                        f"Deleting cached file {cached_features_file} will allow dataset and examples to be cached in future run"
+                        f"Deleting cached file {cached_features_file} will allow dataset and examples to be cached in"
+                        " future run"
                     )
             else:
                 if mode == Split.dev:

@@ -55,10 +55,14 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "facebook/wav2vec2-lv-60-espeak-cv-ft": "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft/resolve/main/vocab.json",
+        "facebook/wav2vec2-lv-60-espeak-cv-ft": (
+            "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft/resolve/main/vocab.json"
+        ),
     },
     "tokenizer_config_file": {
-        "facebook/wav2vec2-lv-60-espeak-cv-ft": "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft/resolve/main/tokenizer_config.json",
+        "facebook/wav2vec2-lv-60-espeak-cv-ft": (
+            "https://huggingface.co/facebook/wav2vec2-lv-60-espeak-cv-ft/resolve/main/tokenizer_config.json"
+        ),
     },
 }
 
@@ -158,6 +162,9 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self.phonemizer_lang = phonemizer_lang
         self.phonemizer_backend = phonemizer_backend
 
+        if do_phonemize:
+            self.init_backend(self.phonemizer_lang)
+
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
@@ -168,6 +175,18 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
     def get_vocab(self) -> Dict:
         return dict(self.encoder, **self.added_tokens_encoder)
+
+    def init_backend(self, phonemizer_lang: str):
+        """
+        Initializes the backend.
+
+        Args:
+            phonemizer_lang (`str`): The language to be used.
+        """
+        requires_backends(self, "phonemizer")
+        from phonemizer.backend import BACKENDS
+
+        self.backend = BACKENDS[self.phonemizer_backend](phonemizer_lang, language_switch="remove-flags")
 
     def prepare_for_tokenization(
         self,
@@ -209,6 +228,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         # set the correct phonemizer language
         if phonemizer_lang is not None:
             self.phonemizer_lang = phonemizer_lang
+            self.init_backend(phonemizer_lang)
 
         return (text, {})
 
@@ -234,23 +254,20 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         return tokens
 
     def phonemize(self, text: str, phonemizer_lang: Optional[str] = None) -> str:
-        requires_backends(self, "phonemizer")
-
-        from phonemizer import phonemize
         from phonemizer.separator import Separator
 
         word_delimiter = self.word_delimiter_token + " " if self.word_delimiter_token is not None else ""
-        phonemizer_lang = phonemizer_lang if phonemizer_lang is not None else self.phonemizer_lang
+        if phonemizer_lang is not None and phonemizer_lang != self.phonemizer_lang:
+            self.init_backend(phonemizer_lang)
+        else:
+            phonemizer_lang = self.phonemizer_lang
 
         separator = Separator(phone=self.phone_delimiter_token, word=word_delimiter, syllable="")
-        phonemes = phonemize(
-            text,
-            language=phonemizer_lang,
-            backend=self.phonemizer_backend,
+        phonemes = self.backend.phonemize(
+            [text],
             separator=separator,
-            language_switch="remove-flags",
         )
-        phonemes = phonemes.strip()
+        phonemes = phonemes[0].strip()
 
         return phonemes
 
@@ -356,7 +373,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             if len(char_offsets) != len(processed_chars):
                 raise ValueError(
                     f"`char_offsets`: {char_offsets} and `processed_tokens`: {processed_chars}"
-                    f" have to be of the same length, but are: `len(offsets)`: "
+                    " have to be of the same length, but are: `len(offsets)`: "
                     f"{len(char_offsets)} and `len(processed_tokens)`: {len(processed_chars)}"
                 )
 
@@ -551,7 +568,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, ensure_ascii=False))
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)
 
@@ -587,7 +604,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         tokens_to_add = []
         for token in new_tokens:
             if not isinstance(token, str):
-                raise ValueError(f"Token {token} has to be of type string, but is " f"of type {type(token)}.")
+                raise ValueError(f"Token {token} has to be of type string, but is of type {type(token)}.")
             assert isinstance(token, str)
             if (
                 token != self.unk_token

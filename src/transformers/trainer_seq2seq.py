@@ -33,8 +33,7 @@ class Seq2SeqTrainer(Trainer):
         eval_dataset: Optional[Dataset] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
-        max_length: Optional[int] = None,
-        num_beams: Optional[int] = None,
+        **gen_kwargs
     ) -> Dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -46,8 +45,8 @@ class Seq2SeqTrainer(Trainer):
 
         Args:
             eval_dataset (`Dataset`, *optional*):
-                Pass a dataset if you wish to override `self.eval_dataset`. If it is an `datasets.Dataset`, columns not
-                accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
+                Pass a dataset if you wish to override `self.eval_dataset`. If it is an [`~datasets.Dataset`], columns
+                not accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
                 method.
             ignore_keys (`List[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
@@ -60,13 +59,22 @@ class Seq2SeqTrainer(Trainer):
             num_beams (`int`, *optional*):
                 Number of beams for beam search that will be used when predicting with the generate method. 1 means no
                 beam search.
+            gen_kwargs:
+                Additional `generate` specific kwargs.
 
         Returns:
             A dictionary containing the evaluation loss and the potential metrics computed from the predictions. The
             dictionary also contains the epoch number which comes from the training state.
         """
-        self._max_length = max_length if max_length is not None else self.args.generation_max_length
-        self._num_beams = num_beams if num_beams is not None else self.args.generation_num_beams
+
+        gen_kwargs = gen_kwargs.copy()
+        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
+            gen_kwargs["max_length"] = self.args.generation_max_length
+        gen_kwargs["num_beams"] = (
+            gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.args.generation_num_beams
+        )
+        self._gen_kwargs = gen_kwargs
+
         return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
     def predict(
@@ -74,8 +82,7 @@ class Seq2SeqTrainer(Trainer):
         test_dataset: Dataset,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "test",
-        max_length: Optional[int] = None,
-        num_beams: Optional[int] = None,
+        **gen_kwargs
     ) -> PredictionOutput:
         """
         Run prediction and returns predictions and potential metrics.
@@ -85,7 +92,7 @@ class Seq2SeqTrainer(Trainer):
 
         Args:
             test_dataset (`Dataset`):
-                Dataset to run the predictions on. If it is an `datasets.Dataset`, columns not accepted by the
+                Dataset to run the predictions on. If it is a [`~datasets.Dataset`], columns not accepted by the
                 `model.forward()` method are automatically removed. Has to implement the method `__len__`
             ignore_keys (`List[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
@@ -98,6 +105,8 @@ class Seq2SeqTrainer(Trainer):
             num_beams (`int`, *optional*):
                 Number of beams for beam search that will be used when predicting with the generate method. 1 means no
                 beam search.
+            gen_kwargs:
+                Additional `generate` specific kwargs.
 
         <Tip>
 
@@ -114,8 +123,15 @@ class Seq2SeqTrainer(Trainer):
             - metrics (`Dict[str, float]`, *optional*): The potential dictionary of metrics (if the dataset contained
               labels).
         """
-        self._max_length = max_length if max_length is not None else self.args.generation_max_length
-        self._num_beams = num_beams if num_beams is not None else self.args.generation_num_beams
+
+        gen_kwargs = gen_kwargs.copy()
+        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
+            gen_kwargs["max_length"] = self.args.generation_max_length
+        gen_kwargs["num_beams"] = (
+            gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.args.generation_num_beams
+        )
+        self._gen_kwargs = gen_kwargs
+
         return super().predict(test_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
     def prediction_step(
@@ -155,17 +171,24 @@ class Seq2SeqTrainer(Trainer):
         inputs = self._prepare_inputs(inputs)
 
         # XXX: adapt synced_gpus for fairscale as well
-        gen_kwargs = {
-            "max_length": self._max_length if self._max_length is not None else self.model.config.max_length,
-            "num_beams": self._num_beams if self._num_beams is not None else self.model.config.num_beams,
-            "synced_gpus": True if is_deepspeed_zero3_enabled() else False,
-        }
+        gen_kwargs = self._gen_kwargs.copy()
+        if gen_kwargs.get("max_length") is None and gen_kwargs.get("max_new_tokens") is None:
+            gen_kwargs["max_length"] = self.model.config.max_length
+        gen_kwargs["num_beams"] = (
+            gen_kwargs["num_beams"] if gen_kwargs.get("num_beams") is not None else self.model.config.num_beams
+        )
+        default_synced_gpus = True if is_deepspeed_zero3_enabled() else False
+        gen_kwargs["synced_gpus"] = (
+            gen_kwargs["synced_gpus"] if gen_kwargs.get("synced_gpus") is not None else default_synced_gpus
+        )
 
         if "attention_mask" in inputs:
             gen_kwargs["attention_mask"] = inputs.get("attention_mask", None)
+        if "global_attention_mask" in inputs:
+            gen_kwargs["global_attention_mask"] = inputs.get("global_attention_mask", None)
 
         # prepare generation inputs
-        # some encoder-decoder models can have varying encder's and thus
+        # some encoder-decoder models can have varying encoder's and thus
         # varying model input names
         if hasattr(self.model, "encoder") and self.model.encoder.main_input_name != self.model.main_input_name:
             generation_inputs = inputs[self.model.encoder.main_input_name]
@@ -177,11 +200,15 @@ class Seq2SeqTrainer(Trainer):
             **gen_kwargs,
         )
         # in case the batch is shorter than max length, the output should be padded
-        if generated_tokens.shape[-1] < gen_kwargs["max_length"]:
+        if gen_kwargs.get("max_length") is not None and generated_tokens.shape[-1] < gen_kwargs["max_length"]:
             generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_length"])
+        elif gen_kwargs.get("max_new_tokens") is not None and generated_tokens.shape[-1] < (
+            gen_kwargs["max_new_tokens"] + 1
+        ):
+            generated_tokens = self._pad_tensors_to_max_len(generated_tokens, gen_kwargs["max_new_tokens"] + 1)
 
         with torch.no_grad():
-            with self.autocast_smart_context_manager():
+            with self.compute_loss_context_manager():
                 outputs = model(**inputs)
             if has_labels:
                 if self.label_smoother is not None:
@@ -196,8 +223,12 @@ class Seq2SeqTrainer(Trainer):
 
         if has_labels:
             labels = inputs["labels"]
-            if labels.shape[-1] < gen_kwargs["max_length"]:
+            if gen_kwargs.get("max_length") is not None and labels.shape[-1] < gen_kwargs["max_length"]:
                 labels = self._pad_tensors_to_max_len(labels, gen_kwargs["max_length"])
+            elif gen_kwargs.get("max_new_tokens") is not None and labels.shape[-1] < (
+                gen_kwargs["max_new_tokens"] + 1
+            ):
+                labels = self._pad_tensors_to_max_len(labels, (gen_kwargs["max_new_tokens"] + 1))
         else:
             labels = None
 

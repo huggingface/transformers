@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -25,13 +25,24 @@ _import_structure = {
     "tokenization_splinter": ["SplinterTokenizer"],
 }
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_splinter_fast"] = ["SplinterTokenizerFast"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_splinter"] = [
         "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "SplinterForQuestionAnswering",
+        "SplinterForPreTraining",
         "SplinterLayer",
         "SplinterModel",
         "SplinterPreTrainedModel",
@@ -42,12 +53,23 @@ if TYPE_CHECKING:
     from .configuration_splinter import SPLINTER_PRETRAINED_CONFIG_ARCHIVE_MAP, SplinterConfig
     from .tokenization_splinter import SplinterTokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_splinter_fast import SplinterTokenizerFast
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_splinter import (
             SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            SplinterForPreTraining,
             SplinterForQuestionAnswering,
             SplinterLayer,
             SplinterModel,

@@ -18,7 +18,15 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_flax_available, is_tf_available, is_tokenizers_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_flax_available,
+    is_tensorflow_text_available,
+    is_tf_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
@@ -26,10 +34,20 @@ _import_structure = {
     "tokenization_bert": ["BasicTokenizer", "BertTokenizer", "WordpieceTokenizer"],
 }
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_bert_fast"] = ["BertTokenizerFast"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_bert"] = [
         "BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "BertForMaskedLM",
@@ -46,7 +64,12 @@ if is_torch_available():
         "load_tf_weights_in_bert",
     ]
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_bert"] = [
         "TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFBertEmbeddings",
@@ -62,9 +85,22 @@ if is_tf_available():
         "TFBertModel",
         "TFBertPreTrainedModel",
     ]
+try:
+    if not is_tensorflow_text_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["tokenization_bert_tf"] = ["TFBertTokenizer"]
 
-if is_flax_available():
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_flax_bert"] = [
+        "FlaxBertForCausalLM",
         "FlaxBertForMaskedLM",
         "FlaxBertForMultipleChoice",
         "FlaxBertForNextSentencePrediction",
@@ -80,10 +116,20 @@ if TYPE_CHECKING:
     from .configuration_bert import BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, BertConfig, BertOnnxConfig
     from .tokenization_bert import BasicTokenizer, BertTokenizer, WordpieceTokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_bert_fast import BertTokenizerFast
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_bert import (
             BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             BertForMaskedLM,
@@ -100,7 +146,12 @@ if TYPE_CHECKING:
             load_tf_weights_in_bert,
         )
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_bert import (
             TF_BERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFBertEmbeddings,
@@ -117,8 +168,22 @@ if TYPE_CHECKING:
             TFBertPreTrainedModel,
         )
 
-    if is_flax_available():
+    try:
+        if not is_tensorflow_text_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .tokenization_bert_tf import TFBertTokenizer
+
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_flax_bert import (
+            FlaxBertForCausalLM,
             FlaxBertForMaskedLM,
             FlaxBertForMultipleChoice,
             FlaxBertForNextSentencePrediction,

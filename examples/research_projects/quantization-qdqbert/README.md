@@ -101,6 +101,12 @@ Recalibrating will affect the accuracy of the model, but the change should be mi
 trtexec --onnx=model.onnx --explicitBatch --workspace=16384 --int8 --shapes=input_ids:64x128,attention_mask:64x128,token_type_ids:64x128 --verbose
 ```
 
+### Benchmark the INT8 QAT ONNX model inference with [ONNX Runtime-TRT](https://onnxruntime.ai/docs/execution-providers/TensorRT-ExecutionProvider.html) using dummy input
+
+```
+python3 ort-infer-benchmark.py
+```
+
 ### Evaluate the INT8 QAT ONNX model inference with TensorRT
 
 ```

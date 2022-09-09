@@ -121,7 +121,10 @@ class RagExampleArguments:
     dpr_ctx_encoder_model_name: str = field(
         default="facebook/dpr-ctx_encoder-multiset-base",
         metadata={
-            "help": "The DPR context encoder model to use. Either 'facebook/dpr-ctx_encoder-single-nq-base' or 'facebook/dpr-ctx_encoder-multiset-base'"
+            "help": (
+                "The DPR context encoder model to use. Either 'facebook/dpr-ctx_encoder-single-nq-base' or"
+                " 'facebook/dpr-ctx_encoder-multiset-base'"
+            )
         },
     )
     output_dir: Optional[str] = field(
@@ -155,7 +158,9 @@ class IndexHnswArguments:
     m: int = field(
         default=128,
         metadata={
-            "help": "The number of bi-directional links created for every new element during the HNSW index construction."
+            "help": (
+                "The number of bi-directional links created for every new element during the HNSW index construction."
+            )
         },
     )
 

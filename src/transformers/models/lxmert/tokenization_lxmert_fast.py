@@ -24,7 +24,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "unc-nlp/lxmert-base-uncased": "https://huggingface.co/unc-nlp/lxmert-base-uncased/resolve/main/vocab.txt",
     },
     "tokenizer_file": {
-        "unc-nlp/lxmert-base-uncased": "https://huggingface.co/unc-nlp/lxmert-base-uncased/resolve/main/tokenizer.json",
+        "unc-nlp/lxmert-base-uncased": (
+            "https://huggingface.co/unc-nlp/lxmert-base-uncased/resolve/main/tokenizer.json"
+        ),
     },
 }
 

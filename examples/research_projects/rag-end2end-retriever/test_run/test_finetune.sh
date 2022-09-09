@@ -44,11 +44,14 @@ python finetune_rag.py \
     --num_retrieval_workers 4  \
     --index_name custom \
     --context_encoder_name facebook/dpr-ctx_encoder-multiset-base \
-    --index_gpus 1 \
-    --gpu_order [6,7,8,9,0,1,2,3,5,4] \
+    --index_gpus 2 \
+    --gpu_order [2,3,4,5,6,7,8,9,0,1] \
     --indexing_freq 5
    
     
 
 # Stop the Ray cluster.
 ray stop
+
+#CUDA_VISIBLE_DEVICES=2,3,4,5,6,7,8,9,0,1 sh ./test_run/test_finetune.sh
+#Make sure --gpu_order is same. 

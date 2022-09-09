@@ -21,9 +21,7 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule
 
 
-_import_structure = {
-    "tokenization_byt5": ["ByT5Tokenizer"],
-}
+_import_structure = {"tokenization_byt5": ["ByT5Tokenizer"]}
 
 
 if TYPE_CHECKING:

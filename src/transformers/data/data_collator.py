@@ -14,11 +14,12 @@
 
 import random
 import warnings
+from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any, Callable, Dict, List, NewType, Optional, Tuple, Union
 
 from ..models.bert import BertTokenizer, BertTokenizerFast
-from ..tokenization_utils_base import BatchEncoding, PreTrainedTokenizerBase
+from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import PaddingStrategy
 
 
@@ -101,7 +102,7 @@ class DefaultDataCollator(DataCollatorMixin):
 def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     import torch
 
-    if not isinstance(features[0], (dict, BatchEncoding)):
+    if not isinstance(features[0], Mapping):
         features = [vars(f) for f in features]
     first = features[0]
     batch = {}
@@ -136,7 +137,7 @@ def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     import numpy as np
     import tensorflow as tf
 
-    if not isinstance(features[0], (dict, BatchEncoding)):
+    if not isinstance(features[0], Mapping):
         features = [vars(f) for f in features]
     first = features[0]
     batch = {}
@@ -177,7 +178,7 @@ def tf_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
 def numpy_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any]:
     import numpy as np
 
-    if not isinstance(features[0], (dict, BatchEncoding)):
+    if not isinstance(features[0], Mapping):
         features = [vars(f) for f in features]
     first = features[0]
     batch = {}
@@ -220,12 +221,11 @@ class DataCollatorWithPadding:
             Select a strategy to pad the returned sequences (according to the model's padding side and padding index)
             among:
 
-            - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence
-              is provided).
+            - `True` or `'longest'` (default): Pad to the longest sequence in the batch (or no padding if only a single
+              sequence is provided).
             - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
               acceptable input length for the model if that argument is not provided.
-            - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-              lengths).
+            - `False` or `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different lengths).
         max_length (`int`, *optional*):
             Maximum length of the returned list and optionally padding length (see above).
         pad_to_multiple_of (`int`, *optional*):
@@ -688,7 +688,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         import tensorflow as tf
 
         # Handle dict or lists with proper padding and conversion to tensor.
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             batch = self.tokenizer.pad(examples, return_tensors="tf", pad_to_multiple_of=self.pad_to_multiple_of)
         else:
             batch = {
@@ -725,7 +725,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
         # Handle dict or lists with proper padding and conversion to tensor.
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             batch = self.tokenizer.pad(examples, return_tensors="pt", pad_to_multiple_of=self.pad_to_multiple_of)
         else:
             batch = {
@@ -782,7 +782,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         import numpy as np
 
         # Handle dict or lists with proper padding and conversion to tensor.
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             batch = self.tokenizer.pad(examples, return_tensors="np", pad_to_multiple_of=self.pad_to_multiple_of)
         else:
             batch = {
@@ -859,7 +859,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
     </Tip>"""
 
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             input_ids = [e["input_ids"] for e in examples]
         else:
             input_ids = examples
@@ -887,7 +887,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         return {"input_ids": inputs, "labels": labels}
 
     def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             input_ids = [e["input_ids"] for e in examples]
         else:
             input_ids = examples
@@ -915,7 +915,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         return {"input_ids": inputs, "labels": labels}
 
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             input_ids = [e["input_ids"] for e in examples]
         else:
             input_ids = examples
@@ -953,7 +953,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             )
 
         cand_indexes = []
-        for (i, token) in enumerate(input_tokens):
+        for i, token in enumerate(input_tokens):
             if token == "[CLS]" or token == "[SEP]":
                 continue
 
@@ -998,7 +998,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the"
+                " --mlm flag if you want to use this tokenizer."
             )
         labels = inputs.clone()
         # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
@@ -1038,7 +1039,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
         input_shape = tf.shape(inputs)
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the"
+                " --mlm flag if you want to use this tokenizer."
             )
         labels = tf.identity(inputs)
         # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
@@ -1078,7 +1080,8 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the"
+                " --mlm flag if you want to use this tokenizer."
             )
         labels = np.copy(inputs)
         # We sample a few tokens in each sequence for masked-LM training (with probability args.mlm_probability defaults to 0.15 in Bert/RoBERTa)
@@ -1159,7 +1162,8 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the --mlm flag if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for masked language modeling. Remove the"
+                " --mlm flag if you want to use this tokenizer."
             )
 
         labels = inputs.clone()
@@ -1208,21 +1212,21 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
     return_tensors: str = "pt"
 
     def torch_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             examples = [e["input_ids"] for e in examples]
         batch = _torch_collate_batch(examples, self.tokenizer)
         inputs, perm_mask, target_mapping, labels = self.torch_mask_tokens(batch)
         return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
 
     def tf_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             examples = [e["input_ids"] for e in examples]
         batch = _tf_collate_batch(examples, self.tokenizer)
         inputs, perm_mask, target_mapping, labels = self.tf_mask_tokens(batch)
         return {"input_ids": inputs, "perm_mask": perm_mask, "target_mapping": target_mapping, "labels": labels}
 
     def numpy_call(self, examples: List[Union[List[int], Any, Dict[str, Any]]]) -> Dict[str, Any]:
-        if isinstance(examples[0], (dict, BatchEncoding)):
+        if isinstance(examples[0], Mapping):
             examples = [e["input_ids"] for e in examples]
         batch = _numpy_collate_batch(examples, self.tokenizer)
         inputs, perm_mask, target_mapping, labels = self.numpy_mask_tokens(batch)
@@ -1245,12 +1249,14 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for permutation language modeling."
+                " Please add a mask token if you want to use this tokenizer."
             )
 
         if inputs.size(1) % 2 != 0:
             raise ValueError(
-                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
+                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see"
+                " relevant comments in source code for details."
             )
 
         labels = inputs.clone()
@@ -1345,12 +1351,14 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for permutation language modeling."
+                " Please add a mask token if you want to use this tokenizer."
             )
 
         if tf.shape(inputs)[1] % 2 != 0:
             raise ValueError(
-                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
+                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see"
+                " relevant comments in source code for details."
             )
 
         labels = tf.identity(inputs)
@@ -1452,12 +1460,14 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
 
         if self.tokenizer.mask_token is None:
             raise ValueError(
-                "This tokenizer does not have a mask token which is necessary for permutation language modeling. Please add a mask token if you want to use this tokenizer."
+                "This tokenizer does not have a mask token which is necessary for permutation language modeling."
+                " Please add a mask token if you want to use this tokenizer."
             )
 
         if inputs.shape[1] % 2 != 0:
             raise ValueError(
-                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see relevant comments in source code for details."
+                "This collator requires that sequence lengths be even to create a leakage-free perm_mask. Please see"
+                " relevant comments in source code for details."
             )
 
         labels = np.copy(inputs)

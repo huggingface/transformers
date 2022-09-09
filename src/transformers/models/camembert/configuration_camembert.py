@@ -27,15 +27,20 @@ logger = logging.get_logger(__name__)
 
 CAMEMBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "camembert-base": "https://huggingface.co/camembert-base/resolve/main/config.json",
-    "umberto-commoncrawl-cased-v1": "https://huggingface.co/Musixmatch/umberto-commoncrawl-cased-v1/resolve/main/config.json",
-    "umberto-wikipedia-uncased-v1": "https://huggingface.co/Musixmatch/umberto-wikipedia-uncased-v1/resolve/main/config.json",
+    "umberto-commoncrawl-cased-v1": (
+        "https://huggingface.co/Musixmatch/umberto-commoncrawl-cased-v1/resolve/main/config.json"
+    ),
+    "umberto-wikipedia-uncased-v1": (
+        "https://huggingface.co/Musixmatch/umberto-wikipedia-uncased-v1/resolve/main/config.json"
+    ),
 }
 
 
 class CamembertConfig(RobertaConfig):
     """
     This class overrides [`RobertaConfig`]. Please check the superclass for the appropriate documentation alongside
-    usage examples.
+    usage examples. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    Camembert [camembert-base](https://huggingface.co/camembert-base) architecture.
     """
 
     model_type = "camembert"
@@ -44,9 +49,13 @@ class CamembertConfig(RobertaConfig):
 class CamembertOnnxConfig(OnnxConfig):
     @property
     def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task == "multiple-choice":
+            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
+        else:
+            dynamic_axis = {0: "batch", 1: "sequence"}
         return OrderedDict(
             [
-                ("input_ids", {0: "batch", 1: "sequence"}),
-                ("attention_mask", {0: "batch", 1: "sequence"}),
+                ("input_ids", dynamic_axis),
+                ("attention_mask", dynamic_axis),
             ]
         )

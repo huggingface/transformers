@@ -179,7 +179,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         texts = []
         labels = []
         ids = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             texts.append(line[column_text])
             labels.append(line[column_label])
             if column_id is not None:
@@ -207,7 +207,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
             labels = [None] * len(texts_or_text_and_labels)
         examples = []
         added_labels = set()
-        for (text_or_text_and_label, label, guid) in zip(texts_or_text_and_labels, labels, ids):
+        for text_or_text_and_label, label, guid in zip(texts_or_text_and_labels, labels, ids):
             if isinstance(text_or_text_and_label, (tuple, list)) and label is None:
                 text, label = text_or_text_and_label
             else:
@@ -262,7 +262,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         label_map = {label: i for i, label in enumerate(self.labels)}
 
         all_input_ids = []
-        for (ex_index, example) in enumerate(self.examples):
+        for ex_index, example in enumerate(self.examples):
             if ex_index % 10000 == 0:
                 logger.info(f"Tokenizing example {ex_index}")
 
@@ -276,7 +276,7 @@ class SingleSentenceClassificationProcessor(DataProcessor):
         batch_length = max(len(input_ids) for input_ids in all_input_ids)
 
         features = []
-        for (ex_index, (input_ids, example)) in enumerate(zip(all_input_ids, self.examples)):
+        for ex_index, (input_ids, example) in enumerate(zip(all_input_ids, self.examples)):
             if ex_index % 10000 == 0:
                 logger.info(f"Writing example {ex_index}/{len(self.examples)}")
             # The mask has 1 for real tokens and 0 for padding tokens. Only real

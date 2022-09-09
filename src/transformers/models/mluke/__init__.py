@@ -18,17 +18,27 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import _LazyModule, is_sentencepiece_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_sentencepiece_available
 
 
 _import_structure = {}
 
 
-if is_sentencepiece_available():
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_mluke"] = ["MLukeTokenizer"]
 
 if TYPE_CHECKING:
-    if is_sentencepiece_available():
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_mluke import MLukeTokenizer
 
 

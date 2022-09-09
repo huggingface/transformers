@@ -18,6 +18,7 @@ import copy
 import os
 import tempfile
 from importlib import import_module
+from math import isnan
 
 from transformers import is_tf_available
 from transformers.models.auto import get_values
@@ -135,25 +136,70 @@ class TFCoreModelTesterMixin:
             self.assertIsNotNone(outputs)
 
     @slow
-    def test_saved_model_creation(self):
+    def test_xla_fit(self):
+        # This is a copy of the test_keras_fit method, but we use XLA compilation instead of eager
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = False
-        config.output_attentions = False
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            if getattr(model, "hf_compute_loss", None):
+                # Test that model correctly compute the loss with kwargs
+                prepared_for_class = self._prepare_for_class(inputs_dict.copy(), model_class, return_labels=True)
+                # Is there a better way to remove these decoder inputs?
+                prepared_for_class = {
+                    key: val
+                    for key, val in prepared_for_class.items()
+                    if key not in ("head_mask", "decoder_head_mask", "cross_attn_head_mask", "decoder_input_ids")
+                }
 
-        if hasattr(config, "use_cache"):
-            config.use_cache = False
+                possible_label_cols = {
+                    "labels",
+                    "label",
+                    "label_ids",
+                    "start_positions",
+                    "start_position",
+                    "end_positions",
+                    "end_position",
+                    "next_sentence_label",
+                }
+                label_names = possible_label_cols.intersection(set(prepared_for_class))
+                self.assertGreater(len(label_names), 0, msg="No matching label names found!")
+                labels = {key: val for key, val in prepared_for_class.items() if key in label_names}
+                inputs_minus_labels = {key: val for key, val in prepared_for_class.items() if key not in label_names}
+                self.assertGreater(len(inputs_minus_labels), 0)
 
-        model_class = self.all_model_classes[0]
+                # Make sure it works with XLA!
+                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), jit_compile=True)
+                # Make sure the model fits without crashing regardless of where we pass the labels
+                history = model.fit(
+                    prepared_for_class,
+                    validation_data=prepared_for_class,
+                    steps_per_epoch=1,
+                    validation_steps=1,
+                    shuffle=False,
+                    verbose=0,
+                )
+                loss = history.history["loss"][0]
+                self.assertTrue(not isnan(loss))
+                val_loss = history.history["val_loss"][0]
+                self.assertTrue(not isnan(val_loss))
 
-        class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-        model = model_class(config)
+                # Now test it with separate labels, to make sure that path works in XLA too.
+                model = model_class(config)
+                model.compile(optimizer=tf.keras.optimizers.SGD(0.0), jit_compile=True)
+                history = model.fit(
+                    inputs_minus_labels,
+                    labels,
+                    validation_data=(inputs_minus_labels, labels),
+                    steps_per_epoch=1,
+                    validation_steps=1,
+                    shuffle=False,
+                    verbose=0,
+                )
 
-        model(class_inputs_dict)
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname, saved_model=True)
-            saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-            self.assertTrue(os.path.exists(saved_model_dir))
+                loss = history.history["loss"][0]
+                self.assertTrue(not isnan(loss))
+                val_loss = history.history["val_loss"][0]
+                self.assertTrue(not isnan(val_loss))
 
     @slow
     def test_saved_model_creation_extended(self):
@@ -205,18 +251,19 @@ class TFCoreModelTesterMixin:
 
     @slow
     def test_mixed_precision(self):
-        tf.keras.mixed_precision.experimental.set_policy("mixed_float16")
+        tf.keras.mixed_precision.set_global_policy("mixed_float16")
 
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        # try/finally block to ensure subsequent tests run in float32
+        try:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            for model_class in self.all_model_classes:
+                class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+                model = model_class(config)
+                outputs = model(class_inputs_dict)
 
-        for model_class in self.all_model_classes:
-            class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config)
-            outputs = model(class_inputs_dict)
-
-            self.assertIsNotNone(outputs)
-
-        tf.keras.mixed_precision.experimental.set_policy("float32")
+                self.assertIsNotNone(outputs)
+        finally:
+            tf.keras.mixed_precision.set_global_policy("float32")
 
     @slow
     def test_train_pipeline_custom_model(self):

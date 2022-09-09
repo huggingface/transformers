@@ -1,0 +1,119 @@
+name: "\U0001F41B Bug Report"
+description: Submit a bug report to help us improve transformers
+labels: [ "bug" ]
+body:
+  - type: textarea
+    id: system-info
+    attributes:
+      label: System Info
+      description: Please share your system info with us. You can run the command `transformers-cli env` and copy-paste its output below.
+      placeholder: transformers version, platform, python version, ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: who-can-help
+    attributes:
+      label: Who can help?
+      description: |
+        Your issue will be replied to more quickly if you can figure out the right person to tag with @
+        If you know how to use git blame, that is the easiest way, otherwise, here is a rough guide of **who to tag**.
+        Please tag fewer than 3 people.
+        
+        Models:
+
+          - ALBERT, BERT, XLM, DeBERTa, DeBERTa-v2, ELECTRA, MobileBert, SqueezeBert: `@LysandreJik`
+          - T5, Pegasus, EncoderDecoder: `@patrickvonplaten`
+          - Blenderbot, MBART, BART, Marian, Pegasus: `@patil-suraj`
+          - Reformer, TransfoXL, XLNet, FNet: `@patrickvonplaten`
+          - Longformer, BigBird: `@ydshieh`
+          - FSMT: `@stas00`
+          - Funnel: `@sgugger`
+          - GPT-2, GPT: `@patil-suraj`, `@patrickvonplaten`, `@LysandreJik`
+          - RAG, DPR: `@patrickvonplaten`, `@lhoestq`
+          - TensorFlow: `@Rocketknight1`
+          - JAX/Flax: `@patil-suraj`
+          - TAPAS, LayoutLM, LayoutLMv2, LUKE, ViT, BEiT, DEiT, DETR, CANINE: `@NielsRogge`
+          - GPT-Neo, GPT-J, CLIP: `@patil-suraj`
+          - Wav2Vec2, HuBERT, UniSpeech, UniSpeechSAT, SEW, SEW-D: `@patrickvonplaten`, `@anton-l`
+          - SpeechEncoderDecoder, Speech2Text, Speech2Text2: `@sanchit-gandhi`, `@patrickvonplaten`, `@anton-l`
+          
+          If the model isn't in the list, ping `@LysandreJik` who will redirect you to the correct contributor.
+
+        Library:
+          - Benchmarks: `@patrickvonplaten`
+          - Deepspeed: `@stas00`
+          - Ray/raytune: `@richardliaw`, `@amogkam`
+          - Text generation: `@patrickvonplaten`, `@Narsil`, `@gante`
+          - Tokenizers: `@SaulLu`
+          - Trainer: `@sgugger`
+          - Pipelines: `@Narsil`
+          - Speech: `@patrickvonplaten`, `@anton-l`, `@sanchit-gandhi`
+          - Vision: `@NielsRogge`, `@sgugger`
+
+        Documentation: `@sgugger`, `@stevhliu`
+
+        Model hub:
+
+          - for issues with a model, report at https://discuss.huggingface.co/ and tag the model's creator.
+
+        HF projects:
+
+          - datasets: [different repo](https://github.com/huggingface/datasets)
+          - rust tokenizers: [different repo](https://github.com/huggingface/tokenizers)
+
+        Examples:
+
+          - maintained examples (not research project or legacy): `@sgugger`, `@patil-suraj`
+
+        For research projetcs, please ping the contributor directly. For example, on the following projects:
+
+          - research_projects/bert-loses-patience: `@JetRunner`
+          - research_projects/distillation: `@VictorSanh`
+      placeholder: "@Username ..."
+
+  - type: checkboxes
+    id: information-scripts-examples
+    attributes:
+      label: Information
+      description: 'The problem arises when using:'
+      options:
+        - label: "The official example scripts"
+        - label: "My own modified scripts"
+
+  - type: checkboxes
+    id: information-tasks
+    attributes:
+      label: Tasks
+      description: "The tasks I am working on are:"
+      options:
+        - label: "An officially supported task in the `examples` folder (such as GLUE/SQuAD, ...)"
+        - label: "My own task or dataset (give details below)"
+
+  - type: textarea
+    id: reproduction
+    validations:
+      required: true
+    attributes:
+      label: Reproduction
+      description: |
+        Please provide a code sample that reproduces the problem you ran into. It can be a Colab link or just a code snippet.
+        If you have code snippets, error messages, stack traces please provide them here as well.
+        Important! Use code tags to correctly format your code. See https://help.github.com/en/github/writing-on-github/creating-and-highlighting-code-blocks#syntax-highlighting
+        Do not use screenshots, as they are hard to read and (more importantly) don't allow others to copy-and-paste your code.
+
+      placeholder: |
+        Steps to reproduce the behavior:
+          
+          1.
+          2.
+          3.
+          
+
+  - type: textarea
+    id: expected-behavior
+    validations:
+      required: true
+    attributes:
+      label: Expected behavior
+      description: "A clear and concise description of what you would expect to happen."

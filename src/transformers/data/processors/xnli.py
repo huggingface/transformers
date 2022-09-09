@@ -40,7 +40,7 @@ class XnliProcessor(DataProcessor):
         lg = self.language if self.train_language is None else self.train_language
         lines = self._read_tsv(os.path.join(data_dir, f"XNLI-MT-1.0/multinli/multinli.train.{lg}.tsv"))
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             guid = f"train-{i}"
@@ -60,7 +60,7 @@ class XnliProcessor(DataProcessor):
         """See base class."""
         lines = self._read_tsv(os.path.join(data_dir, "XNLI-1.0/xnli.test.tsv"))
         examples = []
-        for (i, line) in enumerate(lines):
+        for i, line in enumerate(lines):
             if i == 0:
                 continue
             language = line[0]

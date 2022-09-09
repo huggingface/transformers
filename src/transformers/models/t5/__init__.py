@@ -19,6 +19,7 @@
 from typing import TYPE_CHECKING
 
 from ...utils import (
+    OptionalDependencyNotAvailable,
     _LazyModule,
     is_flax_available,
     is_sentencepiece_available,
@@ -28,17 +29,30 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config", "T5OnnxConfig"],
-}
+_import_structure = {"configuration_t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config", "T5OnnxConfig"]}
 
-if is_sentencepiece_available():
+try:
+    if not is_sentencepiece_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_t5"] = ["T5Tokenizer"]
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_t5_fast"] = ["T5TokenizerFast"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_t5"] = [
         "T5_PRETRAINED_MODEL_ARCHIVE_LIST",
         "T5EncoderModel",
@@ -48,7 +62,12 @@ if is_torch_available():
         "load_tf_weights_in_t5",
     ]
 
-if is_tf_available():
+try:
+    if not is_tf_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_tf_t5"] = [
         "TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TFT5EncoderModel",
@@ -57,8 +76,14 @@ if is_tf_available():
         "TFT5PreTrainedModel",
     ]
 
-if is_flax_available():
+try:
+    if not is_flax_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_flax_t5"] = [
+        "FlaxT5EncoderModel",
         "FlaxT5ForConditionalGeneration",
         "FlaxT5Model",
         "FlaxT5PreTrainedModel",
@@ -68,13 +93,28 @@ if is_flax_available():
 if TYPE_CHECKING:
     from .configuration_t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config, T5OnnxConfig
 
-    if is_sentencepiece_available():
+    try:
+        if not is_sentencepiece_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_t5 import T5Tokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_t5_fast import T5TokenizerFast
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_t5 import (
             T5_PRETRAINED_MODEL_ARCHIVE_LIST,
             T5EncoderModel,
@@ -84,7 +124,12 @@ if TYPE_CHECKING:
             load_tf_weights_in_t5,
         )
 
-    if is_tf_available():
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_tf_t5 import (
             TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
             TFT5EncoderModel,
@@ -93,8 +138,18 @@ if TYPE_CHECKING:
             TFT5PreTrainedModel,
         )
 
-    if is_flax_available():
-        from .modeling_flax_t5 import FlaxT5ForConditionalGeneration, FlaxT5Model, FlaxT5PreTrainedModel
+    try:
+        if not is_flax_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_flax_t5 import (
+            FlaxT5EncoderModel,
+            FlaxT5ForConditionalGeneration,
+            FlaxT5Model,
+            FlaxT5PreTrainedModel,
+        )
 
 
 else:

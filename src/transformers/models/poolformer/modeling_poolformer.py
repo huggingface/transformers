@@ -16,7 +16,6 @@
 
 
 import collections.abc
-from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
@@ -25,14 +24,9 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    ModelOutput,
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-)
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_poolformer import PoolFormerConfig
 
 
@@ -56,80 +50,40 @@ POOLFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.vit.modeling_vit.to_2tuple
-def to_2tuple(x):
-    if isinstance(x, collections.abc.Iterable):
-        return x
-    return (x, x)
-
-
-@dataclass
-class PoolFormerModelOutput(ModelOutput):
+# Copied from transformers.models.beit.modeling_beit.drop_path
+def drop_path(input, drop_prob: float = 0.0, training: bool = False):
     """
-    Class for PoolFormerModel's outputs, with potential hidden states.
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class PoolFormerClassifierOutput(ModelOutput):
-    """
-    Class for PoolformerForImageClassification's outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, num_channels, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-
-
-def drop_path(x, drop_prob: float = 0.0, training: bool = False):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however, the original name is
-    misleading as 'Drop Connect' is a different form of dropout in a separate paper... See discussion:
-    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
-    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
     """
     if drop_prob == 0.0 or not training:
-        return x
+        return input
     keep_prob = 1 - drop_prob
-    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=x.dtype, device=x.device)
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
     random_tensor.floor_()  # binarize
-    output = x.div(keep_prob) * random_tensor
+    output = input.div(keep_prob) * random_tensor
     return output
 
 
+# Copied from transformers.models.beit.modeling_beit.BeitDropPath with Beit->PoolFormer
 class PoolFormerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob=None):
+    def __init__(self, drop_prob: Optional[float] = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
-    def forward(self, x):
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
         return drop_path(x, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
 
 
 class PoolFormerEmbeddings(nn.Module):
@@ -139,17 +93,17 @@ class PoolFormerEmbeddings(nn.Module):
 
     def __init__(self, hidden_size, num_channels, patch_size, stride, padding, norm_layer=None):
         super().__init__()
-        patch_size = to_2tuple(patch_size)
-        stride = to_2tuple(stride)
-        padding = to_2tuple(padding)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        stride = stride if isinstance(stride, collections.abc.Iterable) else (stride, stride)
+        padding = padding if isinstance(padding, collections.abc.Iterable) else (padding, padding)
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=stride, padding=padding)
         self.norm = norm_layer(hidden_size) if norm_layer else nn.Identity()
 
     def forward(self, pixel_values):
-        x = self.projection(pixel_values)
-        x = self.norm(x)
-        return x
+        embeddings = self.projection(pixel_values)
+        embeddings = self.norm(embeddings)
+        return embeddings
 
 
 class PoolFormerGroupNorm(nn.GroupNorm):
@@ -295,7 +249,7 @@ class PoolFormerEncoder(nn.Module):
             # Get patch embeddings from hidden_states
             hidden_states = embedding_layer(hidden_states)
             # Send the embeddings through the blocks
-            for i, blk in enumerate(block_layer):
+            for _, blk in enumerate(block_layer):
                 layer_outputs = blk(hidden_states)
                 hidden_states = layer_outputs[0]
 
@@ -305,7 +259,7 @@ class PoolFormerEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return PoolFormerModelOutput(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
+        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states)
 
 
 class PoolFormerPreTrainedModel(PreTrainedModel):
@@ -374,7 +328,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=PoolFormerModelOutput,
+        output_type=BaseModelOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
@@ -384,7 +338,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PoolFormerModelOutput]:
+    ) -> Union[Tuple, BaseModelOutputWithNoAttention]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -403,7 +357,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         if not return_dict:
             return (sequence_output, None) + encoder_outputs[1:]
 
-        return PoolFormerModelOutput(
+        return BaseModelOutputWithNoAttention(
             last_hidden_state=sequence_output,
             hidden_states=encoder_outputs.hidden_states,
         )
@@ -445,7 +399,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=PoolFormerClassifierOutput,
+        output_type=ImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
@@ -455,7 +409,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         labels: Optional[torch.LongTensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, PoolFormerClassifierOutput]:
+    ) -> Union[Tuple, ImageClassifierOutputWithNoAttention]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -501,4 +455,4 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return PoolFormerClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states)
+        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states)

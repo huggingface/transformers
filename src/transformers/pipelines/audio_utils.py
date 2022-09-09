@@ -55,7 +55,7 @@ def ffmpeg_microphone(
     elif format_for_conversion == "f32le":
         size_of_sample = 4
     else:
-        raise ValueError("Unhandled format `{format_for_conversion}`. Please use `s16le` or `f32le`")
+        raise ValueError(f"Unhandled format `{format_for_conversion}`. Please use `s16le` or `f32le`")
 
     system = platform.system()
     if system == "Linux":
@@ -144,7 +144,7 @@ def ffmpeg_microphone_live(
         dtype = np.float32
         size_of_sample = 4
     else:
-        raise ValueError("Unhandled format `{format_for_conversion}`. Please use `s16le` or `f32le`")
+        raise ValueError(f"Unhandled format `{format_for_conversion}`. Please use `s16le` or `f32le`")
 
     if stride_length_s is None:
         stride_length_s = chunk_length_s / 6
