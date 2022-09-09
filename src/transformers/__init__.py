@@ -1891,6 +1891,7 @@ else:
         [
             "VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST",
             "ViTMSNModel",
+            "ViTMSNForImageClassification",
         ]
     )
     _import_structure["models.videomae"].extend(
@@ -4453,7 +4454,7 @@ if TYPE_CHECKING:
             ViTMAEModel,
             ViTMAEPreTrainedModel,
         )
-        from .models.vit_msn import VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST, ViTMSNModel
+        from .models.vit_msn import VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST, ViTMSNModel, ViTMSNForImageClassification
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Wav2Vec2ForAudioFrameClassification,

@@ -22,9 +22,10 @@ from typing import Dict, List, Optional, Set, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -81,7 +82,7 @@ class ViTMSNEmbeddings(nn.Module):
         h0 = height // self.config.patch_size
         w0 = width // self.config.patch_size
         # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/sayakpaulresearch/dino/issues/8
+        # see discussion at https://github.com/facebookresearch/dino/issues/8
         h0, w0 = h0 + 0.1, w0 + 0.1
         patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
@@ -491,11 +492,11 @@ VIT_MSN_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare ViTMSN Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare ViTMSN Model outputting raw hidden-states without any specific head on top.",
     VIT_MSN_START_DOCSTRING,
 )
 class ViTMSNModel(ViTMSNPreTrainedModel):
-    def __init__(self, config: ViTMSNConfig, add_pooling_layer: bool = True, use_mask_token: bool = False):
+    def __init__(self, config: ViTMSNConfig, use_mask_token: bool = False):
         super().__init__(config)
         self.config = config
 
@@ -503,7 +504,6 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         self.encoder = ViTMSNEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = ViTMSNPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -520,7 +520,7 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     @add_start_docstrings_to_model_forward(VIT_MSN_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
@@ -538,6 +538,7 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
 
         ```python
         >>> from transformers import AutoFeatureExtractor, ViTMSNModel
+        >>> import torch
         >>> from PIL import Image
         >>> import requests
 
@@ -545,7 +546,8 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-msn-base")
-        >>> model = ViTMAEModel.from_pretrained("facebook/vit-msn-base")
+        >>> with torch.no_grad():
+        ...     model = ViTMSNModel.from_pretrained("facebook/vit-msn-base")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -580,15 +582,119 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
+            head_outputs = (sequence_output) 
             return head_outputs + encoder_outputs[1:]
 
-        return BaseModelOutputWithPooling(
+        return BaseModelOutput(
             last_hidden_state=sequence_output,
-            pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    """
+    ViTMSN Model with an image classification head on top e.g. for ImageNet.
+    """,
+    VIT_MSN_START_DOCSTRING,
+)
+class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
+    def __init__(self, config: ViTMSNConfig) -> None:
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.vit = ViTMSNModel(config)
+
+        # Classifier head
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(VIT_MSN_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, ImageClassifierOutput]:
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoFeatureExtractor, ViTMSNForImageClassification
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-msn-base")
+        >>> model = ViTMSNForImageClassification.from_pretrained("facebook/vit-msn-base")
+
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_label = logits.argmax(-1).item()
+        >>> print(model.config.id2label[predicted_label])
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.vit(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=return_dict,
+        )
+
+        sequence_output = outputs[0]
+
+        logits = self.classifier(sequence_output[:, 0, :])
+
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return ImageClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
