@@ -36,9 +36,9 @@ CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class ConditionalDETRConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ConditionalDETRModel`]. It is used to instantiate
-    a CONDITIONAL_DETR model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the CONDITIONAL_DETR
-    [DepuMeng/conditional_detr_resnet50](https://huggingface.co/DepuMeng/conditional_detr_resnet50) architecture.
+    a Conditional DETR model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the Conditional DETR
+    [microsoft/conditional-detr-resnet-50](https://huggingface.co/microsoft/conditional-detr-resnet-50) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -116,10 +116,10 @@ class ConditionalDETRConfig(PretrainedConfig):
     ```python
     >>> from transformers import ConditionalDETRModel, ConditionalDETRConfig
 
-    >>> # Initializing a CONDITIONAL_DETR DepuMeng/conditional_detr_resnet50 style configuration
+    >>> # Initializing a Conditional DETR microsoft/conditional-detr-resnet-50 style configuration
     >>> configuration = ConditionalDETRConfig()
 
-    >>> # Initializing a model from the DepuMeng/conditional_detr_resnet50 style configuration
+    >>> # Initializing a model from the microsoft/conditional-detr-resnet-50 style configuration
     >>> model = ConditionalDETRModel(configuration)
 
     >>> # Accessing the model configuration
