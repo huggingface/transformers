@@ -26,7 +26,7 @@ def get_artifacts_links(worflow_run_id):
             artifacts.update({artifact["name"]: artifact["archive_download_url"] for artifact in result["artifacts"]})
 
         return artifacts
-    except Exception:
+    except Exception as e:
         print("Unknown error, could not fetch links.", e)
 
     return {}
