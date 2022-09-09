@@ -203,6 +203,10 @@ _import_structure = {
     "models.dpt": ["DPT_PRETRAINED_CONFIG_ARCHIVE_MAP", "DPTConfig"],
     "models.electra": ["ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP", "ElectraConfig", "ElectraTokenizer"],
     "models.encoder_decoder": ["EncoderDecoderConfig"],
+    "models.ernie": [
+        "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ErnieConfig",
+    ],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1168,6 +1172,21 @@ else:
         ]
     )
     _import_structure["models.encoder_decoder"].append("EncoderDecoderModel")
+    _import_structure["models.ernie"].extend(
+        [
+            "ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "ErnieForCausalLM",
+            "ErnieForMaskedLM",
+            "ErnieForMultipleChoice",
+            "ErnieForNextSentencePrediction",
+            "ErnieForPreTraining",
+            "ErnieForQuestionAnswering",
+            "ErnieForSequenceClassification",
+            "ErnieForTokenClassification",
+            "ErnieModel",
+            "ErniePreTrainedModel",
+        ]
+    )
     _import_structure["models.flaubert"].extend(
         [
             "FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3066,6 +3085,7 @@ if TYPE_CHECKING:
     from .models.dpt import DPT_PRETRAINED_CONFIG_ARCHIVE_MAP, DPTConfig
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
+    from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -3879,6 +3899,19 @@ if TYPE_CHECKING:
             load_tf_weights_in_electra,
         )
         from .models.encoder_decoder import EncoderDecoderModel
+        from .models.ernie import (
+            ERNIE_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ErnieForCausalLM,
+            ErnieForMaskedLM,
+            ErnieForMultipleChoice,
+            ErnieForNextSentencePrediction,
+            ErnieForPreTraining,
+            ErnieForQuestionAnswering,
+            ErnieForSequenceClassification,
+            ErnieForTokenClassification,
+            ErnieModel,
+            ErniePreTrainedModel,
+        )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
             FlaubertForMultipleChoice,
