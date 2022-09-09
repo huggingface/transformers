@@ -699,7 +699,7 @@ class FlaxGenerationMixin:
                 else:
                     return tensor[batch_indices, beam_indices]
 
-            return jax.tree_map(gather_fn, nested)
+            return jax.tree_util.tree_map(gather_fn, nested)
 
         # init values
         max_length = max_length if max_length is not None else self.config.max_length
@@ -788,7 +788,7 @@ class FlaxGenerationMixin:
             model_outputs = model(input_token, params=params, **state.model_kwargs)
 
             logits = unflatten_beam_dim(model_outputs.logits[:, -1], batch_size, num_beams)
-            cache = jax.tree_map(
+            cache = jax.tree_util.tree_map(
                 lambda tensor: unflatten_beam_dim(tensor, batch_size, num_beams), model_outputs.past_key_values
             )
 
@@ -874,7 +874,7 @@ class FlaxGenerationMixin:
             # With these, gather the top k beam-associated caches.
             next_running_indices = gather_beams(topk_beam_indices, next_topk_indices, batch_size, num_beams)
             next_cache = gather_beams(cache, next_running_indices, batch_size, num_beams)
-            model_outputs["past_key_values"] = jax.tree_map(lambda x: flatten_beam_dim(x), next_cache)
+            model_outputs["past_key_values"] = jax.tree_util.tree_map(lambda x: flatten_beam_dim(x), next_cache)
             next_model_kwargs = self.update_inputs_for_generation(model_outputs, state.model_kwargs)
 
             return BeamSearchState(
