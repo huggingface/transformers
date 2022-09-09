@@ -53,7 +53,7 @@ class TFWav2Vec2ModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=3,
         seq_length=1024,
         is_training=False,
         hidden_size=16,
@@ -337,6 +337,14 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
 
+    @unittest.skip(reason="Dataset conversion goes OOM and crashes with the default options!")
+    def test_dataset_conversion(self):
+        pass
+
+    @unittest.skip(reason="Training goes OOM and crashes with the default options!")
+    def test_keras_fit(self):
+        pass
+
 
 @require_tf
 class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
@@ -454,6 +462,14 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
+
+    @unittest.skip(reason="Dataset conversion goes OOM and crashes with the default options!")
+    def test_dataset_conversion(self):
+        pass
+
+    @unittest.skip(reason="Training goes OOM and crashes with the default options!")
+    def test_keras_fit(self):
+        pass
 
 
 @require_tf
