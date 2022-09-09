@@ -42,8 +42,7 @@
       title: Use tokenizers from 🤗 Tokenizers
     - local: multilingual
       title: Inference for multilingual models
-    - isExpanded: false
-      sections:
+    - sections:
       - local: tasks/sequence_classification
         title: Text classification
       - local: tasks/token_classification
@@ -58,7 +57,8 @@
         title: Summarization
       - local: tasks/multiple_choice
         title: Multiple choice
-      title: Task guides
+      title: Task guides      
+      isExpanded: false
     title: Natural Language Processing
   - sections:
     - local: tasks/audio_classification
