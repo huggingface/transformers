@@ -943,7 +943,7 @@ class CLIPVisionModel(CLIPPreTrainedModel):
         >>> pooled_output = outputs.pooler_output  # pooled CLS states
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        
+
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
