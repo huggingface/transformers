@@ -62,13 +62,13 @@ CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 @dataclass
 class ConditionalDETRDecoderOutput(BaseModelOutputWithCrossAttentions):
     """
-    Base class for outputs of the Conditional DETR decoder. This class adds one attribute to BaseModelOutputWithCrossAttentions,
-    namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
-    gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
+    Base class for outputs of the Conditional DETR decoder. This class adds one attribute to
+    BaseModelOutputWithCrossAttentions, namely an optional stack of intermediate decoder activations, i.e. the output
+    of each decoder layer, each of them gone through a layernorm. This is useful when training the model with auxiliary
+    decoding losses.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -97,9 +97,10 @@ class ConditionalDETRDecoderOutput(BaseModelOutputWithCrossAttentions):
 @dataclass
 class ConditionalDETRModelOutput(Seq2SeqModelOutput):
     """
-    Base class for outputs of the Conditional DETR encoder-decoder model. This class adds one attribute to Seq2SeqModelOutput,
-    namely an optional stack of intermediate decoder activations, i.e. the output of each decoder layer, each of them
-    gone through a layernorm. This is useful when training the model with auxiliary decoding losses.
+    Base class for outputs of the Conditional DETR encoder-decoder model. This class adds one attribute to
+    Seq2SeqModelOutput, namely an optional stack of intermediate decoder activations, i.e. the output of each decoder
+    layer, each of them gone through a layernorm. This is useful when training the model with auxiliary decoding
+    losses.
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -389,6 +390,7 @@ class ConditionalDETRConvModel(nn.Module):
 
         return out, pos
 
+
 # Copied from transformers.models.detr.modeling_detr._expand_mask with Detr->ConditionalDETR
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
@@ -479,6 +481,7 @@ def build_position_encoding(config):
 
     return position_embedding
 
+
 # function to generate sine positional embedding for 2d coordinates
 def gen_sineembed_for_position(pos_tensor):
     scale = 2 * math.pi
@@ -493,11 +496,13 @@ def gen_sineembed_for_position(pos_tensor):
     pos = torch.cat((pos_y, pos_x), dim=2)
     return pos
 
+
 def inverse_sigmoid(x, eps=1e-5):
     x = x.clamp(min=0, max=1)
     x1 = x.clamp(min=eps)
     x2 = (1 - x).clamp(min=eps)
-    return torch.log(x1/x2)
+    return torch.log(x1 / x2)
+
 
 class DetrAttention(nn.Module):
     """
@@ -521,7 +526,8 @@ class DetrAttention(nn.Module):
         self.head_dim = embed_dim // num_heads
         if self.head_dim * num_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {num_heads})."
             )
         self.scaling = self.head_dim**-0.5
 
@@ -585,7 +591,8 @@ class DetrAttention(nn.Module):
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
             )
 
         if attention_mask is not None:
@@ -614,7 +621,8 @@ class DetrAttention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is {attn_output.size()}"
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
             )
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.head_dim)
@@ -625,12 +633,13 @@ class DetrAttention(nn.Module):
 
         return attn_output, attn_weights_reshaped
 
+
 class ConditionalDETRAttention(nn.Module):
     """
     Cross-Attention used in Conditional DETR 'Conditional DETR for Fast Training Convergence' paper.
 
-    The key q_proj, k_proj, v_proj are defined outside the attention.
-    This attention allows the dim of q, k to be different to v.
+    The key q_proj, k_proj, v_proj are defined outside the attention. This attention allows the dim of q, k to be
+    different to v.
     """
 
     def __init__(
@@ -649,7 +658,8 @@ class ConditionalDETRAttention(nn.Module):
         self.head_dim = embed_dim // num_heads
         if self.head_dim * num_heads != self.embed_dim:
             raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`: {num_heads})."
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {num_heads})."
             )
         # head dimension of values
         self.v_head_dim = out_dim // num_heads
@@ -663,6 +673,7 @@ class ConditionalDETRAttention(nn.Module):
 
     def _qk_shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
+
     def _v_shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.v_head_dim).transpose(1, 2).contiguous()
 
@@ -696,7 +707,8 @@ class ConditionalDETRAttention(nn.Module):
 
         if attn_weights.size() != (bsz * self.num_heads, tgt_len, src_len):
             raise ValueError(
-                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is {attn_weights.size()}"
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {attn_weights.size()}"
             )
 
         if attention_mask is not None:
@@ -725,7 +737,8 @@ class ConditionalDETRAttention(nn.Module):
 
         if attn_output.size() != (bsz * self.num_heads, tgt_len, self.v_head_dim):
             raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.v_head_dim)}, but is {attn_output.size()}"
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.v_head_dim)}, but is"
+                f" {attn_output.size()}"
             )
 
         attn_output = attn_output.view(bsz, self.num_heads, tgt_len, self.v_head_dim)
@@ -818,19 +831,18 @@ class ConditionalDETRDecoderLayer(nn.Module):
         self.sa_kcontent_proj = nn.Linear(d_model, d_model)
         self.sa_kpos_proj = nn.Linear(d_model, d_model)
         self.sa_v_proj = nn.Linear(d_model, d_model)
-        
+
         self.self_attn = ConditionalDETRAttention(
             embed_dim=self.embed_dim,
             out_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout
+            dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        
 
         # Decoder Cross-Attention projections
         self.ca_qcontent_proj = nn.Linear(d_model, d_model)
@@ -841,10 +853,7 @@ class ConditionalDETRDecoderLayer(nn.Module):
         self.ca_qpos_sine_proj = nn.Linear(d_model, d_model)
 
         self.encoder_attn = ConditionalDETRAttention(
-            self.embed_dim*2,
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout
+            self.embed_dim * 2, self.embed_dim, config.decoder_attention_heads, dropout=config.attention_dropout
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
@@ -862,7 +871,7 @@ class ConditionalDETRDecoderLayer(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
-        is_first: Optional[bool] = False
+        is_first: Optional[bool] = False,
     ):
         """
         Args:
@@ -888,7 +897,9 @@ class ConditionalDETRDecoderLayer(nn.Module):
         # ========== Begin of Self-Attention =============
         # Apply projections here
         # shape: num_queries x batch_size x 256
-        q_content = self.sa_qcontent_proj(hidden_states)      # target is the input of the first decoder layer. zero by default.
+        q_content = self.sa_qcontent_proj(
+            hidden_states
+        )  # target is the input of the first decoder layer. zero by default.
         q_pos = self.sa_qpos_proj(query_position_embeddings)
         k_content = self.sa_kcontent_proj(hidden_states)
         k_pos = self.sa_kpos_proj(query_position_embeddings)
@@ -924,7 +935,7 @@ class ConditionalDETRDecoderLayer(nn.Module):
 
         k_pos = self.ca_kpos_proj(position_embeddings)
 
-        # For the first decoder layer, we concatenate the positional embedding predicted from 
+        # For the first decoder layer, we concatenate the positional embedding predicted from
         # the object query (the positional embedding) into the original query (key) in DETR.
         if is_first:
             q_pos = self.ca_qpos_proj(query_position_embeddings)
@@ -934,12 +945,12 @@ class ConditionalDETRDecoderLayer(nn.Module):
             q = q_content
             k = k_content
 
-        q = q.view(bs, num_queries, self.nhead, n_model//self.nhead)
+        q = q.view(bs, num_queries, self.nhead, n_model // self.nhead)
         query_sine_embed = self.ca_qpos_sine_proj(query_sine_embed)
-        query_sine_embed = query_sine_embed.view(bs, num_queries, self.nhead, n_model//self.nhead)
+        query_sine_embed = query_sine_embed.view(bs, num_queries, self.nhead, n_model // self.nhead)
         q = torch.cat([q, query_sine_embed], dim=3).view(bs, num_queries, n_model * 2)
-        k = k.view(bs, hw, self.nhead, n_model//self.nhead)
-        k_pos = k_pos.view(bs, hw, self.nhead, n_model//self.nhead)
+        k = k.view(bs, hw, self.nhead, n_model // self.nhead)
+        k_pos = k_pos.view(bs, hw, self.nhead, n_model // self.nhead)
         k = torch.cat([k, k_pos], dim=3).view(bs, hw, n_model * 2)
 
         # Cross-Attention Block
@@ -996,8 +1007,9 @@ class ConditionalDETRClassificationHead(nn.Module):
         hidden_states = self.out_proj(hidden_states)
         return hidden_states
 
+
 class MLP(nn.Module):
-    """ Very simple multi-layer perceptron (also called FFN)"""
+    """Very simple multi-layer perceptron (also called FFN)"""
 
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
         super().__init__()
@@ -1066,8 +1078,8 @@ CONDITIONAL_DETR_INPUTS_DOCSTRING = r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Padding will be ignored by default should you provide it.
 
-            Pixel values can be obtained using [`ConditionalDETRFeatureExtractor`]. See [`ConditionalDETRFeatureExtractor.__call__`] for
-            details.
+            Pixel values can be obtained using [`ConditionalDETRFeatureExtractor`]. See
+            [`ConditionalDETRFeatureExtractor.__call__`] for details.
 
         pixel_mask (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Mask to avoid performing attention on padding pixel values. Mask values selected in `[0, 1]`:
@@ -1323,11 +1335,13 @@ class ConditionalDETRDecoder(ConditionalDETRPreTrainedModel):
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
 
-        reference_points_before_sigmoid = self.ref_point_head(query_position_embeddings)    # [num_queries, batch_size, 2]
+        reference_points_before_sigmoid = self.ref_point_head(
+            query_position_embeddings
+        )  # [num_queries, batch_size, 2]
         reference_points = reference_points_before_sigmoid.sigmoid().transpose(0, 1)
-        obj_center = reference_points[..., :2].transpose(0, 1)  
+        obj_center = reference_points[..., :2].transpose(0, 1)
         # get sine embedding for the query vector
-        query_sine_embed_before_transformation = gen_sineembed_for_position(obj_center) 
+        query_sine_embed_before_transformation = gen_sineembed_for_position(obj_center)
 
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -1339,7 +1353,7 @@ class ConditionalDETRDecoder(ConditionalDETRPreTrainedModel):
             if idx == 0:
                 pos_transformation = 1
             else:
-                pos_transformation = self.query_scale(hidden_states)  
+                pos_transformation = self.query_scale(hidden_states)
             # apply transformation
             query_sine_embed = query_sine_embed_before_transformation * pos_transformation
             if self.gradient_checkpointing and self.training:
@@ -1372,7 +1386,7 @@ class ConditionalDETRDecoder(ConditionalDETRPreTrainedModel):
                     encoder_hidden_states=encoder_hidden_states,
                     encoder_attention_mask=encoder_attention_mask,
                     output_attentions=output_attentions,
-                    is_first=(idx==0)
+                    is_first=(idx == 0),
                 )
 
             hidden_states = layer_outputs[0]
@@ -1401,7 +1415,14 @@ class ConditionalDETRDecoder(ConditionalDETRPreTrainedModel):
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, all_hidden_states, all_self_attns, all_cross_attentions, intermediate, reference_points]
+                for v in [
+                    hidden_states,
+                    all_hidden_states,
+                    all_self_attns,
+                    all_cross_attentions,
+                    intermediate,
+                    reference_points,
+                ]
                 if v is not None
             )
         return ConditionalDETRDecoderOutput(
@@ -1410,14 +1431,14 @@ class ConditionalDETRDecoder(ConditionalDETRPreTrainedModel):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
             intermediate_hidden_states=intermediate,
-            reference_points=reference_points
+            reference_points=reference_points,
         )
 
 
 @add_start_docstrings(
     """
-    The bare CONDITIONAL_DETR Model (consisting of a backbone and encoder-decoder Transformer) outputting raw hidden-states without
-    any specific head on top.
+    The bare CONDITIONAL_DETR Model (consisting of a backbone and encoder-decoder Transformer) outputting raw
+    hidden-states without any specific head on top.
     """,
     CONDITIONAL_DETR_START_DOCSTRING,
 )
@@ -1570,14 +1591,14 @@ class ConditionalDETRModel(ConditionalDETRPreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
-            reference_points=decoder_outputs.reference_points
+            reference_points=decoder_outputs.reference_points,
         )
 
 
 @add_start_docstrings(
     """
-    CONDITIONAL_DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on top, for tasks
-    such as COCO detection.
+    CONDITIONAL_DETR Model (consisting of a backbone and encoder-decoder Transformer) with object detection heads on
+    top, for tasks such as COCO detection.
     """,
     CONDITIONAL_DETR_START_DOCSTRING,
 )
@@ -1669,7 +1690,7 @@ class ConditionalDETRForObjectDetection(ConditionalDETRPreTrainedModel):
 
         # class logits + predicted bounding boxes
         logits = self.class_labels_classifier(sequence_output)
-        
+
         reference = outputs.reference_points if return_dict else outputs[-1]
         reference_before_sigmoid = inverse_sigmoid(reference).transpose(0, 1)
         outputs_coords = []
@@ -1748,8 +1769,8 @@ class ConditionalDETRForObjectDetection(ConditionalDETRPreTrainedModel):
 
 @add_start_docstrings(
     """
-    CONDITIONAL_DETR Model (consisting of a backbone and encoder-decoder Transformer) with a segmentation head on top, for tasks
-    such as COCO panoptic.
+    CONDITIONAL_DETR Model (consisting of a backbone and encoder-decoder Transformer) with a segmentation head on top,
+    for tasks such as COCO panoptic.
 
     """,
     CONDITIONAL_DETR_START_DOCSTRING,
@@ -2154,9 +2175,9 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
 # taken from https://github.com/Atten4Vis/conditionalDETR/blob/master/models/conditional_detr.py
 class ConditionalDETRLoss(nn.Module):
     """
-    This class computes the losses for ConditionalDETRForObjectDetection/ConditionalDETRForSegmentation. The process happens in two steps: 1)
-    we compute hungarian assignment between ground truth boxes and the outputs of the model 2) we supervise each pair
-    of matched ground-truth / prediction (supervise class and box).
+    This class computes the losses for ConditionalDETRForObjectDetection/ConditionalDETRForSegmentation. The process
+    happens in two steps: 1) we compute hungarian assignment between ground truth boxes and the outputs of the model 2)
+    we supervise each pair of matched ground-truth / prediction (supervise class and box).
 
 
 
@@ -2181,8 +2202,8 @@ class ConditionalDETRLoss(nn.Module):
     # removed logging parameter, which was part of the original implementation
     def loss_labels(self, outputs, targets, indices, num_boxes):
         """
-        Classification loss (Binary focal loss) targets dicts must contain the key "class_labels" containing a tensor of dim
-        [nb_target_boxes]
+        Classification loss (Binary focal loss) targets dicts must contain the key "class_labels" containing a tensor
+        of dim [nb_target_boxes]
         """
         if "logits" not in outputs:
             raise KeyError("No logits were found in the outputs")
@@ -2195,12 +2216,19 @@ class ConditionalDETRLoss(nn.Module):
         )
         target_classes[idx] = target_classes_o
 
-        target_classes_onehot = torch.zeros([src_logits.shape[0], src_logits.shape[1], src_logits.shape[2]+1],
-                                            dtype=src_logits.dtype, layout=src_logits.layout, device=src_logits.device)
+        target_classes_onehot = torch.zeros(
+            [src_logits.shape[0], src_logits.shape[1], src_logits.shape[2] + 1],
+            dtype=src_logits.dtype,
+            layout=src_logits.layout,
+            device=src_logits.device,
+        )
         target_classes_onehot.scatter_(2, target_classes.unsqueeze(-1), 1)
 
-        target_classes_onehot = target_classes_onehot[:,:,:-1]
-        loss_ce = sigmoid_focal_loss(src_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2) * src_logits.shape[1]
+        target_classes_onehot = target_classes_onehot[:, :, :-1]
+        loss_ce = (
+            sigmoid_focal_loss(src_logits, target_classes_onehot, num_boxes, alpha=self.focal_alpha, gamma=2)
+            * src_logits.shape[1]
+        )
         losses = {"loss_ce": loss_ce}
 
         return losses
@@ -2430,7 +2458,7 @@ class ConditionalDETRHungarianMatcher(nn.Module):
         # Compute the classification cost.
         alpha = 0.25
         gamma = 2.0
-        neg_cost_class = (1 - alpha) * (out_prob ** gamma) * (-(1 - out_prob + 1e-8).log())
+        neg_cost_class = (1 - alpha) * (out_prob**gamma) * (-(1 - out_prob + 1e-8).log())
         pos_cost_class = alpha * ((1 - out_prob) ** gamma) * (-(out_prob + 1e-8).log())
         class_cost = pos_cost_class[:, tgt_ids] - neg_cost_class[:, tgt_ids]
 
