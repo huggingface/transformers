@@ -100,6 +100,7 @@ _import_structure = {
     "hf_argparser": ["HfArgumentParser"],
     "integrations": [
         "is_comet_available",
+        "is_neptune_available",
         "is_optuna_available",
         "is_ray_available",
         "is_ray_tune_available",
@@ -2986,6 +2987,7 @@ if TYPE_CHECKING:
     # Integrations
     from .integrations import (
         is_comet_available,
+        is_neptune_available,
         is_optuna_available,
         is_ray_available,
         is_ray_tune_available,
