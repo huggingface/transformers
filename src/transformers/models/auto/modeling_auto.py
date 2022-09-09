@@ -42,6 +42,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("canine", "CanineModel"),
         ("clip", "CLIPModel"),
         ("codegen", "CodeGenModel"),
+        ("conditional_detr", "ConditionalDETRModel"),
         ("convbert", "ConvBertModel"),
         ("convnext", "ConvNextModel"),
         ("ctrl", "CTRLModel"),
@@ -373,6 +374,7 @@ MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     [
         # Do not add new models here, this class will be deprecated in the future.
         # Model for Image Segmentation mapping
+        ("conditional_detr", "ConditionalDETRForSegmentation"),
         ("detr", "DetrForSegmentation"),
     ]
 )
@@ -456,6 +458,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Object Detection mapping
         ("deformable_detr", "DeformableDetrForObjectDetection"),
+        ("conditional_detr", "ConditionalDETRForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),
     ]
