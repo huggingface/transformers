@@ -98,7 +98,7 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "accelerate>=0.10.0",
-    "black==22.3",
+    "black==22.3",  # after updating to black 2023, also update Python version in pyproject.toml to 3.7
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
