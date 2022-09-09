@@ -602,7 +602,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         )
 
         if is_pair:
-            batch_text_or_text_pairs = [(text.split(), text_pair) for text, text_pair in batch_text_or_text_pairs]
+            batch_text_or_text_pairs = [([text], text_pair) for text, text_pair in batch_text_or_text_pairs]
 
         print("Batch text or text pairs:", batch_text_or_text_pairs)
 
