@@ -156,7 +156,7 @@ def reduce_by_model(logs, error_filter=None):
 
 
 def make_github_table(reduced_by_error):
-    header = f"| no. | error |"
+    header = "| no. | error |"
     sep = "|-:|:-|"
     lines = [header, sep]
     for error in reduced_by_error:
@@ -168,14 +168,14 @@ def make_github_table(reduced_by_error):
 
 
 def make_github_table_per_model(reduced_by_model):
-    header = f"| model | no. of errors | major error | count |"
+    header = "| model | no. of errors | major error | count |"
     sep = "|-:|-:|-:|-:|"
     lines = [header, sep]
     for model in reduced_by_model:
         count = reduced_by_model[model]["count"]
         try:
             error, _count = list(reduced_by_model[model]["errors"].items())[0]
-        except:
+        except Exception as e:
             pass
         line = f"| {model} | {count} | {error[:60]} | {_count} |"
         lines.append(line)
