@@ -1677,8 +1677,10 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
 
             if self.config.ctc_loss_reduction == "sum":
                 loss = tf.reduce_sum(loss)
+                loss = tf.reshape(loss, (1,))
             if self.config.ctc_loss_reduction == "mean":
                 loss = tf.reduce_mean(loss)
+                loss = tf.reshape(loss, (1,))
         else:
             loss = None
 

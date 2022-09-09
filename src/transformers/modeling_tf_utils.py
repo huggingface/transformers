@@ -1389,7 +1389,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
         # Run forward pass.
         with tf.GradientTape() as tape:
-            y_pred = self(x, training=True)
+            if self._using_dummy_loss and "return_loss" in arg_names:
+                y_pred = self(x, training=True, return_loss=True)
+            else:
+                y_pred = self(x, training=True)
             if self._using_dummy_loss:
                 loss = self.compiled_loss(y_pred.loss, y_pred.loss, sample_weight, regularization_losses=self.losses)
             else:
@@ -1492,7 +1495,10 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             y = {label_to_output.get(key, key): val for key, val in y.items()}
 
         # Run forward pass.
-        y_pred = self(x, training=False)
+        if self._using_dummy_loss and "return_loss" in arg_names:
+            y_pred = self(x, return_loss=True, training=False)
+        else:
+            y_pred = self(x, training=False)
         if self._using_dummy_loss:
             loss = self.compiled_loss(y_pred.loss, y_pred.loss, sample_weight, regularization_losses=self.losses)
         else:
