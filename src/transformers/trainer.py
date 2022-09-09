@@ -1876,8 +1876,8 @@ class Trainer:
 
         metrics = speed_metrics("train", start_time, num_samples=num_train_samples, num_steps=self.state.max_steps)
 
-        total_samples = args.max_steps*total_train_batch_size if args.max_steps > 0  else num_examples*num_train_epochs
-        perf_samples = total_samples - 10*total_train_batch_size
+        total_samples = self.state.global_step*total_train_batch_size if args.max_steps > 0 else num_examples*num_train_epochs
+        perf_samples = total_samples - self.args.warmup_steps*total_train_batch_size
         stable_train_metrics = speed_metrics("stable_train", start_train_stable_time, perf_samples)
 
         self.store_flos()
