@@ -153,8 +153,8 @@ class ConditionalDETRObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~ConditionalDETRFeatureExtractor.post_process`] to retrieve the unnormalized bounding
-            boxes.
+            possible padding). You can use [`~ConditionalDETRFeatureExtractor.post_process`] to retrieve the
+            unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
@@ -217,12 +217,13 @@ class ConditionalDETRSegmentationOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~ConditionalDETRFeatureExtractor.post_process`] to retrieve the unnormalized bounding
-            boxes.
+            possible padding). You can use [`~ConditionalDETRFeatureExtractor.post_process`] to retrieve the
+            unnormalized bounding boxes.
         pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/4, width/4)`):
-            Segmentation masks logits for all queries. See also [`~ConditionalDETRFeatureExtractor.post_process_segmentation`] or
-            [`~ConditionalDETRFeatureExtractor.post_process_panoptic`] to evaluate instance and panoptic segmentation masks
-            respectively.
+            Segmentation masks logits for all queries. See also
+            [`~ConditionalDETRFeatureExtractor.post_process_segmentation`] or
+            [`~ConditionalDETRFeatureExtractor.post_process_panoptic`] to evaluate instance and panoptic segmentation
+            masks respectively.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
@@ -326,7 +327,6 @@ def replace_batch_norm(m, name=""):
         replace_batch_norm(ch, n)
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrTimmConvEncoder with Detr->ConditionalDETR
 class ConditionalDETRTimmConvEncoder(nn.Module):
     """
     Convolutional encoder (backbone) from the timm library.
@@ -1581,7 +1581,6 @@ class ConditionalDETRModel(ConditionalDETRPreTrainedModel):
     """,
     CONDITIONAL_DETR_START_DOCSTRING,
 )
-# Copied from transformers.models.detr.modeling_detr.DetrForObjectDetection with DETR->CONDITIONAL_DETR,Detr->ConditionalDETR,detr->conditional_detr,facebook/detr-resnet-50->Atten4Vis/ConditionalDETR
 class ConditionalDETRForObjectDetection(ConditionalDETRPreTrainedModel):
     def __init__(self, config: ConditionalDETRConfig):
         super().__init__(config)
@@ -1670,7 +1669,7 @@ class ConditionalDETRForObjectDetection(ConditionalDETRPreTrainedModel):
 
         # class logits + predicted bounding boxes
         logits = self.class_labels_classifier(sequence_output)
-
+        
         reference = outputs.reference_points if return_dict else outputs[-1]
         reference_before_sigmoid = inverse_sigmoid(reference).transpose(0, 1)
         outputs_coords = []
@@ -1755,7 +1754,6 @@ class ConditionalDETRForObjectDetection(ConditionalDETRPreTrainedModel):
     """,
     CONDITIONAL_DETR_START_DOCSTRING,
 )
-# Copied from transformers.models.detr.modeling_detr.DetrForSegmentation with DETR->CONDITIONAL_DETR,Detr->ConditionalDETR,detr->conditional_detr,facebook/detr-resnet-50->Atten4Vis/ConditionalDETR
 class ConditionalDETRForSegmentation(ConditionalDETRPreTrainedModel):
     def __init__(self, config: ConditionalDETRConfig):
         super().__init__(config)
@@ -1807,22 +1805,40 @@ class ConditionalDETRForSegmentation(ConditionalDETRPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ConditionalDETRFeatureExtractor, ConditionalDETRForSegmentation
-        >>> from PIL import Image
+        >>> import io
         >>> import requests
+        >>> from PIL import Image
+        >>> import torch
+        >>> import numpy
+
+        >>> from transformers import ConditionalDETRFeatureExtractor, ConditionalDETRForSegmentation
+        >>> from transformers.models.conditional_detr.feature_extraction_conditional_detr import rgb_to_id
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ConditionalDETRFeatureExtractor.from_pretrained("Atten4Vis/ConditionalDETR-panoptic")
-        >>> model = ConditionalDETRForSegmentation.from_pretrained("Atten4Vis/ConditionalDETR-panoptic")
+        >>> feature_extractor = ConditionalDETRFeatureExtractor.from_pretrained(
+        ...     "facebook/conditional_detr-resnet-50-panoptic"
+        ... )
+        >>> model = ConditionalDETRForSegmentation.from_pretrained("facebook/conditional_detr-resnet-50-panoptic")
 
+        >>> # prepare image for the model
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
+
+        >>> # forward pass
         >>> outputs = model(**inputs)
-        >>> # model predicts COCO classes, bounding boxes, and masks
-        >>> logits = outputs.logits
-        >>> bboxes = outputs.pred_boxes
-        >>> masks = outputs.pred_masks
+
+        >>> # use the `post_process_panoptic` method of `ConditionalDETRFeatureExtractor` to convert to COCO format
+        >>> processed_sizes = torch.as_tensor(inputs["pixel_values"].shape[-2:]).unsqueeze(0)
+        >>> result = feature_extractor.post_process_panoptic(outputs, processed_sizes)[0]
+
+        >>> # the segmentation is stored in a special-format png
+        >>> panoptic_seg = Image.open(io.BytesIO(result["png_string"]))
+        >>> panoptic_seg = numpy.array(panoptic_seg, dtype=numpy.uint8)
+        >>> # retrieve the ids corresponding to each mask
+        >>> panoptic_seg_id = rgb_to_id(panoptic_seg)
+        >>> panoptic_seg_id.shape
+        (800, 1066)
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1903,7 +1919,9 @@ class ConditionalDETRForSegmentation(ConditionalDETRPreTrainedModel):
 
         seg_masks = self.mask_head(projected_feature_map, bbox_mask, [features[2][0], features[1][0], features[0][0]])
 
-        pred_masks = seg_masks.view(batch_size, self.conditional_detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])
+        pred_masks = seg_masks.view(
+            batch_size, self.conditional_detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1]
+        )
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
@@ -1985,7 +2003,8 @@ class ConditionalDETRMaskHeadSmallConv(nn.Module):
 
         if dim % 8 != 0:
             raise ValueError(
-                "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in GroupNorm is set to 8"
+                "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in"
+                " GroupNorm is set to 8"
             )
 
         inter_dims = [dim, context_dim // 2, context_dim // 4, context_dim // 8, context_dim // 16, context_dim // 64]
@@ -2077,7 +2096,7 @@ class ConditionalDETRMHAttentionMap(nn.Module):
         weights = torch.einsum("bqnc,bnchw->bqnhw", queries_per_head * self.normalize_fact, keys_per_head)
 
         if mask is not None:
-            weights.masked_fill_(mask.unsqueeze(1).unsqueeze(1), float("-inf"))
+            weights.masked_fill_(mask.unsqueeze(1).unsqueeze(1), torch.finfo(weights.dtype).min)
         weights = nn.functional.softmax(weights.flatten(2), dim=-1).view(weights.size())
         weights = self.dropout(weights)
         return weights
