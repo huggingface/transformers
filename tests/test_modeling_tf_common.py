@@ -204,6 +204,7 @@ class TFModelTesterMixin:
                 batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
                 inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, height, width), dtype=tf.int32)
             elif model_class.__name__.endswith("ForCTC"):
+                # When we have enough CTC models for an AutoClass, we should use their mapping instead of name checks
                 inputs_dict["labels"] = tf.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
                 )
