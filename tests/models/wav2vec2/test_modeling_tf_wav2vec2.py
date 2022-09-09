@@ -341,6 +341,10 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_dataset_conversion(self):
         pass
 
+    @unittest.skip(reason="Training goes OOM and crashes with the default options!")
+    def test_keras_fit(self):
+        pass
+
 
 @require_tf
 class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
@@ -461,6 +465,10 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Dataset conversion goes OOM and crashes with the default options!")
     def test_dataset_conversion(self):
+        pass
+
+    @unittest.skip(reason="Training goes OOM and crashes with the default options!")
+    def test_keras_fit(self):
         pass
 
 
