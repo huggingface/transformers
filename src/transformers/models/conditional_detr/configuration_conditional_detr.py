@@ -116,7 +116,7 @@ class ConditionalDETRConfig(PretrainedConfig):
     ```python
     >>> from transformers import ConditionalDETRModel, ConditionalDETRConfig
 
-    >>> # Initializing a CONDITIONAL_DETR DepuMeng/conditional_detr_resnet50 style configuration
+    >>> # Initializing a Conditional DETR microsoft/conditional-detr-resnet-50 style configuration
     >>> configuration = ConditionalDETRConfig()
 
     >>> # Initializing a model from the DepuMeng/conditional_detr_resnet50 style configuration
