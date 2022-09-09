@@ -337,10 +337,9 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
 
-    #
-    # @skip(reason="Dataset conversion crashes with the default options!")
-    # def test_dataset_conversion(self):
-    #     pass
+    @unittest.skip(reason="Dataset conversion goes OOM and crashes with the default options!")
+    def test_dataset_conversion(self):
+        pass
 
 
 @require_tf
@@ -459,6 +458,10 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
+
+    @unittest.skip(reason="Dataset conversion goes OOM and crashes with the default options!")
+    def test_dataset_conversion(self):
+        pass
 
 
 @require_tf
