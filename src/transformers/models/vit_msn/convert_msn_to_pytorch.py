@@ -145,6 +145,7 @@ def rename_key(dct, old, new):
 
 def convert_vit_msn_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     config = ViTMSNConfig()
+    config.num_labels = 1000
 
     if "s16" in checkpoint_url:
         config.hidden_size = 384
@@ -166,7 +167,7 @@ def convert_vit_msn_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.num_attention_heads = 16
         config.hidden_dropout_prob = 0.1
 
-    model = ViTMSNModel(config, add_pooling_layer=False)
+    model = ViTMSNModel(config)
 
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu")["target_encoder"]
 

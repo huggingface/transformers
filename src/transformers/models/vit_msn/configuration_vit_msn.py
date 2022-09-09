@@ -32,7 +32,7 @@ class ViTMSNConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ViTMSNModel`]. It is used to instantiate an ViT
     MSN model according to the specified arguments, defining the model architecture. Instantiating a configuration with
     the defaults will yield a similar configuration to that of the ViT
-    [facebook/vit-msn-base](https://huggingface.co/facebook/vit-msn-base) architecture.
+    [facebook/vit_msn_base](https://huggingface.co/facebook/vit_msn_base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

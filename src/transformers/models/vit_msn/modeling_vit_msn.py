@@ -545,9 +545,9 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-msn-base")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-msn-small")
         >>> with torch.no_grad():
-        ...     model = ViTMSNModel.from_pretrained("facebook/vit-msn-base")
+        ...     model = ViTMSNModel.from_pretrained("facebook/vit-msn-small")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -584,7 +584,7 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         sequence_output = self.layernorm(sequence_output)
 
         if not return_dict:
-            head_outputs = (sequence_output) 
+            head_outputs = sequence_output
             return head_outputs + encoder_outputs[1:]
 
         return BaseModelOutput(
@@ -631,25 +631,14 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, ViTMSNForImageClassification
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-msn-base")
-        >>> model = ViTMSNForImageClassification.from_pretrained("facebook/vit-msn-base")
-
-        >>> inputs = feature_extractor(images=image, return_tensors="pt")
-        >>> with torch.no_grad():
-        ...     logits = model(**inputs).logits
-
-        >>> # model predicts one of the 1000 ImageNet classes
-        >>> predicted_label = logits.argmax(-1).item()
-        >>> print(model.config.id2label[predicted_label])
-        """
+        >>> from transformers import AutoFeatureExtractor, ViTMSNForImageClassification >>> import torch >>> from PIL
+        import Image >>> import requests >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg" >>> image =
+        Image.open(requests.get(url, stream=True).raw) >>> feature_extractor =
+        AutoFeatureExtractor.from_pretrained("facebook/vit-msn-small") >>> model =
+        ViTMSNForImageClassification.from_pretrained("facebook/vit-msn-small") >>> inputs =
+        feature_extractor(images=image, return_tensors="pt") >>> with torch.no_grad(): ... logits =
+        model(**inputs).logits >>> # model predicts one of the 1000 ImageNet classes >>> predicted_label =
+        logits.argmax(-1).item() >>> print(model.config.id2label[predicted_label])"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.vit(

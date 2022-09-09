@@ -4454,7 +4454,7 @@ if TYPE_CHECKING:
             ViTMAEModel,
             ViTMAEPreTrainedModel,
         )
-        from .models.vit_msn import VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST, ViTMSNModel, ViTMSNForImageClassification
+        from .models.vit_msn import VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST, ViTMSNForImageClassification, ViTMSNModel
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Wav2Vec2ForAudioFrameClassification,

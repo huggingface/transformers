@@ -31,7 +31,7 @@ else:
     _import_structure["modeling_vit_msn"] = [
         "VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ViTMSNModel",
-        "ViTMSNForImageClassification"
+        "ViTMSNForImageClassification",
     ]
 
 if TYPE_CHECKING:
@@ -43,7 +43,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_vit_msn import VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST, ViTMSNModel, ViTMSNForImageClassification
+        from .modeling_vit_msn import VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST, ViTMSNForImageClassification, ViTMSNModel
 
 else:
     import sys
