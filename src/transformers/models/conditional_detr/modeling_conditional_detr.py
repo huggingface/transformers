@@ -1695,7 +1695,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
 
         # class logits + predicted bounding boxes
         logits = self.class_labels_classifier(sequence_output)
-
+        
         reference = outputs.reference_points if return_dict else outputs[-1]
         reference_before_sigmoid = inverse_sigmoid(reference).transpose(0, 1)
         outputs_coords = []
