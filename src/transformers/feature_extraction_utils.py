@@ -421,9 +421,9 @@ class FeatureExtractionMixin(PushToHubMixin):
                 text = reader.read()
             feature_extractor_dict = json.loads(text)
 
-        except json.JSONDecodeError:
+        except json.JSONDecodeError as e:
             raise EnvironmentError(
-                f"It looks like the config file at '{resolved_feature_extractor_file}' is not a valid JSON file."
+                f"It looks like there was a problem with the config file at '{resolved_feature_extractor_file}': {e.msg}."
             )
 
         if is_local:
