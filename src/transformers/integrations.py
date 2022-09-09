@@ -19,6 +19,7 @@ import importlib.util
 import json
 import numbers
 import os
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -1027,6 +1028,7 @@ class NeptuneCallback(TrainerCallback):
         self._force_reset_monitoring_run = False
         self._init_run_kwargs = {"api_token": api_token, "project": project, "name": name, **neptune_run_kwargs}
 
+        self._volatile_checkpoints_dir = None
         self._should_upload_checkpoint = self._log_checkpoints is not None
         self._recent_checkpoint_path = None
 
@@ -1116,15 +1118,32 @@ class NeptuneCallback(TrainerCallback):
         if state and hasattr(state, "trial_params") and state.trial_params is not None:
             self._metadata_namespace[NeptuneCallback.trial_params_key] = state.trial_params
 
-    def _log_model_checkpoint(self, path: str):
-        self._metadata_namespace[self._target_checkpoints_namespace].upload_files(path)
+    def _log_model_checkpoint(self, source_directory: str, checkpoint: str):
+        target_path = relative_path = os.path.join(source_directory, checkpoint)
+
+        if self._volatile_checkpoints_dir is not None:
+            consistent_checkpoint_path = os.path.join(self._volatile_checkpoints_dir, checkpoint)
+            try:
+                shutil.copytree(relative_path, os.path.join(consistent_checkpoint_path, relative_path))
+                target_path = consistent_checkpoint_path
+            except IOError as e:
+                logger.warning(
+                    "NeptuneCallback was unable to made a copy of checkpoint due to I/O exception: '{}'."
+                    "Could fail trying to upload.".format(e)
+                )
+
+        self._metadata_namespace[self._target_checkpoints_namespace].upload_files(target_path)
 
         if self._should_clean_recently_uploaded_checkpoint and self._recent_checkpoint_path is not None:
             self._metadata_namespace[self._target_checkpoints_namespace].delete_files(self._recent_checkpoint_path)
 
-        self._recent_checkpoint_path = path
+        self._recent_checkpoint_path = relative_path
 
     def on_init_end(self, args, state, control, **kwargs):
+        self._volatile_checkpoints_dir = None
+        if self._log_checkpoints and (args.overwrite_output_dir or args.save_total_limit is not None):
+            self._volatile_checkpoints_dir = tempfile.TemporaryDirectory().name
+
         if self._log_checkpoints == "best" and not args.load_best_model_at_end:
             raise ValueError("To save the best model checkpoint, the load_best_model_at_end argument must be enabled.")
 
@@ -1147,12 +1166,14 @@ class NeptuneCallback(TrainerCallback):
         self._stop_run_if_exists()
 
     def __del__(self):
+        if self._volatile_checkpoints_dir is not None:
+            shutil.rmtree(self._volatile_checkpoints_dir, ignore_errors=True)
+
         self._stop_run_if_exists()
 
     def on_save(self, args, state, control, **kwargs):
         if self._should_upload_checkpoint:
-            checkpoint_path = os.path.join(args.output_dir, f"checkpoint-{state.global_step}")
-            self._log_model_checkpoint(checkpoint_path)
+            self._log_model_checkpoint(args.output_dir, f"checkpoint-{state.global_step}")
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
         if self._log_checkpoints == "best":
