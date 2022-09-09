@@ -177,3 +177,54 @@ At this point, only three steps remain:
 For a more in-depth example of how to fine-tune a model for image classification, take a look at the corresponding [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification.ipynb).
 
 </Tip>
+
+## Inference
+
+Great, now that you've finetuned a model, you can use it for inference!
+
+Load an image you'd like to run inference on:
+
+```py
+>>> from datasets import load_dataset
+
+>>> dataset = load_dataset("Bingsu/Cat_and_Dog", split="train")
+>>> image = dataset["image"][0]
+>>> image
+```
+
+<frameworkcontent>
+<pt>
+Load a feature extractor to preprocess the image and return the `input` as PyTorch tensors (you can use the model you just finetuned or a pretrained model for image classification):
+
+```py
+>>> from transformers import AutoFeatureExtractor
+
+>>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
+>>> inputs = feature_extractor(image, return_tensors="pt")
+```
+
+Pass your inputs to the model and return the logits:
+
+```py
+>>> from transformers import AutoModelForImageClassification
+
+>>> model = AutoModelForImageClassification.from_pretrained("google/vit-base-patch16-224")
+>>> with torch.no_grad():
+...    logits = model(**inputs).logits
+```
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/image-classification-inference.png" alt="image of a tabby cat"/>
+</div>
+
+Get the predicted label with the highest probability, and use the model's `id2label` mapping to convert it to a label:
+
+```py
+>>> import torch
+
+>>> predicted_label = logits.argmax(-1).item()
+>>> model.config.id2label[predicted_label]
+'tabby, tabby cat'
+```
+</pt>
+</frameworkcontent>
