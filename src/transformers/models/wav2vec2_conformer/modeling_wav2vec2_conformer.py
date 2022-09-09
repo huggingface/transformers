@@ -1483,7 +1483,7 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
         >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2)
         >>> mask_time_indices = torch.tensor(mask_time_indices, device=input_values.device, dtype=torch.long)
-        
+
         >>> # compute negative indices
         >>> sampled_negative_indices = _sample_negative_indices((batch_size, sequence_length), model.config.num_negatives, mask_time_indices)
         >>> sampled_negative_indices = torch.tensor(sampled_negative_indices , device=input_values.device, dtype=torch.long)
