@@ -119,7 +119,7 @@ class ConditionalDETRConfig(PretrainedConfig):
     >>> # Initializing a Conditional DETR microsoft/conditional-detr-resnet-50 style configuration
     >>> configuration = ConditionalDETRConfig()
 
-    >>> # Initializing a model from the DepuMeng/conditional_detr_resnet50 style configuration
+    >>> # Initializing a model from the microsoft/conditional-detr-resnet-50 style configuration
     >>> model = ConditionalDETRModel(configuration)
 
     >>> # Accessing the model configuration
