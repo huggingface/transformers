@@ -1097,12 +1097,12 @@ class ErnieForCausalLM(ErniePreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
-    # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.__init__ with Bert->Ernie,bert->ernie
+    # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.__init__ with BertLMHeadModel->ErnieForCausalLM,Bert->Ernie,bert->ernie
     def __init__(self, config):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `ErnieLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `ErnieForCausalLM` as a standalone, add `is_decoder=True.`")
 
         self.ernie = ErnieModel(config, add_pooling_layer=False)
         self.cls = ErnieOnlyMLMHead(config)
