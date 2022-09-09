@@ -57,7 +57,7 @@
         title: Summarization
       - local: tasks/multiple_choice
         title: Multiple choice
-      title: Task guides      
+      title: Task guides
       isExpanded: false
     title: Natural Language Processing
   - sections:
