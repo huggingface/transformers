@@ -212,7 +212,9 @@ Load a feature extractor to preprocess the audio file and return the `input` as 
 ```py
 >>> from transformers import AutoFeatureExtractor
 
->>> feature_extractor = AutoFeatureExtractor.from_pretrained("ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition")
+>>> feature_extractor = AutoFeatureExtractor.from_pretrained(
+...     "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
+... )
 >>> inputs = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
 ```
 
@@ -221,9 +223,11 @@ Pass your inputs to the model and return the logits:
 ```py
 >>> from transformers import AutoModelForAudioClassification
 
->>> model = AutoModelForAudioClassification.from_pretrained("ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition")
+>>> model = AutoModelForAudioClassification.from_pretrained(
+...     "ehcalabres/wav2vec2-lg-xlsr-en-speech-emotion-recognition"
+... )
 >>> with torch.no_grad():
-...    logits = model(**inputs).logits
+...     logits = model(**inputs).logits
 ```
 
 Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a label:

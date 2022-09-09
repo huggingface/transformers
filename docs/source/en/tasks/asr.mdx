@@ -257,7 +257,7 @@ Pass your inputs to the model and return the logits:
 
 >>> model = AutoModelForCTC.from_pretrained("facebook/wav2vec2-base-960h")
 >>> with torch.no_grad():
-...    logits = model(**inputs).logits
+...     logits = model(**inputs).logits
 ```
 
 Get the predicted `input_ids` with the highest probability, and use the processor to decode the predicted `input_ids` back into text:
