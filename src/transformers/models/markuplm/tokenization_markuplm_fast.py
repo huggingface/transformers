@@ -205,6 +205,12 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             only_label_first_subword=only_label_first_subword,
             **kwargs,
         )
+        if trim_offsets:
+            # Not implemented yet, because we need to chain two post processors which is not possible yet
+            # We need to wait for https://github.com/huggingface/tokenizers/pull/1005
+            # With `trim_offsets=False` we don't need to do add `processors.ByteLevel(trim_offsets=False)` 
+            # because it's not doing anything
+            raise NotImplementedError("`trim_offsets=True` is not implemented for MarkupLMTokenizerFast. Please set it to False.")
 
         self.tags_dict = tags_dict
 
@@ -231,10 +237,6 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
 
             if state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
                 state["add_prefix_space"] = add_prefix_space
-                changes_to_apply = True
-
-            if state.get("trim_offsets", trim_offsets) != trim_offsets:
-                state["trim_offsets"] = trim_offsets
                 changes_to_apply = True
 
             if changes_to_apply:
