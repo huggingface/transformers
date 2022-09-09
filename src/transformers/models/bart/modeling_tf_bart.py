@@ -134,7 +134,8 @@ class TFBartLearnedPositionalEmbedding(tf.keras.layers.Embedding):
             position_ids = tf.range(seq_len, delta=1, name="range")
             position_ids += past_key_values_length
 
-        return super().call(position_ids + tf.constant(self.offset, dtype=position_ids.dtype))
+        offset_dtype = position_ids.dtype if isinstance(position_ids, tf.Tensor) else tf.int32
+        return super().call(position_ids + tf.constant(self.offset, dtype=offset_dtype))
 
 
 class TFBartAttention(tf.keras.layers.Layer):
