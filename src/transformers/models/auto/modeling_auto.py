@@ -459,6 +459,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         # Model for Object Detection mapping
         ("conditional_detr", "ConditionalDetrForObjectDetection"),
         ("deformable_detr", "DeformableDetrForObjectDetection"),
+        ("conditional_detr", "ConditionalDETRForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),
     ]

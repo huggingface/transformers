@@ -3553,6 +3553,13 @@ if TYPE_CHECKING:
             DeformableDetrModel,
             DeformableDetrPreTrainedModel,
         )
+        from .models.conditional_detr import (
+            CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConditionalDETRForObjectDetection,
+            ConditionalDETRForSegmentation,
+            ConditionalDETRModel,
+            ConditionalDETRPreTrainedModel,
+        )
         from .models.detr import (
             DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             DetrForObjectDetection,

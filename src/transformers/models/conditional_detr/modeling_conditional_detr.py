@@ -502,7 +502,6 @@ def gen_sine_position_embeddings(pos_tensor):
     pos = torch.cat((pos_y, pos_x), dim=2)
     return pos
 
-
 def inverse_sigmoid(x, eps=1e-5):
     x = x.clamp(min=0, max=1)
     x1 = x.clamp(min=eps)
@@ -679,7 +678,6 @@ class ConditionalDetrAttention(nn.Module):
 
     def _qk_shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
     def _v_shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.v_head_dim).transpose(1, 2).contiguous()
 
