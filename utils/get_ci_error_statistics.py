@@ -26,7 +26,7 @@ def get_artifacts_links(worflow_run_id):
             artifacts.update({artifact["name"]: artifact["archive_download_url"] for artifact in result["artifacts"]})
 
         return artifacts
-    except Exception as e:
+    except Exception:
         print("Unknown error, could not fetch links.", e)
 
     return {}
@@ -175,7 +175,7 @@ def make_github_table_per_model(reduced_by_model):
         count = reduced_by_model[model]["count"]
         try:
             error, _count = list(reduced_by_model[model]["errors"].items())[0]
-        except Exception as e:
+        except Exception:
             pass
         line = f"| {model} | {count} | {error[:60]} | {_count} |"
         lines.append(line)
