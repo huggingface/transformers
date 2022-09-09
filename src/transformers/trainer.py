@@ -1123,6 +1123,14 @@ class Trainer:
                 optimizer_kwargs.update(adam_kwargs)
             except ImportError:
                 raise ValueError("Trainer tried to instantiate bnb Adam8bit but bnb is not installed!")
+        elif args.optim == OptimizersNames.ANYPRECISION_ADAMW:
+            try:
+                from torchdistx.optimizers.anyprecision_optimizer import AnyPrecisionAdamW
+
+                optimizer_cls = AnyPrecisionAdamW
+                optimizer_kwargs.update(adam_kwargs)
+            except ImportError:
+                raise ValueError("Please install https://github.com/pytorch/torchdistx")
         elif args.optim == OptimizerNames.SGD:
             optimizer_cls = torch.optim.SGD
         elif args.optim == OptimizerNames.ADAGRAD:

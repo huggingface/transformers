@@ -113,6 +113,7 @@ class OptimizerNames(ExplicitEnum):
     ADAMW_APEX_FUSED = "adamw_apex_fused"
     ADAFACTOR = "adafactor"
     ADAMW_BNB = "adamw_bnb_8bit"
+    ANYPRECISION_ADAMW = "anyprecision_adamw"
     SGD = "sgd"
     ADAGRAD = "adagrad"
 
@@ -401,7 +402,7 @@ class TrainingArguments:
 
             The options should be separated by whitespaces.
         optim (`str` or [`training_args.OptimizerNames`], *optional*, defaults to `"adamw_hf"`):
-            The optimizer to use: adamw_hf, adamw_torch, adamw_apex_fused, or adafactor.
+            The optimizer to use: adamw_hf, adamw_torch, adamw_apex_fused, anyprecision_adamw or adafactor.
         adafactor (`bool`, *optional*, defaults to `False`):
             This argument is deprecated. Use `--optim adafactor` instead.
         group_by_length (`bool`, *optional*, defaults to `False`):
