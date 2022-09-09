@@ -2347,7 +2347,6 @@ class ConditionalDETRLoss(nn.Module):
 
 
 # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead with Detr->ConditionalDETR,detr->conditional_detr
 class ConditionalDETRMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
