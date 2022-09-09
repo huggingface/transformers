@@ -237,6 +237,8 @@
         title: ELECTRA
       - local: model_doc/encoder-decoder
         title: Encoder Decoder Models
+      - local: model_doc/ernie
+        title: ERNIE
       - local: model_doc/flaubert
         title: FlauBERT
       - local: model_doc/fnet
