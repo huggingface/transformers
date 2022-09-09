@@ -27,7 +27,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "DeppMeng/ConditionalDETR": "https://huggingface.co/DeppMeng/ConditionalDETR/resolve/main/config.json",
+    "DepuMeng/ConditionalDETR": "https://huggingface.co/DepuMeng/conditional_detr_resnet50/resolve/main/config.json",
 }
 
 
@@ -36,7 +36,7 @@ class ConditionalDETRConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`ConditionalDETRModel`]. It is used to instantiate
     a CONDITIONAL_DETR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the CONDITIONAL_DETR
-    [DeppMeng/ConditionalDETR](https://huggingface.co/DeppMeng/ConditionalDETR) architecture.
+    [DepuMeng/ConditionalDETR](https://huggingface.co/DepuMeng/ConditionalDETR) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -114,10 +114,10 @@ class ConditionalDETRConfig(PretrainedConfig):
     ```python
     >>> from transformers import ConditionalDETRModel, ConditionalDETRConfig
 
-    >>> # Initializing a CONDITIONAL_DETR DeppMeng/ConditionalDETR style configuration
+    >>> # Initializing a CONDITIONAL_DETR DepuMeng/ConditionalDETR style configuration
     >>> configuration = ConditionalDETRConfig()
 
-    >>> # Initializing a model from the DeppMeng/ConditionalDETR style configuration
+    >>> # Initializing a model from the DepuMeng/ConditionalDETR style configuration
     >>> model = ConditionalDETRModel(configuration)
 
     >>> # Accessing the model configuration
