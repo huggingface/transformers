@@ -877,7 +877,7 @@ class IBertForMaskedLM(IBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="kssteven/ibert-roberta-base",
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
         mask="<mask>",
@@ -986,7 +986,7 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(IBERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="kssteven/ibert-roberta-large-mnli",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )

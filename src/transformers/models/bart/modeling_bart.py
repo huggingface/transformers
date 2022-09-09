@@ -1461,7 +1461,11 @@ class BartForSequenceClassification(BartPretrainedModel):
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
+<<<<<<< HEAD
+        checkpoint="moussaKam/barthez-sentiment-classification",
+=======
         checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
+>>>>>>> bb6f6d53386bf2340eead6a8f9320ce61add3e96
         output_type=Seq2SeqSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
@@ -1587,7 +1591,11 @@ class BartForQuestionAnswering(BartPretrainedModel):
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
+<<<<<<< HEAD
+        checkpoint="phiyodr/bart-large-finetuned-squad2",
+=======
         checkpoint=_CHECKPOINT_FOR_QA,
+>>>>>>> bb6f6d53386bf2340eead6a8f9320ce61add3e96
         output_type=Seq2SeqQuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_loss=_QA_EXPECTED_LOSS,

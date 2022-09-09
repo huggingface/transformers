@@ -88,4 +88,8 @@ src/transformers/models/wav2vec2/tokenization_wav2vec2.py
 src/transformers/models/wav2vec2_conformer/modeling_wav2vec2_conformer.py
 src/transformers/models/wav2vec2_with_lm/processing_wav2vec2_with_lm.py
 src/transformers/models/wavlm/modeling_wavlm.py
+<<<<<<< HEAD
+src/transformers/models/ibert/modeling_ibert.py
+=======
 src/transformers/models/yolos/modeling_yolos.py
+>>>>>>> bb6f6d53386bf2340eead6a8f9320ce61add3e96
