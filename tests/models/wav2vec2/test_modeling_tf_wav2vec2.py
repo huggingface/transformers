@@ -336,6 +336,7 @@ class TFWav2Vec2ModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_model_from_pretrained(self):
         model = TFWav2Vec2Model.from_pretrained("facebook/wav2vec2-base-960h")
         self.assertIsNotNone(model)
+
     #
     # @skip(reason="Dataset conversion crashes with the default options!")
     # def test_dataset_conversion(self):
