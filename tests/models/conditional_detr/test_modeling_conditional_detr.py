@@ -19,7 +19,7 @@ import inspect
 import math
 import unittest
 
-from transformers import ConditionalDETRConfig, is_timm_available, is_vision_available
+from transformers import ConditionalDetrConfig, is_timm_available, is_vision_available
 from transformers.testing_utils import require_timm, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
@@ -31,16 +31,16 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 if is_timm_available():
     import torch
 
-    from transformers import ConditionalDETRForObjectDetection, ConditionalDETRForSegmentation, ConditionalDETRModel
+    from transformers import ConditionalDetrForObjectDetection, ConditionalDetrForSegmentation, ConditionalDetrModel
 
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ConditionalDETRFeatureExtractor
+    from transformers import ConditionalDetrFeatureExtractor
 
 
-class ConditionalDETRModelTester:
+class ConditionalDetrModelTester:
     def __init__(
         self,
         parent,
@@ -105,7 +105,7 @@ class ConditionalDETRModelTester:
         return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
-        return ConditionalDETRConfig(
+        return ConditionalDetrConfig(
             d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
@@ -125,7 +125,7 @@ class ConditionalDETRModelTester:
         return config, inputs_dict
 
     def create_and_check_conditional_detr_model(self, config, pixel_values, pixel_mask, labels):
-        model = ConditionalDETRModel(config=config)
+        model = ConditionalDetrModel(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -137,7 +137,7 @@ class ConditionalDETRModelTester:
         )
 
     def create_and_check_conditional_detr_object_detection_head_model(self, config, pixel_values, pixel_mask, labels):
-        model = ConditionalDETRForObjectDetection(config=config)
+        model = ConditionalDetrForObjectDetection(config=config)
         model.to(torch_device)
         model.eval()
 
@@ -155,12 +155,12 @@ class ConditionalDETRModelTester:
 
 
 @require_timm
-class ConditionalDETRModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class ConditionalDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
-            ConditionalDETRModel,
-            ConditionalDETRForObjectDetection,
-            ConditionalDETRForSegmentation,
+            ConditionalDetrModel,
+            ConditionalDetrForObjectDetection,
+            ConditionalDetrForSegmentation,
         )
         if is_timm_available()
         else ()
@@ -176,7 +176,7 @@ class ConditionalDETRModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ in ["ConditionalDETRForObjectDetection", "ConditionalDETRForSegmentation"]:
+            if model_class.__name__ in ["ConditionalDetrForObjectDetection", "ConditionalDetrForSegmentation"]:
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -199,8 +199,8 @@ class ConditionalDETRModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
         return inputs_dict
 
     def setUp(self):
-        self.model_tester = ConditionalDETRModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ConditionalDETRConfig, has_text_modality=False)
+        self.model_tester = ConditionalDetrModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ConditionalDetrConfig, has_text_modality=False)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -279,10 +279,10 @@ class ConditionalDETRModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
                 # Object Detection model returns pred_logits and pred_boxes
-                if model_class.__name__ == "ConditionalDETRForObjectDetection":
+                if model_class.__name__ == "ConditionalDetrForObjectDetection":
                     correct_outlen += 1
                 # Panoptic Segmentation model returns pred_logits, pred_boxes, pred_masks
-                if model_class.__name__ == "ConditionalDETRForSegmentation":
+                if model_class.__name__ == "ConditionalDetrForSegmentation":
                     correct_outlen += 2
                 if "past_key_values" in outputs:
                     correct_outlen += 1  # past_key_values have been returned
@@ -406,7 +406,7 @@ class ConditionalDETRModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if model_class.__name__ == "ConditionalDETRForObjectDetection":
+            if model_class.__name__ == "ConditionalDetrForObjectDetection":
                 expected_shape = (
                     self.model_tester.batch_size,
                     self.model_tester.num_queries,
@@ -452,17 +452,17 @@ def prepare_img():
 @require_timm
 @require_vision
 @slow
-class ConditionalDETRModelIntegrationTests(unittest.TestCase):
+class ConditionalDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (
-            ConditionalDETRFeatureExtractor.from_pretrained("Atten4Vis/ConditionalDETR")
+            ConditionalDetrFeatureExtractor.from_pretrained("Atten4Vis/ConditionalDETR")
             if is_vision_available()
             else None
         )
 
     def test_inference_no_head(self):
-        model = ConditionalDETRModel.from_pretrained("Atten4Vis/ConditionalDETR").to(torch_device)
+        model = ConditionalDetrModel.from_pretrained("Atten4Vis/ConditionalDETR").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -479,7 +479,7 @@ class ConditionalDETRModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
     def test_inference_object_detection_head(self):
-        model = ConditionalDETRForObjectDetection.from_pretrained("Atten4Vis/ConditionalDETR").to(torch_device)
+        model = ConditionalDetrForObjectDetection.from_pretrained("Atten4Vis/ConditionalDETR").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -505,7 +505,7 @@ class ConditionalDETRModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
     def test_inference_panoptic_segmentation_head(self):
-        model = ConditionalDETRForSegmentation.from_pretrained("Atten4Vis/ConditionalDETR-panoptic").to(torch_device)
+        model = ConditionalDetrForSegmentation.from_pretrained("Atten4Vis/ConditionalDETR-panoptic").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()

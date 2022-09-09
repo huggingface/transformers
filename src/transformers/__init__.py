@@ -172,7 +172,7 @@ _import_structure = {
         "CLIPVisionConfig",
     ],
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
-    "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDETRConfig"],
+    "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": [],
@@ -661,7 +661,7 @@ else:
     _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
-    _import_structure["models.conditional_detr"].append("ConditionalDETRFeatureExtractor")
+    _import_structure["models.conditional_detr"].append("ConditionalDetrFeatureExtractor")
     _import_structure["models.donut"].append("DonutFeatureExtractor")
     _import_structure["models.dpt"].append("DPTFeatureExtractor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor"])
@@ -713,10 +713,10 @@ else:
     _import_structure["models.conditional_detr"].extend(
         [
             "CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ConditionalDETRForObjectDetection",
-            "ConditionalDETRForSegmentation",
-            "ConditionalDETRModel",
-            "ConditionalDETRPreTrainedModel",
+            "ConditionalDetrForObjectDetection",
+            "ConditionalDetrForSegmentation",
+            "ConditionalDetrModel",
+            "ConditionalDetrPreTrainedModel",
         ]
     )
 
@@ -3086,7 +3086,7 @@ if TYPE_CHECKING:
         CLIPVisionConfig,
     )
     from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
-    from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDETRConfig
+    from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
@@ -3510,7 +3510,7 @@ if TYPE_CHECKING:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor
-        from .models.conditional_detr import ConditionalDETRFeatureExtractor
+        from .models.conditional_detr import ConditionalDetrFeatureExtractor
         from .models.convnext import ConvNextFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
@@ -3548,10 +3548,10 @@ if TYPE_CHECKING:
         )
         from .models.conditional_detr import (
             CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ConditionalDETRForObjectDetection,
-            ConditionalDETRForSegmentation,
-            ConditionalDETRModel,
-            ConditionalDETRPreTrainedModel,
+            ConditionalDetrForObjectDetection,
+            ConditionalDetrForSegmentation,
+            ConditionalDetrModel,
+            ConditionalDetrPreTrainedModel,
         )
         from .models.detr import (
             DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
