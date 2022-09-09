@@ -203,6 +203,10 @@ class TFModelTesterMixin:
             elif model_class in get_values(TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING):
                 batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
                 inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, height, width), dtype=tf.int32)
+            elif model_class.__name__.endswith("ForCTC"):
+                inputs_dict["labels"] = tf.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
+                )
 
         return inputs_dict
 
