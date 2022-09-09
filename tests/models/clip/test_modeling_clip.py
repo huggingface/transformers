@@ -234,6 +234,13 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
             model = CLIPVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @slow
+    def test_model_with_projection_from_pretrained(self):
+        for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = CLIPVisionModel.from_pretrained(model_name, with_projection=True)
+            self.assertIsNotNone(model)
+            self.assertTrue(hasattr(model, "visual_projection"))
+
 
 class CLIPTextModelTester:
     def __init__(
@@ -380,6 +387,13 @@ class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = CLIPTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
+
+    @slow
+    def test_model_with_projection_from_pretrained(self):
+        for model_name in CLIP_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
+            model = CLIPTextModel.from_pretrained(model_name, with_projection=True)
+            self.assertIsNotNone(model)
+            self.assertTrue(hasattr(model, "text_projection"))
 
 
 class CLIPModelTester:
