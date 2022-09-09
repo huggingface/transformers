@@ -99,7 +99,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def get_question_nodes_and_xpaths(self):
         question = "what's his name?"
         nodes = ["hello world"]
-        xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"]
+        xpaths = ["/html/body/div/li[1]/div/span"]#, "/html/body/div/li[1]/div/span"]
 
         return question, nodes, xpaths
 
@@ -2198,7 +2198,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         tokenizer_p = MarkupLMTokenizer.from_pretrained("microsoft/markuplm-base")
         # no fast tokenizer for now
-        tokenizer_r = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base")
+        tokenizer_r = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base", from_slow=True)
 
         # There are 3 cases:
         # CASE 1: document image classification (training + inference), document image token classification (inference),

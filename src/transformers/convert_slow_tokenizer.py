@@ -1062,11 +1062,22 @@ class MarkupLMConverter(Converter):
 
         tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=ot.add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
+        '''
         tokenizer.post_processor = processors.RobertaProcessing(
             sep=(ot.sep_token, ot.sep_token_id),
             cls=(ot.cls_token, ot.cls_token_id),
             add_prefix_space=ot.add_prefix_space,
             trim_offsets=True,  # True by default on Roberta (historical)
+        )
+        '''
+
+        tokenizer.post_processor = processors.TemplateProcessing(
+            single="<s> $A </s>",
+            pair="<s> $A </s> $B </s>",
+            special_tokens=[
+                ("<s>", ot.convert_tokens_to_ids("<s>")),
+                ("</s>", ot.convert_tokens_to_ids("</s>")),
+            ],
         )
 
         return tokenizer
