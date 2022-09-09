@@ -208,7 +208,6 @@ class TFModelTesterMixin:
                 inputs_dict["labels"] = tf.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
                 )
-            breakpoint()
 
         return inputs_dict
 
