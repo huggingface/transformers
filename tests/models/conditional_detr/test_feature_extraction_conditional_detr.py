@@ -32,10 +32,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ConditionalDETRFeatureExtractor
+    from transformers import ConditionalDetrFeatureExtractor
 
 
-class ConditionalDETRFeatureExtractionTester(unittest.TestCase):
+class ConditionalDetrFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -74,7 +74,7 @@ class ConditionalDETRFeatureExtractionTester(unittest.TestCase):
 
     def get_expected_values(self, image_inputs, batched=False):
         """
-        This function computes the expected height and width when providing images to ConditionalDETRFeatureExtractor,
+        This function computes the expected height and width when providing images to ConditionalDetrFeatureExtractor,
         assuming do_resize is set to True with a scalar size.
         """
         if not batched:
@@ -106,12 +106,12 @@ class ConditionalDETRFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class ConditionalDETRFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class ConditionalDetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = ConditionalDETRFeatureExtractor if is_vision_available() else None
+    feature_extraction_class = ConditionalDetrFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = ConditionalDETRFeatureExtractionTester(self)
+        self.feature_extract_tester = ConditionalDetrFeatureExtractionTester(self)
 
     @property
     def feat_extract_dict(self):
@@ -253,7 +253,7 @@ class ConditionalDETRFeatureExtractionTest(FeatureExtractionSavingTestMixin, uni
         target = {"image_id": 39769, "annotations": target}
 
         # encode them
-        feature_extractor = ConditionalDETRFeatureExtractor.from_pretrained("Atten4Vis/ConditionalDETR")
+        feature_extractor = ConditionalDetrFeatureExtractor.from_pretrained("Atten4Vis/ConditionalDETR")
         encoding = feature_extractor(images=image, annotations=target, return_tensors="pt")
 
         # verify pixel values
@@ -300,7 +300,7 @@ class ConditionalDETRFeatureExtractionTest(FeatureExtractionSavingTestMixin, uni
 
         # encode them
         # TODO replace by .from_pretrained Atten4Vis/ConditionalDETR-panoptic
-        feature_extractor = ConditionalDETRFeatureExtractor(format="coco_panoptic")
+        feature_extractor = ConditionalDetrFeatureExtractor(format="coco_panoptic")
         encoding = feature_extractor(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
 
         # verify pixel values

@@ -26,10 +26,10 @@ from PIL import Image
 import requests
 from huggingface_hub import hf_hub_download
 from transformers import (
-    ConditionalDETRConfig,
-    ConditionalDETRFeatureExtractor,
-    ConditionalDETRForObjectDetection,
-    ConditionalDETRForSegmentation,
+    ConditionalDetrConfig,
+    ConditionalDetrFeatureExtractor,
+    ConditionalDetrForObjectDetection,
+    ConditionalDetrForSegmentation,
 )
 from transformers.utils import logging
 
@@ -226,7 +226,7 @@ def convert_conditional_detr_checkpoint(model_name, pytorch_dump_folder_path):
     """
 
     # load default config
-    config = ConditionalDETRConfig()
+    config = ConditionalDetrConfig()
     # set backbone and dilation attributes
     if "resnet101" in model_name:
         config.backbone = "resnet101"
@@ -246,7 +246,7 @@ def convert_conditional_detr_checkpoint(model_name, pytorch_dump_folder_path):
 
     # load feature extractor
     format = "coco_panoptic" if is_panoptic else "coco_detection"
-    feature_extractor = ConditionalDETRFeatureExtractor(format=format)
+    feature_extractor = ConditionalDetrFeatureExtractor(format=format)
 
     # prepare image
     img = prepare_img()
@@ -290,7 +290,7 @@ def convert_conditional_detr_checkpoint(model_name, pytorch_dump_folder_path):
                 val = state_dict.pop(key)
                 state_dict[prefix + key] = val
     # finally, create HuggingFace model and load state dict
-    model = ConditionalDETRForSegmentation(config) if is_panoptic else ConditionalDETRForObjectDetection(config)
+    model = ConditionalDetrForSegmentation(config) if is_panoptic else ConditionalDetrForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
     model.push_to_hub(repo_id=model_name, organization="DepuMeng", commit_message="Add model")

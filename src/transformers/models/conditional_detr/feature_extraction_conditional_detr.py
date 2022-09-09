@@ -119,7 +119,7 @@ def id_to_rgb(id_map):
     return color
 
 
-class ConditionalDETRFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a CONDITIONAL_DETR feature extractor.
 
@@ -431,11 +431,11 @@ class ConditionalDETRFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
             annotations (`Dict`, `List[Dict]`, *optional*):
                 The corresponding annotations in COCO format.
 
-                In case [`ConditionalDETRFeatureExtractor`] was initialized with `format = "coco_detection"`, the
+                In case [`ConditionalDetrFeatureExtractor`] was initialized with `format = "coco_detection"`, the
                 annotations for each image should have the following format: {'image_id': int, 'annotations':
                 [annotation]}, with the annotations being a list of COCO object annotations.
 
-                In case [`ConditionalDETRFeatureExtractor`] was initialized with `format = "coco_panoptic"`, the
+                In case [`ConditionalDetrFeatureExtractor`] was initialized with `format = "coco_panoptic"`, the
                 annotations for each image should have the following format: {'image_id': int, 'file_name': str,
                 'segments_info': [segment_info]} with segments_info being a list of COCO panoptic annotations.
 
@@ -445,7 +445,7 @@ class ConditionalDETRFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
             masks_path (`pathlib.Path`, *optional*):
                 Path to the directory containing the PNG files that store the class-agnostic image segmentations. Only
-                relevant in case [`ConditionalDETRFeatureExtractor`] was initialized with `format = "coco_panoptic"`.
+                relevant in case [`ConditionalDetrFeatureExtractor`] was initialized with `format = "coco_panoptic"`.
 
             pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
@@ -676,11 +676,11 @@ class ConditionalDETRFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
     # inspired by https://github.com/Atten4Vis/conditionalDETR/blob/master/models/conditional_detr.py#L258
     def post_process(self, outputs, target_sizes):
         """
-        Converts the output of [`ConditionalDETRForObjectDetection`] into the format expected by the COCO api. Only
+        Converts the output of [`ConditionalDetrForObjectDetection`] into the format expected by the COCO api. Only
         supports PyTorch.
 
         Args:
-            outputs ([`ConditionalDETRObjectDetectionOutput`]):
+            outputs ([`ConditionalDetrObjectDetectionOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
@@ -717,11 +717,11 @@ class ConditionalDETRFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
     def post_process_segmentation(self, outputs, target_sizes, threshold=0.9, mask_threshold=0.5):
         """
-        Converts the output of [`ConditionalDETRForSegmentation`] into image segmentation predictions. Only supports
+        Converts the output of [`ConditionalDetrForSegmentation`] into image segmentation predictions. Only supports
         PyTorch.
 
         Parameters:
-            outputs ([`ConditionalDETRSegmentationOutput`]):
+            outputs ([`ConditionalDetrSegmentationOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
                 Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction.
@@ -760,14 +760,14 @@ class ConditionalDETRFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L218
     def post_process_instance(self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5):
         """
-        Converts the output of [`ConditionalDETRForSegmentation`] into actual instance segmentation predictions. Only
+        Converts the output of [`ConditionalDetrForSegmentation`] into actual instance segmentation predictions. Only
         supports PyTorch.
 
         Args:
             results (`List[Dict]`):
-                Results list obtained by [`~ConditionalDETRFeatureExtractor.post_process`], to which "masks" results
+                Results list obtained by [`~ConditionalDetrFeatureExtractor.post_process`], to which "masks" results
                 will be added.
-            outputs ([`ConditionalDETRSegmentationOutput`]):
+            outputs ([`ConditionalDetrSegmentationOutput`]):
                 Raw outputs of the model.
             orig_target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
@@ -804,11 +804,11 @@ class ConditionalDETRFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
     # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L241
     def post_process_panoptic(self, outputs, processed_sizes, target_sizes=None, is_thing_map=None, threshold=0.85):
         """
-        Converts the output of [`ConditionalDETRForSegmentation`] into actual panoptic predictions. Only supports
+        Converts the output of [`ConditionalDetrForSegmentation`] into actual panoptic predictions. Only supports
         PyTorch.
 
         Parameters:
-            outputs ([`ConditionalDETRSegmentationOutput`]):
+            outputs ([`ConditionalDetrSegmentationOutput`]):
                 Raw outputs of the model.
             processed_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
                 Torch Tensor (or list) containing the size (h, w) of each image of the batch, i.e. the size after data

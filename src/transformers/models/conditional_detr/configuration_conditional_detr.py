@@ -33,9 +33,9 @@ CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class ConditionalDETRConfig(PretrainedConfig):
+class ConditionalDetrConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ConditionalDETRModel`]. It is used to instantiate
+    This is the configuration class to store the configuration of a [`ConditionalDetrModel`]. It is used to instantiate
     a Conditional DETR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Conditional DETR
     [microsoft/conditional-detr-resnet-50](https://huggingface.co/microsoft/conditional-detr-resnet-50) architecture.
@@ -48,7 +48,7 @@ class ConditionalDETRConfig(PretrainedConfig):
             The number of input channels.
         num_queries (`int`, *optional*, defaults to 100):
             Number of object queries, i.e. detection slots. This is the maximal number of objects
-            [`ConditionalDETRModel`] can detect in a single image. For COCO, we recommend 100 queries.
+            [`ConditionalDetrModel`] can detect in a single image. For COCO, we recommend 100 queries.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the layers.
         encoder_layers (`int`, *optional*, defaults to 6):
@@ -114,13 +114,13 @@ class ConditionalDETRConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import ConditionalDETRModel, ConditionalDETRConfig
+    >>> from transformers import ConditionalDetrModel, ConditionalDetrConfig
 
     >>> # Initializing a Conditional DETR microsoft/conditional-detr-resnet-50 style configuration
-    >>> configuration = ConditionalDETRConfig()
+    >>> configuration = ConditionalDetrConfig()
 
     >>> # Initializing a model from the microsoft/conditional-detr-resnet-50 style configuration
-    >>> model = ConditionalDETRModel(configuration)
+    >>> model = ConditionalDetrModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -214,7 +214,7 @@ class ConditionalDETRConfig(PretrainedConfig):
         return self.d_model
 
 
-class ConditionalDETROnnxConfig(OnnxConfig):
+class ConditionalDetrOnnxConfig(OnnxConfig):
 
     torch_onnx_minimum_version = version.parse("1.11")
 
