@@ -209,7 +209,7 @@ class CLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-    
+
     def test_model_with_projection(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
@@ -315,7 +315,7 @@ class CLIPTextModelTester:
             result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
-    
+
     def create_and_check_model_with_projection(self, config, input_ids, input_mask):
         model = CLIPTextModel(config=config, with_projection=True)
         model.to(torch_device)
@@ -352,6 +352,10 @@ class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_model_with_projection(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model_with_projection(*config_and_inputs)
 
     def test_training(self):
         pass
