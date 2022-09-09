@@ -269,15 +269,15 @@ conda install -c comet_ml -c anaconda -c conda-forge comet_ml
     conda install -c conda-forge neptune-client
     ```
 
-1. Import `NeptuneCallback`:
+2. Import `NeptuneCallback`:
 
     ```python
     from transformers.integrations import NeptuneCallback
     ```
 
-1. Enable Neptune logging in your script:
+3. Enable Neptune logging in your script:
 
-    - In your `TrainingArguments`, set the `report_to` argument to `"neptune"`:
+   In your `TrainingArguments`, set the `report_to` argument to `"neptune"`:
 
         ```python
         training_args = TrainingArguments(
@@ -293,7 +293,7 @@ conda install -c comet_ml -c anaconda -c conda-forge comet_ml
         )
         ```
     
-    - Alternatively, for more logging options, create a Neptune callback:
+   Alternatively, for more logging options, create a Neptune callback:
 
         ```python
         neptune_callback = NeptuneCallback()
@@ -326,7 +326,7 @@ conda install -c comet_ml -c anaconda -c conda-forge comet_ml
         )
         ```
 
-1. When you start the training with `trainer.train()`, your metadata will be logged in Neptune.
+4. When you start the training with `trainer.train()`, your metadata will be logged in Neptune.
 
 Although you can pass your **Neptune API token** and **project name** as arguments when creating the callback, the recommended way is to save them as environment variables:
 

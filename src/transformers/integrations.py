@@ -48,6 +48,10 @@ if _has_comet:
     except (ImportError, ValueError):
         _has_comet = False
 
+_has_neptune = importlib.util.find_spec("neptune") is not None
+if TYPE_CHECKING and _has_neptune:
+    from neptune.new.metadata_containers.run import Run
+
 from .trainer_callback import ProgressCallback, TrainerCallback  # noqa: E402
 from .trainer_utils import PREFIX_CHECKPOINT_DIR, BestRun, IntervalStrategy  # noqa: E402
 from .utils import ENV_VARS_TRUE_VALUES, is_torch_tpu_available  # noqa: E402
@@ -110,7 +114,7 @@ def is_fairscale_available():
 
 
 def is_neptune_available():
-    return importlib.util.find_spec("neptune") is not None
+    return _has_neptune
 
 
 def is_codecarbon_available():
@@ -931,6 +935,17 @@ class MLflowCallback(TrainerCallback):
             self._ml_flow.end_run()
 
 
+class NeptuneMissingConfiguration(Exception):
+    def __init__(self):
+        super().__init__(
+            """
+        ------ Unsupported ---- We were not able to create new runs. You provided a custom Neptune run to
+        `NeptuneCallback` with the `run` argument. For the integration to work fully, provide your `api_token` and
+        `project` by saving them as environment variables or passing them to the callback.
+        """
+        )
+
+
 class NeptuneCallback(TrainerCallback):
     """TrainerCallback that sends the logs to [Neptune](https://neptune.ai).
 
@@ -961,25 +976,12 @@ class NeptuneCallback(TrainerCallback):
             created.
     """
 
-    if TYPE_CHECKING and is_neptune_available():
-        from neptune.new.metadata_containers.run import Run
-
-    class MissingConfiguration(Exception):
-        def __init__(self):
-            super().__init__(
-                """
-            ------ Unsupported ---- We were not able to create new runs. You provided a custom Neptune run to
-            `NeptuneCallback` with the `run` argument. For the integration to work fully, provide your `api_token` and
-            `project` by saving them as environment variables or passing them to the callback.
-            """
-            )
-
-    INTEGRATION_VERSION_KEY = "source_code/integrations/transformers"
-    MODEL_PARAMETERS_KEY = "model_parameters"
-    TRIAL_NAME_KEY = "trial"
-    TRIAL_PARAMS_KEY = "trial_params"
-    TRAINER_PARAMETERS_KEY = "trainer_parameters"
-    FLAT_METRICS = {"train/epoch"}
+    integration_version_key = "source_code/integrations/transformers"
+    model_parameters_key = "model_parameters"
+    trial_name_key = "trial"
+    trial_params_key = "trial_params"
+    trainer_parameters_key = "trainer_parameters"
+    flat_metrics = {"train/epoch"}
 
     def __init__(
         self,
@@ -1019,7 +1021,7 @@ class NeptuneCallback(TrainerCallback):
         self._log_checkpoints = log_checkpoints
         self._initial_run: Optional[Run] = run
 
-        self._run: Optional[Run] = None
+        self._run = None
         self._is_monitoring_run = False
         self._run_id = None
         self._force_reset_monitoring_run = False
@@ -1051,14 +1053,17 @@ class NeptuneCallback(TrainerCallback):
             self._run = init_run(**self._init_run_kwargs, **additional_neptune_kwargs)
             self._run_id = self._run["sys/id"].fetch()
         except (NeptuneMissingProjectNameException, NeptuneMissingApiTokenException) as e:
-            raise NeptuneCallback.MissingConfiguration() from e
+            raise NeptuneMissingConfiguration() from e
+
+    def _use_initial_run(self):
+        self._run = self._initial_run
+        self._is_monitoring_run = True
+        self._run_id = self._run["sys/id"].fetch()
+        self._initial_run = None
 
     def _ensure_run_with_monitoring(self):
         if self._initial_run is not None:
-            self._run = self._initial_run
-            self._is_monitoring_run = True
-            self._run_id = self._run["sys/id"].fetch()
-            self._initial_run = None
+            self._use_initial_run()
         else:
             if not self._force_reset_monitoring_run and self._is_monitoring_run:
                 return
@@ -1072,10 +1077,7 @@ class NeptuneCallback(TrainerCallback):
 
     def _ensure_at_least_run_without_monitoring(self):
         if self._initial_run is not None:
-            self._should_reset_monitoring_run = False
-            self._run = self._initial_run
-            self._initial_run = None
-            self._run_id = self._run["sys/id"].fetch()
+            self._use_initial_run()
         else:
             if not self._run:
                 self._initialize_run(
@@ -1098,21 +1100,21 @@ class NeptuneCallback(TrainerCallback):
         return self.run[self._base_namespace_path]
 
     def _log_integration_version(self):
-        self.run[NeptuneCallback.INTEGRATION_VERSION_KEY] = version
+        self.run[NeptuneCallback.integration_version_key] = version
 
     def _log_trainer_parameters(self, args):
-        self._metadata_namespace[NeptuneCallback.TRAINER_PARAMETERS_KEY] = args.to_sanitized_dict()
+        self._metadata_namespace[NeptuneCallback.trainer_parameters_key] = args.to_sanitized_dict()
 
     def _log_model_parameters(self, model):
         if model and hasattr(model, "config") and model.config is not None:
-            self._metadata_namespace[NeptuneCallback.MODEL_PARAMETERS_KEY] = model.config.to_dict()
+            self._metadata_namespace[NeptuneCallback.model_parameters_key] = model.config.to_dict()
 
     def _log_hyper_param_search_parameters(self, state):
         if state and hasattr(state, "trial_name"):
-            self._metadata_namespace[NeptuneCallback.TRIAL_NAME_KEY] = state.trial_name
+            self._metadata_namespace[NeptuneCallback.trial_name_key] = state.trial_name
 
         if state and hasattr(state, "trial_params") and state.trial_params is not None:
-            self._metadata_namespace[NeptuneCallback.TRIAL_PARAMS_KEY] = state.trial_params
+            self._metadata_namespace[NeptuneCallback.trial_params_key] = state.trial_params
 
     def _log_model_checkpoint(self, path: str):
         self._metadata_namespace[self._target_checkpoints_namespace].upload_files(path)
@@ -1179,7 +1181,7 @@ class NeptuneCallback(TrainerCallback):
         if logs is not None:
             for name, value in rewrite_logs(logs).items():
                 if isinstance(value, (int, float)):
-                    if name in NeptuneCallback.FLAT_METRICS:
+                    if name in NeptuneCallback.flat_metrics:
                         self._metadata_namespace[name] = value
                     else:
                         self._metadata_namespace[name].log(value, step=state.global_step)
