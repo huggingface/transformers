@@ -198,7 +198,7 @@ You can easily log and monitor your runs code. The following are currently suppo
 * [TensorBoard](https://www.tensorflow.org/tensorboard)
 * [Weights & Biases](https://docs.wandb.ai/integrations/huggingface)
 * [Comet ML](https://www.comet.ml/docs/python-sdk/huggingface/)
-* [Neptune](https://docs.neptune.ai/integrations-and-supported-tools/model-training/huggingface)
+* [Neptune](https://docs.neptune.ai/integrations-and-supported-tools/model-training/hugging-face)
 
 ### Weights & Biases
 
@@ -255,84 +255,83 @@ conda install -c comet_ml -c anaconda -c conda-forge comet_ml
 
 ### Neptune
 
-1. Install the Neptune client library:
+First, install the Neptune client library. You can do it with either `pip` or `conda`:
 
-    pip:
+`pip`:
 
-    ```bash
-    pip install neptune-client
-    ```
+```bash
+pip install neptune-client
+```
 
-    conda:
+`conda`:
 
-    ```bash
-    conda install -c conda-forge neptune-client
-    ```
+```bash
+conda install -c conda-forge neptune-client
+```
 
-2. Import `NeptuneCallback`:
+Next, in your model training script, import `NeptuneCallback`:
 
-    ```python
-    from transformers.integrations import NeptuneCallback
-    ```
+```python
+from transformers.integrations import NeptuneCallback
+```
 
-3. Enable Neptune logging in your script:
+To enable Neptune logging, in your `TrainingArguments`, set the `report_to` argument to `"neptune"`:
 
-   In your `TrainingArguments`, set the `report_to` argument to `"neptune"`:
+```python
+training_args = TrainingArguments(
+    "quick-training-distilbert-mrpc", 
+    evaluation_strategy="steps",
+    eval_steps = 20,
+    report_to = "neptune",
+)
 
-        ```python
-        training_args = TrainingArguments(
-            "quick-training-distilbert-mrpc", 
-            evaluation_strategy="steps",
-            eval_steps = 20,
-            report_to = "neptune",
-        )
-        trainer = Trainer(
-            model,
-            training_args,
-            ...
-        )
-        ```
-    
-   Alternatively, for more logging options, create a Neptune callback:
+trainer = Trainer(
+    model,
+    training_args,
+    ...
+)
+```
 
-        ```python
-        neptune_callback = NeptuneCallback()
-        ```
+Alternatively, for more logging options, create a Neptune callback:
 
-        To add more detail to the tracked run, you can supply optional arguments to `NeptuneCallback`.
+```python
+neptune_callback = NeptuneCallback()
+```
 
-        Some examples:
+To add more detail to the tracked run, you can supply optional arguments to `NeptuneCallback`.
 
-        ```python
-        neptune_callback = NeptuneCallback(
-            name = "DistilBERT",
-            description = "DistilBERT fine-tuned on GLUE/MRPC",
-            tags = ["args-callback", "fine-tune", "MRPC"],  # tags help you manage runs in Neptune
-            base_namespace="callback",  # the default is "finetuning"
-            log_checkpoints = "best",  # other options are "last", "same", and None
-            capture_hardware_metrics = False,  # additional keyword arguments for a Neptune run
-        )
-        ```
+Some examples:
 
-        Pass the callback to the Trainer:
+```python
+neptune_callback = NeptuneCallback(
+    name = "DistilBERT",
+    description = "DistilBERT fine-tuned on GLUE/MRPC",
+    tags = ["args-callback", "fine-tune", "MRPC"],  # tags help you manage runs in Neptune
+    base_namespace="callback",  # the default is "finetuning"
+    log_checkpoints = "best",  # other options are "last", "same", and None
+    capture_hardware_metrics = False,  # additional keyword arguments for a Neptune run
+)
+```
 
-        ```python
-        training_args = TrainingArguments(..., report_to = None)
-        trainer = Trainer(
-            model,
-            training_args,
-            ...,
-            callbacks=[neptune_callback],
-        )
-        ```
+Pass the callback to the Trainer:
 
-4. When you start the training with `trainer.train()`, your metadata will be logged in Neptune.
+```python
+training_args = TrainingArguments(..., report_to = None)
+trainer = Trainer(
+    model,
+    training_args,
+    ...
+    callbacks=[neptune_callback],
+)
+```
 
-Although you can pass your **Neptune API token** and **project name** as arguments when creating the callback, the recommended way is to save them as environment variables:
+Now, when you start the training with `trainer.train()`, your metadata will be logged in Neptune.
+
+**Note:** Although you can pass your **Neptune API token** and **project name** as arguments when creating the callback, the recommended way is to save them as environment variables:
 
 | Environment variable | Value                                                |
 | :------------------- | :--------------------------------------------------- |
 | `NEPTUNE_API_TOKEN`  | Your Neptune API token. To find and copy it, click your Neptune avatar and select **Get your API token**. |
 | `NEPTUNE_PROJECT` | The full name of your Neptune project (`workspace-name/project-name`). To find and copy it, head to **project settings** &rarr; **Properties**. |
 
-For detailed instructions and examples, see the [Neptune docs](https://docs.neptune.ai/integrations-and-supported-tools/model-training/huggingface).
+For detailed instructions and examples, see the [Neptune docs](https://docs.neptune.ai/integrations-and-supported-tools/model-training/hugging-face).
