@@ -173,10 +173,7 @@ def make_github_table_per_model(reduced_by_model):
     lines = [header, sep]
     for model in reduced_by_model:
         count = reduced_by_model[model]["count"]
-        try:
-            error, _count = list(reduced_by_model[model]["errors"].items())[0]
-        except Exception:
-            pass
+        error, _count = list(reduced_by_model[model]["errors"].items())[0]
         line = f"| {model} | {count} | {error[:60]} | {_count} |"
         lines.append(line)
 
