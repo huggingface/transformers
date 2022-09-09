@@ -180,7 +180,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         pad_width=1001,
         pad_token_label=-100,
         only_label_first_subword=True,
-        trim_offsets=True,
+        trim_offsets=False,
         **kwargs
     ):
         super().__init__(
@@ -910,7 +910,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
         cls = [self.cls_token_id]
         sep = [self.sep_token_id]
-        return cls + token_ids_0 + sep + sep + token_ids_1 + sep
+        return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
@@ -932,7 +932,7 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
 
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+        return len(cls + token_ids_0 + sep + token_ids_1 + sep) * [0]
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)

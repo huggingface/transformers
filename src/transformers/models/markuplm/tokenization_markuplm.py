@@ -376,6 +376,9 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
+        logger.warning(
+            "MarkupLM now does not support generative tasks, decoding is experimental and subject to change."
+        )
         text = "".join(tokens)
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
         return text
@@ -437,7 +440,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
         cls = [self.cls_token_id]
         sep = [self.sep_token_id]
-        return cls + token_ids_0 + sep + sep + token_ids_1 + sep
+        return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def build_xpath_tags_with_special_tokens(
         self, xpath_tags_0: List[int], xpath_tags_1: Optional[List[int]] = None
@@ -445,7 +448,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         pad = [self.pad_xpath_tags_seq]
         if len(xpath_tags_1) == 0:
             return pad + xpath_tags_0 + pad
-        return pad + xpath_tags_0 + pad + pad + xpath_tags_1 + pad
+        return pad + xpath_tags_0 + pad + xpath_tags_1 + pad
 
     def build_xpath_subs_with_special_tokens(
         self, xpath_subs_0: List[int], xpath_subs_1: Optional[List[int]] = None
@@ -453,7 +456,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         pad = [self.pad_xpath_subs_seq]
         if len(xpath_subs_1) == 0:
             return pad + xpath_subs_0 + pad
-        return pad + xpath_subs_0 + pad + pad + xpath_subs_1 + pad
+        return pad + xpath_subs_0 + pad + xpath_subs_1 + pad
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -500,7 +503,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
 
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
-        return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+        return len(cls + token_ids_0 + sep + token_ids_1 + sep) * [0]
 
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
