@@ -29,10 +29,8 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP",
-                              "PegasusConfig",
-                              "PegasusOnnxConfig"]
-    }
+    "configuration_pegasus": ["PEGASUS_PRETRAINED_CONFIG_ARCHIVE_MAP", "PegasusConfig", "PegasusOnnxConfig"]
+}
 
 try:
     if not is_sentencepiece_available():
