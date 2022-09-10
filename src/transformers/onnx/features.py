@@ -424,6 +424,15 @@ class FeaturesManager:
             "default",
             onnx_config_cls="models.owlvit.OwlViTOnnxConfig",
         ),
+        "pegasus": supported_features_mapping(
+            "default",
+            "default-with-past",
+            "causal-lm",
+            "causal-lm-with-past",
+            "seq2seq-lm",
+            "seq2seq-lm-with-past",
+            onnx_config_cls="models.pegasus.PegasusOnnxConfig",
+        ),
         "perceiver": supported_features_mapping(
             "image-classification",
             "masked-lm",

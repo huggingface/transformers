@@ -239,6 +239,7 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     # Disable for now as it causes fatal error `Floating point exception (core dumped)` and the subsequential tests are
     # not run.
     # ("longt5", "google/long-t5-tglobal-base"),
+    ("pegasus", "google/pegasus-base-x"),
 }
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_MODELS` once TensorFlow has parity with the PyTorch model implementations.
