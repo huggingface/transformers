@@ -173,6 +173,7 @@ class PegasusConfig(PretrainedConfig):
     def hidden_size(self) -> int:
         return self.d_model
 
+
 # Copied from transformers.models.bart.configuration_bart.BartOnnxConfig with Bart->Pegasus
 class PegasusOnnxConfig(OnnxSeq2SeqConfigWithPast):
     @property
