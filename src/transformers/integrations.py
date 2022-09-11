@@ -1063,7 +1063,7 @@ class ClearMLCallback(TrainerCallback):
                 'Automatic ClearML logging enabled.'
             )
             if self._clearml_task is None:
-                self._clearml_task = self._clearml.Task.init(project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),task_name=os.getenv("CLEARML_TASK", "Trainer"), auto_connect_frameworks={'tensorboard': False})
+                self._clearml_task = self._clearml.Task.init(project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),task_name=os.getenv("CLEARML_TASK", "Trainer"), auto_connect_frameworks={'tensorboard': False, 'pytorch': False})
                 self._initialized = True
                 logger.info(
                     'ClearML Task has been initialized.'
@@ -1071,8 +1071,7 @@ class ClearMLCallback(TrainerCallback):
 
             self._clearml_task.connect(args, "Args")
             if hasattr(model, "config") and model.config is not None:
-                model_config = model.config.to_dict()
-                self._clearml_task.connect(model_config, "Model Configuration")
+                self._clearml_task.connect(model.config, "Model Configuration")
 
 
     def on_train_begin(self, args, state, control, model=None, tokenizer=None, **kwargs):
@@ -1116,6 +1115,13 @@ class ClearMLCallback(TrainerCallback):
                         f'"{v}" of type {type(v)} for key "{k}" as a scalar. '
                         "This invocation of ClearML logger's  report_scalar() "
                         "is incorrect so we dropped this attribute.")
+    
+    def on_save(self, args, state, control, **kwargs):
+        if self._clearml_task and state.is_world_process_zero:
+            ckpt_dir = f"checkpoint-{state.global_step}"
+            artifact_path = os.path.join(args.output_dir, ckpt_dir)
+            logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. This may take time.")
+            self._clearml_task.update_output_model(artifact_path, iteration=state.global_step, auto_delete_file=False)
 
 
 INTEGRATION_TO_CALLBACK = {
