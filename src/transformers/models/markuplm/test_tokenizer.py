@@ -1,6 +1,4 @@
-import torch
-
-from transformers import LayoutLMv2TokenizerFast, MarkupLMTokenizer, MarkupLMTokenizerFast
+from transformers import LayoutLMv2TokenizerFast, MarkupLMTokenizerFast
 
 
 # slow_tokenizer = MarkupLMTokenizer.from_pretrained("microsoft/markuplm-base")

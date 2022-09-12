@@ -21,10 +21,9 @@ import json
 from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
 
-from tokenizers import processors
+from tokenizers import pre_tokenizers, processors
 
 from ...file_utils import PaddingStrategy, TensorType, add_end_docstrings
-from ...tokenization_utils import AddedToken
 from ...tokenization_utils_base import (
     ENCODE_KWARGS_DOCSTRING,
     BatchEncoding,
@@ -208,9 +207,11 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         if trim_offsets:
             # Not implemented yet, because we need to chain two post processors which is not possible yet
             # We need to wait for https://github.com/huggingface/tokenizers/pull/1005
-            # With `trim_offsets=False` we don't need to do add `processors.ByteLevel(trim_offsets=False)` 
+            # With `trim_offsets=False` we don't need to do add `processors.ByteLevel(trim_offsets=False)`
             # because it's not doing anything
-            raise NotImplementedError("`trim_offsets=True` is not implemented for MarkupLMTokenizerFast. Please set it to False.")
+            raise NotImplementedError(
+                "`trim_offsets=True` is not implemented for MarkupLMTokenizerFast. Please set it to False."
+            )
 
         self.tags_dict = tags_dict
 

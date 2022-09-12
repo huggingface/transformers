@@ -29,10 +29,14 @@ from transformers import (
 )
 from transformers.file_utils import FEATURE_EXTRACTOR_NAME, cached_property
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_torch, slow
+from transformers.testing_utils import require_torch, require_vision, require_tokenizers, slow
+from transformers.utils.import_utils import is_vision_available
 
+if is_vision_available():
+    from PIL import Image
 
 @require_tokenizers
+@require_vision
 class MarkupLMProcessorTest(unittest.TestCase):
     tokenizer_class = MarkupLMTokenizer
 
