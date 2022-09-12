@@ -472,7 +472,7 @@ class TFLEDEncoderSelfAttention(tf.keras.layers.Layer):
         )
         first_chunk_mask = (
             tf.tile(
-                tf.range(chunks_count + 1)[None, :, None, None],
+                tf.range(chunks_count + 1, dtype=tf.int64)[None, :, None, None],
                 (batch_size * num_heads, 1, window_overlap, window_overlap),
             )
             < 1
@@ -1335,10 +1335,10 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        input_ids = tf.convert_to_tensor([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0]])
+        input_ids = tf.convert_to_tensor([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0]], dtype=tf.int64)
         # make sure global layers are initialized
-        attention_mask = tf.convert_to_tensor([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0]])
-        global_attention_mask = tf.convert_to_tensor([[0, 0, 0, 0, 1], [0, 0, 1, 0, 0]])
+        attention_mask = tf.convert_to_tensor([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0]], dtype=tf.int64)
+        global_attention_mask = tf.convert_to_tensor([[0, 0, 0, 0, 1], [0, 0, 1, 0, 0]], dtype=tf.int64)
         dummy_inputs = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -1350,10 +1350,10 @@ class TFLEDPreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int64, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int64, name="decoder_attention_mask"),
             }
         ]
     )
