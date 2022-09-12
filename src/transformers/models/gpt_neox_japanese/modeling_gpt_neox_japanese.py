@@ -14,15 +14,12 @@
 # limitations under the License.
 """ PyTorch GPTNeoX model."""
 
-import math
 from typing import Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import Tensor, nn
-from torch.nn import CrossEntropyLoss, init
-from torch.nn.parameter import Parameter
+from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...file_utils import (
@@ -80,7 +77,7 @@ class GPTNeoXJapanesePreTrainedModel(PreTrainedModel):
 
 
 class GPTNeoXJapaneseAttention(nn.Module):
-    def __init__(self, config, bias=False):
+    def __init__(self, config, use_bias=False):
         super().__init__()
         self.num_attention_heads = config.num_attention_heads
         self.hidden_size = config.hidden_size
@@ -93,10 +90,10 @@ class GPTNeoXJapaneseAttention(nn.Module):
         self.max_positions = config.max_position_embeddings
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.norm_factor = torch.sqrt(torch.tensor(self.head_size, dtype=torch.float32)).to(torch.get_default_dtype())
-        self.query_key_value = ColumnParallelLinear(
-            input_size=config.hidden_size, output_size=3 * config.hidden_size, bias=bias
-        )
-        self.dense = RowParallelLinear(input_size=config.hidden_size, output_size=config.hidden_size, bias=bias)
+        # removed bias parameters except for the last layer
+        self.use_bias = use_bias
+        self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=use_bias)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=use_bias)
 
     def forward(
         self,
@@ -112,7 +109,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
         # Compute QKV
         # Attention heads [batch, seq_len, hidden_size]
         #   --> [batch, seq_len, (np * 3 * head_size)]
-        qkv, _ = self.query_key_value(hidden_states)
+        qkv = self.query_key_value(hidden_states)
 
         # [batch, seq_len, (num_heads * 3 * head_size)]
         #   --> [batch, seq_len, num_heads, 3 * head_size]
@@ -154,7 +151,8 @@ class GPTNeoXJapaneseAttention(nn.Module):
 
         # Reshape outputs
         attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_size)
-        attn_output, bias = self.dense(attn_output)
+        attn_output = self.dense(attn_output)
+        bias = self.dense.state_dict()["bias"] if self.use_bias else None
 
         outputs = (attn_output, present)
         if output_attentions:
@@ -225,6 +223,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
         # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
         # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
         mask_value = torch.tensor(mask_value, dtype=attn_scores.dtype).to(attn_scores.device)
+        causal_mask = causal_mask.to(attn_scores.device)
         attn_scores = torch.where(causal_mask, attn_scores, mask_value)
 
         if attention_mask is not None:
@@ -243,11 +242,8 @@ class GPTNeoXJapaneseAttention(nn.Module):
         return attn_output, attn_weights
 
 
+# Copied from transformers.models.gpt_neox.modeling_gpt_neox.RotaryEmbedding
 class RotaryEmbedding(torch.nn.Module):
-    """
-    same class as original gpt-neox
-    """
-
     def __init__(self, dim, max_position_embeddings, base=10000, device=None):
         super().__init__()
         inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2).float().to(device) / dim))
@@ -300,95 +296,20 @@ def bias_dropout_add(x: Tensor, bias: Tensor, residual: Optional[Tensor], prob: 
     return out
 
 
-def get_bias_dropout_add(training):
-    def _bias_dropout_add(x, bias, residual, prob):
-        return bias_dropout_add(x, bias, residual, prob, training)
-
-    return _bias_dropout_add
-
-
-class RowParallelLinear(nn.Module):
-    def __init__(self, input_size, output_size, bias=False) -> None:
-        super(RowParallelLinear, self).__init__()
-
-        # Keep input parameters
-        self.input_size = input_size
-        self.output_size = output_size
-
-        self.weight = Parameter(torch.ones(self.output_size, self.input_size))
-        if bias:
-            self.bias = Parameter(torch.zeros(self.output_size))
-        else:
-            self.register_parameter("bias", None)
-
-        # if uncommented, the following line will cause test failure
-        # self.reset_parameters()
-
-    def reset_parameters(self) -> None:
-        init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-        if self.bias is not None:
-            fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
-            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-            init.uniform_(self.bias, -bound, bound)
-
-    def forward(self, input_):
-        output = F.linear(input_, self.weight)
-        output_bias = self.bias
-        return output, output_bias
-
-
-class ColumnParallelLinear(torch.nn.Module):
-    def __init__(self, input_size, output_size, bias=False) -> None:
-        super(ColumnParallelLinear, self).__init__()
-
-        # Keep input parameters
-        self.input_size = input_size
-        self.output_size = output_size
-        self.skip_bias_add = True
-
-        self.weight = Parameter(torch.ones(self.output_size, self.input_size))
-        if bias:
-            self.bias = Parameter(torch.zeros(self.output_size))
-        else:
-            self.register_parameter("bias", None)
-
-        # if uncommented, the following line will cause test failure
-        # self.reset_parameters()
-
-    def reset_parameters(self) -> None:
-        init.kaiming_uniform_(self.weight, a=math.sqrt(5))
-        if self.bias is not None:
-            fan_in, _ = init._calculate_fan_in_and_fan_out(self.weight)
-            bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-            init.uniform_(self.bias, -bound, bound)
-
-    def forward(self, input_):
-        bias = self.bias if not self.skip_bias_add else None
-        output = F.linear(input_, self.weight, bias)
-        output_bias = self.bias if self.skip_bias_add else None
-        return output, output_bias
-
-
 class GPTNeoXJapaneseMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         intermediate_size = int(config.hidden_size * config.intermediate_multiple_size)
-        self.dense_h_to_4h = ColumnParallelLinear(
-            input_size=config.hidden_size,
-            output_size=intermediate_size,
-        )
+        self.dense_h_to_4h = nn.Linear(config.hidden_size, intermediate_size, bias=False)
         # Project back to h.
-        self.dense_4h_to_h = RowParallelLinear(
-            input_size=intermediate_size,
-            output_size=config.hidden_size,
-        )
+        self.dense_4h_to_h = nn.Linear(intermediate_size, config.hidden_size, bias=False)
         self.act = ACT2FN[config.hidden_act]
 
     def forward(self, hidden_states):
-        intermediate, bias = self.dense_h_to_4h(hidden_states)
-        intermediate = self.act(intermediate + bias if bias is not None else intermediate)
-        output, output_bias = self.dense_4h_to_h(intermediate)
-        return output, output_bias
+        intermediate = self.dense_h_to_4h(hidden_states)
+        intermediate = self.act(intermediate)
+        output = self.dense_4h_to_h(intermediate)
+        return output
 
 
 class GPTNeoXJapaneseLayer(nn.Module):
@@ -398,12 +319,9 @@ class GPTNeoXJapaneseLayer(nn.Module):
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         # activate bias only last layer
-        self.attention = GPTNeoXJapaneseAttention(config=config, bias=layer_number == config.num_hidden_layers - 1)
+        self.attention = GPTNeoXJapaneseAttention(config=config, use_bias=layer_number == config.num_hidden_layers - 1)
         self.mlp = GPTNeoXJapaneseMLP(config)
         self.hidden_dropout = config.hidden_dropout
-
-    def _get_bias_dropout(self):
-        return get_bias_dropout_add(self.training)
 
     def forward(
         self,
@@ -414,7 +332,6 @@ class GPTNeoXJapaneseLayer(nn.Module):
         layer_past=None,
         output_attentions=False,
     ):
-        bias_dropout_fn = self._get_bias_dropout()
         residual = hidden_states
         ln_out = self.input_layernorm(hidden_states)
         attention_layer_outputs, attn_bias = self.attention(
@@ -428,22 +345,21 @@ class GPTNeoXJapaneseLayer(nn.Module):
         attn_output = attention_layer_outputs[0]  # output_attn: a, present, (attentions)
         outputs = attention_layer_outputs[1:]
 
-        with torch.enable_grad():  # atten_output = (atten_output + bias) + residual
-            attn_output = bias_dropout_fn(
-                attn_output,
-                bias=attn_bias.expand_as(residual) if attn_bias is not None else attn_bias,
-                residual=residual,
-                prob=self.hidden_dropout,
-            )
+        # attn_output = (atten_output + bias) + residual
+        attn_output = bias_dropout_add(
+            attn_output,
+            bias=attn_bias.expand_as(residual) if attn_bias is not None else attn_bias,
+            residual=residual,
+            prob=self.hidden_dropout,
+            training=self.training,
+        )
 
-        mlp_output, mlp_bias = self.mlp(self.post_attention_layernorm(attn_output))
-        with torch.enable_grad():  # atten_output = (mlp_output + mlp_bias) + atten_output
-            attn_output = bias_dropout_fn(
-                mlp_output,
-                bias=mlp_bias.expand_as(attn_output) if mlp_bias is not None else mlp_bias,
-                residual=attn_output,
-                prob=self.hidden_dropout,
-            )
+        # mlp_output, mlp_bias = self.mlp(self.post_attention_layernorm(attn_output))
+        mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
+        # attn_output = (mlp_output + mlp_bias) + atten_output
+        attn_output = bias_dropout_add(
+            mlp_output, bias=None, residual=attn_output, prob=self.hidden_dropout, training=self.training
+        )
 
         if use_cache:
             outputs = (attn_output,) + outputs
@@ -561,6 +477,21 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
+
+        Example:
+
+        ```python
+        >>> from transformers import GPTNeoXJapaneseTokenizer, GPTNeoXJapaneseModel
+        >>> import torch
+
+        >>> tokenizer = GPTNeoXJapaneseTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
+        >>> model = GPTNeoXJapaneseModel.from_pretrained("abeja/gpt-neox-japanese-2.7b")
+
+        >>> inputs = tokenizer("日本語のGPT-neoxがHugging Faceで使えます😀", return_tensors="pt")
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

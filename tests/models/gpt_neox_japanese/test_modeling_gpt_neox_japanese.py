@@ -18,7 +18,8 @@
 import unittest
 
 from transformers import GPTNeoXJapaneseConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese import GPTNeoXJapaneseTokenizer
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -228,6 +229,27 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
-    @unittest.skip(reason="Feed forward chunking is not implemented")
-    def test_feed_forward_chunking(self):
-        pass
+    @slow
+    def test_generation(self):
+        model_id = "abeja/gpt-neox-japanese-2.7b"
+
+        prompts = ["データサイエンティストとは、", "100年後に必要とされる会社は、", "フルリモートの環境で働くために必要なことは、", "国境の長いトンネルを抜けると", "美味しい日本食といえば、"]
+
+        EXPECTED_OUTPUTS = [
+            "データサイエンティストとは、データを分析し、ビジネスに役立つ知見を導き出す専門家のことです。",
+            "100年後に必要とされる会社は、「人」が中心の会社です。",
+            "フルリモートの環境で働くために必要なことは、「自分の時間をコントロールする」ことです。",
+            "国境の長いトンネルを抜けると、そこは雪国だった。",
+            "美味しい日本食といえば、やっぱりお寿司ですよね。",
+        ]
+
+        tokenizer = GPTNeoXJapaneseTokenizer.from_pretrained(model_id)
+        model = GPTNeoXJapaneseForCausalLM.from_pretrained(model_id)
+
+        predicted_outputs = []
+        for prompt in prompts:
+            input_ids = tokenizer(prompt, return_tensors="pt").input_ids
+            generated_ids = model.generate(input_ids, max_length=50)
+            generated_string = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
+            predicted_outputs += generated_string
+        self.assertListEqual(predicted_outputs, EXPECTED_OUTPUTS)
