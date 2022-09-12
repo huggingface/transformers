@@ -1761,7 +1761,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 (small models, fine-tuning).
             load_in_8bit_skip_modules (`List[str]`, *optional*, defaults to `None`):
                 An explicit list of the modules that we do not want to convert in 8-bit. This is useful for models such
-                as Jukebox that has several heads in different places and not necessarly at the last position.
+                as Jukebox that has several heads in different places and not necessarily at the last position.
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
