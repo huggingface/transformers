@@ -841,9 +841,7 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
 
     The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
     and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
-    pass your inputs and labels in any format that `model.fit()` supports!
-
-    If you want to use the second format outside of Keras methods like `fit()` and `predict()`, such as when creating
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second format outside of Keras methods like `fit()` and `predict()`, such as when creating
     your own layers or models with the Keras `Functional` API, there are three possibilities you
     can use to gather all the input Tensors in the first positional argument:
 
@@ -2114,9 +2112,7 @@ class TF{{cookiecutter.camelcase_modelname}}PreTrainedModel(TFPreTrainedModel):
 
     The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
     and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
-    pass your inputs and labels in any format that `model.fit()` supports!
-
-    If you want to use the second format outside of Keras methods like `fit()` and `predict()`, such as when creating
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second format outside of Keras methods like `fit()` and `predict()`, such as when creating
     your own layers or models with the Keras `Functional` API, there are three possibilities you
     can use to gather all the input Tensors in the first positional argument:
 

@@ -848,11 +848,10 @@ ELECTRA_START_DOCSTRING = r"""
 
     The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
     and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
-    pass your inputs and labels in any format that `model.fit()` supports!
-
-    If you want to use the second format outside of Keras methods like `fit()` and `predict()`, such as when creating
-    your own layers or models with the Keras `Functional` API, there are three possibilities you can use to gather all
-    the input Tensors in the first positional argument:
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
     - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
@@ -861,7 +860,7 @@ ELECTRA_START_DOCSTRING = r"""
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
 
     Note that when creating models and layers with
-    (subclassing)[https://keras.io/guides/making_new_layers_and_models_via_subclassing/] then you don't need to worry
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
     about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
