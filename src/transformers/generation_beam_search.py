@@ -259,7 +259,7 @@ class BeamSearchScorer(BeamScorer):
                         continue
                     if beam_indices is not None:
                         beam_index = beam_indices[batch_beam_idx]
-                        beam_index = beam_index + (next_index,)
+                        beam_index = beam_index + (batch_beam_idx,)
                     else:
                         beam_index = None
 

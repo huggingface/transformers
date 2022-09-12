@@ -1085,6 +1085,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         loss = tf.reduce_mean(loss, axis=-1)  # [batch_size, num_patches], mean loss per patch
 
         loss = tf.reduce_sum(loss * mask) / tf.reduce_sum(mask)  # mean loss on removed patches
+        loss = tf.reshape(loss, (1,))
         return loss
 
     @unpack_inputs

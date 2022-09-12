@@ -303,10 +303,10 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             return param
 
         if mask is None:
-            return jax.tree_map(conditional_cast, params)
+            return jax.tree_util.tree_map(conditional_cast, params)
 
         flat_params = flatten_dict(params)
-        flat_mask, _ = jax.tree_flatten(mask)
+        flat_mask, _ = jax.tree_util.tree_flatten(mask)
 
         for masked, key in zip(flat_mask, flat_params.keys()):
             if masked:
@@ -900,7 +900,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             )
 
         # dictionary of key: dtypes for the model params
-        param_dtypes = jax.tree_map(lambda x: x.dtype, state)
+        param_dtypes = jax.tree_util.tree_map(lambda x: x.dtype, state)
         # extract keys of parameters not in jnp.float32
         fp16_params = [k for k in param_dtypes if param_dtypes[k] == jnp.float16]
         bf16_params = [k for k in param_dtypes if param_dtypes[k] == jnp.bfloat16]

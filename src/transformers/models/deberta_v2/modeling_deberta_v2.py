@@ -43,6 +43,31 @@ _CONFIG_FOR_DOC = "DebertaV2Config"
 _TOKENIZER_FOR_DOC = "DebertaV2Tokenizer"
 _CHECKPOINT_FOR_DOC = "microsoft/deberta-v2-xlarge"
 
+# Masked LM docstring
+_CHECKPOINT_FOR_MASKED_LM = "hf-internal-testing/tiny-random-deberta-v2"
+_MASKED_LM_EXPECTED_OUTPUT = "'enberry'"
+_MASKED_LM_EXPECTED_LOSS = "11.85"
+
+# TokenClassification docstring
+_CHECKPOINT_FOR_TOKEN_CLASSIFICATION = "hf-internal-testing/tiny-random-deberta-v2"
+_TOKEN_CLASS_EXPECTED_OUTPUT = (
+    "['LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0',"
+    " 'LABEL_0', 'LABEL_0']"
+)
+_TOKEN_CLASS_EXPECTED_LOSS = 0.61
+
+# QuestionAnswering docstring
+_CHECKPOINT_FOR_QA = "hf-internal-testing/tiny-random-deberta-v2"
+_QA_EXPECTED_OUTPUT = "'was Jim Henson? Jim Henson was'"
+_QA_EXPECTED_LOSS = 2.47
+_QA_TARGET_START_INDEX = 2
+_QA_TARGET_END_INDEX = 9
+
+# SequenceClassification docstring
+_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "hf-internal-testing/tiny-random-deberta-v2"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_1'"
+_SEQ_CLASS_EXPECTED_LOSS = "0.69"
+
 DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/deberta-v2-xlarge",
     "microsoft/deberta-v2-xxlarge",
@@ -717,7 +742,9 @@ class DisentangledSelfAttention(nn.Module):
         if "p2c" in self.pos_att_type:
             scale_factor += 1
         scale = torch.sqrt(torch.tensor(query_layer.size(-1), dtype=torch.float) * scale_factor)
-        attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2)) / scale
+        attention_scores = torch.bmm(query_layer, key_layer.transpose(-1, -2)) / torch.tensor(
+            scale, dtype=query_layer.dtype
+        )
         if self.relative_attention:
             rel_embeddings = self.pos_dropout(rel_embeddings)
             rel_att = self.disentangled_attention_bias(
@@ -799,7 +826,7 @@ class DisentangledSelfAttention(nn.Module):
                 dim=-1,
                 index=c2p_pos.squeeze(0).expand([query_layer.size(0), query_layer.size(1), relative_pos.size(-1)]),
             )
-            score += c2p_att / scale
+            score += c2p_att / torch.tensor(scale, dtype=c2p_att.dtype)
 
         # position->content
         if "p2c" in self.pos_att_type:
@@ -822,7 +849,7 @@ class DisentangledSelfAttention(nn.Module):
                 dim=-1,
                 index=p2c_pos.squeeze(0).expand([query_layer.size(0), key_layer.size(-2), key_layer.size(-2)]),
             ).transpose(-1, -2)
-            score += p2c_att / scale
+            score += p2c_att / torch.tensor(scale, dtype=p2c_att.dtype)
 
         return score
 
@@ -1134,9 +1161,12 @@ class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_MASKED_LM,
         output_type=MaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
+        mask="[MASK]",
+        expected_output=_MASKED_LM_EXPECTED_OUTPUT,
+        expected_loss=_MASKED_LM_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1276,9 +1306,11 @@ class DebertaV2ForSequenceClassification(DebertaV2PreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1385,9 +1417,11 @@ class DebertaV2ForTokenClassification(DebertaV2PreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_TOKEN_CLASSIFICATION,
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_TOKEN_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_TOKEN_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1461,9 +1495,13 @@ class DebertaV2ForQuestionAnswering(DebertaV2PreTrainedModel):
     @add_start_docstrings_to_model_forward(DEBERTA_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_QA,
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=_QA_EXPECTED_OUTPUT,
+        expected_loss=_QA_EXPECTED_LOSS,
+        qa_target_start_index=_QA_TARGET_START_INDEX,
+        qa_target_end_index=_QA_TARGET_END_INDEX,
     )
     def forward(
         self,

@@ -12,7 +12,11 @@ This is an open-source effort to train and evaluate code generation models. Code
 - continuously push checkpoints to the hub with `huggingface_hub`
 - stream the dataset with `datasets` during training to avoid disk bottlenecks
 - apply the `code_eval` metric in `datasets` to evaluate on [OpenAI's _HumanEval_ benchmark](https://huggingface.co/datasets/openai_humaneval)
-
+- showcase examples for downstream tasks with code models in [examples](https://github.com/huggingface/transformers/tree/main/examples/research_projects/codeparrot/examples) folder:
+    - Algorithmic complexity prediction
+    - Code generation from english text
+    - Code explanation
+    
 ## Installation
 To install the dependencies simply run the following command:
 ```bash
