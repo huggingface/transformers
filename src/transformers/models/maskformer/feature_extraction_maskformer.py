@@ -69,12 +69,12 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             The sequence of standard deviations for each channel, to be used when normalizing images. Defaults to the
             ImageNet std.
         ignore_index (`int`, *optional*):
-            Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels denoted with 
-            0 (background) will be replaced with `ignore_index`.
+            Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
+            denoted with 0 (background) will be replaced with `ignore_index`.
         reduce_labels (`bool`, *optional*, defaults to `False`):
-            Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0 is
-            used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k). The
-            background label will be replaced by `ignore_index`.
+            Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
+            is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
+            The background label will be replaced by `ignore_index`.
 
     """
 
@@ -192,8 +192,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 number of channels, H and W are image height and width.
 
             segmentation_maps (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
-                The corresponding semantic segmentation maps with the pixel-wise class id annotations or instance segmentation maps with pixel-wise 
-                instance id annotations. Assumed to be semantic segmentation maps if no `instance_id_to_semantic_id map` is provided.
+                The corresponding semantic segmentation maps with the pixel-wise class id annotations or instance
+                segmentation maps with pixel-wise instance id annotations. Assumed to be semantic segmentation maps if
+                no `instance_id_to_semantic_id map` is provided.
 
             pad_and_return_pixel_mask (`bool`, *optional*, defaults to `True`):
                 Whether or not to pad images up to the largest image in a batch and create a pixel mask.
@@ -204,9 +205,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 - 0 for pixels that are padding (i.e. **masked**).
 
             instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
-                A mapping between object instance ids and class ids. If passed, `segmentation_maps` is treated as an instance segmentation map 
-                where each pixel represents an instance id. Can be provided as a single dictionary with a global /dataset-level mapping or as 
-                a list of dictionaries (one per image), to map instance ids in each image separately.
+                A mapping between object instance ids and class ids. If passed, `segmentation_maps` is treated as an
+                instance segmentation map where each pixel represents an instance id. Can be provided as a single
+                dictionary with a global / dataset-level mapping or as a list of dictionaries (one per image), to map
+                instance ids in each image separately.
 
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
@@ -218,10 +220,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
               `pixel_mask` is in `self.model_input_names`).
-            - **mask_labels** -- Optional list of mask labels of shape `(num_class_labels, height, width)` to be fed to a model
-              (when `annotations` are provided).
-            - **class_labels** -- Optional list of class labels of shape `(num_class_labels)` to be fed to a model (when
-              `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
+            - **mask_labels** -- Optional list of mask labels of shape `(num_class_labels, height, width)` to be fed to
+              a model (when `annotations` are provided).
+            - **class_labels** -- Optional list of class labels of shape `(num_class_labels)` to be fed to a model
+              (when `annotations` are provided). They identify the labels of `mask_labels`, e.g. the label of
               `mask_labels[i][j]` if `class_labels[i][j]`.
         """
         # Input type checking for clearer error
@@ -325,12 +327,12 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         all_labels = np.unique(segmentation_map)
 
         # Drop background label if applicable
-        if self.reduce_labels: 
+        if self.reduce_labels:
             all_labels = all_labels[all_labels != 0]
 
         # Generate a binary mask for each object instance
-        binary_masks = [np.ma.masked_where(segmentation_map==i, segmentation_map) for i in all_labels]
-        binary_masks = np.stack(binary_masks, axis=0) # (num_labels, height, width)
+        binary_masks = [np.ma.masked_where(segmentation_map == i, segmentation_map) for i in all_labels]
+        binary_masks = np.stack(binary_masks, axis=0)  # (num_labels, height, width)
 
         # Convert instance ids to class ids
         if instance_id_to_semantic_id is not None:
@@ -338,7 +340,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
             for label in all_labels:
                 class_id = instance_id_to_semantic_id[label]
-                labels[all_labels==label] = class_id
+                labels[all_labels == label] = class_id
         else:
             labels = all_labels
 
@@ -381,10 +383,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            instance_id_to_semantic_id (`Dict[int, int]`, *optional*):
-                If passed, we treat `segmentation_maps` as an instance segmentation map where each pixel represents an
-                instance id. To convert it to a binary mask of shape (`batch, num_labels, height, width`) we need a
-                dictionary mapping instance ids to label ids to create a semantic segmentation map.
+            instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
+                A mapping between object instance ids and class ids. If passed, `segmentation_maps` is treated as an
+                instance segmentation map where each pixel represents an instance id. Can be provided as a single
+                dictionary with a global/dataset-level mapping or as a list of dictionaries (one per image), to map
+                instance ids in each image separately.
 
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
@@ -395,7 +398,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
             - **pixel_values** -- Pixel values to be fed to a model.
             - **pixel_mask** -- Pixel mask to be fed to a model (when `pad_and_return_pixel_mask=True` or if
-              *"pixel_mask"* is in `self.model_input_names`).
+              `pixel_mask` is in `self.model_input_names`).
             - **mask_labels** -- Optional list of mask labels of shape `(labels, height, width)` to be fed to a model
               (when `annotations` are provided).
             - **class_labels** -- Optional list of class labels of shape `(labels)` to be fed to a model (when
@@ -415,7 +418,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 if isinstance(instance_id_to_semantic_id, List):
                     converted_segmentation_map = self.convert_segmentation_map_to_binary_masks(
                         segmentation_map, instance_id_to_semantic_id[i]
-                    )  
+                    )
                 else:
                     converted_segmentation_map = self.convert_segmentation_map_to_binary_masks(
                         segmentation_map, instance_id_to_semantic_id
@@ -483,7 +486,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         Returns:
             `torch.Tensor`:
-                A tensor of shape (`batch_size, num_labels, height, width`).
+                A tensor of shape (`batch_size, num_class_labels, height, width`).
         """
         # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
         class_queries_logits = outputs.class_queries_logits
