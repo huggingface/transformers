@@ -515,11 +515,11 @@ def main():
         inputs, targets = [], []
         for i in range(len(examples[text_column])):
             if examples[text_column][i]:
-                if not examples[summary_column][i] and not warned_about_empty:
+                if not examples[summary_column][i] and not empty_summary_warning["warned"]:
                     logger.warning(
                         "Found an empty reference summary. This will be included in the preprocessed dataset."
                     )
-                    warned_about_empty = True
+                    empty_summary_warning["warned"] = True
                 inputs.append(examples[text_column][i])
                 targets.append(examples[summary_column][i])
 
@@ -540,7 +540,7 @@ def main():
         return model_inputs
 
     # A flag to determine whether we have already warned about empty summaries.
-    warned_about_empty = False
+    empty_summary_warning = {"warned": False}
 
     if training_args.do_train:
         if "train" not in raw_datasets:
