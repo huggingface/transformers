@@ -2361,7 +2361,8 @@ class JukeboxPrior(nn.Module):
 
     def get_cond(self, music_tokens_conds, metadata):
         """
-        Converts the input tokens to input_embeddings. Splits the lyrics form the rest of the metadata. Lyric tokens can be None.
+        Converts the input tokens to input_embeddings. Splits the lyrics form the rest of the metadata. Lyric tokens
+        can be None.
         """
         if metadata is not None:
             n_labels = metadata.shape[1] - self.nb_relevant_lyric_tokens
