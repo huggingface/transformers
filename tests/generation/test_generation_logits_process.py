@@ -169,7 +169,7 @@ class LogitsProcessorTest(unittest.TestCase):
             torch.tensor([[0.3, 0.1, 0.1, 0.5], [0.15, 0.3, 0.3, 0.25]], device=torch_device, dtype=torch.float)
         )
 
-        top_p_warp = TopPLogitsWarper(0.7)
+        top_p_warp = TopPLogitsWarper(0.8)
         filtered_dist = torch.exp(top_p_warp(input_ids, dist))
 
         # dist should be filtered to keep min num values so that sum is >= 0.7
@@ -179,16 +179,6 @@ class LogitsProcessorTest(unittest.TestCase):
         )
         self.assertTrue(torch.allclose(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-3))
         
-        # check edge case when sum of prob of tokens can be exactly equal to p
-        top_p_warp = TopPLogitsWarper(0.8)
-        edge_dist = dist[0].reshape(1, -1)
-        filtered_dist = torch.exp(top_p_warp(input_ids, edge_dist))
-
-        EXPECTED_FILTERED_DIST = torch.tensor(
-            [[0.3, 0.0, 0.0, 0.5]], device=torch_device, dtype=torch.float
-        )
-        self.assertTrue(torch.allclose(filtered_dist, EXPECTED_FILTERED_DIST, atol=1e-3))
-
         # check edge cases with negative and extreme logits
         ramp_logits = torch.arange(vocab_size, device=torch_device, dtype=torch.float).unsqueeze(0).repeat(
             batch_size, 1
