@@ -155,6 +155,7 @@ class FlaxBloomAttention(nn.Module):
         self.hidden_size = self.config.hidden_size
         self.num_heads = self.config.n_head
         self.head_dim = self.hidden_size // self.num_heads
+        self.attention_softmax_in_fp32 = self.dtype is not jnp.float32
 
         if self.head_dim * self.num_heads != self.hidden_size:
             raise ValueError(
@@ -272,8 +273,12 @@ class FlaxBloomAttention(nn.Module):
 
         attention_bias = attention_bias + alibi
 
-        # TODO(sanchit-gandhi): override softmax precision to fp32 if self.attention_softmax_in_fp32=True and self.dtype != fp32
-        # usual dot product attention
+        # Cast in fp32 if the original dtype is different from fp32
+        if self.attention_softmax_in_fp32:
+            query = query.astype(jnp.float32)
+            key = key.astype(jnp.float32)
+            attention_bias = attention_bias.astype(jnp.float32)
+
         attn_weights = dot_product_attention_weights(
             query,
             key,
@@ -284,6 +289,12 @@ class FlaxBloomAttention(nn.Module):
             dtype=self.dtype,
             precision=None,
         )
+
+        # Cast back in the original dtype if the native dtype is not fp32
+        if self.attention_softmax_in_fp32:
+            query = query.astype(self.dtype)
+            key = key.astype(self.dtype)
+            attention_bias = attention_bias.astype(self.dtype)
 
         attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value)
         attn_output = self._merge_heads(attn_output)
