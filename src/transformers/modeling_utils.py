@@ -2159,7 +2159,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
 
-            # We never convert lm_head or any last modules for numerical stability reasons
+            # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
             if load_in_8bit_skip_modules is None:
                 modules_to_not_convert = get_keys_to_not_convert(model)
             else:
