@@ -38,8 +38,6 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
 
     """
 
-    # model_input_names = ["pixel_values"]
-
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -95,7 +93,7 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
 
     def __call__(self, html_strings) -> BatchFeature:
         """
-        Main method to prepare for the model one or several image(s).
+        Main method to prepare for the model one or several HTML strings.
 
         Args:
             html_strings (`str`, `List[str]`):

@@ -18,7 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -28,16 +28,25 @@ _import_structure = {
     "tokenization_markuplm": ["MarkupLMTokenizer"],
 }
 
-if is_tokenizers_available():
+try:
+    if not is_tokenizers_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["tokenization_markuplm_fast"] = ["MarkupLMTokenizerFast"]
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_markuplm"] = [
         "MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "MarkupLMForQuestionAnswering",
         "MarkupLMForSequenceClassification",
         "MarkupLMForTokenClassification",
-        "MarkupLMLayer",
         "MarkupLMModel",
         "MarkupLMPreTrainedModel",
     ]
@@ -49,16 +58,25 @@ if TYPE_CHECKING:
     from .processing_markuplm import MarkupLMProcessor
     from .tokenization_markuplm import MarkupLMTokenizer
 
-    if is_tokenizers_available():
+    try:
+        if not is_tokenizers_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .tokenization_markuplm_fast import MarkupLMTokenizerFast
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_markuplm import (
             MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST,
             MarkupLMForQuestionAnswering,
             MarkupLMForSequenceClassification,
             MarkupLMForTokenClassification,
-            MarkupLMLayer,
             MarkupLMModel,
             MarkupLMPreTrainedModel,
         )

@@ -1502,7 +1502,6 @@ else:
             "MarkupLMForQuestionAnswering",
             "MarkupLMForSequenceClassification",
             "MarkupLMForTokenClassification",
-            "MarkupLMLayer",
             "MarkupLMModel",
             "MarkupLMPreTrainedModel",
         ]
@@ -4218,7 +4217,6 @@ if TYPE_CHECKING:
             MarkupLMForQuestionAnswering,
             MarkupLMForSequenceClassification,
             MarkupLMForTokenClassification,
-            MarkupLMLayer,
             MarkupLMModel,
             MarkupLMPreTrainedModel,
         )
