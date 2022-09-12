@@ -539,6 +539,7 @@ class FlaxBloomBlockCollection(nn.Module):
             FlaxBloomBlock(self.config, name=str(layer_number), dtype=self.dtype, use_scan=False)
             for layer_number in range(self.config.num_hidden_layers)
         ]
+        
         if self.use_scan:
             self.scan_fn = scan_with_axes(
                 FlaxBloomBlock,
@@ -572,10 +573,10 @@ class FlaxBloomBlockCollection(nn.Module):
                 hidden_states,
                 alibi,
                 attention_mask,  # kwargs not supported by scan
-                jnp.arange(self.config.num_hidden_layers),
                 None,
                 deterministic,
                 init_cache,
+                output_attentions,
             )
             hidden_states = hidden_states[0]
 
