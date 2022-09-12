@@ -1759,7 +1759,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 quantization works well for values of magnitude ~5, but beyond that, there is a significant performance
                 penalty. A good default threshold is 6, but a lower threshold might be needed for more unstable models
                 (small models, fine-tuning).
-            load_in_8bit_skip_modules (`List[str]`, *optional*, defaults to `None`):
+            load_in_8bit_skip_modules (`List[str]`, *optional*):
                 An explicit list of the modules that we do not want to convert in 8-bit. This is useful for models such
                 as Jukebox that has several heads in different places and not necessarily at the last position.
             subfolder (`str`, *optional*, defaults to `""`):
