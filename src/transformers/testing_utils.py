@@ -43,6 +43,7 @@ from .integrations import (
     is_sigopt_available,
     is_wandb_available,
 )
+from .trainer_utils import set_seed
 from .utils import (
     is_accelerate_available,
     is_apex_available,
@@ -1649,5 +1650,5 @@ class set_reproducible(ContextDecorator):
 
     def set_seed(self, frame, event, arg):
         # Set the seed
-        torch.manual_seed(self.seed)
+        set_seed(self.seed)
         return
