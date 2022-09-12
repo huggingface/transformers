@@ -198,7 +198,7 @@ class TopPLogitsWarper(LogitsWarper):
         sorted_indices_to_remove = cumulative_probs <= (1 - self.top_p)
         if self.min_tokens_to_keep > 1:
             # Keep at least min_tokens_to_keep
-            sorted_indices_to_remove[..., -self.min_tokens_to_keep:] = 0
+            sorted_indices_to_remove[..., -self.min_tokens_to_keep :] = 0
 
         # scatter sorted tensors to original indexing
         indices_to_remove = sorted_indices_to_remove.scatter(1, sorted_indices, sorted_indices_to_remove)
