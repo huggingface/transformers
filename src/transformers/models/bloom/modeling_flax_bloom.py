@@ -535,15 +535,18 @@ class FlaxBloomBlockCollection(nn.Module):
     use_scan: bool = False
 
     def setup(self):
-        self.layers = [FlaxBloomBlock(self.config, name=str(layer_number), dtype=self.dtype, use_scan=False) for layer_number in range(self.config.num_hidden_layers)]
+        self.layers = [
+            FlaxBloomBlock(self.config, name=str(layer_number), dtype=self.dtype, use_scan=False)
+            for layer_number in range(self.config.num_hidden_layers)
+        ]
         if self.use_scan:
             self.scan_fn = scan_with_axes(
-                    FlaxBloomBlock,
-                    variable_axes={"params": 0, "cache": 0},
-                    split_rngs={"params": True, "dropout": True},
-                    in_axes=(nn.broadcast, nn.broadcast, 0, nn.broadcast, nn.broadcast, nn.broadcast),
-                    length=self.config.num_hidden_layers,
-                )(self.config, dtype=self.dtype, use_scan=True, name="FlaxBloomBlockLayers")
+                FlaxBloomBlock,
+                variable_axes={"params": 0, "cache": 0},
+                split_rngs={"params": True, "dropout": True},
+                in_axes=(nn.broadcast, nn.broadcast, 0, nn.broadcast, nn.broadcast, nn.broadcast),
+                length=self.config.num_hidden_layers,
+            )(self.config, dtype=self.dtype, use_scan=True, name="FlaxBloomBlockLayers")
 
     # TODO(sanchit-gandhi): re-write as a `setup` to conform to Transformers JAX/Flax conventions
     def __call__(
