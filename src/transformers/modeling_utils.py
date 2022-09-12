@@ -1749,7 +1749,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 https://test.pypi.org/simple/ bitsandbytes-cudaXXX` where XXX is your CUDA version (e.g. 11.6 = 116).
                 Make also sure that you have enough GPU RAM to store half of the model size since the 8bit modules are
                 not compiled and adapted for CPUs.
-            int8_threshold (`float`, *optional*, defaults to 6):
+            load_in_8bit_threshold (`float`, *optional*, defaults to 6):
                 Works together with `load_in_8bit`. This corresponds to the outlier threshold for outlier detection as
                 described in `GPT3.int8() : 8-bit Matrix Multiplication for Transformers at Scale` paper. Any hidden
                 states value that is above this threshold will be considered an outlier and the operation on those
@@ -1759,7 +1759,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 quantization works well for values of magnitude ~5, but beyond that, there is a significant performance
                 penalty. A good default threshold is 6, but a lower threshold might be needed for more unstable models
                 (small models, fine-tuning).
-            no_load_in_8bit_modules (`List[str]`, *optional*, defaults to `None`):
+            load_in_8bit_skip_modules (`List[str]`, *optional*, defaults to `None`):
                 An explicit list of the modules that we do not want to convert in 8-bit. This is useful for models such
                 as Jukebox that has several heads in different places and not necessarly at the last position.
             subfolder (`str`, *optional*, defaults to `""`):
@@ -1853,8 +1853,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", False)
         load_in_8bit = kwargs.pop("load_in_8bit", False)
-        int8_threshold = kwargs.pop("int8_threshold", 6.0)
-        no_load_in_8bit_modules = kwargs.pop("no_load_in_8bit_modules", None)
+        load_in_8bit_threshold = kwargs.pop("load_in_8bit_threshold", 6.0)
+        load_in_8bit_skip_modules = kwargs.pop("load_in_8bit_skip_modules", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
 
@@ -2160,11 +2160,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
 
             # We never convert lm_head or any last modules for numerical stability reasons
-            if no_load_in_8bit_modules is None:
+            if load_in_8bit_skip_modules is None:
                 modules_to_not_convert = get_keys_to_not_convert(model)
             else:
-                modules_to_not_convert = no_load_in_8bit_modules
-            model = replace_8bit_linear(model, threshold=int8_threshold, modules_to_not_convert=modules_to_not_convert)
+                modules_to_not_convert = load_in_8bit_skip_modules
+            model = replace_8bit_linear(
+                model, threshold=load_in_8bit_threshold, modules_to_not_convert=modules_to_not_convert
+            )
 
         if isinstance(device_map, str):
             if model._no_split_modules is None:
