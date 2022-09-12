@@ -534,8 +534,18 @@ class FlaxBloomBlockCollection(nn.Module):
     dtype: jnp.dtype = jnp.float32
     use_scan: bool = False
 
+    def setup(self):
+        self.layers = [FlaxBloomBlock(self.config, name=str(layer_number), dtype=self.dtype, use_scan=False) for layer_number in range(self.config.num_hidden_layers)]
+        if self.use_scan:
+            self.scan_fn = scan_with_axes(
+                    FlaxBloomBlock,
+                    variable_axes={"params": 0, "cache": 0},
+                    split_rngs={"params": True, "dropout": True},
+                    in_axes=(nn.broadcast, nn.broadcast, 0, nn.broadcast, nn.broadcast, nn.broadcast),
+                    length=self.config.num_hidden_layers,
+                )(self.config, dtype=self.dtype, use_scan=True, name="FlaxBloomBlockLayers")
+
     # TODO(sanchit-gandhi): re-write as a `setup` to conform to Transformers JAX/Flax conventions
-    @nn.compact
     def __call__(
         self,
         hidden_states,
@@ -555,13 +565,7 @@ class FlaxBloomBlockCollection(nn.Module):
             # assert not output_hidden_states, "cannot use `scan` with `output_hidden_states` set to `True`"
             hidden_states = (hidden_states,)
 
-            hidden_states, _ = scan_with_axes(
-                FlaxBloomBlock,
-                variable_axes={"params": 0, "cache": 0},
-                split_rngs={"params": True, "dropout": True},
-                in_axes=(nn.broadcast, nn.broadcast, 0, nn.broadcast, nn.broadcast, nn.broadcast),
-                length=self.config.num_hidden_layers,
-            )(self.config, dtype=self.dtype, use_scan=True, name="FlaxBloomBlockLayers")(
+            hidden_states, _ = self.scan_fn(
                 hidden_states,
                 alibi,
                 attention_mask,  # kwargs not supported by scan
@@ -577,7 +581,7 @@ class FlaxBloomBlockCollection(nn.Module):
                 if output_hidden_states:
                     all_hidden_states += (hidden_states,)
 
-                layer_outputs = FlaxBloomBlock(self.config, name=str(layer_number), dtype=self.dtype, use_scan=False)(
+                layer_outputs = self.layers[layer_number](
                     hidden_states,
                     alibi=alibi,
                     attention_mask=attention_mask,
