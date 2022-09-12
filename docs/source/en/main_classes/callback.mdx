@@ -32,6 +32,7 @@ By default a [`Trainer`] will use the following callbacks:
 - [`~integrations.WandbCallback`] if [wandb](https://www.wandb.com/) is installed.
 - [`~integrations.CometCallback`] if [comet_ml](https://www.comet.ml/site/) is installed.
 - [`~integrations.MLflowCallback`] if [mlflow](https://www.mlflow.org/) is installed.
+- [`~integrations.NeptuneCallback`] if [neptune](https://neptune.ai/) is installed.
 - [`~integrations.AzureMLCallback`] if [azureml-sdk](https://pypi.org/project/azureml-sdk/) is
   installed.
 - [`~integrations.CodeCarbonCallback`] if [codecarbon](https://pypi.org/project/codecarbon/) is
@@ -69,6 +70,8 @@ Here is the list of the available [`TrainerCallback`] in the library:
 [[autodoc]] integrations.AzureMLCallback
 
 [[autodoc]] integrations.CodeCarbonCallback
+
+[[autodoc]] integrations.NeptuneCallback
 
 ## TrainerCallback
 

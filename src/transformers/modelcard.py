@@ -80,8 +80,6 @@ class ModelCard:
     Inioluwa Deborah Raji and Timnit Gebru for the proposal behind model cards. Link: https://arxiv.org/abs/1810.03993
 
     Note: A model card can be loaded and saved to disk.
-
-    Parameters:
     """
 
     def __init__(self, **kwargs):

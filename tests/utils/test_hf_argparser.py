@@ -245,6 +245,19 @@ class HfArgumentParserTest(unittest.TestCase):
         args = BasicExample(**args_dict)
         self.assertEqual(parsed_args, args)
 
+    def test_parse_dict_extra_key(self):
+        parser = HfArgumentParser(BasicExample)
+
+        args_dict = {
+            "foo": 12,
+            "bar": 3.14,
+            "baz": "42",
+            "flag": True,
+            "extra": 42,
+        }
+
+        self.assertRaises(ValueError, parser.parse_dict, args_dict, allow_extra_keys=False)
+
     def test_integration_training_args(self):
         parser = HfArgumentParser(TrainingArguments)
         self.assertIsNotNone(parser)

@@ -22,12 +22,40 @@ The abstract from the paper is the following:
 
 Tips:
 
-- MobileViT is more like a CNN than a Transformer model. It does not work on sequence data but on batches of images. Unlike ViT, there are no embeddings. The backbone model outputs a feature map.
+- MobileViT is more like a CNN than a Transformer model. It does not work on sequence data but on batches of images. Unlike ViT, there are no embeddings. The backbone model outputs a feature map. You can follow [this tutorial](https://keras.io/examples/vision/mobilevit) for a lightweight introduction.
 - One can use [`MobileViTFeatureExtractor`] to prepare images for the model. Note that if you do your own preprocessing, the pretrained checkpoints expect images to be in BGR pixel order (not RGB).
 - The available image classification checkpoints are pre-trained on [ImageNet-1k](https://huggingface.co/datasets/imagenet-1k) (also referred to as ILSVRC 2012, a collection of 1.3 million images and 1,000 classes).
 - The segmentation model uses a [DeepLabV3](https://arxiv.org/abs/1706.05587) head. The available semantic segmentation checkpoints are pre-trained on [PASCAL VOC](http://host.robots.ox.ac.uk/pascal/VOC/). 
+- As the name suggests MobileViT was desgined to be performant and efficient on mobile phones. The TensorFlow versions of the MobileViT models are fully compatible with [TensorFlow Lite](https://www.tensorflow.org/lite). 
 
-This model was contributed by [matthijs](https://huggingface.co/Matthijs). The original code and weights can be found [here](https://github.com/apple/ml-cvnets).
+  You can use the following code to convert a MobileViT checkpoint (be it image classification or semantic segmentation) to generate a 
+  TensorFlow Lite model:
+
+```py
+from transformers import TFMobileViTForImageClassification
+import tensorflow as tf
+
+
+model_ckpt = "apple/mobilevit-xx-small"
+model = TFMobileViTForImageClassification.from_pretrained(model_ckpt)
+
+converter = tf.lite.TFLiteConverter.from_keras_model(model)
+converter.optimizations = [tf.lite.Optimize.DEFAULT]
+converter.target_spec.supported_ops = [
+    tf.lite.OpsSet.TFLITE_BUILTINS,
+    tf.lite.OpsSet.SELECT_TF_OPS,
+]
+tflite_model = converter.convert()
+tflite_filename = model_ckpt.split("/")[-1] + ".tflite"
+with open(tflite_filename, "wb") as f:
+    f.write(tflite_model)
+```
+
+  The resulting model will be just **about an MB** making it a good fit for mobile applications where resources and network
+  bandwidth can be constrained. 
+
+
+This model was contributed by [matthijs](https://huggingface.co/Matthijs). The TensorFlow version of the model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). The original code and weights can be found [here](https://github.com/apple/ml-cvnets).
 
 
 ## MobileViTConfig
@@ -53,3 +81,18 @@ This model was contributed by [matthijs](https://huggingface.co/Matthijs). The o
 
 [[autodoc]] MobileViTForSemanticSegmentation
     - forward
+
+## TFMobileViTModel
+
+[[autodoc]] TFMobileViTModel
+    - call 
+
+## TFMobileViTForImageClassification
+
+[[autodoc]] TFMobileViTForImageClassification
+    - call 
+
+## TFMobileViTForSemanticSegmentation
+
+[[autodoc]] TFMobileViTForSemanticSegmentation
+    - call 

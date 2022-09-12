@@ -1431,7 +1431,7 @@ class TFTapasForQuestionAnswering(TFTapasPreTrainedModel):
             logits_aggregation = self.aggregation_classifier(pooled_output)
 
         # Total loss calculation
-        total_loss = 0.0
+        total_loss = tf.zeros(shape=(1,), dtype=tf.float32)
         calculate_loss = False
         if labels is not None:
             calculate_loss = True

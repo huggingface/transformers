@@ -63,7 +63,6 @@ class DuplicationIndex:
 
         self._index.insert(code_key, min_hash)
         if len(close_duplicates) > 0:
-
             for base_duplicate in close_duplicates:
                 if base_duplicate in self._duplicate_clusters:
                     self._duplicate_clusters[base_duplicate].add(code_key)

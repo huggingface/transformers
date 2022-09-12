@@ -1,3 +1,5 @@
+from copy import deepcopy
+
 from transformers.utils import is_accelerate_available, is_bitsandbytes_available
 
 
@@ -9,6 +11,7 @@ if is_bitsandbytes_available():
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
+    from accelerate.utils import find_tied_parameters
 
 
 def set_module_8bit_tensor_to_device(module, tensor_name, device, value=None):
@@ -132,8 +135,17 @@ def get_key_to_not_convert(model):
     model (`torch.nn.Module`):
         Input model
     """
+    # Create a copy of the model and tie the weights, then
+    # check if it contains tied weights
+    tied_model = deepcopy(model)  # this has 0 cost since it is done inside `init_empty_weights` context manager`
+    tied_model.tie_weights()
+    has_tied_params = len(find_tied_parameters(tied_model)) > 0
+
+    # Check if it is a base model
+    is_base_model = not hasattr(model, model.base_model_prefix)
+
     # Ignore this for base models (BertModel, GPT2Model, etc.)
-    if not hasattr(model, model.base_model_prefix):
+    if (not has_tied_params) and is_base_model:
         return ""
 
     # otherwise they have an attached head

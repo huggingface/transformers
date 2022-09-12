@@ -2398,7 +2398,7 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
 
         # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
         # bnb will fail even if bnb is installed.
-        with patch.dict("sys.modules", {"bnb.optim": None}):
+        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
             with self.assertRaises(ValueError):
                 Trainer.get_optimizer_cls_and_kwargs(args)
 

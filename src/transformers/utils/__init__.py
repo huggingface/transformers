@@ -63,6 +63,7 @@ from .hub import (
     cached_file,
     default_cache_path,
     define_sagemaker_information,
+    extract_commit_hash,
     get_cached_models,
     get_file_from_repo,
     get_full_repo_name,

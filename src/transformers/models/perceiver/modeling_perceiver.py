@@ -1960,7 +1960,6 @@ def build_position_encoding(
     Builds the position encoding.
 
     Args:
-
     - out_channels: refers to the number of channels of the position encodings.
     - project_pos_dim: if specified, will project the position encodings to this dimension.
 
