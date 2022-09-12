@@ -222,7 +222,6 @@ class FlaxBloomAttention(nn.Module):
         deterministic: bool = True,
         init_cache: bool = False,
         output_attentions: bool = False,
-        layer_number: int = None,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
 
@@ -357,7 +356,6 @@ class FlaxBloomBlock(nn.Module):
         hidden_states,
         alibi,
         attention_mask=None,
-        layer_number: int = None,
         layer_past=None,
         deterministic: bool = True,
         init_cache: bool = False,
@@ -383,7 +381,6 @@ class FlaxBloomBlock(nn.Module):
             deterministic=deterministic,
             init_cache=init_cache,
             output_attentions=output_attentions,
-            layer_number=layer_number,
         )
 
         attention_output = attn_outputs[0]
@@ -594,7 +591,6 @@ class FlaxBloomBlockCollection(nn.Module):
                     deterministic=deterministic,
                     init_cache=init_cache,
                     output_attentions=output_attentions,
-                    layer_number=layer_number,
                 )
                 hidden_states = layer_outputs[0]
 
