@@ -539,7 +539,7 @@ class FlaxBloomBlockCollection(nn.Module):
             FlaxBloomBlock(self.config, name=str(layer_number), dtype=self.dtype, use_scan=False)
             for layer_number in range(self.config.num_hidden_layers)
         ]
-        
+
         if self.use_scan:
             self.scan_fn = scan_with_axes(
                 FlaxBloomBlock,
