@@ -433,24 +433,21 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-    # Following https://github.com/sayakpaulresearch/msn/blob/main/src/deit.py#L200-#L211.
-    def _init_weights(self, module):
+    # todo: Resort to https://github.com/sayakpaulresearch/msn/blob/main/src/deit.py#L200-#L211
+    # when creating pre-training scripts.
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            torch.nn.init.trunc_normal_(module.weight, std=self.config.initializer_range)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
-
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
-        elif isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight, mode="fan_in", nonlinearity="relu")
-            if isinstance(module, nn.Conv2d) and module.bias is not None:
-                nn.init.constant_(module.bias, 0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
+    def _set_gradient_checkpointing(self, module: ViTMSNEncoder, value: bool = False) -> None:
         if isinstance(module, ViTMSNEncoder):
             module.gradient_checkpointing = value
 
@@ -631,14 +628,24 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoFeatureExtractor, ViTMSNForImageClassification >>> import torch >>> from PIL
-        import Image >>> import requests >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg" >>> image =
-        Image.open(requests.get(url, stream=True).raw) >>> feature_extractor =
-        AutoFeatureExtractor.from_pretrained("facebook/vit-msn-small") >>> model =
-        ViTMSNForImageClassification.from_pretrained("facebook/vit-msn-small") >>> inputs =
-        feature_extractor(images=image, return_tensors="pt") >>> with torch.no_grad(): ... logits =
-        model(**inputs).logits >>> # model predicts one of the 1000 ImageNet classes >>> predicted_label =
-        logits.argmax(-1).item() >>> print(model.config.id2label[predicted_label])"""
+        >>> from transformers import AutoFeatureExtractor, ViTMSNForImageClassification
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/vit-msn-small")
+        >>> model = ViTMSNForImageClassification.from_pretrained("facebook/vit-msn-small")
+
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_label = logits.argmax(-1).item()
+        >>> print(model.config.id2label[predicted_label])
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.vit(
@@ -672,6 +679,8 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
                     loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
+                print(f"Logit shape: {logits.view(-1, self.num_labels).shape}")
+                print(f"Labels shape: {labels.view(-1).shape}")
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
