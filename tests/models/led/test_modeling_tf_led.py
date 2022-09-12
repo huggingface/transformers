@@ -428,4 +428,4 @@ class TFLEDModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.convert_to_tensor(
             [[33.6507, 6.4572, 16.8089], [5.8739, -2.4238, 11.2902], [-3.2139, -4.3149, 4.2783]],
         )
-        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-3)
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-3, rtol=1e-3)
