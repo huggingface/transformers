@@ -983,7 +983,7 @@ class TFGPT2DoubleHeadsModel(TFGPT2PreTrainedModel):
         r"""
         mc_token_ids (`tf.Tensor` or `Numpy array` of shape `(batch_size, num_choices)`, *optional*, default to index of the last token of the input):
             Index of the classification token in each input sequence. Selected in the range `[0, input_ids.size(-1) -
-            1[`.
+            1]`.
 
         Return:
 

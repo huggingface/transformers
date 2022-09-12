@@ -242,7 +242,7 @@ PT_SEQUENCE_CLASSIFICATION_SAMPLE = r"""
     >>> num_labels = len(model.config.id2label)
     >>> model = {model_class}.from_pretrained("{checkpoint}", num_labels=num_labels)
 
-    >>> labels = torch.tensor(1)
+    >>> labels = torch.tensor([1])
     >>> loss = model(**inputs, labels=labels).loss
     >>> round(loss.item(), 2)
     {expected_loss}

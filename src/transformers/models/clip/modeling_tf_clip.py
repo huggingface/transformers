@@ -874,6 +874,7 @@ class TFCLIPMainLayer(tf.keras.layers.Layer):
         loss = None
         if return_loss:
             loss = clip_loss(logits_per_text)
+            loss = tf.reshape(loss, (1,))
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
