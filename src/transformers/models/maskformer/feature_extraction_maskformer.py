@@ -163,7 +163,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         images: ImageInput,
         segmentation_maps: ImageInput = None,
         pad_and_return_pixel_mask: Optional[bool] = True,
-        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+        instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
@@ -203,10 +203,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            instance_id_to_semantic_id (`Dict[int, int]`, *optional*):
-                If passed, we treat `segmentation_maps` as an instance segmentation map where each pixel represents an
-                instance id. To convert it to a binary mask of shape (`batch, num_labels, height, width`) we need a
-                dictionary mapping instance ids to label ids to create a semantic segmentation map.
+            instance_id_to_semantic_id (`List[Dict[int, int]]` or `Dict[int, int]`, *optional*):
+                A mapping between object instance ids and class ids. If passed, `segmentation_maps` is treated as an instance segmentation map 
+                where each pixel represents an instance id. Can be provided as a single dictionary with a global /dataset-level mapping or as 
+                a list of dictionaries (one per image), to map instance ids in each image separately.
 
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
@@ -339,6 +339,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             for label in all_labels:
                 class_id = instance_id_to_semantic_id[label]
                 labels[all_labels==label] = class_id
+        else:
+            labels = all_labels
 
         # Decrement labels by 1
         if self.reduce_labels:
@@ -351,7 +353,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         pixel_values_list: List["np.ndarray"],
         segmentation_maps: ImageInput = None,
         pad_and_return_pixel_mask: bool = True,
-        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+        instance_id_to_semantic_id: Optional[Union[List[Dict[int, int]], Dict[int, int]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
     ):
         """
@@ -407,10 +409,17 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         if segmentation_maps is not None:
             segmentation_maps = map(np.array, segmentation_maps)
             converted_segmentation_maps = []
-            for segmentation_map in segmentation_maps:
-                converted_segmentation_map = self.convert_segmentation_map_to_binary_masks(
-                    segmentation_map, instance_id_to_semantic_id
-                )
+
+            for i, segmentation_map in enumerate(segmentation_maps):
+                # Use instance2class_id mapping per image
+                if isinstance(instance_id_to_semantic_id, List):
+                    converted_segmentation_map = self.convert_segmentation_map_to_binary_masks(
+                        segmentation_map, instance_id_to_semantic_id[i]
+                    )  
+                else:
+                    converted_segmentation_map = self.convert_segmentation_map_to_binary_masks(
+                        segmentation_map, instance_id_to_semantic_id
+                    )
                 converted_segmentation_maps.append(converted_segmentation_map)
 
             annotations = []
