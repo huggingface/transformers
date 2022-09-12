@@ -189,7 +189,8 @@ class TFLogitsProcessorTest(unittest.TestCase):
         # create distribution and take log (inverse to Softmax as taken in TFTopPLogitsWarper)
         dist = np.log(np.array([[0.3, 0.1, 0.1, 0.5], [0.15, 0.3, 0.3, 0.25]], dtype=np.float32))
 
-        top_p_warp = TFTopPLogitsWarper(0.7)
+        # top_p = 0.8 is an edge case for the 1st test -- exact sum of the two most likely tokens
+        top_p_warp = TFTopPLogitsWarper(0.8)
         if use_xla:
             top_p_warp = tf.function(top_p_warp, jit_compile=True)
         filtered_dist = tf.exp(top_p_warp(input_ids, dist, cur_len))
