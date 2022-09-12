@@ -209,10 +209,10 @@ class FlaxBloomGenerationTest(unittest.TestCase):
     all_generative_model_classes = () if is_flax_available() else ()
 
     def setUp(self):
-        self.model_id = "bigscience/bloom-350m"
+        self.model_id = "bigscience/bloom-560m"
         self.tokenizer = BloomTokenizerFast.from_pretrained(self.model_id, padding_side="left")
         self.model_tester = FlaxBloomModelTester(self)
-        self.model = FlaxBloomForCausalLM.from_pretrained(self.model_id, from_pt=True)
+        self.model = FlaxBloomForCausalLM.from_pretrained(self.model_id, from_pt=True, revision="gs555750")
 
     def test_model_batched_gen(self):
         # tests if the model outputs the same generation for the same batched input
