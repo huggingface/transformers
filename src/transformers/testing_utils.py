@@ -1639,14 +1639,9 @@ class set_reproducible(ContextDecorator):
         sys.settrace(None)
 
     def trace_calls(self, frame, event, arg):
-        # We want to only trace our call events
-        # and setting the seed before the forward function
-        if event != "call":
-            return
-        elif frame.f_code.co_name != "forward":
-            return
-        # Set the seed when it is a call to a forward function
-        return self.set_seed
+        # Set the seed when it is a call to a forward function from the model
+        if "/modeling_" in frame.f_code.co_filename:
+            return self.set_seed
 
     def set_seed(self, frame, event, arg):
         # Set the seed
