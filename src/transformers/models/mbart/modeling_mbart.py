@@ -88,7 +88,7 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int):
 
     shifted = torch.full_like(input_ids, pad_token_id)
     for b_idx in range(input_ids.size(0)):
-        shifted[b_idx, 1:index_of_eos[b_idx]+1] = prev_output_tokens[b_idx, :index_of_eos[b_idx]].clone()
+        shifted[b_idx, 1 : index_of_eos[b_idx] + 1] = prev_output_tokens[b_idx, : index_of_eos[b_idx]].clone()
 
     shifted[:, 0] = decoder_start_tokens
 
