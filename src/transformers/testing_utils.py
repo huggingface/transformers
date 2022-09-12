@@ -1646,4 +1646,3 @@ class set_reproducible(ContextDecorator):
     def set_seed(self, frame, event, arg):
         # Set the seed
         set_seed(self.seed)
-        return
