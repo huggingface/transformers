@@ -648,18 +648,18 @@ CONVBERT_START_DOCSTRING = r"""
     pass your inputs and labels in any format that `model.fit()` supports!
 
     If you want to use the second format outside of Keras methods like `fit()` and `predict()`, such as when creating
-    your own layers or models with the Keras `Functional` API, there are three possibilities you
-    can use to gather all the input Tensors in the first positional argument:
+    your own layers or models with the Keras `Functional` API, there are three possibilities you can use to gather all
+    the input Tensors in the first positional argument:
 
     - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
-    
-    Note that when creating models and layers with (subclassing)[https://keras.io/guides/making_new_layers_and_models_via_subclassing/]
-    then you don't need to worry about any of this, as you can just pass inputs like you would to any other Python
-    function!
+
+    Note that when creating models and layers with
+    (subclassing)[https://keras.io/guides/making_new_layers_and_models_via_subclassing/] then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
