@@ -317,9 +317,6 @@ class FlaxBloomMLP(nn.Module):
     def setup(self):
         hidden_size = self.config.hidden_size
 
-        self.pretraining_tp = self.config.pretraining_tp
-        self.slow_but_exact = self.config.slow_but_exact
-
         kernel_init = jax.nn.initializers.normal(self.config.initializer_range)
 
         self.dense_h_to_4h = nn.Dense(4 * hidden_size, dtype=self.dtype, kernel_init=kernel_init)
