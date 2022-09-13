@@ -406,6 +406,15 @@ class FeaturesManager:
             "image-classification",
             onnx_config_cls="models.mobilevit.MobileViTOnnxConfig",
         ),
+        "mpnet": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "sequence-classification",
+            "multiple-choice",
+            "token-classification",
+            "question-answering",
+            onnx_config_cls="models.mpnet.MPNetOnnxConfig",
+        ),
         "mt5": supported_features_mapping(
             "default",
             "default-with-past",

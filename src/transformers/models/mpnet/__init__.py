@@ -29,7 +29,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig"],
+    "configuration_mpnet": ["MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "MPNetConfig", "MPNetOnnxConfig"],
     "tokenization_mpnet": ["MPNetTokenizer"],
 }
 
@@ -80,7 +80,7 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig
+    from .configuration_mpnet import MPNET_PRETRAINED_CONFIG_ARCHIVE_MAP, MPNetConfig, MPNetOnnxConfig
     from .tokenization_mpnet import MPNetTokenizer
 
     try:

@@ -86,7 +86,7 @@ class MPNetEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
-    def forward(self, input_ids=None, position_ids=None, inputs_embeds=None, **kwargs):
+    def forward(self, input_ids=None, position_ids=None, inputs_embeds=None, *args, **kwargs):
         if position_ids is None:
             if input_ids is not None:
                 position_ids = create_position_ids_from_input_ids(input_ids, self.padding_idx)
@@ -162,6 +162,7 @@ class MPNetSelfAttention(nn.Module):
         head_mask=None,
         position_bias=None,
         output_attentions=False,
+        *args,
         **kwargs,
     ):
 
@@ -236,6 +237,7 @@ class MPNetAttention(nn.Module):
         head_mask=None,
         position_bias=None,
         output_attentions=False,
+        *args,
         **kwargs,
     ):
         self_outputs = self.attn(
@@ -295,6 +297,7 @@ class MPNetLayer(nn.Module):
         head_mask=None,
         position_bias=None,
         output_attentions=False,
+        *args,
         **kwargs,
     ):
         self_attention_outputs = self.attention(
@@ -329,6 +332,7 @@ class MPNetEncoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=False,
+        *args,
         **kwargs,
     ):
         position_bias = self.compute_position_bias(hidden_states)
@@ -344,6 +348,7 @@ class MPNetEncoder(nn.Module):
                 head_mask[i],
                 position_bias,
                 output_attentions=output_attentions,
+                *args,
                 **kwargs,
             )
             hidden_states = layer_outputs[0]
@@ -526,6 +531,7 @@ class MPNetModel(MPNetPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        *args,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPooling]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -664,7 +670,7 @@ class MPNetLMHead(nn.Module):
         # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
         self.decoder.bias = self.bias
 
-    def forward(self, features, **kwargs):
+    def forward(self, features, *args, **kwargs):
         x = self.dense(features)
         x = gelu(x)
         x = self.layer_norm(x)
@@ -951,7 +957,7 @@ class MPNetClassificationHead(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
 
-    def forward(self, features, **kwargs):
+    def forward(self, features, *args, **kwargs):
         x = features[:, 0, :]  # take <s> token (equiv. to BERT's [CLS] token)
         x = self.dropout(x)
         x = self.dense(x)
