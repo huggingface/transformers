@@ -102,6 +102,7 @@ def rgb_to_id(color):
         return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
     return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
 
+
 # Copied from transformers.models.detr.feature_extraction_detr.id_to_rgb
 def id_to_rgb(id_map):
     if isinstance(id_map, np.ndarray):
@@ -399,7 +400,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
             target["boxes"] = boxes
 
         return image, target
-    
+
     def __call__(
         self,
         images: ImageInput,
