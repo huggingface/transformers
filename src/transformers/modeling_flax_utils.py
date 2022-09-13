@@ -47,8 +47,10 @@ from .utils import (
     add_start_docstrings_to_model_forward,
     cached_file,
     copy_func,
+    download_url,
     has_file,
     is_offline_mode,
+    is_remote_url,
     logging,
     replace_return_docstrings,
 )
@@ -677,6 +679,9 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
             elif os.path.isfile(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
                 is_local = True
+            elif is_remote_url(pretrained_model_name_or_path):
+                archive_file = pretrained_model_name_or_path
+                resolved_archive_file = download_url(pretrained_model_name_or_path)
             else:
                 filename = WEIGHTS_NAME if from_pt else FLAX_WEIGHTS_NAME
                 try:

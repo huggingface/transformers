@@ -32,7 +32,9 @@ from .utils import (
     PushToHubMixin,
     cached_file,
     copy_func,
+    download_url,
     extract_commit_hash,
+    is_remote_url,
     is_torch_available,
     logging,
 )
@@ -592,9 +594,12 @@ class PretrainedConfig(PushToHubMixin):
 
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isfile(os.path.join(subfolder, pretrained_model_name_or_path)):
-            # Soecial case when pretrained_model_name_or_path is a local file
+            # Special case when pretrained_model_name_or_path is a local file
             resolved_config_file = pretrained_model_name_or_path
             is_local = True
+        elif is_remote_url(pretrained_model_name_or_path):
+            configuration_file = pretrained_model_name_or_path
+            resolved_config_file = download_url(pretrained_model_name_or_path)
         else:
             configuration_file = kwargs.pop("_configuration_file", CONFIG_NAME)
 

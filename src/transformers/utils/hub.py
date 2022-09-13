@@ -19,10 +19,12 @@ import os
 import re
 import shutil
 import sys
+import tempfile
 import traceback
 import warnings
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Union
+from urllib.parse import urlparse
 from uuid import uuid4
 
 import huggingface_hub
@@ -37,7 +39,7 @@ from huggingface_hub import (
     whoami,
 )
 from huggingface_hub.constants import HUGGINGFACE_HEADER_X_LINKED_ETAG, HUGGINGFACE_HEADER_X_REPO_COMMIT
-from huggingface_hub.file_download import REGEX_COMMIT_HASH
+from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
     EntryNotFoundError,
     LocalEntryNotFoundError,
@@ -122,6 +124,11 @@ HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/tele
 
 # Return value when trying to load a file from cache but the file does not exist in the distant repo.
 _CACHED_NO_EXIST = object()
+
+
+def is_remote_url(url_or_filename):
+    parsed = urlparse(url_or_filename)
+    return parsed.scheme in ("http", "https")
 
 
 def get_cached_models(cache_dir: Union[str, Path] = None) -> List[Tuple]:
@@ -539,6 +546,32 @@ def get_file_from_repo(
         _raise_exceptions_for_missing_entries=False,
         _raise_exceptions_for_connection_errors=False,
     )
+
+
+def download_url(url, proxies=None):
+    """
+    Downloads a given url in a temporary file. This function is not safe to use in multiple processes. Its only use is
+    for deprecated behavior allowing to download config/models with a single url instead of using the Hub.
+
+    Args:
+        url (`str`): The url of the file to download.
+        proxies (`Dict[str, str]`, *optional*):
+            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+            'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+
+    Returns:
+        `str`: The location of the temporary file where the url was downloaded.
+    """
+    warnings.warn(
+        f"Using `from_pretrained` with the url of a file (here {url}) is deprecated and won't be possible anymore in"
+        " v5 of Transformers. You should host your file on the Hub (hf.co) instead and use the repository ID. Note"
+        " that this is not compatible with the caching system (your file will be downloaded at each execution) or"
+        " multiple processes (each process will download the file in a different temporary file)."
+    )
+    tmp_file = tempfile.mktemp()
+    with open(tmp_file, "wb") as f:
+        http_get(url, f, proxies=proxies)
+    return tmp_file
 
 
 def has_file(
