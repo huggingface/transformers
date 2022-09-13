@@ -5122,14 +5122,14 @@ class ViTMAEPreTrainedModel(metaclass=DummyObject):
 VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ViTMSNModel(metaclass=DummyObject):
+class ViTMSNForImageClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ViTMSNForImageClassification(metaclass=DummyObject):
+class ViTMSNModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
