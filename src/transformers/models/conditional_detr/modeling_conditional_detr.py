@@ -57,7 +57,7 @@ _CONFIG_FOR_DOC = "ConditionalDetrConfig"
 _CHECKPOINT_FOR_DOC = "Atten4Vis/ConditionalDETR"
 
 CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "Atten4Vis/ConditionalDETR",
+    "microsoft/conditional-detr-resnet-50",
     # See all conditional_detr models at https://huggingface.co/models?filter=conditional_detr
 ]
 
