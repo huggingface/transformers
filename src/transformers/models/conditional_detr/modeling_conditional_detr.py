@@ -503,6 +503,7 @@ def inverse_sigmoid(x, eps=1e-5):
     return torch.log(x1 / x2)
 
 
+# Copied from transformers.models.detr.modeling_detr.DetrAttention with DETR->Conditional DETR
 class DetrAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
