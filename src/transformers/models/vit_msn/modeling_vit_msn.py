@@ -591,6 +591,8 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         )
 
 
+# Caution: We don't have the weights for the classification head yet. This class
+# is here for the users that are interested to fine-tune the base model (ViTMSNModel).
 @add_start_docstrings(
     """
     ViTMSN Model with an image classification head on top e.g. for ImageNet.
