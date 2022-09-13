@@ -1266,14 +1266,14 @@ class SpecialTokensMixin:
         all_toks = list(OrderedDict.fromkeys(all_toks))
         return all_toks
 
-    @property
+    @cached_property
     def all_special_ids(self) -> List[int]:
         """
         `List[int]`: List the ids of the special tokens(`'<unk>'`, `'<cls>'`, etc.) mapped to class attributes.
         """
         all_toks = self.all_special_tokens
         all_ids = self.convert_tokens_to_ids(all_toks)
-        return all_ids
+        return set(all_ids)
 
 
 ENCODE_KWARGS_DOCSTRING = r"""
