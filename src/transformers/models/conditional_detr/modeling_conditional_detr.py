@@ -326,6 +326,7 @@ def replace_batch_norm(m, name=""):
         replace_batch_norm(ch, n)
 
 
+# Copied from transformers.models.detr.modeling_detr.DetrTimmConvEncoder
 class ConditionalDetrTimmConvEncoder(nn.Module):
     """
     Convolutional encoder (backbone) from the timm library.
