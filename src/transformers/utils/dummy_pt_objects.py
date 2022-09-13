@@ -5136,6 +5136,13 @@ class ViTMSNModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class ViTMSNPreTrainedModel(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
