@@ -54,11 +54,11 @@ if is_timm_available():
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "ConditionalDetrConfig"
-_CHECKPOINT_FOR_DOC = "Atten4Vis/ConditionalDETR"
+_CHECKPOINT_FOR_DOC = "microsoft/conditional-detr-resnet-50"
 
 CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/conditional-detr-resnet-50",
-    # See all conditional_detr models at https://huggingface.co/models?filter=conditional_detr
+    # See all Conditional DETR models at https://huggingface.co/models?filter=conditional_detr
 ]
 
 
@@ -331,11 +331,11 @@ class ConditionalDetrTimmConvEncoder(nn.Module):
     """
     Convolutional encoder (backbone) from the timm library.
 
-    nn.BatchNorm2d layers are replaced by ConditionalDetrFrozenBatchNorm2d as defined above.
+    nn.BatchNorm2d layers are replaced by DetrFrozenBatchNorm2d as defined above.
 
     """
 
-    def __init__(self, name: str, dilation: bool):
+    def __init__(self, name: str, dilation: bool, use_pretrained_backbone: bool, num_channels: int = 3):
         super().__init__()
 
         kwargs = {}
@@ -344,7 +344,14 @@ class ConditionalDetrTimmConvEncoder(nn.Module):
 
         requires_backends(self, ["timm"])
 
-        backbone = create_model(name, pretrained=True, features_only=True, out_indices=(1, 2, 3, 4), **kwargs)
+        backbone = create_model(
+            name,
+            pretrained=use_pretrained_backbone,
+            features_only=True,
+            out_indices=(1, 2, 3, 4),
+            in_chans=num_channels,
+            **kwargs,
+        )
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
@@ -482,7 +489,7 @@ def build_position_encoding(config):
 
 
 # function to generate sine positional embedding for 2d coordinates
-def gen_sineembed_for_position(pos_tensor):
+def gen_sine_position_embeddings(pos_tensor):
     scale = 2 * math.pi
     dim_t = torch.arange(128, dtype=torch.float32, device=pos_tensor.device)
     dim_t = 10000 ** (2 * (dim_t // 2) / 128)
@@ -503,12 +510,11 @@ def inverse_sigmoid(x, eps=1e-5):
     return torch.log(x1 / x2)
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrAttention with DETR->Conditional DETR
 class DetrAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
 
-    Here, we add position embeddings to the queries and keys (as explained in the CONDITIONAL_DETR paper).
+    Here, we add position embeddings to the queries and keys (as explained in the Conditional DETR paper).
     """
 
     def __init__(
@@ -1112,7 +1118,6 @@ CONDITIONAL_DETR_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrEncoder with DETR->CONDITIONAL DETR,Detr->ConditionalDetr
 class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -1120,7 +1125,7 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
 
     The encoder updates the flattened feature map through multiple self-attention layers.
 
-    Small tweak for CONDITIONAL_DETR:
+    Small tweak for Conditional DETR:
 
     - position_embeddings are added to the forward pass.
 
@@ -1136,7 +1141,7 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
 
         self.layers = nn.ModuleList([ConditionalDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-        # in the original CONDITIONAL_DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
+        # in the original Conditional DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1341,7 +1346,7 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         reference_points = reference_points_before_sigmoid.sigmoid().transpose(0, 1)
         obj_center = reference_points[..., :2].transpose(0, 1)
         # get sine embedding for the query vector
-        query_sine_embed_before_transformation = gen_sineembed_for_position(obj_center)
+        query_sine_embed_before_transformation = gen_sine_position_embeddings(obj_center)
 
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -1503,8 +1508,8 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ConditionalDetrFeatureExtractor.from_pretrained("Atten4Vis/ConditionalDETR")
-        >>> model = ConditionalDetrModel.from_pretrained("Atten4Vis/ConditionalDETR")
+        >>> feature_extractor = ConditionalDetrFeatureExtractor.from_pretrained("microsoft/conditional-detr-resnet-50")
+        >>> model = ConditionalDetrModel.from_pretrained("microsoft/conditional-detr-resnet-50")
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
@@ -1606,7 +1611,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
 
-        # CONDITIONAL_DETR encoder-decoder model
+        # CONDITIONAL DETR encoder-decoder model
         self.model = ConditionalDetrModel(config)
 
         # Object detection heads
@@ -1662,8 +1667,8 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ConditionalDetrFeatureExtractor.from_pretrained("Atten4Vis/ConditionalDETR")
-        >>> model = ConditionalDetrForObjectDetection.from_pretrained("Atten4Vis/ConditionalDETR")
+        >>> feature_extractor = ConditionalDetrFeatureExtractor.from_pretrained("microsoft/conditional-detr-resnet-50")
+        >>> model = ConditionalDetrForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -2374,7 +2379,7 @@ class ConditionalDetrLoss(nn.Module):
         return losses
 
 
-# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead with Detr->ConditionalDetr
 class ConditionalDetrMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
@@ -2396,7 +2401,6 @@ class ConditionalDetrMLPPredictionHead(nn.Module):
         return x
 
 
-# taken from https://github.com/Atten4Vis/conditionalDETR/blob/master/models/matcher.py
 class ConditionalDetrHungarianMatcher(nn.Module):
     """
     This class computes an assignment between the targets and the predictions of the network.
@@ -2421,7 +2425,7 @@ class ConditionalDetrHungarianMatcher(nn.Module):
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
         self.giou_cost = giou_cost
-        if class_cost == 0 or bbox_cost == 0 or giou_cost == 0:
+        if class_cost == 0 and bbox_cost == 0 and giou_cost == 0:
             raise ValueError("All costs of the Matcher can't be 0")
 
     @torch.no_grad()
@@ -2488,6 +2492,7 @@ def _upcast(t: Tensor) -> Tensor:
         return t if t.dtype in (torch.int32, torch.int64) else t.int()
 
 
+# Copied from transformers.models.detr.modeling_detr.box_area
 def box_area(boxes: Tensor) -> Tensor:
     """
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
@@ -2504,7 +2509,7 @@ def box_area(boxes: Tensor) -> Tensor:
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
 
 
-# modified from torchvision to also return the union
+# Copied from transformers.models.detr.modeling_detr.box_iou
 def box_iou(boxes1, boxes2):
     area1 = box_area(boxes1)
     area2 = box_area(boxes2)
@@ -2521,6 +2526,7 @@ def box_iou(boxes1, boxes2):
     return iou, union
 
 
+# Copied from transformers.models.detr.modeling_detr.generalized_box_iou
 def generalized_box_iou(boxes1, boxes2):
     """
     Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
@@ -2554,7 +2560,7 @@ def _max_by_axis(the_list):
             maxes[index] = max(maxes[index], item)
     return maxes
 
-
+# Copied from transformers.models.detr.modeling_detr.NestedTensor
 class NestedTensor(object):
     def __init__(self, tensors, mask: Optional[Tensor]):
         self.tensors = tensors
@@ -2575,7 +2581,7 @@ class NestedTensor(object):
     def __repr__(self):
         return str(self.tensors)
 
-
+# Copied from transformers.models.detr.modeling_detr.nested_tensor_from_tensor_list
 def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     if tensor_list[0].ndim == 3:
         max_size = _max_by_axis([list(img.shape) for img in tensor_list])
