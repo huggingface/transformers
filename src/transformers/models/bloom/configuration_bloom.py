@@ -70,7 +70,7 @@ class BloomConfig(PretrainedConfig):
             Dropout rate of the dropout function on the bias dropout.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             Dropout rate applied to the attention probs
-        use_cache (`bool`, *optional*, defaults to `True`):
+        use_cache (`bool`, *optional*, defaults to `False`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         pretraining_tp (`int`, *optional*, defaults to `1`):
             Experimental feature. Tensor parallelism rank used during pretraining with Megatron. Please refer to [this
