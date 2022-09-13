@@ -309,7 +309,6 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return image, target
 
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._resize
     def _resize(self, image, size, target=None, max_size=None):
         """
         Resize the image to the given size. Size can be min_size (scalar) or (w, h) tuple. If size is an int, smaller
@@ -380,7 +379,6 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return rescaled_image, target
 
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._normalize
     def _normalize(self, image, mean, std, target=None):
         """
         Normalize the image with a certain mean and std.
@@ -403,7 +401,6 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return image, target
     
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._call with DETR->Conditional DETR,Detr->ConditionalDetr
     def __call__(
         self,
         images: ImageInput,
@@ -626,7 +623,6 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return encoded_inputs
 
-    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._max_by_axis
     def _max_by_axis(self, the_list):
         # type: (List[List[int]]) -> List[int]
         maxes = the_list[0]
