@@ -54,9 +54,11 @@ from .utils import (
     ModelOutput,
     PushToHubMixin,
     cached_file,
+    download_url,
     find_labels,
     has_file,
     is_offline_mode,
+    is_remote_url,
     logging,
     requires_backends,
     working_or_temp_dir,
@@ -2345,6 +2347,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             elif os.path.isfile(pretrained_model_name_or_path + ".index"):
                 archive_file = pretrained_model_name_or_path + ".index"
                 is_local = True
+            elif is_remote_url(pretrained_model_name_or_path):
+                archive_file = pretrained_model_name_or_path
+                resolved_archive_file = download_url(pretrained_model_name_or_path)
             else:
                 # set correct filename
                 filename = WEIGHTS_NAME if from_pt else TF2_WEIGHTS_NAME
