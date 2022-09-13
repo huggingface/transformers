@@ -48,6 +48,7 @@ def center_to_corners_format(x):
     return torch.stack(b, dim=-1)
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.corners_to_center_format
 def corners_to_center_format(x):
     """
     Converts a NumPy array of bounding boxes of shape (number of bounding boxes, 4) of corners format (x_0, y_0, x_1,
