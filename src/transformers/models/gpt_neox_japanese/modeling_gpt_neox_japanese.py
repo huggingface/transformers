@@ -90,10 +90,12 @@ class GPTNeoXJapaneseAttention(nn.Module):
         self.max_positions = config.max_position_embeddings
         self.attention_dropout = nn.Dropout(config.attention_dropout)
         self.norm_factor = torch.sqrt(torch.tensor(self.head_size, dtype=torch.float32)).to(torch.get_default_dtype())
-        # removed bias parameters except for the last layer
+
+        self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=False)
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
+        # Activate bias if the last layer
         self.use_bias = use_bias
-        self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=use_bias)
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=use_bias)
+        self.dense_bias = nn.Parameter(torch.zeros(config.hidden_size)) if use_bias else None
 
     def forward(
         self,
@@ -152,13 +154,12 @@ class GPTNeoXJapaneseAttention(nn.Module):
         # Reshape outputs
         attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_size)
         attn_output = self.dense(attn_output)
-        bias = self.dense.state_dict()["bias"] if self.use_bias else None
 
         outputs = (attn_output, present)
         if output_attentions:
             outputs += (attn_weights,)
 
-        return outputs, bias
+        return outputs, self.dense_bias
 
     @classmethod
     def _split_heads(cls, tensor, num_attention_heads, attn_head_size):
@@ -353,9 +354,8 @@ class GPTNeoXJapaneseLayer(nn.Module):
             prob=self.hidden_dropout,
             training=self.training,
         )
-
-        # mlp_output, mlp_bias = self.mlp(self.post_attention_layernorm(attn_output))
         mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
+
         # attn_output = (mlp_output + mlp_bias) + atten_output
         attn_output = bias_dropout_add(
             mlp_output, bias=None, residual=attn_output, prob=self.hidden_dropout, training=self.training
