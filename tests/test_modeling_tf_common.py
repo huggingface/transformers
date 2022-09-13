@@ -1162,7 +1162,7 @@ class TFModelTesterMixin:
         for model_class in self.all_model_classes:
             for size in [config.vocab_size - 10, config.vocab_size + 10, None]:
                 # build the embeddings
-                model = model_class(config=config)
+                model = model_class(config=copy.deepcopy(config))  # `resize_token_embeddings` mutates `config`
                 old_input_embeddings = _get_word_embedding_weight(model, model.get_input_embeddings())
                 old_bias = model.get_bias()
                 old_output_embeddings = _get_word_embedding_weight(model, model.get_output_embeddings())
@@ -1202,6 +1202,42 @@ class TFModelTesterMixin:
                         if tf.math.reduce_sum(tf.math.abs(p1 - p2)) > 0:
                             models_equal = False
                     self.assertTrue(models_equal)
+
+    def test_save_load_after_resize_token_embeddings(self):
+        if not self.test_resize_embeddings:
+            return
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            # create a model with resized (expended) embeddings
+            new_tokens_size = 10
+            old_total_size = config.vocab_size
+            new_total_size = old_total_size + new_tokens_size
+            model = model_class(config=copy.deepcopy(config))  # `resize_token_embeddings` mutates `config`
+            model(model.dummy_inputs)  # builds the embeddings layer
+            model.resize_token_embeddings(new_total_size)
+
+            # fetch the output for an input exclusively made of new members of the vocabulary
+            new_vocab_input_ids = ids_tensor(inputs_dict["input_ids"].shape, new_tokens_size)
+            new_vocab_input_ids += old_total_size
+            outputs = model(new_vocab_input_ids)
+
+            # vocabulary out of bounds should raise an exception
+            with self.assertRaises(tf.errors.InvalidArgumentError):
+                outputs = model(new_vocab_input_ids * 100)
+
+            # save and load the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname, saved_model=False)
+                model = model_class.from_pretrained(tmpdirname)
+                restored_model_outputs = model(new_vocab_input_ids)
+
+                # check that the output for the restored model is the same
+                self.assert_outputs_same(restored_model_outputs, outputs)
+
+                # vocabulary out of bounds should raise an exception
+                with self.assertRaises(tf.errors.InvalidArgumentError):
+                    outputs = model(new_vocab_input_ids * 100)
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

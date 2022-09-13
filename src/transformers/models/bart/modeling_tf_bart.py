@@ -758,6 +758,17 @@ class TFBartEncoder(tf.keras.layers.Layer):
             else:
                 context_manager = nullcontext()
             with context_manager:
+                if tf.executing_eagerly():
+                    # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+                    # indices on GPU, returning zeros instead. This is a dangeroud silent behavior.
+                    tf.debugging.assert_less(
+                        input_ids,
+                        self.embed_tokens.input_dim,
+                        message=(
+                            "input_ids must be smaller than the embedding layer's input dimension (got"
+                            f" {tf.math.reduce_max(input_ids)} >={self.embed_tokens.input_dim})"
+                        ),
+                    )
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         embed_pos = self.embed_positions(input_shape)
@@ -954,6 +965,17 @@ class TFBartDecoder(tf.keras.layers.Layer):
             else:
                 context_manager = nullcontext()
             with context_manager:
+                if tf.executing_eagerly():
+                    # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+                    # indices on GPU, returning zeros instead. This is a dangeroud silent behavior.
+                    tf.debugging.assert_less(
+                        input_ids,
+                        self.embed_tokens.input_dim,
+                        message=(
+                            "input_ids must be smaller than the embedding layer's input dimension (got"
+                            f" {tf.math.reduce_max(input_ids)} >={self.embed_tokens.input_dim})"
+                        ),
+                    )
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         hidden_states = inputs_embeds
@@ -1279,7 +1301,6 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         self.bias_layer = BiasLayer(
             name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
-        self.final_logits_bias = self.bias_layer.bias  # alias to keep the same interface with PT
 
     def get_decoder(self):
         return self.model.decoder
@@ -1297,7 +1318,12 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         return {"final_logits_bias": self.bias_layer.bias}
 
     def set_bias(self, value):
-        self.bias_layer.bias = value["final_logits_bias"]
+        # Replaces the existing layers containing bias for correct (de)serialization.
+        vocab_size = value["final_logits_bias"].shape[-1]
+        self.bias_layer = BiasLayer(
+            name="final_logits_bias", shape=[1, vocab_size], initializer="zeros", trainable=False
+        )
+        self.bias_layer.bias.assign(value["final_logits_bias"])
 
     @add_start_docstrings_to_model_forward(BART_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
