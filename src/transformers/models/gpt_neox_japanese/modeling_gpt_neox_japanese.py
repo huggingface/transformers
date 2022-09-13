@@ -289,6 +289,18 @@ def apply_rotary_pos_emb(q, k, cos, sin, offset: int = 0):
 
 
 def bias_dropout_add(x: Tensor, bias: Tensor, residual: Optional[Tensor], prob: float, training: bool) -> Tensor:
+    """add bias to x, apply dropout and residual connection
+
+    Args:
+        x (Tensor): main path of output
+        bias (Tensor): None or attn_bias of the last attention layer
+        residual (Optional[Tensor]): residual value
+        prob (float): dropout probability
+        training (bool): whether in training mode or not
+
+    Returns:
+        Tensor: dropout(x + bias) + residual
+    """
     if bias is not None:
         x = x + bias
     out = torch.nn.functional.dropout(x, p=prob, training=training)
@@ -435,9 +447,9 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         self.config = config
 
         self.embed_in = nn.Embedding(config.vocab_size, config.hidden_size)
-        self.layers = nn.ModuleList([])
-        for layer_i in range(config.num_hidden_layers):
-            self.layers.append(GPTNeoXJapaneseLayer(config=config, layer_number=layer_i))
+        self.layers = nn.ModuleList(
+            [GPTNeoXJapaneseLayer(config=config, layer_number=i) for i in range(config.num_hidden_layers)]
+        )
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
