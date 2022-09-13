@@ -271,7 +271,13 @@ else:
                     "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            ("xlm-roberta-xl", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "xlm-roberta-xl",
+                (
+                    "XLMRobertaTokenizer" if is_sentencepiece_available() else None,
+                    "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             (
                 "xlnet",
                 (

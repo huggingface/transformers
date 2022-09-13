@@ -54,7 +54,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "xlm-roberta-xlarge"
 _CONFIG_FOR_DOC = "XLMRobertaXLConfig"
-_TOKENIZER_FOR_DOC = "RobertaTokenizer"
+_TOKENIZER_FOR_DOC = "XLMRobertaTokenizer"
 
 XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/xlm-roberta-xl",
