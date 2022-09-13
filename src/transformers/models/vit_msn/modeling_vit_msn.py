@@ -321,7 +321,7 @@ class ViTMSNOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTOutput with ViT->ViTMSN
+# Copied from transformers.models.vit.modeling_vit.ViTLayer with ViT->ViTMSN
 class ViTMSNLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
