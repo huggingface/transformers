@@ -457,7 +457,7 @@ class FlaxBloomPreTrainedModel(FlaxPreTrainedModel):
                 cache.
         """
         # init input variables to retrieve cache
-        input_ids = jnp.ones((batch_size, max_length))
+        input_ids = jnp.ones((batch_size, max_length), dtype="i4")
         attention_mask = jnp.ones_like(input_ids)
 
         init_variables = self.module.init(
@@ -641,7 +641,7 @@ class FlaxBloomModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
-        inputs_embeds = self.word_embeddings(input_ids.astype("i4"))
+        inputs_embeds = self.word_embeddings(input_ids)
         # do post-embedding layernorm
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
 
