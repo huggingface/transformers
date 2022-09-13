@@ -1220,24 +1220,26 @@ class TFModelTesterMixin:
             # fetch the output for an input exclusively made of new members of the vocabulary
             new_vocab_input_ids = ids_tensor(inputs_dict["input_ids"].shape, new_tokens_size)
             new_vocab_input_ids += old_total_size
-            outputs = model(new_vocab_input_ids)
-
-            # vocabulary out of bounds should raise an exception
-            with self.assertRaises(tf.errors.InvalidArgumentError):
-                outputs = model(new_vocab_input_ids * 100)
+            inputs_dict["input_ids"] = new_vocab_input_ids
+            prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
+            outputs = model(**prepared_inputs)
 
             # save and load the model
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname, saved_model=False)
                 model = model_class.from_pretrained(tmpdirname)
-                restored_model_outputs = model(new_vocab_input_ids)
+                restored_model_outputs = model(**prepared_inputs)
 
                 # check that the output for the restored model is the same
                 self.assert_outputs_same(restored_model_outputs, outputs)
 
-                # vocabulary out of bounds should raise an exception
-                with self.assertRaises(tf.errors.InvalidArgumentError):
-                    outputs = model(new_vocab_input_ids * 100)
+    # def test_save_load_after_resize_token_embeddings_with_special_tokens(self):
+    #             # in both cases, vocabulary out of bounds should raise an exception
+    #             inputs_dict["input_ids"] = new_vocab_input_ids * 100
+    #             prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
+    #             with self.assertRaises(tf.errors.InvalidArgumentError):
+    #                 outputs = model(new_vocab_input_ids * 100)
+
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
