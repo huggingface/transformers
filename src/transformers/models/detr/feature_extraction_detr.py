@@ -14,6 +14,7 @@
 # limitations under the License.
 """Feature extractor class for DETR."""
 
+import copy
 import io
 import pathlib
 from collections import defaultdict
@@ -547,6 +548,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             if annotations is not None:
                 annotations = [annotations]
 
+        # Create deep copies to avoid editing inputs in place
+        images = [copy.deepcopy(image) for image in images]
+
+        if annotations is not None:
+            annotations = [copy.deepcopy(annotation) for annotation in annotations]
+
         # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
         if annotations is not None:
             for idx, (image, target) in enumerate(zip(images, annotations)):
@@ -560,7 +567,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if self.do_resize and self.size is not None:
             if annotations is not None:
                 for idx, (image, target) in enumerate(zip(images, annotations)):
-                    image, target = self._resize(image=image, target=target, size=self.size, max_size=self.max_size)
+                    copy_image = image.copy()
+                    image, target = self._resize(
+                        image=copy_image, target=target, size=self.size, max_size=self.max_size
+                    )
                     images[idx] = image
                     annotations[idx] = target
             else:
@@ -579,6 +589,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 images = [
                     self._normalize(image=image, mean=self.image_mean, std=self.image_std)[0] for image in images
                 ]
+        else:
+            images = [np.array(image) for image in images]
 
         if pad_and_return_pixel_mask:
             # pad images up to largest image in batch and create pixel_mask
