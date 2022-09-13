@@ -1112,7 +1112,7 @@ CONDITIONAL_DETR_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrEncoder with DETR->CONDITIONAL_DETR,Detr->ConditionalDetr
+# Copied from transformers.models.detr.modeling_detr.DetrEncoder with DETR->CONDITIONAL DETR,Detr->ConditionalDetr
 class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
