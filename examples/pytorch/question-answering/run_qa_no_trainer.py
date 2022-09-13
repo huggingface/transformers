@@ -253,7 +253,7 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
+        "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
     )
     parser.add_argument(
         "--max_predict_samples",

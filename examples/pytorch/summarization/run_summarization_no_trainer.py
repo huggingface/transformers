@@ -138,7 +138,7 @@ def parse_args():
         help="The number of processes to use for the preprocessing.",
     )
     parser.add_argument(
-        "--overwrite_cache", type=bool, default=None, help="Overwrite the cached training and evaluation sets"
+        "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
     )
     parser.add_argument(
         "--max_target_length",
