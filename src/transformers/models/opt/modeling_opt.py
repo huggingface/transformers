@@ -637,7 +637,6 @@ class OPTDecoder(OPTPreTrainedModel):
             inputs_embeds = self.project_in(inputs_embeds)
 
         hidden_states = inputs_embeds + pos_embeds
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None

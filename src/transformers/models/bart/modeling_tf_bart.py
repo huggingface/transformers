@@ -16,6 +16,7 @@
 
 
 import random
+from contextlib import nullcontext
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -514,22 +515,27 @@ BART_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
-
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
     - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -743,7 +749,15 @@ class TFBartEncoder(tf.keras.layers.Layer):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            with tf.name_scope(self.embed_tokens.name + "/"):
+            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
+            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
+            # is used with a name ending in `/`, that name replaces the current name scope.
+            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            if hasattr(self.embed_tokens, "load_weight_prefix"):
+                context_manager = tf.name_scope(self.embed_tokens.load_weight_prefix + "/")
+            else:
+                context_manager = nullcontext()
+            with context_manager:
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         embed_pos = self.embed_positions(input_shape)
@@ -931,7 +945,15 @@ class TFBartDecoder(tf.keras.layers.Layer):
             positions = self.embed_positions(input_shape, position_ids=position_ids)
 
         if inputs_embeds is None:
-            with tf.name_scope(self.embed_tokens.name + "/"):
+            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
+            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
+            # is used with a name ending in `/`, that name replaces the current name scope.
+            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            if hasattr(self.embed_tokens, "load_weight_prefix"):
+                context_manager = tf.name_scope(self.embed_tokens.load_weight_prefix + "/")
+            else:
+                context_manager = nullcontext()
+            with context_manager:
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         hidden_states = inputs_embeds
@@ -1027,8 +1049,9 @@ class TFBartMainLayer(tf.keras.layers.Layer):
     def __init__(self, config: BartConfig, load_weight_prefix=None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        load_weight_prefix = "model.shared" if load_weight_prefix is None else load_weight_prefix
-        self.shared = tf.keras.layers.Embedding(config.vocab_size, config.d_model, name=load_weight_prefix)
+        self.shared = tf.keras.layers.Embedding(config.vocab_size, config.d_model, name="model.shared")
+        # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
+        self.shared.load_weight_prefix = "model.shared" if load_weight_prefix is None else load_weight_prefix
 
         self.encoder = TFBartEncoder(config, self.shared, name="encoder")
         self.decoder = TFBartDecoder(config, self.shared, name="decoder")

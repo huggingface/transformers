@@ -395,11 +395,10 @@ def _compute_global_attention_mask(input_ids_shape, sep_token_indices, before_se
     Computes global attention mask by putting attention on all tokens before `sep_token_id` if `before_sep_token is
     True` else after `sep_token_id`.
     """
-
     assert shape_list(sep_token_indices)[1] == 2, "`input_ids` should have two dimensions"
     question_end_index = tf.reshape(sep_token_indices, (input_ids_shape[0], 3, 2))[:, 0, 1][:, None]
     # bool attention mask with True in locations of global attention
-    attention_mask = tf.expand_dims(tf.range(input_ids_shape[1]), axis=0)
+    attention_mask = tf.expand_dims(tf.range(input_ids_shape[1], dtype=tf.int64), axis=0)
     attention_mask = tf.tile(attention_mask, (input_ids_shape[0], 1))
     if before_sep_token is True:
         question_end_index = tf.tile(question_end_index, (1, input_ids_shape[1]))
@@ -468,10 +467,9 @@ class TFLongformerLMHead(tf.keras.layers.Layer):
         return hidden_states
 
 
-# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaEmbeddings with Roberta->Longformer
 class TFLongformerEmbeddings(tf.keras.layers.Layer):
     """
-    Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
+    Same as BertEmbeddings with a tiny tweak for positional embeddings indexing and some extra casting.
     """
 
     def __init__(self, config, **kwargs):
@@ -547,7 +545,7 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
         input_shape = shape_list(inputs_embeds)[:-1]
 
         if token_type_ids is None:
-            token_type_ids = tf.fill(dims=input_shape, value=0)
+            token_type_ids = tf.cast(tf.fill(dims=input_shape, value=0), tf.int64)
 
         if position_ids is None:
             if input_ids is not None:
@@ -557,7 +555,8 @@ class TFLongformerEmbeddings(tf.keras.layers.Layer):
                 )
             else:
                 position_ids = tf.expand_dims(
-                    tf.range(start=self.padding_idx + 1, limit=input_shape[-1] + self.padding_idx + 1), axis=0
+                    tf.range(start=self.padding_idx + 1, limit=input_shape[-1] + self.padding_idx + 1, dtype=tf.int64),
+                    axis=0,
                 )
 
         position_embeds = tf.gather(params=self.position_embeddings, indices=position_ids)
@@ -998,7 +997,7 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
         first_chunk_mask = (
             tf.tile(
-                tf.range(chunks_count + 1)[None, :, None, None],
+                tf.range(chunks_count + 1, dtype=tf.int64)[None, :, None, None],
                 (batch_size * num_heads, 1, window_overlap, window_overlap),
             )
             < 1
@@ -1701,6 +1700,21 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         training=False,
     ):
 
+        if input_ids is not None and not isinstance(input_ids, tf.Tensor):
+            input_ids = tf.convert_to_tensor(input_ids, dtype=tf.int64)
+        elif input_ids is not None:
+            input_ids = tf.cast(input_ids, tf.int64)
+
+        if attention_mask is not None and not isinstance(attention_mask, tf.Tensor):
+            attention_mask = tf.convert_to_tensor(attention_mask, dtype=tf.int64)
+        elif attention_mask is not None:
+            attention_mask = tf.cast(attention_mask, tf.int64)
+
+        if global_attention_mask is not None and not isinstance(global_attention_mask, tf.Tensor):
+            global_attention_mask = tf.convert_to_tensor(global_attention_mask, dtype=tf.int64)
+        elif global_attention_mask is not None:
+            global_attention_mask = tf.cast(global_attention_mask, tf.int64)
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -1711,10 +1725,10 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if attention_mask is None:
-            attention_mask = tf.fill(input_shape, 1)
+            attention_mask = tf.cast(tf.fill(input_shape, 1), tf.int64)
 
         if token_type_ids is None:
-            token_type_ids = tf.fill(input_shape, 0)
+            token_type_ids = tf.cast(tf.fill(input_shape, 0), tf.int64)
 
         # merge `global_attention_mask` and `attention_mask`
         if global_attention_mask is not None:
@@ -1831,7 +1845,7 @@ class TFLongformerMainLayer(tf.keras.layers.Layer):
         if inputs_embeds is not None:
 
             def pad_embeddings():
-                input_ids_padding = tf.fill((batch_size, padding_len), self.pad_token_id)
+                input_ids_padding = tf.cast(tf.fill((batch_size, padding_len), self.pad_token_id), tf.int64)
                 inputs_embeds_padding = self.embeddings(input_ids_padding)
                 return tf.concat([inputs_embeds, inputs_embeds_padding], axis=-2)
 
@@ -1875,10 +1889,15 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
 
     @property
     def dummy_inputs(self):
-        input_ids = tf.convert_to_tensor([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]])
+        input_ids = tf.convert_to_tensor([[7, 6, 0, 0, 1], [1, 2, 3, 0, 0], [0, 0, 0, 4, 5]], dtype=tf.int64)
         # make sure global layers are initialized
-        attention_mask = tf.convert_to_tensor([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]])
-        global_attention_mask = tf.convert_to_tensor([[0, 0, 0, 0, 1], [0, 0, 1, 0, 0], [0, 0, 0, 0, 1]])
+        attention_mask = tf.convert_to_tensor([[1, 1, 0, 0, 1], [1, 1, 1, 0, 0], [1, 0, 0, 1, 1]], dtype=tf.int64)
+        global_attention_mask = tf.convert_to_tensor(
+            [[0, 0, 0, 0, 1], [0, 0, 1, 0, 0], [0, 0, 0, 0, 1]], dtype=tf.int64
+        )
+        global_attention_mask = tf.convert_to_tensor(
+            [[0, 0, 0, 0, 1], [0, 0, 1, 0, 0], [0, 0, 0, 0, 1]], dtype=tf.int64
+        )
         return {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -1888,8 +1907,8 @@ class TFLongformerPreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
             }
         ]
     )
@@ -1911,22 +1930,27 @@ LONGFORMER_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
-
-    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -2230,6 +2254,21 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
             are not taken into account for computing the loss.
         """
 
+        if input_ids is not None and not isinstance(input_ids, tf.Tensor):
+            input_ids = tf.convert_to_tensor(input_ids, dtype=tf.int64)
+        elif input_ids is not None:
+            input_ids = tf.cast(input_ids, tf.int64)
+
+        if attention_mask is not None and not isinstance(attention_mask, tf.Tensor):
+            attention_mask = tf.convert_to_tensor(attention_mask, dtype=tf.int64)
+        elif attention_mask is not None:
+            attention_mask = tf.cast(attention_mask, tf.int64)
+
+        if global_attention_mask is not None and not isinstance(global_attention_mask, tf.Tensor):
+            global_attention_mask = tf.convert_to_tensor(global_attention_mask, dtype=tf.int64)
+        elif global_attention_mask is not None:
+            global_attention_mask = tf.cast(global_attention_mask, tf.int64)
+
         # set global attention on question tokens
         if global_attention_mask is None and input_ids is not None:
             if shape_list(tf.where(input_ids == self.config.sep_token_id))[0] != 3 * shape_list(input_ids)[0]:
@@ -2239,12 +2278,12 @@ class TFLongformerForQuestionAnswering(TFLongformerPreTrainedModel, TFQuestionAn
                     " forward function to avoid this. This is most likely an error. The global attention is disabled"
                     " for this forward pass."
                 )
-                global_attention_mask = tf.fill(shape_list(input_ids), value=0)
+                global_attention_mask = tf.cast(tf.fill(shape_list(input_ids), value=0), tf.int64)
             else:
                 logger.info("Initializing global attention on question tokens...")
                 # put global attention on all tokens until `config.sep_token_id` is reached
                 sep_token_indices = tf.where(input_ids == self.config.sep_token_id)
-                sep_token_indices = tf.cast(sep_token_indices, dtype=input_ids.dtype)
+                sep_token_indices = tf.cast(sep_token_indices, dtype=tf.int64)
                 global_attention_mask = _compute_global_attention_mask(shape_list(input_ids), sep_token_indices)
 
         outputs = self.longformer(
@@ -2370,13 +2409,28 @@ class TFLongformerForSequenceClassification(TFLongformerPreTrainedModel, TFSeque
         training: Optional[bool] = False,
     ) -> Union[TFLongformerSequenceClassifierOutput, Tuple[tf.Tensor]]:
 
+        if input_ids is not None and not isinstance(input_ids, tf.Tensor):
+            input_ids = tf.convert_to_tensor(input_ids, dtype=tf.int64)
+        elif input_ids is not None:
+            input_ids = tf.cast(input_ids, tf.int64)
+
+        if attention_mask is not None and not isinstance(attention_mask, tf.Tensor):
+            attention_mask = tf.convert_to_tensor(attention_mask, dtype=tf.int64)
+        elif attention_mask is not None:
+            attention_mask = tf.cast(attention_mask, tf.int64)
+
+        if global_attention_mask is not None and not isinstance(global_attention_mask, tf.Tensor):
+            global_attention_mask = tf.convert_to_tensor(global_attention_mask, dtype=tf.int64)
+        elif global_attention_mask is not None:
+            global_attention_mask = tf.cast(global_attention_mask, tf.int64)
+
         if global_attention_mask is None and input_ids is not None:
             logger.info("Initializing global attention on CLS token...")
             # global attention on cls token
             global_attention_mask = tf.zeros_like(input_ids)
-            updates = tf.ones(shape_list(input_ids)[0], dtype=tf.int32)
+            updates = tf.ones(shape_list(input_ids)[0], dtype=tf.int64)
             indices = tf.pad(
-                tensor=tf.expand_dims(tf.range(shape_list(input_ids)[0]), axis=1),
+                tensor=tf.expand_dims(tf.range(shape_list(input_ids)[0], dtype=tf.int64), axis=1),
                 paddings=[[0, 0], [0, 1]],
                 constant_values=0,
             )
@@ -2448,9 +2502,9 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
 
     @property
     def dummy_inputs(self):
-        input_ids = tf.convert_to_tensor(MULTIPLE_CHOICE_DUMMY_INPUTS)
+        input_ids = tf.convert_to_tensor(MULTIPLE_CHOICE_DUMMY_INPUTS, dtype=tf.int64)
         # make sure global layers are initialized
-        global_attention_mask = tf.convert_to_tensor([[[0, 0, 0, 1], [0, 0, 0, 1]]] * 2)
+        global_attention_mask = tf.convert_to_tensor([[[0, 0, 0, 1], [0, 0, 0, 1]]] * 2, dtype=tf.int64)
         return {"input_ids": input_ids, "global_attention_mask": global_attention_mask}
 
     @unpack_inputs
@@ -2542,8 +2596,8 @@ class TFLongformerForMultipleChoice(TFLongformerPreTrainedModel, TFMultipleChoic
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None, None), tf.int32, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int64, name="attention_mask"),
             }
         ]
     )

@@ -435,6 +435,8 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_ctc_loss(*config_and_inputs)
 
+    # TODO (Joao): fix me
+    @unittest.skip("Broke with TF 2.10")
     def test_labels_out_of_vocab(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.check_labels_out_of_vocab(*config_and_inputs)

@@ -51,6 +51,13 @@ from .generation_stopping_criteria import (
     StoppingCriteriaList,
     validate_stopping_criteria,
 )
+from .models.auto import (
+    MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
+    MODEL_FOR_CAUSAL_LM_MAPPING,
+    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+    MODEL_FOR_VISION_2_SEQ_MAPPING,
+)
 from .pytorch_utils import torch_int_div
 from .utils import ModelOutput, logging
 
@@ -463,12 +470,6 @@ class GenerationMixin:
 
         return can_retrieve_inputs
 
-    def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
-        """
-        Implement in subclasses of [`PreTrainedModel`] for custom behavior to prepare inputs in the generate method.
-        """
-        return {"input_ids": input_ids}
-
     def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         """
         Implement in subclasses of [`PreTrainedModel`] for custom behavior to adjust the logits in the generate method.
@@ -840,6 +841,32 @@ class GenerationMixin:
 
         return transition_scores
 
+    def _validate_model_class(self):
+        """
+        Confirms that the model class is compatible with generation. If not, raises an exception that points to the
+        right class to use.
+        """
+        if not hasattr(self, "prepare_inputs_for_generation"):
+            generate_compatible_mappings = [
+                MODEL_FOR_CAUSAL_LM_MAPPING,
+                MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
+                MODEL_FOR_VISION_2_SEQ_MAPPING,
+                MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+                MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+            ]
+            generate_compatible_classes = set()
+            for model_mapping in generate_compatible_mappings:
+                supported_models = model_mapping.get(type(self.config), default=None)
+                if supported_models is not None:
+                    generate_compatible_classes.add(supported_models.__name__)
+            exception_message = (
+                f"The current model class ({self.__class__.__name__}) is not compatible with `.generate()`, as "
+                "it doesn't have a language model head."
+            )
+            if generate_compatible_classes:
+                exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
+            raise TypeError(exception_message)
+
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         # Excludes arguments that are handled before calling any model function
@@ -1142,7 +1169,8 @@ class GenerationMixin:
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ['Paris ist eines der dichtesten besiedelten Gebiete Europas.']
         ```"""
-        # 0. Validate model kwargs
+        # 0. Validate the `.generate()` call
+        self._validate_model_class()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # 1. Set generation parameters if not already defined
