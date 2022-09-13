@@ -94,9 +94,7 @@ def masks_to_boxes(masks):
     return np.stack([x_min, y_min, x_max, y_max], 1)
 
 
-# 2 functions below copied from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
-# Copyright (c) 2018, Alexander Kirillov
-# All rights reserved.
+# Copied from transformers.models.detr.feature_extraction_detr.rgb_to_id
 def rgb_to_id(color):
     if isinstance(color, np.ndarray) and len(color.shape) == 3:
         if color.dtype == np.uint8:
@@ -104,7 +102,7 @@ def rgb_to_id(color):
         return color[:, :, 0] + 256 * color[:, :, 1] + 256 * 256 * color[:, :, 2]
     return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
 
-
+# Copied from transformers.models.detr.feature_extraction_detr.id_to_rgb
 def id_to_rgb(id_map):
     if isinstance(id_map, np.ndarray):
         id_map_copy = id_map.copy()
@@ -123,7 +121,7 @@ def id_to_rgb(id_map):
 
 class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs a CONDITIONAL_DETR feature extractor.
+    Constructs a CONDITIONAL DETR feature extractor.
 
     This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
@@ -188,7 +186,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
         else:
             raise ValueError(f"Format {self.format} not supported")
 
-    # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L33
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.convert_coco_poly_to_mask
     def convert_coco_poly_to_mask(self, segmentations, height, width):
 
         try:
@@ -212,10 +210,10 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return masks
 
-    # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L50
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.prepare_coco_detection with DETR->Conditional DETR
     def prepare_coco_detection(self, image, target, return_segmentation_masks=False):
         """
-        Convert the target in COCO format into the format expected by CONDITIONAL_DETR.
+        Convert the target in COCO format into the format expected by CONDITIONAL DETR.
         """
         w, h = image.size
 
@@ -277,6 +275,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return image, target
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.prepare_coco_panoptic
     def prepare_coco_panoptic(self, image, target, masks_path, return_masks=True):
         w, h = image.size
         ann_info = target.copy()
@@ -310,6 +309,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return image, target
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._resize
     def _resize(self, image, size, target=None, max_size=None):
         """
         Resize the image to the given size. Size can be min_size (scalar) or (w, h) tuple. If size is an int, smaller
@@ -380,6 +380,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return rescaled_image, target
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._normalize
     def _normalize(self, image, mean, std, target=None):
         """
         Normalize the image with a certain mean and std.
@@ -401,7 +402,8 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
             target["boxes"] = boxes
 
         return image, target
-
+    
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._call with DETR->Conditional DETR,Detr->ConditionalDetr
     def __call__(
         self,
         images: ImageInput,
@@ -549,7 +551,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
             if annotations is not None:
                 annotations = [annotations]
 
-        # prepare (COCO annotations as a list of Dict -> CONDITIONAL_DETR target as a single Dict per image)
+        # prepare (COCO annotations as a list of Dict -> CONDITIONAL DETR target as a single Dict per image)
         if annotations is not None:
             for idx, (image, target) in enumerate(zip(images, annotations)):
                 if not isinstance(image, Image.Image):
@@ -624,6 +626,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return encoded_inputs
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._max_by_axis
     def _max_by_axis(self, the_list):
         # type: (List[List[int]]) -> List[int]
         maxes = the_list[0]
@@ -632,6 +635,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
                 maxes[index] = max(maxes[index], item)
         return maxes
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.pad_and_create_pixel_mask
     def pad_and_create_pixel_mask(
         self, pixel_values_list: List["torch.Tensor"], return_tensors: Optional[Union[str, TensorType]] = None
     ):
@@ -717,6 +721,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return results
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_segmentation with Detr->ConditionalDetr
     def post_process_segmentation(self, outputs, target_sizes, threshold=0.9, mask_threshold=0.5):
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into image segmentation predictions. Only supports
@@ -759,7 +764,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
             preds.append(predictions)
         return preds
 
-    # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L218
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_instance with Detr->ConditionalDetr
     def post_process_instance(self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5):
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into actual instance segmentation predictions. Only
@@ -803,7 +808,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return results
 
-    # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L241
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_panoptic with Detr->ConditionalDetr
     def post_process_panoptic(self, outputs, processed_sizes, target_sizes=None, is_thing_map=None, threshold=0.85):
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into actual panoptic predictions. Only supports
