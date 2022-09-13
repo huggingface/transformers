@@ -302,7 +302,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("canine", "CANINE"),
         ("clip", "CLIP"),
         ("codegen", "CodeGen"),
-        ("conditional_detr", "conditional_detr"),
+        ("conditional_detr", "Conditional DETR"),
         ("convbert", "ConvBERT"),
         ("convnext", "ConvNeXT"),
         ("cpm", "CPM"),
