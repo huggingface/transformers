@@ -1437,7 +1437,7 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
 
 @add_start_docstrings(
     """
-    The bare CONDITIONAL_DETR Model (consisting of a backbone and encoder-decoder Transformer) outputting raw
+    The bare Conditional DETR Model (consisting of a backbone and encoder-decoder Transformer) outputting raw
     hidden-states without any specific head on top.
     """,
     CONDITIONAL_DETR_START_DOCSTRING,
