@@ -134,6 +134,7 @@ class ConditionalDetrConfig(PretrainedConfig):
 
     def __init__(
         self,
+        num_channels=3,
         num_queries=300,
         max_position_embeddings=1024,
         encoder_layers=6,
@@ -157,6 +158,7 @@ class ConditionalDetrConfig(PretrainedConfig):
         auxiliary_loss=False,
         position_embedding_type="sine",
         backbone="resnet50",
+        use_pretrained_backbone=True,
         dilation=False,
         class_cost=2,
         bbox_cost=5,
@@ -169,6 +171,7 @@ class ConditionalDetrConfig(PretrainedConfig):
         focal_alpha=0.25,
         **kwargs
     ):
+        self.num_channels = num_channels
         self.num_queries = num_queries
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
@@ -191,6 +194,7 @@ class ConditionalDetrConfig(PretrainedConfig):
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
+        self.use_pretrained_backbone = use_pretrained_backbone
         self.dilation = dilation
         # Hungarian matcher
         self.class_cost = class_cost
