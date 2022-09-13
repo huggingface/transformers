@@ -59,10 +59,6 @@ class ViTMSNEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
-        # Following https://github.com/sayakpaulresearch/msn/blob/main/src/deit.py#L196-#L197
-        torch.nn.init.trunc_normal_(self.position_embeddings, std=self.config.initializer_range)
-        torch.nn.init.trunc_normal_(self.cls_token, std=self.config.initializer_range)
-
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
         This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher

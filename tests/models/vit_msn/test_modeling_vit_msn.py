@@ -234,6 +234,6 @@ class ViTMSNModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.3775, -0.0978, -0.1020]).to(torch_device)
+        expected_slice = torch.tensor([-0.0803, -0.4454, -0.2375]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
