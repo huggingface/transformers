@@ -60,6 +60,7 @@ def corners_to_center_format(x):
     return np.stack(b, axis=-1)
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.masks_to_boxes
 def masks_to_boxes(masks):
     """
     Compute the bounding boxes around the provided panoptic segmentation masks.
