@@ -1243,7 +1243,7 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         self.layerdrop = config.decoder_layerdrop
 
         self.layers = nn.ModuleList([ConditionalDetrDecoderLayer(config) for _ in range(config.decoder_layers)])
-        # in CONDITIONAL_DETR, the decoder uses layernorm after the last decoder layer output
+        # in Conditional DETR, the decoder uses layernorm after the last decoder layer output
         self.layernorm = nn.LayerNorm(config.d_model)
         d_model = config.d_model
         self.gradient_checkpointing = False
