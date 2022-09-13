@@ -581,7 +581,7 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         sequence_output = self.layernorm(sequence_output)
 
         if not return_dict:
-            head_outputs = sequence_output
+            head_outputs = (sequence_output,)
             return head_outputs + encoder_outputs[1:]
 
         return BaseModelOutput(
@@ -679,8 +679,6 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
                     loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
                 loss_fct = CrossEntropyLoss()
-                print(f"Logit shape: {logits.view(-1, self.num_labels).shape}")
-                print(f"Labels shape: {labels.view(-1).shape}")
                 loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
             elif self.config.problem_type == "multi_label_classification":
                 loss_fct = BCEWithLogitsLoss()
