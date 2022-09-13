@@ -1023,9 +1023,9 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
         if isinstance(module, DeformableDetrLearnedPositionEmbedding):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
-        if isinstance(module, DeformableDetrMultiscaleDeformableAttention):
+        elif isinstance(module, DeformableDetrMultiscaleDeformableAttention):
             module._reset_parameters()
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=std)
@@ -1035,6 +1035,11 @@ class DeformableDetrPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+        if hasattr(module, "reference_points") and not self.config.two_stage:
+            nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
+            nn.init.constant_(module.reference_points.bias.data, 0.0)
+        if hasattr(module, "level_embed"):
+            nn.init.normal_(module.level_embed)
 
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, DeformableDetrDecoder):
@@ -1478,12 +1483,6 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
             self.reference_points = nn.Linear(config.d_model, 2)
 
         self.post_init()
-
-    def _init_weights(self, module):
-        if not self.config.two_stage:
-            nn.init.xavier_uniform_(self.reference_points.weight.data, gain=1.0)
-            nn.init.constant_(self.reference_points.bias.data, 0.0)
-        nn.init.normal_(self.level_embed)
 
     def get_encoder(self):
         return self.encoder

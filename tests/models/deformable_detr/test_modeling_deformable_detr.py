@@ -500,6 +500,7 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
 
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
+            print("Model class:", model_class)
             model = model_class(config=configs_no_init)
             for name, param in model.named_parameters():
                 if param.requires_grad:
@@ -509,6 +510,7 @@ class DeformableDetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
                             or "sampling_offsets.bias" in name
                             or "value_proj" in name
                             or "output_proj" in name
+                            or "reference_points" in name
                         ):
                             continue
                     self.assertIn(
