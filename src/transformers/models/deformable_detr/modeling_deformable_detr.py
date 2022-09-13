@@ -46,7 +46,7 @@ from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
 
 
-logger = logging.getLogger(__name__)
+logger = logging.get_logger(__name__)
 
 # Move this to not compile only when importing, this needs to happen later, like in __init__.
 if is_torch_cuda_available():
