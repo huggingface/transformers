@@ -270,8 +270,6 @@ class ConditionalDetrSegmentationOutput(ModelOutput):
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# BELOW: utilities copied from
-# https://github.com/facebookresearch/detr/blob/master/backbone.py
 # Copied from transformers.models.detr.modeling_detr.DetrFrozenBatchNorm2d with Detr->ConditionalDetr
 class ConditionalDetrFrozenBatchNorm2d(nn.Module):
     """
