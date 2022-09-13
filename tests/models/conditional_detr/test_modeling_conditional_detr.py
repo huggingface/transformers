@@ -479,7 +479,9 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
 
     def test_inference_object_detection_head(self):
-        model = ConditionalDetrForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50").to(torch_device)
+        model = ConditionalDetrForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50").to(
+            torch_device
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -505,7 +507,9 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
 
     def test_inference_panoptic_segmentation_head(self):
-        model = ConditionalDetrForSegmentation.from_pretrained("microsoft/conditional-detr-resnet-50-panoptic").to(torch_device)
+        model = ConditionalDetrForSegmentation.from_pretrained("microsoft/conditional-detr-resnet-50-panoptic").to(
+            torch_device
+        )
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
