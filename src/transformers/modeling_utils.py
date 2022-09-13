@@ -59,10 +59,12 @@ from .utils import (
     PushToHubMixin,
     cached_file,
     copy_func,
+    download_url,
     has_file,
     is_accelerate_available,
     is_bitsandbytes_available,
     is_offline_mode,
+    is_remote_url,
     logging,
     replace_return_docstrings,
 )
@@ -1998,6 +2000,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                 archive_file = os.path.join(subfolder, pretrained_model_name_or_path + ".index")
                 is_local = True
+            elif is_remote_url(pretrained_model_name_or_path):
+                archive_file = pretrained_model_name_or_path
+                resolved_archive_file = download_url(pretrained_model_name_or_path)
             else:
                 # set correct filename
                 if from_tf:
