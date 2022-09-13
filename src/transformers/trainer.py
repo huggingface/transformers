@@ -1210,7 +1210,7 @@ class Trainer:
                 value = type(old_attr)(value)
             setattr(self.args, key, value)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
-            logger.info("Trial:", trial.params)
+            logger.info(f"Trial: {trial.params}")
         if self.hp_search_backend == HPSearchBackend.SIGOPT:
             logger.info(f"SigOpt Assignments: {trial.assignments}")
         if self.hp_search_backend == HPSearchBackend.WANDB:

@@ -159,26 +159,49 @@ def default_hp_search_backend():
 def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import optuna
 
-    def _objective(trial, checkpoint_dir=None):
-        checkpoint = None
-        if checkpoint_dir:
-            for subdir in os.listdir(checkpoint_dir):
-                if subdir.startswith(PREFIX_CHECKPOINT_DIR):
-                    checkpoint = os.path.join(checkpoint_dir, subdir)
-        trainer.objective = None
-        trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
-        # If there hasn't been any evaluation during the training loop.
-        if getattr(trainer, "objective", None) is None:
-            metrics = trainer.evaluate()
-            trainer.objective = trainer.compute_objective(metrics)
-        return trainer.objective
+    if trainer.args.process_index == 0:
 
-    timeout = kwargs.pop("timeout", None)
-    n_jobs = kwargs.pop("n_jobs", 1)
-    study = optuna.create_study(direction=direction, **kwargs)
-    study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs)
-    best_trial = study.best_trial
-    return BestRun(str(best_trial.number), best_trial.value, best_trial.params)
+        def _objective(trial, checkpoint_dir=None):
+            checkpoint = None
+            if checkpoint_dir:
+                for subdir in os.listdir(checkpoint_dir):
+                    if subdir.startswith(PREFIX_CHECKPOINT_DIR):
+                        checkpoint = os.path.join(checkpoint_dir, subdir)
+            trainer.objective = None
+            trainer._hp_search_setup(trial)
+            if trainer.args.world_size > 1:
+                if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
+                    raise RuntimeError("only support DDP optuna HPO for ParallelMode.DISTRIBUTED currently.")
+                torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
+            trainer.train(resume_from_checkpoint=checkpoint)
+            # If there hasn't been any evaluation during the training loop.
+            if getattr(trainer, "objective", None) is None:
+                metrics = trainer.evaluate()
+                trainer.objective = trainer.compute_objective(metrics)
+            return trainer.objective
+
+        timeout = kwargs.pop("timeout", None)
+        n_jobs = kwargs.pop("n_jobs", 1)
+        study = optuna.create_study(direction=direction, **kwargs)
+        study.optimize(_objective, n_trials=n_trials, timeout=timeout, n_jobs=n_jobs)
+        best_trial = study.best_trial
+        return BestRun(str(best_trial.number), best_trial.value, best_trial.params)
+    else:
+        for i in range(n_trials):
+            trainer.objective = None
+            args_main_rank = list(pickle.dumps(trainer.args))
+            if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
+                raise RuntimeError("only support DDP optuna HPO for ParallelMode.DISTRIBUTED currently.")
+            torch.distributed.broadcast_object_list(args_main_rank, src=0)
+            local_rank = trainer.args.local_rank  # backup the local_rank info
+            trainer.args = pickle.loads(bytes(args_main_rank))
+            trainer.args.local_rank = local_rank
+            trainer.train(resume_from_checkpoint=None)
+            # If there hasn't been any evaluation during the training loop.
+            if getattr(trainer, "objective", None) is None:
+                metrics = trainer.evaluate()
+                trainer.objective = trainer.compute_objective(metrics)
+        return None
 
 
 def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
