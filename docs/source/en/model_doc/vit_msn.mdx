@@ -10,72 +10,55 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# ViTMAE
+# ViTMSN
 
 ## Overview
 
-The ViTMAE model was proposed in [Masked Autoencoders Are Scalable Vision Learners](https://arxiv.org/abs/2111.06377v2) by Kaiming He, Xinlei Chen, Saining Xie, Yanghao Li,
-Piotr Dollár, Ross Girshick. The paper shows that, by pre-training a Vision Transformer (ViT) to reconstruct pixel values for masked patches, one can get results after
-fine-tuning that outperform supervised pre-training.
+The ViTMAE model was proposed in [Masked Siamese Networks for Label-Efficient Learning](https://arxiv.org/abs/2204.07141) by Mahmoud Assran, Mathilde Caron, Ishan Misra, Piotr Bojanowski, Florian Bordes,
+Pascal Vincent, Armand Joulin, Michael Rabbat, Nicolas Ballas. The paper presents a joint-embedding architecture to match the prototypes
+of masked patches with that of the unmasked patches. With this setup, their method yields excellent performance in the low-shot and extreme low-shot
+regimes.
 
 The abstract from the paper is the following:
 
-*This paper shows that masked autoencoders (MAE) are scalable self-supervised learners for computer vision. Our MAE approach is simple: we mask random patches of the
-input image and reconstruct the missing pixels. It is based on two core designs. First, we develop an asymmetric encoder-decoder architecture, with an encoder that operates
-only on the visible subset of patches (without mask tokens), along with a lightweight decoder that reconstructs the original image from the latent representation and mask
-tokens. Second, we find that masking a high proportion of the input image, e.g., 75%, yields a nontrivial and meaningful self-supervisory task. Coupling these two designs
-enables us to train large models efficiently and effectively: we accelerate training (by 3x or more) and improve accuracy. Our scalable approach allows for learning high-capacity
-models that generalize well: e.g., a vanilla ViT-Huge model achieves the best accuracy (87.8%) among methods that use only ImageNet-1K data. Transfer performance in downstream
-tasks outperforms supervised pre-training and shows promising scaling behavior.*
+*We propose Masked Siamese Networks (MSN), a self-supervised learning framework for learning image representations. Our
+approach matches the representation of an image view containing randomly masked patches to the representation of the original
+unmasked image. This self-supervised pre-training strategy is particularly scalable when applied to Vision Transformers since only the
+unmasked patches are processed by the network. As a result, MSNs improve the scalability of joint-embedding architectures,
+while producing representations of a high semantic level that perform competitively on low-shot image classification. For instance,
+on ImageNet-1K, with only 5,000 annotated images, our base MSN model achieves 72.4% top-1 accuracy,
+and with 1% of ImageNet-1K labels, we achieve 75.7% top-1 accuracy, setting a new state-of-the-art for self-supervised learning on this benchmark.*
 
 Tips:
 
-- MAE (masked auto encoding) is a method for self-supervised pre-training of Vision Transformers (ViTs). The pre-training objective is relatively simple:
-by masking a large portion (75%) of the image patches, the model must reconstruct raw pixel values. One can use [`ViTMAEForPreTraining`] for this purpose.
-- An example Python script that illustrates how to pre-train [`ViTMAEForPreTraining`] from scratch can be found [here](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-One can easily tweak it for their own use case.
-- A notebook that illustrates how to visualize reconstructed pixel values with [`ViTMAEForPreTraining`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/ViTMAE/ViT_MAE_visualization_demo.ipynb).
-- After pre-training, one "throws away" the decoder used to reconstruct pixels, and one uses the encoder for fine-tuning/linear probing. This means that after
-fine-tuning, one can directly plug in the weights into a [`ViTForImageClassification`].
-- One can use [`ViTFeatureExtractor`] to prepare images for the model. See the code examples for more info. 
-- Note that the encoder of MAE is only used to encode the visual patches. The encoded patches are then concatenated with mask tokens, which the decoder (which also
-consists of Transformer blocks) takes as input. Each mask token is a shared, learned vector that indicates the presence of a missing patch to be predicted. Fixed
-sin/cos position embeddings are added both to the input of the encoder and the decoder.
-- For a visual understanding of how MAEs work you can check out this [post](https://keras.io/examples/vision/masked_image_modeling/).
-
-<img src="https://user-images.githubusercontent.com/11435359/146857310-f258c86c-fde6-48e8-9cee-badd2b21bd2c.png"
-alt="drawing" width="600"/> 
-
-<small> MAE architecture. Taken from the <a href="https://arxiv.org/abs/2111.06377">original paper.</a> </small>
-
-This model was contributed by [nielsr](https://huggingface.co/nielsr). TensorFlow version of the model was contributed by [sayakpaul](https://github.com/sayakpaul) and 
-[ariG23498](https://github.com/ariG23498) (equal contribution). The original code can be found [here](https://github.com/facebookresearch/mae). 
+- MSN (masked siamese networks) is a method for self-supervised pre-training of Vision Transformers (ViTs). The pre-training
+objective is to match the prototypes assigned to the unmasked views of the images to that of the masked views of the same images.
+- The authors have only released pre-trained weights of the backbone (ImageNet-1k pre-training). So, to use that on your own image classification dataset,
+use the [`ViTMSNForImageClassification`] class which is initialized from [`ViTMSNModel`]. Follow
+[this notebook](https://github.com/huggingface/notebooks/blob/main/examples/image_classification.ipynb) for a detailed tutorial on fine-tuning.
+- MSN is particularly useful in the low-shot and extreme low-shot regimes. Notably, it achieves 75.7% top-1 accuracy with only 1% of ImageNet-1K
+labels when fine-tuned.
 
 
-## ViTMAEConfig
+<img src="https://i.ibb.co/W6PQMdC/Screenshot-2022-09-13-at-9-08-40-AM.png" alt="drawing" width="600"/> 
 
-[[autodoc]] ViTMAEConfig
+<small> MSN architecture. Taken from the <a href="https://arxiv.org/abs/2204.07141">original paper.</a> </small>
+
+This model was contributed by [sayakpaul](https://huggingface.co/sayakpaul). The original code can be found [here](https://github.com/facebookresearch/msn). 
 
 
-## ViTMAEModel
+## ViTMSNConfig
 
-[[autodoc]] ViTMAEModel
+[[autodoc]] ViTMSNConfig
+
+
+## ViTMSNModel
+
+[[autodoc]] ViTMSNModel
     - forward
 
 
-## ViTMAEForPreTraining
+## ViTMSNForImageClassification
 
-[[autodoc]] transformers.ViTMAEForPreTraining
+[[autodoc]] ViTMSNForImageClassification
     - forward
-
-
-## TFViTMAEModel
-
-[[autodoc]] TFViTMAEModel
-    - call
-
-
-## TFViTMAEForPreTraining
-
-[[autodoc]] transformers.TFViTMAEForPreTraining
-    - call
