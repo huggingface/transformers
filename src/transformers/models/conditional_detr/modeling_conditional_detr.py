@@ -1228,7 +1228,7 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
 
     The decoder updates the query embeddings through multiple self-attention and cross-attention layers.
 
-    Some small tweaks for CONDITIONAL_DETR:
+    Some small tweaks for Conditional DETR:
 
     - position_embeddings and query_position_embeddings are added to the forward pass.
     - if self.config.auxiliary_loss is set to True, also returns a stack of activations from all decoding layers.
