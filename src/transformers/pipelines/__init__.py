@@ -222,7 +222,7 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
         "tf": (),
         "default": {
-            "model": {"pt": ("impira/layoutlm-document-qa", "3a93017")},
+            "model": {"pt": ("impira/layoutlm-document-qa", "52e01b3")},
         },
         "type": "multimodal",
     },
