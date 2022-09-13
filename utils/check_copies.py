@@ -477,6 +477,7 @@ SPECIAL_MODEL_NAMES = {
     "OpenAI GPT": "GPT",
     "Perceiver": "Perceiver IO",
     "ViT": "Vision Transformer (ViT)",
+    "conditional_detr": "Conditional DETR"
 }
 
 # Update this list with the models that shouldn't be in the README. This only concerns modular models or those who do
