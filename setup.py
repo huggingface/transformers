@@ -98,7 +98,7 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "accelerate>=0.10.0",
-    "black==22.3",
+    "black==22.3",  # after updating to black 2023, also update Python version in pyproject.toml to 3.7
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
@@ -116,7 +116,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.8.1,<1.0",
+    "huggingface-hub>=0.9.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -154,8 +154,8 @@ _deps = [
     "sigopt",
     "librosa",
     "starlette",
-    "tensorflow-cpu>=2.3,<2.10",
-    "tensorflow>=2.3,<2.10",
+    "tensorflow-cpu>=2.3",
+    "tensorflow>=2.3",
     "tensorflow-text",
     "tf2onnx",
     "timeout-decorator",

@@ -315,6 +315,13 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     ]
 )
 
+TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
+    [
+        ("layoutlm", "TFLayoutLMForQuestionAnswering"),
+    ]
+)
+
+
 TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [
         # Model for Table Question Answering mapping
@@ -405,6 +412,9 @@ TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING = _LazyAutoMapping(
 )
 TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES
+)
+TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
+    CONFIG_MAPPING_NAMES, TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES
 )
 TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING = _LazyAutoMapping(
     CONFIG_MAPPING_NAMES, TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES
@@ -513,6 +523,17 @@ class TFAutoModelForQuestionAnswering(_BaseAutoModelClass):
 
 
 TFAutoModelForQuestionAnswering = auto_class_update(TFAutoModelForQuestionAnswering, head_doc="question answering")
+
+
+class TFAutoModelForDocumentQuestionAnswering(_BaseAutoModelClass):
+    _model_mapping = TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING
+
+
+TFAutoModelForDocumentQuestionAnswering = auto_class_update(
+    TFAutoModelForDocumentQuestionAnswering,
+    head_doc="document question answering",
+    checkpoint_for_example='impira/layoutlm-document-qa", revision="3dc6de3',
+)
 
 
 class TFAutoModelForTableQuestionAnswering(_BaseAutoModelClass):

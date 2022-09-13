@@ -51,11 +51,12 @@ from .base import (
     infer_framework_load_model,
 )
 from .conversational import Conversation, ConversationalPipeline
+from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
-from .image2text_generation import Image2TextGenerationPipeline
 from .image_classification import ImageClassificationPipeline
 from .image_segmentation import ImageSegmentationPipeline
+from .image_to_text import ImageToTextPipeline
 from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
@@ -109,6 +110,7 @@ if is_torch_available():
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
         AutoModelForCTC,
+        AutoModelForDocumentQuestionAnswering,
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
         AutoModelForMaskedLM,
@@ -215,6 +217,15 @@ SUPPORTED_TASKS = {
         },
         "type": "multimodal",
     },
+    "document-question-answering": {
+        "impl": DocumentQuestionAnsweringPipeline,
+        "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
+        "tf": (),
+        "default": {
+            "model": {"pt": ("impira/layoutlm-document-qa", "3a93017")},
+        },
+        "type": "multimodal",
+    },
     "fill-mask": {
         "impl": FillMaskPipeline,
         "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
@@ -305,8 +316,8 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": ("facebook/detr-resnet-50-panoptic", "fc15262")}},
         "type": "image",
     },
-    "image2text-generation": {
-        "impl": Image2TextGenerationPipeline,
+    "image-to-text": {
+        "impl": ImageToTextPipeline,
         "tf": (TFAutoModelForVision2Seq,) if is_tf_available() else (),
         "pt": (AutoModelForVision2Seq,) if is_torch_available() else (),
         "default": {
@@ -443,7 +454,7 @@ def pipeline(
     trust_remote_code: Optional[bool] = None,
     model_kwargs: Dict[str, Any] = None,
     pipeline_class: Optional[Any] = None,
-    **kwargs
+    **kwargs,
 ) -> Pipeline:
     """
     Utility factory method to build a [`Pipeline`].

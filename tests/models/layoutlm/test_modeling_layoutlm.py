@@ -12,12 +12,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-import copy
 import unittest
 
 from transformers import LayoutLMConfig, is_torch_available
-from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -28,9 +25,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        MODEL_FOR_MASKED_LM_MAPPING,
-        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
-        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         LayoutLMForMaskedLM,
         LayoutLMForQuestionAnswering,
         LayoutLMForSequenceClassification,
@@ -272,30 +266,6 @@ class LayoutLMModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_question_answering(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
-
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = copy.deepcopy(inputs_dict)
-        if return_labels:
-            if model_class in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
-                inputs_dict["labels"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
-            elif model_class in [
-                *get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
-                *get_values(MODEL_FOR_MASKED_LM_MAPPING),
-            ]:
-                inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
-                )
-            elif model_class.__name__ == "LayoutLMForQuestionAnswering":
-                inputs_dict["start_positions"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
-                inputs_dict["end_positions"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
-
-        return inputs_dict
 
 
 def prepare_layoutlm_batch_inputs():

@@ -93,6 +93,15 @@ def get_int_from_env(env_keys, default):
     return default
 
 
+def get_xla_device_type(device: "torch.device") -> Optional[str]:
+    """
+    Returns the xla device type (CPU|GPU|TPU) or None if the device is a non-xla device.
+    """
+    if is_torch_tpu_available():
+        return xm.xla_real_devices([device])[0].split(":")[0]
+    return None
+
+
 class OptimizerNames(ExplicitEnum):
     """
     Stores the acceptable string identifiers for optimizers.
@@ -405,8 +414,8 @@ class TrainingArguments:
             instance of `Dataset`.
         report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
-            `"comet_ml"`, `"mlflow"`, `"tensorboard"` and `"wandb"`. Use `"all"` to report to all integrations
-            installed, `"none"` for no integrations.
+            `"comet_ml"`, `"mlflow"`, `"neptune"`, `"tensorboard"` and `"wandb"`. Use `"all"` to report to all
+            integrations installed, `"none"` for no integrations.
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
@@ -1108,7 +1117,7 @@ class TrainingArguments:
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
-            and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
+            and (get_xla_device_type(self.device) != "GPU")
             and (self.fp16 or self.fp16_full_eval)
         ):
             raise ValueError(
@@ -1120,7 +1129,7 @@ class TrainingArguments:
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
-            and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
+            and (get_xla_device_type(self.device) != "GPU")
             and (self.device.type != "cpu")
             and (self.bf16 or self.bf16_full_eval)
         ):
