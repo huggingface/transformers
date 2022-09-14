@@ -638,6 +638,9 @@ class TFOpenAIGPTLMHeadModel(TFOpenAIGPTPreTrainedModel, TFCausalLanguageModelin
 
         return TFCausalLMOutput(logits=output.logits, hidden_states=hs, attentions=attns)
 
+    def prepare_inputs_for_generation(self, inputs, **kwargs):
+        return {"input_ids": inputs}
+
 
 @add_start_docstrings(
     """

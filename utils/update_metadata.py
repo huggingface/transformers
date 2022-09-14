@@ -80,6 +80,11 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "AutoModelForAudioFrameClassification",
     ),
     ("audio-xvector", "MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES", "AutoModelForAudioXVector"),
+    (
+        "document-question-answering",
+        "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES",
+        "AutoModelForDocumentQuestionAnswering",
+    ),
 ]
 
 

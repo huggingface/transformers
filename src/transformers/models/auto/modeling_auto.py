@@ -53,6 +53,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("deberta-v2", "DebertaV2Model"),
         ("decision_transformer", "DecisionTransformerModel"),
         ("decision_transformer_gpt2", "DecisionTransformerGPT2Model"),
+        ("deformable_detr", "DeformableDetrModel"),
         ("deit", "DeiTModel"),
         ("detr", "DetrModel"),
         ("distilbert", "DistilBertModel"),
@@ -70,6 +71,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("gpt2", "GPT2Model"),
         ("gpt_neo", "GPTNeoModel"),
         ("gpt_neox", "GPTNeoXModel"),
+        ("gpt_neox_japanese", "GPTNeoXJapaneseModel"),
         ("gptj", "GPTJModel"),
         ("groupvit", "GroupViTModel"),
         ("hubert", "HubertModel"),
@@ -233,6 +235,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("gpt2", "GPT2LMHeadModel"),
         ("gpt_neo", "GPTNeoForCausalLM"),
         ("gpt_neox", "GPTNeoXForCausalLM"),
+        ("gpt_neox_japanese", "GPTNeoXJapaneseForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
         ("ibert", "IBertForMaskedLM"),
         ("layoutlm", "LayoutLMForMaskedLM"),
@@ -291,6 +294,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gpt2", "GPT2LMHeadModel"),
         ("gpt_neo", "GPTNeoForCausalLM"),
         ("gpt_neox", "GPTNeoXForCausalLM"),
+        ("gpt_neox_japanese", "GPTNeoXJapaneseForCausalLM"),
         ("gptj", "GPTJForCausalLM"),
         ("marian", "MarianForCausalLM"),
         ("mbart", "MBartForCausalLM"),
@@ -451,6 +455,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Object Detection mapping
+        ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),
     ]
@@ -920,7 +925,7 @@ class AutoModelForDocumentQuestionAnswering(_BaseAutoModelClass):
 AutoModelForDocumentQuestionAnswering = auto_class_update(
     AutoModelForDocumentQuestionAnswering,
     head_doc="document question answering",
-    checkpoint_for_example='impira/layoutlm-document-qa", revision="3dc6de3',
+    checkpoint_for_example='impira/layoutlm-document-qa", revision="52e01b3',
 )
 
 

@@ -36,6 +36,11 @@ from .generation_flax_logits_process import (
     FlaxTopKLogitsWarper,
     FlaxTopPLogitsWarper,
 )
+from .models.auto import (
+    FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
+)
 from .utils import ModelOutput, logging
 
 
@@ -161,6 +166,30 @@ class FlaxGenerationMixin:
         """
         return logits
 
+    def _validate_model_class(self):
+        """
+        Confirms that the model class is compatible with generation. If not, raises an exception that points to the
+        right class to use.
+        """
+        if not hasattr(self, "prepare_inputs_for_generation"):
+            generate_compatible_mappings = [
+                FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+                FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
+                FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+            ]
+            generate_compatible_classes = set()
+            for model_mapping in generate_compatible_mappings:
+                supported_models = model_mapping.get(type(self.config), default=None)
+                if supported_models is not None:
+                    generate_compatible_classes.add(supported_models.__name__)
+            exception_message = (
+                f"The current model class ({self.__class__.__name__}) is not compatible with `.generate()`, as "
+                "it doesn't have a language model head."
+            )
+            if generate_compatible_classes:
+                exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
+            raise TypeError(exception_message)
+
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         unused_model_args = []
@@ -281,7 +310,8 @@ class FlaxGenerationMixin:
         >>> outputs = model.generate(input_ids=input_ids, max_length=20, top_k=30, do_sample=True)
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ```"""
-        # Validate model kwargs
+        # Validate the `.generate()` call
+        self._validate_model_class()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # set init values
