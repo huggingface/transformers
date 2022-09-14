@@ -1,0 +1,110 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# Saving and Exporting Models in TensorFlow
+
+TensorFlow, uniquely among the major ML frameworks, has a rich in-house ecosystem for model saving and deployment.
+As a result, it has a number of different ways to save and export models, and not all of them play nicely with the
+models in the 🤗 Transformers library. This page is a guide to the best practices for saving and exporting models
+in TensorFlow. It should be read in conjunction with the (TensorFlow documentation on model saving and loading)[https://www.tensorflow.org/guide/keras/save_and_serialize].
+
+## Saving subclassed models
+
+Keras has several methods for saving whole models that work well when the model is constructed with the `Sequential` or
+`Functional` API. However, these methods do not work with models constructed with the (subclassing API)[https://www.tensorflow.org/guide/keras/custom_layers_and_models].
+Unfortunately, the subclassing API is by far the most flexible and powerful API for building TensorFlow models, and is
+the only API used throughout the entire `transformers` codebase! So what can we do?
+
+The reason saving subclassed models is difficult is that subclassed models contain Python code which cannot be
+serialized. It is generally not possible to completely overcome this limitation, and as a result, naively using
+`model.save()` can have unexpected results. Still, there are plenty of ways to save your model
+that *will* work, so don't panic and keep reading!
+
+### Saving weights only
+
+In many cases, saving your model weights only will work fine. `model.save_weights()` should work for all of our models.
+Similarly, although the `ModelCheckpoint` callback in Keras can encounter difficulties with our models because it
+tries to save the entire model as `SavedModel`, it will work fine if you set `save_weights_only=True`:
+
+```python
+callbacks = [
+    tf.keras.callbacks.ModelCheckpoint(
+        filepath="weights.{epoch:02d}-{val_loss:.2f}.h5",
+        save_weights_only=True,  # This bit is important!
+        monitor="val_loss",
+    )
+]
+
+model.fit(callbacks=callbacks)
+```
+
+### Saving weights and model config
+
+When you want to save the entire model, rather than just the weights, the best way to do this is to save the weights
+and the model config, and then reinitialize the model from those. This is what the `save_pretrained()` and
+`load_pretrained()` (links!) methods in `transformers` do. We highly recommend using these methods over `model.save()`
+when you want to share your full model.
+
+```python
+from transformers import TFAutoModelForImageClassification
+
+model = TFAutoModelForImageClassification.from_pretrained("google/vit-base-patch16-224")
+
+# Insert your fine-tuning code here
+
+model.save_pretrained("path/to/my_model_save")
+
+# Your model architecture and weights are loaded in one line!
+reloaded_model = TFAutoModelForImageClassification.from_pretrained("path/to/my_model_save")
+```
+
+### Uploading models to the Hub
+
+You can upload your model to the Hub using the `model.push_to_hub()` (link!) method! This method will save the model
+to a temporary directory using `save_pretrained()` and then push that directory to a repository on the HuggingFace Hub!
+There is also a `PushToHubCallback` (link!) you can use to automate this process, automatically uploading a full model
+checkpoint to the Hub after each training epoch, which will allow you to resume training even from a different machine
+than the one you began training on.
+
+```python
+model.push_to_hub("my_amazing_vision_transformer")
+
+# This line will load your model just as you saved it, even from a totally different machine.
+model = TFAutoModelForImageClassification.from_pretrained("my_username/my_amazing_vision_transformer")
+```
+
+## Exporting models for inference
+
+The methods above all work great, but they depend on having a machine with a Python environment and a copy of
+`transformers` installed. However, in many deployment scenarios this will not be the case. For example, when
+exporting your model to TFX (link!) or TFLite (link!), the standard advice involves saving your model as `SavedModel`.
+This creates a recurring problem for users of `transformers`, but don't panic! There are a few ways to get around this.
+
+### What SavedModel actually contains
+
+We mentioned above that models in `transformers` cannot be correctly saved as `SavedModel` because they use the
+subclassing API, and raw Python code cannot be serialized. However, if you try to save a model as `SavedModel` using
+`model.save()`, you will find that it generally works (although it raises a lot of warnings). What's going on, and what
+has it actually saved?
+
+The answer is that the `SavedModel` file has saved a *trace* through your model with a specific list of input shapes.
+In effect, TensorFlow has compiled your model for a very specific type of input, and saved that compilation. If you try
+to load this model, it might actually work for you, but you won't be able to train it, and it will throw an error if
+you pass it inputs that are different shapes to the shapes it was compiled with.
+
+### Controlling the shapes of the SavedModel trace
+
+The `SavedModel` trace is controlled by the `signatures` argument to `model.save()`.
+
+# TODO I think my central point of confusion is that we seem to save models with signatures based on the dummy
+#      inputs, but we specify flexible shapes in the tf.function() annotation to model.serving(). So why aren't
+#      those used? Maybe because
