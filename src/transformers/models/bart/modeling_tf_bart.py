@@ -765,7 +765,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
                     tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
                     message=(
                         "input_ids must be smaller than the embedding layer's input dimension (got"
-                        f" {tf.math.reduce_max(input_ids)} >={self.embed_tokens.input_dim})"
+                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
                     ),
                 )
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
@@ -971,7 +971,7 @@ class TFBartDecoder(tf.keras.layers.Layer):
                     tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
                     message=(
                         "input_ids must be smaller than the embedding layer's input dimension (got"
-                        f" {tf.math.reduce_max(input_ids)} >={self.embed_tokens.input_dim})"
+                        f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.input_dim})"
                     ),
                 )
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
