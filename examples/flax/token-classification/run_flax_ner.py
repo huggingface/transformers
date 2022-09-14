@@ -29,9 +29,10 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 import datasets
 import numpy as np
-from datasets import ClassLabel, load_dataset, load_metric
+from datasets import ClassLabel, load_dataset
 from tqdm import tqdm
 
+import evaluate
 import jax
 import jax.numpy as jnp
 import optax
@@ -152,7 +153,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -646,7 +647,7 @@ def main():
 
     p_eval_step = jax.pmap(eval_step, axis_name="batch")
 
-    metric = load_metric("seqeval")
+    metric = evaluate.load("seqeval")
 
     def get_labels(y_pred, y_true):
         # Transform predictions and references tensos to numpy arrays

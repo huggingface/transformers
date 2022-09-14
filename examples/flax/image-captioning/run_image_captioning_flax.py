@@ -31,10 +31,11 @@ from typing import Callable, Optional
 import datasets
 import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
-from datasets import Dataset, load_dataset, load_metric
+from datasets import Dataset, load_dataset
 from PIL import Image
 from tqdm import tqdm
 
+import evaluate
 import jax
 import jax.numpy as jnp
 import optax
@@ -185,7 +186,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -551,11 +552,14 @@ def main():
         targets = captions
 
         model_inputs = {}
-        # Setup the tokenizer for targets
-        with tokenizer.as_target_tokenizer():
-            labels = tokenizer(
-                targets, max_length=max_target_length, padding="max_length", truncation=True, return_tensors="np"
-            )
+
+        labels = tokenizer(
+            text_target=targets,
+            max_length=max_target_length,
+            padding="max_length",
+            truncation=True,
+            return_tensors="np",
+        )
         model_inputs["labels"] = labels["input_ids"]
         decoder_input_ids = shift_tokens_right_fn(
             labels["input_ids"], model.config.pad_token_id, model.config.decoder_start_token_id
@@ -811,7 +815,7 @@ def main():
                 yield batch
 
     # Metric
-    metric = load_metric("rouge")
+    metric = evaluate.load("rouge")
 
     def postprocess_text(preds, labels):
         preds = [pred.strip() for pred in preds]
@@ -1007,7 +1011,7 @@ def main():
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
-            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
             model.save_pretrained(os.path.join(training_args.output_dir, ckpt_dir), params=params)
             tokenizer.save_pretrained(os.path.join(training_args.output_dir, ckpt_dir))
             if training_args.push_to_hub:
@@ -1060,7 +1064,7 @@ def main():
         if metrics:
             # normalize metrics
             metrics = get_metrics(metrics)
-            metrics = jax.tree_map(jnp.mean, metrics)
+            metrics = jax.tree_util.tree_map(jnp.mean, metrics)
 
         # compute ROUGE metrics
         generations = []

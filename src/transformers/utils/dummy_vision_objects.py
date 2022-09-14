@@ -24,13 +24,6 @@ class CLIPFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class CLIPProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class ConvNextFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -46,6 +39,13 @@ class DeiTFeatureExtractor(metaclass=DummyObject):
 
 
 class DetrFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class DonutFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -144,6 +144,13 @@ class PoolFormerFeatureExtractor(metaclass=DummyObject):
 
 
 class SegformerFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class VideoMAEFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

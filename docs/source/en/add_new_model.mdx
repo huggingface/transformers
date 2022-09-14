@@ -813,13 +813,9 @@ checkpoint and to get the required access rights to be able to upload the model 
 *brand_new_bert*. The `push_to_hub` method, present in all models in `transformers`, is a quick and efficient way to push your checkpoint to the hub. A little snippet is pasted below:
 
 ```python
-brand_new_bert.push_to_hub(
-    repo_path_or_name="brand_new_bert",
-    # Uncomment the following line to push to an organization
-    # organization="<ORGANIZATION>",
-    commit_message="Add model",
-    use_temp_dir=True,
-)
+brand_new_bert.push_to_hub("brand_new_bert")
+# Uncomment the following line to push to an organization.
+# brand_new_bert.push_to_hub("<organization>/brand_new_bert")
 ```
 
 It is worth spending some time to create fitting model cards for each checkpoint. The model cards should highlight the

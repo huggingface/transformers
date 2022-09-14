@@ -187,12 +187,15 @@ ignored. The code example below illustrates all of this.
 
 >>> # encode the targets
 >>> target_encoding = tokenizer(
-...     [output_sequence_1, output_sequence_2], padding="longest", max_length=max_target_length, truncation=True
+...     [output_sequence_1, output_sequence_2],
+...     padding="longest",
+...     max_length=max_target_length,
+...     truncation=True,
+...     return_tensors="pt",
 ... )
 >>> labels = target_encoding.input_ids
 
 >>> # replace padding token id's of the labels by -100 so it's ignored by the loss
->>> labels = torch.tensor(labels)
 >>> labels[labels == tokenizer.pad_token_id] = -100
 
 >>> # forward pass

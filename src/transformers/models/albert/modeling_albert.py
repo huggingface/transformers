@@ -20,7 +20,6 @@ from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
 import torch
-from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -35,7 +34,12 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import (
+    apply_chunking_to_forward,
+    find_pruneable_heads_and_indices,
+    is_torch_greater_than_1_6,
+    prune_linear_layer,
+)
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -212,7 +216,7 @@ class AlbertEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if version.parse(torch.__version__) > version.parse("1.6.0"):
+        if is_torch_greater_than_1_6:
             self.register_buffer(
                 "token_type_ids",
                 torch.zeros(self.position_ids.size(), dtype=torch.long),

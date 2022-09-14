@@ -27,8 +27,9 @@ from typing import Any, Dict, List, Optional, Union
 
 import datasets
 import torch
-from datasets import DatasetDict, load_dataset, load_metric
+from datasets import DatasetDict, load_dataset
 
+import evaluate
 import transformers
 from transformers import (
     AutoConfig,
@@ -88,7 +89,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -425,7 +426,7 @@ def main():
         return
 
     # 8. Load Metric
-    metric = load_metric("wer")
+    metric = evaluate.load("wer")
 
     def compute_metrics(pred):
         pred_ids = pred.predictions

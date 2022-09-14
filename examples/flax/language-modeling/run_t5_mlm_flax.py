@@ -172,7 +172,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -327,7 +327,7 @@ class FlaxDataCollatorForT5MLM:
     pad_token_id: int
     decoder_start_token_id: int
 
-    def __call__(self, examples: List[Dict[str, np.ndarray]]) -> Dict[str, np.ndarray]:
+    def __call__(self, examples: List[Dict[str, np.ndarray]]) -> BatchEncoding:
 
         # convert list to dict and tensorize input
         batch = BatchEncoding(
@@ -746,7 +746,6 @@ def main():
             config,
             seed=training_args.seed,
             dtype=getattr(jnp, model_args.dtype),
-            use_auth_token=True if model_args.use_auth_token else None,
         )
 
     # Data collator
@@ -941,7 +940,7 @@ def main():
 
                 # get eval metrics
                 eval_metrics = get_metrics(eval_metrics)
-                eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+                eval_metrics = jax.tree_util.tree_map(jnp.mean, eval_metrics)
 
                 # Update progress bar
                 epochs.write(f"Step... ({cur_step} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['accuracy']})")
@@ -953,7 +952,7 @@ def main():
             if cur_step % training_args.save_steps == 0 and cur_step > 0:
                 # save checkpoint after each epoch and push checkpoint to the hub
                 if jax.process_index() == 0:
-                    params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+                    params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
                     model.save_pretrained(training_args.output_dir, params=params)
                     tokenizer.save_pretrained(training_args.output_dir)
                     if training_args.push_to_hub:
@@ -979,7 +978,7 @@ def main():
 
         # get eval metrics
         eval_metrics = get_metrics(eval_metrics)
-        eval_metrics = jax.tree_map(lambda metric: jnp.mean(metric).item(), eval_metrics)
+        eval_metrics = jax.tree_util.tree_map(lambda metric: jnp.mean(metric).item(), eval_metrics)
 
         if jax.process_index() == 0:
             eval_metrics = {f"eval_{metric_name}": value for metric_name, value in eval_metrics.items()}

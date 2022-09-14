@@ -44,7 +44,7 @@ class GELUActivation(nn.Module):
 
     def __init__(self, use_gelu_python: bool = False):
         super().__init__()
-        if version.parse(torch.__version__) < version.parse("1.4") or use_gelu_python:
+        if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.4") or use_gelu_python:
             self.act = self._gelu_python
         else:
             self.act = nn.functional.gelu
@@ -110,7 +110,7 @@ class SiLUActivation(nn.Module):
 
     def __init__(self):
         super().__init__()
-        if version.parse(torch.__version__) < version.parse("1.7"):
+        if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.7"):
             self.act = self._silu_python
         else:
             self.act = nn.functional.silu
@@ -130,7 +130,7 @@ class MishActivation(nn.Module):
 
     def __init__(self):
         super().__init__()
-        if version.parse(torch.__version__) < version.parse("1.9"):
+        if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.9"):
             self.act = self._mish_python
         else:
             self.act = nn.functional.mish

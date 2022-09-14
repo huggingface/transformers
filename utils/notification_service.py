@@ -387,28 +387,52 @@ class Message:
         return json.dumps(blocks)
 
     @staticmethod
-    def error_out():
-        payload = [
-            {
-                "type": "section",
-                "text": {
-                    "type": "plain_text",
-                    "text": "There was an issue running the tests.",
-                },
-                "accessory": {
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
-                    "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
-                },
-            }
-        ]
+    def error_out(title, ci_title="", setup_failed=False, runner_failed=False):
+
+        blocks = []
+        title_block = {"type": "header", "text": {"type": "plain_text", "text": title}}
+        blocks.append(title_block)
+
+        if ci_title:
+            ci_title_block = {"type": "section", "text": {"type": "mrkdwn", "text": ci_title}}
+            blocks.append(ci_title_block)
+
+        if setup_failed:
+            text = "💔 Setup job failed. Tests are not run. 😭"
+        elif runner_failed:
+            text = "💔 CI runners have problems! Tests are not run. 😭"
+        else:
+            text = "💔 There was an issue running the tests. 😭"
+
+        error_block_1 = {
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": text,
+            },
+        }
+        error_block_2 = {
+            "type": "section",
+            "text": {
+                "type": "plain_text",
+                "text": "🙏 Let's fix it ASAP! 🙏",
+            },
+            "accessory": {
+                "type": "button",
+                "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
+                "url": f"https://github.com/huggingface/transformers/actions/runs/{os.environ['GITHUB_RUN_ID']}",
+            },
+        }
+        blocks.extend([error_block_1, error_block_2])
+
+        payload = json.dumps(blocks)
 
         print("Sending the following payload")
-        print(json.dumps({"blocks": json.loads(payload)}))
+        print(json.dumps({"blocks": blocks}))
 
         client.chat_postMessage(
             channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
-            text="There was an issue running the tests.",
+            text=text,
             blocks=payload,
         )
 
@@ -448,7 +472,12 @@ class Message:
 
         content = {"type": "section", "text": {"type": "mrkdwn", "text": text}}
 
-        if job_result["job_link"] is not None:
+        # TODO: Make sure we always have a valid job link (or at least a way not to break the report sending)
+        # Currently we get the device from a job's artifact name.
+        # If a device is found, the job name should contain the device type, for example, `XXX (single-gpu)`.
+        # This could be done by adding `machine_type` in a job's `strategy`.
+        # (If `job_result["job_link"][device]` is `None`, we get an error: `... [ERROR] must provide a string ...`)
+        if job_result["job_link"] is not None and job_result["job_link"][device] is not None:
             content["accessory"] = {
                 "type": "button",
                 "text": {"type": "plain_text", "text": "GitHub Action job", "emoji": True},
@@ -625,6 +654,11 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 if __name__ == "__main__":
 
+    setup_status = os.environ.get("SETUP_STATUS")
+    runner_status = os.environ.get("RUNNER_STATUS")
+    setup_failed = True if setup_status is not None and setup_status != "success" else False
+    runner_failed = True if runner_status is not None and runner_status != "success" else False
+
     org = "huggingface"
     repo = "transformers"
     repository_full_name = f"{org}/{repo}"
@@ -683,6 +717,10 @@ if __name__ == "__main__":
 
     else:
         ci_title = ""
+
+    if setup_failed or runner_failed:
+        Message.error_out(title, ci_title, setup_failed, runner_failed)
+        exit(0)
 
     arguments = sys.argv[1:][0]
     try:

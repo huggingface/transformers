@@ -33,9 +33,10 @@ from typing import Callable, Optional
 import datasets
 import nltk  # Here to have a nice missing dependency error message early on
 import numpy as np
-from datasets import Dataset, load_dataset, load_metric
+from datasets import Dataset, load_dataset
 from tqdm import tqdm
 
+import evaluate
 import jax
 import jax.numpy as jnp
 import optax
@@ -120,6 +121,12 @@ class TrainingArguments:
         default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
     )
     hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+    gradient_checkpointing: bool = field(
+        default=False,
+        metadata={
+            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
+        },
+    )
 
     def __post_init__(self):
         if self.output_dir is not None:
@@ -185,7 +192,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -534,6 +541,9 @@ def main():
             dtype=getattr(jnp, model_args.dtype),
         )
 
+    if training_args.gradient_checkpointing:
+        model.enable_gradient_checkpointing()
+
     if model.config.decoder_start_token_id is None:
         raise ValueError("Make sure that `config.decoder_start_token_id` is correctly defined")
 
@@ -589,10 +599,13 @@ def main():
         )
 
         # Setup the tokenizer for targets
-        with tokenizer.as_target_tokenizer():
-            labels = tokenizer(
-                targets, max_length=max_target_length, padding="max_length", truncation=True, return_tensors="np"
-            )
+        labels = tokenizer(
+            text_target=targets,
+            max_length=max_target_length,
+            padding="max_length",
+            truncation=True,
+            return_tensors="np",
+        )
 
         model_inputs["labels"] = labels["input_ids"]
         decoder_input_ids = shift_tokens_right_fn(
@@ -656,7 +669,7 @@ def main():
         )
 
     # Metric
-    metric = load_metric("rouge")
+    metric = evaluate.load("rouge")
 
     def postprocess_text(preds, labels):
         preds = [pred.strip() for pred in preds]
@@ -676,12 +689,9 @@ def main():
         decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
 
         result = metric.compute(predictions=decoded_preds, references=decoded_labels, use_stemmer=True)
-        # Extract a few results from ROUGE
-        result = {key: value.mid.fmeasure * 100 for key, value in result.items()}
-
+        result = {k: round(v * 100, 4) for k, v in result.items()}
         prediction_lens = [np.count_nonzero(pred != tokenizer.pad_token_id) for pred in preds]
         result["gen_len"] = np.mean(prediction_lens)
-        result = {k: round(v, 4) for k, v in result.items()}
         return result
 
     # Enable tensorboard only on the master node
@@ -892,7 +902,7 @@ def main():
 
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
-        eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+        eval_metrics = jax.tree_util.tree_map(jnp.mean, eval_metrics)
 
         # compute ROUGE metrics
         rouge_desc = ""
@@ -913,7 +923,7 @@ def main():
 
         # save checkpoint after each epoch and push checkpoint to the hub
         if jax.process_index() == 0:
-            params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+            params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
             model.save_pretrained(training_args.output_dir, params=params)
             tokenizer.save_pretrained(training_args.output_dir)
             if training_args.push_to_hub:
@@ -947,7 +957,7 @@ def main():
 
         # normalize prediction metrics
         pred_metrics = get_metrics(pred_metrics)
-        pred_metrics = jax.tree_map(jnp.mean, pred_metrics)
+        pred_metrics = jax.tree_util.tree_map(jnp.mean, pred_metrics)
 
         # compute ROUGE metrics
         rouge_desc = ""

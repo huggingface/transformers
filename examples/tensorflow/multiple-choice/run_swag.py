@@ -18,6 +18,7 @@ Fine-tuning the library models for multiple choice.
 """
 # You can also adapt this script on your own multiple choice task. Pointers for this are left as comments.
 
+import json
 import logging
 import os
 import sys
@@ -38,6 +39,7 @@ from transformers import (
     AutoTokenizer,
     DefaultDataCollator,
     HfArgumentParser,
+    PushToHubCallback,
     TFAutoModelForMultipleChoice,
     TFTrainingArguments,
     create_optimizer,
@@ -54,16 +56,6 @@ logger = logging.getLogger(__name__)
 
 
 # region Helper classes and functions
-class SavePretrainedCallback(tf.keras.callbacks.Callback):
-    # Hugging Face models have a save_pretrained() method that saves both the weights and the necessary
-    # metadata to allow them to be loaded as a pretrained model in future. This is a simple Keras callback
-    # that saves the model with this method after each epoch.
-    def __init__(self, output_dir, **kwargs):
-        super().__init__()
-        self.output_dir = output_dir
-
-    def on_epoch_end(self, epoch, logs=None):
-        self.model.save_pretrained(self.output_dir)
 
 
 @dataclass
@@ -157,7 +149,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -391,7 +383,6 @@ def main():
         if "train" not in raw_datasets:
             raise ValueError("--do_train requires a train dataset")
         train_dataset = raw_datasets["train"]
-        non_label_columns = [feature for feature in train_dataset.features if feature not in ("label", "labels")]
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
@@ -407,8 +398,6 @@ def main():
         if "validation" not in raw_datasets:
             raise ValueError("--do_eval requires a validation dataset")
         eval_dataset = raw_datasets["validation"]
-        if not training_args.do_train:
-            non_label_columns = [feature for feature in eval_dataset.features if feature not in ("label", "labels")]
         if data_args.max_eval_samples is not None:
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
             eval_dataset = eval_dataset.select(range(max_eval_samples))
@@ -444,79 +433,120 @@ def main():
         num_replicas = training_args.strategy.num_replicas_in_sync
         total_train_batch_size = training_args.per_device_train_batch_size * num_replicas
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
+
         if training_args.do_train:
-            total_train_steps = (len(train_dataset) // total_train_batch_size) * int(training_args.num_train_epochs)
+            num_train_steps = (len(train_dataset) // total_train_batch_size) * int(training_args.num_train_epochs)
+            if training_args.warmup_steps > 0:
+                num_warmup_steps = training_args.warmup_steps
+            elif training_args.warmup_ratio > 0:
+                num_warmup_steps = int(num_train_steps * training_args.warmup_ratio)
+            else:
+                num_warmup_steps = 0
             optimizer, lr_schedule = create_optimizer(
-                init_lr=training_args.learning_rate, num_train_steps=int(total_train_steps), num_warmup_steps=0
+                init_lr=training_args.learning_rate,
+                num_train_steps=num_train_steps,
+                num_warmup_steps=num_warmup_steps,
+                adam_beta1=training_args.adam_beta1,
+                adam_beta2=training_args.adam_beta2,
+                adam_epsilon=training_args.adam_epsilon,
+                weight_decay_rate=training_args.weight_decay,
+                adam_global_clipnorm=training_args.max_grad_norm,
             )
         else:
-            optimizer = "adam"  # Just put anything in here, since we're not using it anyway
-        model.compile(
-            optimizer=optimizer,
-            loss=tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True),
-            metrics=[tf.keras.metrics.SparseCategoricalAccuracy(name="accuracy")],
-        )
+            optimizer = None
+        model.compile(optimizer=optimizer, metrics=["accuracy"], jit_compile=training_args.xla)
+        # endregion
+
+        # region Preparing push_to_hub and model card
+        push_to_hub_model_id = training_args.push_to_hub_model_id
+        model_name = model_args.model_name_or_path.split("/")[-1]
+        if not push_to_hub_model_id:
+            push_to_hub_model_id = f"{model_name}-finetuned-multiplechoice"
+
+        model_card_kwargs = {"finetuned_from": model_args.model_name_or_path, "tasks": "multiple-choice"}
+
+        if training_args.push_to_hub:
+            callbacks = [
+                PushToHubCallback(
+                    output_dir=training_args.output_dir,
+                    model_id=push_to_hub_model_id,
+                    organization=training_args.push_to_hub_organization,
+                    token=training_args.push_to_hub_token,
+                    tokenizer=tokenizer,
+                    **model_card_kwargs,
+                )
+            ]
+        else:
+            callbacks = []
         # endregion
 
         # region Training
+        eval_metrics = None
         if training_args.do_train:
-            dataset_exclude_cols = set(non_label_columns + ["label"])
-            tf_train_dataset = train_dataset.to_tf_dataset(
-                columns=[col for col in train_dataset.column_names if col not in dataset_exclude_cols],
+            dataset_options = tf.data.Options()
+            dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
+
+            # model.prepare_tf_dataset() wraps a Hugging Face dataset in a tf.data.Dataset which is ready to use in
+            # training. This is the recommended way to use a Hugging Face dataset when training with Keras. You can also
+            # use the lower-level dataset.to_tf_dataset() method, but you will have to specify things like column names
+            # yourself if you use this method, whereas they are automatically inferred from the model input names when
+            # using model.prepare_tf_dataset()
+            # For more info see the docs:
+            # https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.TFPreTrainedModel.prepare_tf_dataset
+            # https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.to_tf_dataset
+
+            tf_train_dataset = model.prepare_tf_dataset(
+                train_dataset,
                 shuffle=True,
                 batch_size=total_train_batch_size,
                 collate_fn=data_collator,
-                drop_remainder=True,
-                # `label_cols` is needed for user-defined losses, such as in this example
-                label_cols="label" if "label" in train_dataset.column_names else None,
-            )
+            ).with_options(dataset_options)
 
             if training_args.do_eval:
-                validation_data = eval_dataset.to_tf_dataset(
-                    columns=[col for col in eval_dataset.column_names if col not in dataset_exclude_cols],
+                validation_data = model.prepare_tf_dataset(
+                    eval_dataset,
                     shuffle=False,
                     batch_size=total_eval_batch_size,
                     collate_fn=data_collator,
                     drop_remainder=True,
-                    # `label_cols` is needed for user-defined losses, such as in this example
-                    label_cols="label" if "label" in eval_dataset.column_names else None,
-                )
+                ).with_options(dataset_options)
             else:
                 validation_data = None
-            model.fit(
+            history = model.fit(
                 tf_train_dataset,
                 validation_data=validation_data,
                 epochs=int(training_args.num_train_epochs),
-                callbacks=[SavePretrainedCallback(output_dir=training_args.output_dir)],
+                callbacks=callbacks,
             )
+            eval_metrics = {key: val[-1] for key, val in history.history.items()}
         # endregion
 
         # region Evaluation
         if training_args.do_eval and not training_args.do_train:
-            dataset_exclude_cols = set(non_label_columns + ["label"])
+            dataset_options = tf.data.Options()
+            dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
             # Do a standalone evaluation pass
-            tf_eval_dataset = eval_dataset.to_tf_dataset(
-                columns=[col for col in eval_dataset.column_names if col not in dataset_exclude_cols],
+            tf_eval_dataset = model.prepare_tf_dataset(
+                eval_dataset,
                 shuffle=False,
                 batch_size=total_eval_batch_size,
                 collate_fn=data_collator,
                 drop_remainder=True,
-                # `label_cols` is needed for user-defined losses, such as in this example
-                label_cols="label" if "label" in eval_dataset.column_names else None,
-            )
-            model.evaluate(tf_eval_dataset)
+            ).with_options(dataset_options)
+            eval_results = model.evaluate(tf_eval_dataset)
+            eval_metrics = {"val_loss": eval_results[0], "val_accuracy": eval_results[1]}
         # endregion
 
+        if eval_metrics is not None and training_args.output_dir is not None:
+            output_eval_file = os.path.join(training_args.output_dir, "all_results.json")
+            with open(output_eval_file, "w") as writer:
+                writer.write(json.dumps(eval_metrics))
+
         # region Push to hub
-        if training_args.push_to_hub:
-            model.push_to_hub(
-                finetuned_from=model_args.model_name_or_path,
-                tasks="multiple-choice",
-                dataset_tags="swag",
-                dataset_args="regular",
-                dataset="SWAG",
-                language="en",
-            )
+
+        if training_args.output_dir is not None and not training_args.push_to_hub:
+            # If we're not pushing to hub, at least save a local copy when we're done
+            model.save_pretrained(training_args.output_dir)
         # endregion
 
 

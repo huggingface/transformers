@@ -35,6 +35,12 @@ from .generation_tf_logits_process import (
     TFTopKLogitsWarper,
     TFTopPLogitsWarper,
 )
+from .models.auto import (
+    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+    TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
+)
 from .tf_utils import shape_list, stable_softmax
 from .utils import ModelOutput, logging
 
@@ -357,12 +363,6 @@ class TFGenerationMixin:
 
     supports_xla_generation = True
 
-    def prepare_inputs_for_generation(self, inputs, **kwargs):
-        """
-        Implement in subclasses of [`TFPreTrainedModel`] for custom behavior to prepare inputs in the generate method.
-        """
-        return {"input_ids": inputs}
-
     def _use_cache(self, outputs, use_cache):
         """During generation, decide whether to pass the `past` variable to the next forward pass."""
         use_cache = getattr(self.config, "use_cache", False)
@@ -418,7 +418,6 @@ class TFGenerationMixin:
         post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, `(batch_size, sequence_length,
             feature_dim)` or `(batch_size, num_channels, height, width)`, *optional*):
                 The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
@@ -456,10 +455,10 @@ class TFGenerationMixin:
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to 1.0):
-                Exponential penalty to the length. 1.0 means no penalty.
-
-                Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
-                order to encourage the model to produce longer sequences.
+                Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
+                to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
+                the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
+                while `length_penalty` < 0.0 encourages shorter sequences.
             no_repeat_ngram_size (`int`, *optional*, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
             bad_words_ids(`List[int]`, *optional*):
@@ -580,6 +579,7 @@ class TFGenerationMixin:
         do_sample = do_sample if do_sample is not None else self.config.do_sample
 
         if do_sample is False or num_beams == 1:
+            seed = model_kwargs.pop("seed", None)
             return self._generate(
                 input_ids=input_ids,
                 max_length=max_length,
@@ -602,13 +602,14 @@ class TFGenerationMixin:
                 attention_mask=attention_mask,
                 decoder_start_token_id=decoder_start_token_id,
                 use_cache=use_cache,
-                seed=model_kwargs.pop("seed", None),
+                seed=seed,
                 output_scores=output_scores,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 forced_bos_token_id=forced_bos_token_id,
                 forced_eos_token_id=forced_eos_token_id,
+                **model_kwargs,
             )
 
         # We cannot generate if the model does not have a LM head
@@ -1289,6 +1290,54 @@ class TFGenerationMixin:
         else:
             return logits
 
+    def _validate_model_class(self):
+        """
+        Confirms that the model class is compatible with generation. If not, raises an exception that points to the
+        right class to use.
+        """
+        if not hasattr(self, "prepare_inputs_for_generation"):
+            generate_compatible_mappings = [
+                TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+                TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
+                TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+                TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+            ]
+            generate_compatible_classes = set()
+            for model_mapping in generate_compatible_mappings:
+                supported_models = model_mapping.get(type(self.config), default=None)
+                if supported_models is not None:
+                    generate_compatible_classes.add(supported_models.__name__)
+            exception_message = (
+                f"The current model class ({self.__class__.__name__}) is not compatible with `.generate()`, as "
+                "it doesn't have a language model head."
+            )
+            if generate_compatible_classes:
+                exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
+            raise TypeError(exception_message)
+
+    def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
+        """Validates model kwargs for generation. Generate argument typos will also be caught here."""
+        # Excludes arguments that are handled before calling any model function
+        if self.config.is_encoder_decoder:
+            for key in ["decoder_input_ids"]:
+                model_kwargs.pop(key, None)
+
+        unused_model_args = []
+        model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)
+        # `kwargs` if often used to handle optional forward pass inputs like `attention_mask`. If
+        # `prepare_inputs_for_generation` doesn't accept `kwargs`, then a stricter check can be made ;)
+        if "kwargs" in model_args:
+            model_args |= set(inspect.signature(self.call).parameters)
+        for key, value in model_kwargs.items():
+            if value is not None and key not in model_args:
+                unused_model_args.append(key)
+
+        if unused_model_args:
+            raise ValueError(
+                f"The following `model_kwargs` are not used by the model: {unused_model_args} (note: typos in the"
+                " generate arguments will also show up in this list)"
+            )
+
     def _generate(
         self,
         input_ids=None,
@@ -1336,7 +1385,6 @@ class TFGenerationMixin:
         post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
-
             input_ids (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
                 The sequence used as a prompt for the generation. If `None` the method initializes it with
                 `bos_token_id` and a batch size of 1.
@@ -1371,10 +1419,10 @@ class TFGenerationMixin:
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to 1.0):
-                Exponential penalty to the length. 1.0 means no penalty.
-
-                Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
-                order to encourage the model to produce longer sequences.
+                Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
+                to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
+                the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
+                while `length_penalty` < 0.0 encourages shorter sequences.
             no_repeat_ngram_size (`int`, *optional*, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
             bad_words_ids(`List[int]`, *optional*):
@@ -1485,6 +1533,10 @@ class TFGenerationMixin:
         # generate sequences without allowing bad_words to be generated
         outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)
         ```"""
+        # 0. Validate the `.generate()` call
+        self._validate_model_class()
+        self._validate_model_kwargs(model_kwargs.copy())
+
         # 1. Set generation parameters if not already defined
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
@@ -1533,7 +1585,7 @@ class TFGenerationMixin:
         # 2. Define model inputs
         input_ids = self._prepare_model_inputs(input_ids, bos_token_id)
         # inputs_ids now has to be defined and cannot be None anymore
-        batch_size = input_ids.shape[0]
+        batch_size = shape_list(input_ids)[0]
 
         # 3. Prepare other model kwargs
         if output_attentions is not None:
@@ -1702,7 +1754,8 @@ class TFGenerationMixin:
 
     @staticmethod
     def _expand_to_num_beams(tensor: tf.Tensor, num_beams: int) -> tf.Tensor:
-        return tf.broadcast_to(tensor[:, None], (tensor.shape[0], num_beams) + tensor.shape[1:])
+        shape = shape_list(tensor)
+        return tf.broadcast_to(tensor[:, None], (shape[0], num_beams) + tuple(shape[1:]))
 
     def _prepare_attention_mask_for_generation(
         self,
@@ -1712,9 +1765,7 @@ class TFGenerationMixin:
     ) -> tf.Tensor:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in (tf.int32, tf.int64)
         is_pad_token_in_inputs = (pad_token_id is not None) and tf.math.reduce_any(inputs == pad_token_id)
-        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
-            (eos_token_id is not None) and (pad_token_id != eos_token_id)
-        )
+        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id != eos_token_id)
 
         # Check if input is input_ids and padded -> only then is attention_mask defined
         if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
@@ -2069,7 +2120,6 @@ class TFGenerationMixin:
         Generates sequences for models with a language modeling head using greedy decoding.
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             logits_processor (`TFLogitsProcessorList`, *optional*):
@@ -2115,7 +2165,7 @@ class TFGenerationMixin:
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
         >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
 
-        >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
+        >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
         >>> model.config.pad_token_id = model.config.eos_token_id
 
         >>> input_prompt = "Today is a beautiful day, and"
@@ -2162,7 +2212,7 @@ class TFGenerationMixin:
         decoder_hidden_states = [] if (return_dict_in_generate and output_hidden_states) else None
 
         # 3. init tensors to use for "xla-compileable" generate function
-        batch_size, cur_len = input_ids.shape
+        batch_size, cur_len = shape_list(input_ids)
 
         # initialize `generated` (`input_ids` padded with `pad_token_id`), `finished_sequences`
         input_ids_padding = tf.ones((batch_size, max_length - cur_len), dtype=tf.int32) * (pad_token_id or 0)
@@ -2322,7 +2372,6 @@ class TFGenerationMixin:
         Generates sequences for models with a language modeling head using multinomial sampling.
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             logits_processor (`TFLogitsProcessorList`, *optional*):
@@ -2432,7 +2481,7 @@ class TFGenerationMixin:
         decoder_hidden_states = [] if (return_dict_in_generate and output_hidden_states) else None
 
         # 3. init tensors to use for "xla-compileable" generate function
-        batch_size, cur_len = input_ids.shape
+        batch_size, cur_len = shape_list(input_ids)
 
         # initialize `generated` (pre-populated with `pad_token_id`), `finished_sequences`
         input_ids_padding = tf.ones((batch_size, max_length - cur_len), dtype=tf.int32) * (pad_token_id or 0)
@@ -2599,7 +2648,6 @@ class TFGenerationMixin:
         Generates sequences for models with a language modeling head using beam search with multinomial sampling.
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             max_length (`int`, *optional*, defaults to 20):
@@ -2609,7 +2657,10 @@ class TFGenerationMixin:
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to 1.0):
-                Exponential penalty to the length. 1.0 means no penalty.
+                Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
+                to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
+                the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
+                while `length_penalty` < 0.0 encourages shorter sequences.
             early_stopping (`bool`, *optional*, defaults to `False`):
                 Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
             logits_processor (`[TFLogitsProcessorList]`, *optional*):
@@ -2678,18 +2729,16 @@ class TFGenerationMixin:
 
         def flatten_beam_dim(tensor, batch_axis=0):
             """Flattens the first two dimensions of a non-scalar array."""
+            shape = shape_list(tensor)
             return tf.reshape(
                 tensor,
-                tensor.shape[:batch_axis]
-                + [tensor.shape[batch_axis] * tensor.shape[batch_axis + 1]]
-                + tensor.shape[batch_axis + 2 :],
+                shape[:batch_axis] + [shape[batch_axis] * shape[batch_axis + 1]] + shape[batch_axis + 2 :],
             )
 
         def unflatten_beam_dim(tensor, batch_size, num_beams, batch_axis=0):
             """Unflattens the first, flat batch*beam dimension of a non-scalar array."""
-            return tf.reshape(
-                tensor, tensor.shape[:batch_axis] + [batch_size, num_beams] + tensor.shape[batch_axis + 1 :]
-            )
+            shape = shape_list(tensor)
+            return tf.reshape(tensor, shape[:batch_axis] + [batch_size, num_beams] + shape[batch_axis + 1 :])
 
         def gather_beams(nested, beam_indices, batch_axis=0):
             """Gathers the beam slices indexed by beam_indices into new beam array."""
@@ -2748,7 +2797,7 @@ class TFGenerationMixin:
         decoder_hidden_states = [] if (return_dict_in_generate and output_hidden_states) else None
 
         # 3. init tensors to use for "xla-compileable" generate function
-        batch_size, num_beams, cur_len = input_ids.shape
+        batch_size, num_beams, cur_len = shape_list(input_ids)
 
         # per batch, beam-item holding current token in loop, pre-populated with `pad_token_id`
         input_ids_padding = tf.ones((batch_size, num_beams, max_length - cur_len), dtype=tf.int32) * (
@@ -2894,7 +2943,7 @@ class TFGenerationMixin:
                 eos_in_next_token = tf.broadcast_to(eos_in_next_token, topk_sequences[:, :, cur_len].shape)
             did_topk_just_finished = eos_in_next_token & tf.broadcast_to(
                 tf.concat((tf.ones((num_beams), dtype=tf.bool), tf.zeros((num_beams), dtype=tf.bool)), axis=0),
-                eos_in_next_token.shape,
+                shape_list(eos_in_next_token),
             )
 
             # non-top `num_beams` eos tokens can't be used to finish a beam, but the others can't be used in the next
@@ -2917,7 +2966,7 @@ class TFGenerationMixin:
             topk_log_probs = topk_log_probs / (tf.cast(cur_len, dtype=tf.float32) ** length_penalty)
             beams_in_batch_are_full = (
                 tf.broadcast_to(
-                    tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), did_topk_just_finished.shape
+                    tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), shape_list(did_topk_just_finished)
                 )
                 & early_stopping
             )

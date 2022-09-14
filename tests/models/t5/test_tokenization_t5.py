@@ -210,10 +210,9 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Summary of the text.",
             "Another summary.",
         ]
-        with tokenizer.as_target_tokenizer():
-            targets = tokenizer(
-                tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
-            )
+        targets = tokenizer(
+            text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
+        )
         self.assertEqual(32, targets["input_ids"].shape[1])
 
     def test_outputs_not_longer_than_maxlen(self):
@@ -235,12 +234,10 @@ class T5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         expected_src_tokens = [71, 307, 8986, 21, 4505, 1635, 1707, 5, 1]
         expected_tgt_tokens = [20698, 13, 8, 1499, 5, 1]
 
-        batch = tokenizer(src_text)
-        with tokenizer.as_target_tokenizer():
-            targets = tokenizer(tgt_text)
+        batch = tokenizer(src_text, text_target=tgt_text)
 
         self.assertEqual(expected_src_tokens, batch["input_ids"][0])
-        self.assertEqual(expected_tgt_tokens, targets["input_ids"][0])
+        self.assertEqual(expected_tgt_tokens, batch["labels"][0])
 
     def test_token_type_ids(self):
         src_text_1 = ["A first paragraph for summarization."]

@@ -553,22 +553,27 @@ MARIAN_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
-
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
     - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -937,11 +942,11 @@ class TFMarianDecoder(tf.keras.layers.Layer):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`tf.Tensor` of
-                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
-                control over how to convert `input_ids` indices into associated vectors than the model's internal
-                embedding lookup matrix.
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`tf.Tensor` of shape
+                `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids`
+                you can choose to directly pass an embedded representation. This is useful if you want more control
+                over how to convert `input_ids` indices into associated vectors than the model's internal embedding
+                lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail. This argument can be used only in eager mode, in graph mode the value
@@ -1269,6 +1274,24 @@ class TFMarianModel(TFMarianPreTrainedModel):
         )
 
 
+# Copied from transformers.models.bart.modeling_tf_bart.BiasLayer
+class BiasLayer(tf.keras.layers.Layer):
+    """
+    Bias as a layer. It is used for serialization purposes: `tf.keras.Model.save_weights` stores on a per-layer basis,
+    so all weights have to be registered in a layer.
+    """
+
+    def __init__(self, shape, initializer, trainable, name, **kwargs):
+        super().__init__(name=name, **kwargs)
+        # Note: the name of this variable will NOT be scoped when serialized, i.e. it will not be in the format of
+        # "outer_layer/inner_layer/.../name:0". Instead, it will be "name:0". For further details, see:
+        # https://github.com/huggingface/transformers/pull/18833#issuecomment-1233090214
+        self.bias = self.add_weight(name=name, shape=shape, initializer=initializer, trainable=trainable)
+
+    def call(self, x):
+        return x + self.bias
+
+
 @add_start_docstrings(
     "The MARIAN Model with a language modeling head. Can be used for summarization.",
     MARIAN_START_DOCSTRING,
@@ -1284,9 +1307,10 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
         self.model = TFMarianMainLayer(config, name="model")
         self.use_cache = config.use_cache
         # final_bias_logits is registered as a buffer in pytorch, so not trainable for the sake of consistency.
-        self.final_logits_bias = self.add_weight(
+        self.bias_layer = BiasLayer(
             name="final_logits_bias", shape=[1, config.vocab_size], initializer="zeros", trainable=False
         )
+        self.final_logits_bias = self.bias_layer.bias  # alias to keep the same interface with PT
 
     def get_decoder(self):
         return self.model.decoder
@@ -1373,7 +1397,7 @@ class TFMarianMTModel(TFMarianPreTrainedModel, TFCausalLanguageModelingLoss):
             training=training,
         )
         lm_logits = self.model.shared(outputs[0], mode="linear")
-        lm_logits = lm_logits + self.final_logits_bias
+        lm_logits = self.bias_layer(lm_logits)
         masked_lm_loss = None if labels is None else self.hf_compute_loss(labels, lm_logits)
 
         if not return_dict:

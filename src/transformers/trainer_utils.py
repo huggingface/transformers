@@ -337,7 +337,6 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None):
     should be run immediately after the operation to be measured has completed.
 
     Args:
-
     - split: name to prefix metric (like train, eval, test...)
     - start_time: operation start time
     - num_samples: number of samples processed

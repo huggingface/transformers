@@ -567,14 +567,22 @@ as the model saving with FSDP activated is only available with recent fixes.
   For this, add `--fsdp full_shard` to the command line arguments. 
   - SHARD_GRAD_OP : Shards optimizer states + gradients across data parallel workers/GPUs.
     For this, add `--fsdp shard_grad_op` to the command line arguments.
+  - NO_SHARD : No sharding. For this, add `--fsdp no_shard` to the command line arguments.
 - To offload the parameters and gradients to the CPU, 
 add `--fsdp "full_shard offload"` or `--fsdp "shard_grad_op offload"` to the command line arguments.
 -  To automatically recursively wrap layers with FSDP using `default_auto_wrap_policy`, 
 add `--fsdp "full_shard auto_wrap"` or `--fsdp "shard_grad_op auto_wrap"` to the command line arguments.
 - To enable both CPU offloading and auto wrapping, 
 add `--fsdp "full_shard offload auto_wrap"` or `--fsdp "shard_grad_op offload auto_wrap"` to the command line arguments.
-- If auto wrapping is enabled, please add `--fsdp_min_num_params <number>` to command line arguments.
-It specifies FSDP's minimum number of parameters for Default Auto Wrapping.
+- If auto wrapping is enabled, you can either use transformer based auto wrap policy or size based auto wrap policy.
+  - For transformer based auto wrap policy, please add `--fsdp_transformer_layer_cls_to_wrap <value>` to command line arguments.
+  This specifies the transformer layer class name (case-sensitive) to wrap ,e.g, `BertLayer`, `GPTJBlock`, `T5Block` ....
+  This is important because submodules that share weights (e.g., embedding layer) should not end up in different FSDP wrapped units. 
+  Using this policy, wrapping happens for each block containing Multi-Head Attention followed by couple of MLP layers. 
+  Remaining layers including the shared embeddings are conviniently wrapped in same outermost FSDP unit.
+  Therefore, use this for transformer based models.
+  - For size based auto wrap policy, please add `--fsdp_min_num_params <number>` to command line arguments.
+  It specifies FSDP's minimum number of parameters for auto wrapping.
 
 **Few caveats to be aware of**
 - Mixed precision is currently not supported with FSDP as we wait for PyTorch to fix support for it.
@@ -582,6 +590,66 @@ More details in this [issues](https://github.com/pytorch/pytorch/issues/75676).
 - FSDP currently doesn't support multiple parameter groups. 
 More details mentioned in this [issue](https://github.com/pytorch/pytorch/issues/76501)
 (`The original model parameters' .grads are not set, meaning that they cannot be optimized separately (which is why we cannot support multiple parameter groups)`).
+
+### Using Trainer for accelerated PyTorch Training on Mac 
+
+With PyTorch v1.12 release, developers and researchers can take advantage of Apple silicon GPUs for significantly faster model training. 
+This unlocks the ability to perform machine learning workflows like prototyping and fine-tuning locally, right on Mac.
+Apple's Metal Performance Shaders (MPS) as a backend for PyTorch enables this and can be used via the new `"mps"` device. 
+This will map computational graphs and primitives on the MPS Graph framework and tuned kernels provided by MPS.
+For more information please refer official documents [Introducing Accelerated PyTorch Training on Mac](https://pytorch.org/blog/introducing-accelerated-pytorch-training-on-mac/)
+and [MPS BACKEND](https://pytorch.org/docs/stable/notes/mps.html). 
+
+<Tip warning={false}>
+
+We strongly recommend to install PyTorch >= 1.13 (nightly version at the time of writing) on your MacOS machine. 
+It has major fixes related to model correctness and performance improvements for transformer based models.
+Please refer to https://github.com/pytorch/pytorch/issues/82707 for more details.
+
+</Tip>
+
+**Benefits of Training and Inference using Apple Silicon Chips**
+
+1. Enables users to train larger networks or batch sizes locally
+2. Reduces data retrieval latency and provides the GPU with direct access to the full memory store due to unified memory architecture. 
+Therefore, improving end-to-end performance.
+3. Reduces costs associated with cloud-based development or the need for additional local GPUs.
+
+**Pre-requisites**: To install torch with mps support, 
+please follow this nice medium article [GPU-Acceleration Comes to PyTorch on M1 Macs](https://medium.com/towards-data-science/gpu-acceleration-comes-to-pytorch-on-m1-macs-195c399efcc1).
+
+**Usage**:
+User has to just pass `--use_mps_device` argument. 
+For example, you can run the offical Glue text classififcation task (from the root folder) using Apple Silicon GPU with below command:
+
+```bash
+export TASK_NAME=mrpc
+
+python examples/pytorch/text-classification/run_glue.py \
+  --model_name_or_path bert-base-cased \
+  --task_name $TASK_NAME \
+  --do_train \
+  --do_eval \
+  --max_seq_length 128 \
+  --per_device_train_batch_size 32 \
+  --learning_rate 2e-5 \
+  --num_train_epochs 3 \
+  --output_dir /tmp/$TASK_NAME/ \
+  --use_mps_device \
+  --overwrite_output_dir
+```
+
+**A few caveats to be aware of**
+
+1. Some PyTorch operations have not been implemented in mps and will throw an error. 
+One way to get around that is to set the environment variable `PYTORCH_ENABLE_MPS_FALLBACK=1`, 
+which will fallback to CPU for these operations. It still throws a UserWarning however.
+2. Distributed setups `gloo` and `nccl` are not working with `mps` device. 
+This means that currently only single GPU of `mps` device type can be used.
+
+Finally, please, remember that, 🤗 `Trainer` only integrates MPS backend, therefore if you
+have any problems or questions with regards to MPS backend usage, please, 
+file an issue with [PyTorch GitHub](https://github.com/pytorch/pytorch/issues).
 
 Sections that were moved:
 

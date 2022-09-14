@@ -22,7 +22,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
 
 from transformers.utils.doc import add_code_sample_docstrings
@@ -30,6 +29,7 @@ from transformers.utils.doc import add_code_sample_docstrings
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import PreTrainedModel, find_pruneable_heads_and_indices, prune_linear_layer
+from ...pytorch_utils import is_torch_greater_than_1_6
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -392,7 +392,7 @@ class FlavaTextEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        if version.parse(torch.__version__) > version.parse("1.6.0"):
+        if is_torch_greater_than_1_6:
             self.register_buffer(
                 "token_type_ids",
                 torch.zeros(self.position_ids.size(), dtype=torch.long),

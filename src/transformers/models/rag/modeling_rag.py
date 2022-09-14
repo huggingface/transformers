@@ -818,8 +818,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
         >>> model = RagSequenceForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
 
         >>> inputs = tokenizer("How many people live in Paris?", return_tensors="pt")
-        >>> with tokenizer.as_target_tokenizer():
-        ...     targets = tokenizer("In Paris, there are 10 million people.", return_tensors="pt")
+        >>> targets = tokenizer(text_target="In Paris, there are 10 million people.", return_tensors="pt")
         >>> input_ids = inputs["input_ids"]
         >>> labels = targets["input_ids"]
         >>> outputs = model(input_ids=input_ids, labels=labels)
@@ -1287,8 +1286,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         >>> model = RagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
 
         >>> inputs = tokenizer("How many people live in Paris?", return_tensors="pt")
-        >>> with tokenizer.as_target_tokenizer():
-        ...     targets = tokenizer("In Paris, there are 10 million people.", return_tensors="pt")
+        >>> targets = tokenizer(text_target="In Paris, there are 10 million people.", return_tensors="pt")
         >>> input_ids = inputs["input_ids"]
         >>> labels = targets["input_ids"]
         >>> outputs = model(input_ids=input_ids, labels=labels)
@@ -1465,10 +1463,10 @@ class RagTokenForGeneration(RagPreTrainedModel):
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to 1.0):
-                Exponential penalty to the length. 1.0 means no penalty.
-
-                Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
-                order to encourage the model to produce longer sequences.
+                Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
+                to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
+                the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
+                while `length_penalty` < 0.0 encourages shorter sequences.
             no_repeat_ngram_size (`int`, *optional*, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
             encoder_no_repeat_ngram_size (`int`, *optional*, defaults to 0):

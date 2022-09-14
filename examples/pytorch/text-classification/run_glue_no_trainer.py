@@ -23,10 +23,11 @@ from pathlib import Path
 
 import datasets
 import torch
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 
+import evaluate
 import transformers
 from accelerate import Accelerator
 from accelerate.logging import get_logger
@@ -42,9 +43,12 @@ from transformers import (
     default_data_collator,
     get_scheduler,
 )
-from transformers.utils import get_full_repo_name, send_example_telemetry
+from transformers.utils import check_min_version, get_full_repo_name, send_example_telemetry
 from transformers.utils.versions import require_version
 
+
+# Will error if the minimal version of Transformers is not installed. Remove at your own risks.
+check_min_version("4.22.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -447,28 +451,23 @@ def main():
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # Figure out how many steps we should save the Accelerator states
-    if hasattr(args.checkpointing_steps, "isdigit"):
-        checkpointing_steps = args.checkpointing_steps
-        if args.checkpointing_steps.isdigit():
-            checkpointing_steps = int(args.checkpointing_steps)
-    else:
-        checkpointing_steps = None
+    checkpointing_steps = args.checkpointing_steps
+    if checkpointing_steps is not None and checkpointing_steps.isdigit():
+        checkpointing_steps = int(checkpointing_steps)
 
     # We need to initialize the trackers we use, and also store our configuration.
-    # We initialize the trackers only on main process because `accelerator.log`
-    # only logs on main process and we don't want empty logs/runs on other processes.
+    # The trackers initializes automatically on the main process.
     if args.with_tracking:
-        if accelerator.is_main_process:
-            experiment_config = vars(args)
-            # TensorBoard cannot log Enums, need the raw value
-            experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
-            accelerator.init_trackers("glue_no_trainer", experiment_config)
+        experiment_config = vars(args)
+        # TensorBoard cannot log Enums, need the raw value
+        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+        accelerator.init_trackers("glue_no_trainer", experiment_config)
 
     # Get the metric function
     if args.task_name is not None:
-        metric = load_metric("glue", args.task_name)
+        metric = evaluate.load("glue", args.task_name)
     else:
-        metric = load_metric("accuracy")
+        metric = evaluate.load("accuracy")
 
     # Train!
     total_batch_size = args.per_device_train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
@@ -590,6 +589,9 @@ def main():
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
+
+    if args.with_tracking:
+        accelerator.end_training()
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()

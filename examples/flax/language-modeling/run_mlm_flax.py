@@ -107,6 +107,12 @@ class TrainingArguments:
         default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
     )
     hub_token: str = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
+    gradient_checkpointing: bool = field(
+        default=False,
+        metadata={
+            "help": "If True, use gradient checkpointing to save memory at the expense of slower backward pass."
+        },
+    )
 
     def __post_init__(self):
         if self.output_dir is not None:
@@ -172,7 +178,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -638,8 +644,10 @@ def main():
             config,
             seed=training_args.seed,
             dtype=getattr(jnp, model_args.dtype),
-            use_auth_token=True if model_args.use_auth_token else None,
         )
+
+    if training_args.gradient_checkpointing:
+        model.enable_gradient_checkpointing()
 
     # Store some constant
     num_epochs = int(training_args.num_train_epochs)
@@ -819,9 +827,9 @@ def main():
 
                 # normalize eval metrics
                 eval_metrics = get_metrics(eval_metrics)
-                eval_metrics = jax.tree_map(jnp.sum, eval_metrics)
+                eval_metrics = jax.tree_util.tree_map(jnp.sum, eval_metrics)
                 eval_normalizer = eval_metrics.pop("normalizer")
-                eval_metrics = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics)
+                eval_metrics = jax.tree_util.tree_map(lambda x: x / eval_normalizer, eval_metrics)
 
                 # Update progress bar
                 epochs.desc = f"Step... ({cur_step} | Loss: {eval_metrics['loss']}, Acc: {eval_metrics['accuracy']})"
@@ -833,7 +841,7 @@ def main():
             if cur_step % training_args.save_steps == 0 and cur_step > 0:
                 # save checkpoint after each epoch and push checkpoint to the hub
                 if jax.process_index() == 0:
-                    params = jax.device_get(jax.tree_map(lambda x: x[0], state.params))
+                    params = jax.device_get(jax.tree_util.tree_map(lambda x: x[0], state.params))
                     model.save_pretrained(training_args.output_dir, params=params)
                     tokenizer.save_pretrained(training_args.output_dir)
                     if training_args.push_to_hub:
@@ -859,9 +867,9 @@ def main():
 
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
-        eval_metrics = jax.tree_map(lambda metric: jnp.sum(metric).item(), eval_metrics)
+        eval_metrics = jax.tree_util.tree_map(lambda metric: jnp.sum(metric).item(), eval_metrics)
         eval_normalizer = eval_metrics.pop("normalizer")
-        eval_metrics = jax.tree_map(lambda x: x / eval_normalizer, eval_metrics)
+        eval_metrics = jax.tree_util.tree_map(lambda x: x / eval_normalizer, eval_metrics)
 
         try:
             perplexity = math.exp(eval_metrics["loss"])

@@ -27,9 +27,10 @@ from typing import Any, Callable, Dict, Optional, Tuple
 
 import datasets
 import numpy as np
-from datasets import load_dataset, load_metric
+from datasets import load_dataset
 from tqdm import tqdm
 
+import evaluate
 import jax
 import jax.numpy as jnp
 import optax
@@ -104,7 +105,7 @@ class ModelArguments:
         default=False,
         metadata={
             "help": (
-                "Will use the token generated when running `transformers-cli login` (necessary to use this script "
+                "Will use the token generated when running `huggingface-cli login` (necessary to use this script "
                 "with private models)."
             )
         },
@@ -570,9 +571,9 @@ def main():
     p_eval_step = jax.pmap(eval_step, axis_name="batch")
 
     if data_args.task_name is not None:
-        metric = load_metric("glue", data_args.task_name)
+        metric = evaluate.load("glue", data_args.task_name)
     else:
-        metric = load_metric("accuracy")
+        metric = evaluate.load("accuracy")
 
     logger.info(f"===== Starting training ({num_epochs} epochs) =====")
     train_time = 0

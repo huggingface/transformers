@@ -80,7 +80,7 @@ _XVECTOR_EXPECTED_OUTPUT = 1.0
 
 
 WAV2VEC2_CONFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/wav2vec2-conformer-large-rel-pos",
+    "facebook/wav2vec2-conformer-rel-pos-large",
     # See all Wav2Vec2Conformer models at https://huggingface.co/models?filter=wav2vec2-conformer
 ]
 
@@ -670,8 +670,8 @@ class Wav2Vec2ConformerSelfAttention(nn.Module):
             self.linear_pos = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
             # these two learnable bias are used in matrix c and matrix d
             # as described in https://arxiv.org/abs/1901.02860 Section 3.3
-            self.pos_bias_u = nn.Parameter(torch.Tensor(self.num_heads, self.head_size))
-            self.pos_bias_v = nn.Parameter(torch.Tensor(self.num_heads, self.head_size))
+            self.pos_bias_u = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
+            self.pos_bias_v = nn.Parameter(torch.zeros(self.num_heads, self.head_size))
 
     def forward(
         self,
@@ -1226,7 +1226,7 @@ WAV2VEC2_CONFORMER_INPUTS_DOCSTRING = r"""
 
             `attention_mask` should only be passed if the corresponding processor has `config.return_attention_mask ==
             True`. For all models whose processor has `config.return_attention_mask == False`, such as
-            [wav2vec2_conformer-base](https://huggingface.co/facebook/wav2vec2-conformer-large-rel-pos),
+            [wav2vec2-conformer-rel-pos-large](https://huggingface.co/facebook/wav2vec2-conformer-rel-pos-large),
             `attention_mask` should **not** be passed to avoid degraded performance when doing batched inference. For
             such models `input_values` should simply be padded with 0 and passed without `attention_mask`. Be aware
             that these models also yield slightly different results depending on whether `input_values` is padded or

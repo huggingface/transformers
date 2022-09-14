@@ -22,7 +22,6 @@ import os
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from typing import Optional, Tuple, Union
@@ -48,6 +47,7 @@ from ...pytorch_utils import (
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
     prune_linear_layer,
+    is_torch_greater_than_1_6,
 )
 from ...utils import logging
 from .configuration_{{cookiecutter.lowercase_modelname}} import {{cookiecutter.camelcase_modelname}}Config
@@ -157,7 +157,7 @@ class {{cookiecutter.camelcase_modelname}}Embeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
-        if version.parse(torch.__version__) > version.parse("1.6.0"):
+        if is_torch_greater_than_1_6:
             self.register_buffer(
                 "token_type_ids",
                 torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
@@ -2136,7 +2136,7 @@ class {{cookiecutter.camelcase_modelname}}PreTrainedModel(PreTrainedModel):
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more control over how to convert `input_ids` indices into associated
+            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more control over how to convert `input_ids` indices into associated
             vectors than the model's internal embedding lookup matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
@@ -2483,7 +2483,7 @@ class {{cookiecutter.camelcase_modelname}}Decoder({{cookiecutter.camelcase_model
 
                 If `past_key_values` are used, the user can optionally input only the last
                 `decoder_input_ids` (those that don't have their past key value states given to this model) of
-                shape `(batch_size, 1)` instead of all ``decoder_input_ids``` of shape `(batch_size,
+                shape `(batch_size, 1)` instead of all `decoder_input_ids` of shape `(batch_size,
                 sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more control over how to convert `input_ids` indices
                 into associated vectors than the model's internal embedding lookup matrix.
             output_attentions (`bool`, *optional*):

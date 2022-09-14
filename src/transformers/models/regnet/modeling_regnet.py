@@ -45,7 +45,7 @@ _EXPECTED_OUTPUT_SHAPE = [1, 1088, 7, 7]
 
 # Image classification docstring
 _IMAGE_CLASS_CHECKPOINT = "facebook/regnet-y-040"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "'tabby, tabby cat'"
+_IMAGE_CLASS_EXPECTED_OUTPUT = "tabby, tabby cat"
 
 REGNET_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/regnet-y-040",

@@ -21,7 +21,7 @@ import os
 import sys
 import warnings
 from collections import OrderedDict
-from functools import wraps
+from functools import lru_cache, wraps
 from itertools import chain
 from types import ModuleType
 from typing import Any
@@ -42,6 +42,8 @@ USE_TF = os.environ.get("USE_TF", "AUTO").upper()
 USE_TORCH = os.environ.get("USE_TORCH", "AUTO").upper()
 USE_JAX = os.environ.get("USE_FLAX", "AUTO").upper()
 
+FORCE_TF_AVAILABLE = os.environ.get("FORCE_TF_AVAILABLE", "AUTO").upper()
+
 _torch_version = "N/A"
 if USE_TORCH in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TF not in ENV_VARS_TRUE_VALUES:
     _torch_available = importlib.util.find_spec("torch") is not None
@@ -57,39 +59,45 @@ else:
 
 
 _tf_version = "N/A"
-if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
-    _tf_available = importlib.util.find_spec("tensorflow") is not None
-    if _tf_available:
-        candidates = (
-            "tensorflow",
-            "tensorflow-cpu",
-            "tensorflow-gpu",
-            "tf-nightly",
-            "tf-nightly-cpu",
-            "tf-nightly-gpu",
-            "intel-tensorflow",
-            "intel-tensorflow-avx512",
-            "tensorflow-rocm",
-            "tensorflow-macos",
-        )
-        _tf_version = None
-        # For the metadata, we have to look for both tensorflow and tensorflow-cpu
-        for pkg in candidates:
-            try:
-                _tf_version = importlib_metadata.version(pkg)
-                break
-            except importlib_metadata.PackageNotFoundError:
-                pass
-        _tf_available = _tf_version is not None
-    if _tf_available:
-        if version.parse(_tf_version) < version.parse("2"):
-            logger.info(f"TensorFlow found but with version {_tf_version}. Transformers requires version 2 minimum.")
-            _tf_available = False
-        else:
-            logger.info(f"TensorFlow version {_tf_version} available.")
+if FORCE_TF_AVAILABLE in ENV_VARS_TRUE_VALUES:
+    _tf_available = True
 else:
-    logger.info("Disabling Tensorflow because USE_TORCH is set")
-    _tf_available = False
+    if USE_TF in ENV_VARS_TRUE_AND_AUTO_VALUES and USE_TORCH not in ENV_VARS_TRUE_VALUES:
+        _tf_available = importlib.util.find_spec("tensorflow") is not None
+        if _tf_available:
+            candidates = (
+                "tensorflow",
+                "tensorflow-cpu",
+                "tensorflow-gpu",
+                "tf-nightly",
+                "tf-nightly-cpu",
+                "tf-nightly-gpu",
+                "intel-tensorflow",
+                "intel-tensorflow-avx512",
+                "tensorflow-rocm",
+                "tensorflow-macos",
+                "tensorflow-aarch64",
+            )
+            _tf_version = None
+            # For the metadata, we have to look for both tensorflow and tensorflow-cpu
+            for pkg in candidates:
+                try:
+                    _tf_version = importlib_metadata.version(pkg)
+                    break
+                except importlib_metadata.PackageNotFoundError:
+                    pass
+            _tf_available = _tf_version is not None
+        if _tf_available:
+            if version.parse(_tf_version) < version.parse("2"):
+                logger.info(
+                    f"TensorFlow found but with version {_tf_version}. Transformers requires version 2 minimum."
+                )
+                _tf_available = False
+            else:
+                logger.info(f"TensorFlow version {_tf_version} available.")
+    else:
+        logger.info("Disabling Tensorflow because USE_TORCH is set")
+        _tf_available = False
 
 
 if USE_JAX in ENV_VARS_TRUE_AND_AUTO_VALUES:
@@ -299,7 +307,7 @@ def is_torch_bf16_gpu_available():
     # 4. torch.autocast exists
     # XXX: one problem here is that it may give invalid results on mixed gpus setup, so it's
     # really only correct for the 0th gpu (or currently set default device if different from 0)
-    if version.parse(torch.__version__) < version.parse("1.10"):
+    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.10"):
         return False
 
     if torch.cuda.is_available() and torch.version.cuda is not None:
@@ -321,7 +329,7 @@ def is_torch_bf16_cpu_available():
 
     import torch
 
-    if version.parse(torch.__version__) < version.parse("1.10"):
+    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.10"):
         return False
 
     try:
@@ -356,7 +364,7 @@ def is_torch_tf32_available():
         return False
     if int(torch.version.cuda.split(".")[0]) < 11:
         return False
-    if version.parse(torch.__version__) < version.parse("1.7"):
+    if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.7"):
         return False
 
     return True
@@ -406,6 +414,7 @@ def is_ftfy_available():
     return _ftfy_available
 
 
+@lru_cache()
 def is_torch_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     if not _torch_available:

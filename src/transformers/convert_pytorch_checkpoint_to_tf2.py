@@ -38,7 +38,6 @@ from . import (
     T5_PRETRAINED_CONFIG_ARCHIVE_MAP,
     TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP,
     WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
-    WEIGHTS_NAME,
     XLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
     XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP,
     XLNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -91,11 +90,10 @@ from . import (
     XLMConfig,
     XLMRobertaConfig,
     XLNetConfig,
-    cached_path,
     is_torch_available,
     load_pytorch_checkpoint_in_tf2_model,
 )
-from .utils import hf_bucket_url, logging
+from .utils import CONFIG_NAME, WEIGHTS_NAME, cached_file, logging
 
 
 if is_torch_available():
@@ -311,7 +309,7 @@ def convert_pt_checkpoint_to_tf(
 
     # Initialise TF model
     if config_file in aws_config_map:
-        config_file = cached_path(aws_config_map[config_file], force_download=not use_cached_models)
+        config_file = cached_file(config_file, CONFIG_NAME, force_download=not use_cached_models)
     config = config_class.from_json_file(config_file)
     config.output_hidden_states = True
     config.output_attentions = True
@@ -320,8 +318,9 @@ def convert_pt_checkpoint_to_tf(
 
     # Load weights from tf checkpoint
     if pytorch_checkpoint_path in aws_config_map.keys():
-        pytorch_checkpoint_url = hf_bucket_url(pytorch_checkpoint_path, filename=WEIGHTS_NAME)
-        pytorch_checkpoint_path = cached_path(pytorch_checkpoint_url, force_download=not use_cached_models)
+        pytorch_checkpoint_path = cached_file(
+            pytorch_checkpoint_path, WEIGHTS_NAME, force_download=not use_cached_models
+        )
     # Load PyTorch checkpoint in tf2 model:
     tf_model = load_pytorch_checkpoint_in_tf2_model(tf_model, pytorch_checkpoint_path)
 
@@ -395,14 +394,14 @@ def convert_all_pt_checkpoints_to_tf(
             print("-" * 100)
 
             if config_shortcut_name in aws_config_map:
-                config_file = cached_path(aws_config_map[config_shortcut_name], force_download=not use_cached_models)
+                config_file = cached_file(config_shortcut_name, CONFIG_NAME, force_download=not use_cached_models)
             else:
-                config_file = cached_path(config_shortcut_name, force_download=not use_cached_models)
+                config_file = config_shortcut_name
 
             if model_shortcut_name in aws_model_maps:
-                model_file = cached_path(aws_model_maps[model_shortcut_name], force_download=not use_cached_models)
+                model_file = cached_file(model_shortcut_name, WEIGHTS_NAME, force_download=not use_cached_models)
             else:
-                model_file = cached_path(model_shortcut_name, force_download=not use_cached_models)
+                model_file = model_shortcut_name
 
             if os.path.isfile(model_shortcut_name):
                 model_shortcut_name = "converted_model"

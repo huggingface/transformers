@@ -377,7 +377,6 @@ class DistributedTensorGatherer:
     For some reason, that's not going to roll their boat. This class is there to solve that problem.
 
     Args:
-
         world_size (`int`):
             The number of processes used in the distributed training.
         num_samples (`int`):
@@ -835,9 +834,11 @@ def _get_learning_rate(self):
         last_lr = (
             # backward compatibility for pytorch schedulers
             self.lr_scheduler.get_last_lr()[0]
-            if version.parse(torch.__version__) >= version.parse("1.4")
+            if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.4")
             else self.lr_scheduler.get_lr()[0]
         )
+        if torch.is_tensor(last_lr):
+            last_lr = last_lr.item()
     return last_lr
 
 

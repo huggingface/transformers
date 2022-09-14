@@ -26,7 +26,7 @@ from transformers.models.wav2vec2.modeling_wav2vec2 import _compute_mask_indices
 if is_apex_available():
     from apex import amp
 
-if version.parse(torch.__version__) >= version.parse("1.6"):
+if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.6"):
     _is_native_amp_available = True
     from torch.cuda.amp import autocast
 

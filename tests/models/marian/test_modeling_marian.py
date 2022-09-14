@@ -438,10 +438,7 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
         src, tgt = ["I am a small frog"], ["Ich bin ein kleiner Frosch."]
         expected_ids = [38, 121, 14, 697, 38848, 0]
 
-        model_inputs = self.tokenizer(src, return_tensors="pt").to(torch_device)
-        with self.tokenizer.as_target_tokenizer():
-            targets = self.tokenizer(tgt, return_tensors="pt")
-        model_inputs["labels"] = targets["input_ids"].to(torch_device)
+        model_inputs = self.tokenizer(src, text_target=tgt, return_tensors="pt").to(torch_device)
 
         self.assertListEqual(expected_ids, model_inputs.input_ids[0].tolist())
 
