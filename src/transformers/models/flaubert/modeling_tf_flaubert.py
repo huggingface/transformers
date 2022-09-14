@@ -200,9 +200,9 @@ def get_masks(slen, lengths, causal, padding_mask=None):
 
     # sanity check
     # assert shape_list(mask) == [bs, slen]
-    if tf.executing_eagerly():
-        tf.debugging.assert_equal(shape_list(mask), [bs, slen])
-        assert causal is False or shape_list(attn_mask) == [bs, slen, slen]
+    tf.debugging.assert_equal(shape_list(mask), [bs, slen])
+    if causal:
+        tf.debugging.assert_equal(shape_list(attn_mask), [bs, slen, slen])
 
     return mask, attn_mask
 
@@ -517,10 +517,9 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
 
         # check inputs
         # assert shape_list(lengths)[0] == bs
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(lengths)[0], bs
-            ), f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched"
+        tf.debugging.assert_equal(
+            shape_list(lengths)[0], bs
+        ), f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched"
         # assert lengths.max().item() <= slen
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
         # assert (src_enc is None) == (src_len is None)
@@ -538,15 +537,14 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
             position_ids = tf.expand_dims(tf.range(slen), axis=0)
             position_ids = tf.tile(position_ids, (bs, 1))
 
-        if tf.executing_eagerly():
-            # assert shape_list(position_ids) == [bs, slen]  # (slen, bs)
-            tf.debugging.assert_equal(
-                shape_list(position_ids), [bs, slen]
-            ), f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched"
-            # position_ids = position_ids.transpose(0, 1)
+        # assert shape_list(position_ids) == [bs, slen]  # (slen, bs)
+        tf.debugging.assert_equal(
+            shape_list(position_ids), [bs, slen]
+        ), f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched"
+        # position_ids = position_ids.transpose(0, 1)
 
         # langs
-        if langs is not None and tf.executing_eagerly():
+        if langs is not None:
             # assert shape_list(langs) == [bs, slen]  # (slen, bs)
             tf.debugging.assert_equal(
                 shape_list(langs), [bs, slen]
