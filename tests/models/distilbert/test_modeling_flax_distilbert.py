@@ -111,7 +111,6 @@ class FlaxDistilBertModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxDistilBertModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             FlaxDistilBertModel,

@@ -92,8 +92,10 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             },
             query=[
                 "What repository has the largest number of stars?",
-                "Given that the numbers of stars defines if a repository is active, what repository is the most"
-                " active?",
+                (
+                    "Given that the numbers of stars defines if a repository is active, what repository is the most"
+                    " active?"
+                ),
                 "What is the number of repositories?",
                 "What is the average number of stars?",
                 "What is the total amount of stars?",
@@ -195,8 +197,10 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             },
             query=[
                 "What repository has the largest number of stars?",
-                "Given that the numbers of stars defines if a repository is active, what repository is the most"
-                " active?",
+                (
+                    "Given that the numbers of stars defines if a repository is active, what repository is the most"
+                    " active?"
+                ),
                 "What is the number of repositories?",
                 "What is the average number of stars?",
                 "What is the total amount of stars?",
@@ -315,8 +319,10 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             },
             query=[
                 "What repository has the largest number of stars?",
-                "Given that the numbers of stars defines if a repository is active, what repository is the most"
-                " active?",
+                (
+                    "Given that the numbers of stars defines if a repository is active, what repository is the most"
+                    " active?"
+                ),
                 "What is the number of repositories?",
                 "What is the average number of stars?",
                 "What is the total amount of stars?",
@@ -437,8 +443,10 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             },
             query=[
                 "What repository has the largest number of stars?",
-                "Given that the numbers of stars defines if a repository is active, what repository is the most"
-                " active?",
+                (
+                    "Given that the numbers of stars defines if a repository is active, what repository is the most"
+                    " active?"
+                ),
                 "What is the number of repositories?",
                 "What is the average number of stars?",
                 "What is the total amount of stars?",

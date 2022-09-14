@@ -27,7 +27,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class BlenderbotSmallTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = BlenderbotSmallTokenizer
     test_rust_tokenizer = False
 

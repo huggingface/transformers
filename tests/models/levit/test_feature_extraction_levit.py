@@ -76,7 +76,6 @@ class LevitFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class LevitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
     feature_extraction_class = LevitFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

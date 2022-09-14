@@ -31,7 +31,6 @@ FRAMEWORK = "pt" if is_torch_available() else "tf"
 @require_sentencepiece
 @require_tokenizers
 class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = CamembertTokenizer
     rust_tokenizer_class = CamembertTokenizerFast
     test_rust_tokenizer = True
@@ -115,11 +114,15 @@ class CamembertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # camembert is a french model. So we also use french texts.
         sequences = [
-            "Le transformeur est un modèle d'apprentissage profond introduit en 2017, "
-            "utilisé principalement dans le domaine du traitement automatique des langues (TAL).",
-            "À l'instar des réseaux de neurones récurrents (RNN), les transformeurs sont conçus "
-            "pour gérer des données séquentielles, telles que le langage naturel, pour des tâches "
-            "telles que la traduction et la synthèse de texte.",
+            (
+                "Le transformeur est un modèle d'apprentissage profond introduit en 2017, "
+                "utilisé principalement dans le domaine du traitement automatique des langues (TAL)."
+            ),
+            (
+                "À l'instar des réseaux de neurones récurrents (RNN), les transformeurs sont conçus "
+                "pour gérer des données séquentielles, telles que le langage naturel, pour des tâches "
+                "telles que la traduction et la synthèse de texte."
+            ),
         ]
 
         self.tokenizer_integration_test_util(

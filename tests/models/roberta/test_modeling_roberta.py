@@ -346,7 +346,6 @@ class RobertaModelTester:
 
 @require_torch
 class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             RobertaForCausalLM,
