@@ -738,12 +738,11 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         value_vectors = self.value(hidden_states)
         batch_size, seq_len, embed_dim = shape_list(hidden_states)
 
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                embed_dim,
-                self.embed_dim,
-                message=f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}",
-            )
+        tf.debugging.assert_equal(
+            embed_dim,
+            self.embed_dim,
+            message=f"hidden_states should have embed_dim = {self.embed_dim}, but has {embed_dim}",
+        )
 
         # normalize query
         query_vectors /= tf.math.sqrt(tf.cast(self.head_dim, dtype=query_vectors.dtype))
@@ -770,15 +769,14 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # pad local attention probs
         attn_scores += diagonal_mask
 
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(attn_scores),
-                [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 1],
-                message=(
-                    f"attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads},"
-                    f" {self.one_sided_attn_window_size * 2 + 1}), but is of size {shape_list(attn_scores)}"
-                ),
-            )
+        tf.debugging.assert_equal(
+            shape_list(attn_scores),
+            [batch_size, seq_len, self.num_heads, self.one_sided_attn_window_size * 2 + 1],
+            message=(
+                f"attn_probs should be of size ({batch_size}, {seq_len}, {self.num_heads},"
+                f" {self.one_sided_attn_window_size * 2 + 1}), but is of size {shape_list(attn_scores)}"
+            ),
+        )
 
         # compute global attn indices required through out forward fn
         (
@@ -826,15 +824,14 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         )
 
         if layer_head_mask is not None:
-            if tf.executing_eagerly():
-                tf.debugging.assert_equal(
-                    shape_list(layer_head_mask),
-                    [self.num_heads],
-                    message=(
-                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
-                        f" {shape_list(layer_head_mask)}"
-                    ),
-                )
+            tf.debugging.assert_equal(
+                shape_list(layer_head_mask),
+                [self.num_heads],
+                message=(
+                    f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                    f" {shape_list(layer_head_mask)}"
+                ),
+            )
 
             attn_probs = tf.reshape(layer_head_mask, (1, 1, -1, 1)) * attn_probs
 
@@ -857,12 +854,9 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             ),
         )
 
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(attn_output),
-                [batch_size, seq_len, self.num_heads, self.head_dim],
-                message="Unexpected size",
-            )
+        tf.debugging.assert_equal(
+            shape_list(attn_output), [batch_size, seq_len, self.num_heads, self.head_dim], message="Unexpected size"
+        )
 
         attn_output = tf.reshape(attn_output, (batch_size, seq_len, embed_dim))
 
@@ -917,20 +911,19 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         """
         batch_size, seq_len, num_heads, head_dim = shape_list(query)
 
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                seq_len % (window_overlap * 2),
-                0,
-                message=f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}",
-            )
-            tf.debugging.assert_equal(
-                shape_list(query),
-                shape_list(key),
-                message=(
-                    f"Shape of query and key should be equal, but got query: {shape_list(query)} and key:"
-                    f" {shape_list(key)}"
-                ),
-            )
+        tf.debugging.assert_equal(
+            seq_len % (window_overlap * 2),
+            0,
+            message=f"Sequence length should be multiple of {window_overlap * 2}. Given {seq_len}",
+        )
+        tf.debugging.assert_equal(
+            shape_list(query),
+            shape_list(key),
+            message=(
+                f"Shape of query and key should be equal, but got query: {shape_list(query)} and key:"
+                f" {shape_list(key)}"
+            ),
+        )
 
         chunks_count = seq_len // window_overlap - 1
 
@@ -1064,22 +1057,19 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
 
         batch_size, seq_len, num_heads, head_dim = shape_list(value)
 
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                seq_len % (window_overlap * 2),
-                0,
-                message="Seq_len has to be multiple of 2 * window_overlap",
-            )
-            tf.debugging.assert_equal(
-                shape_list(attn_probs)[:3],
-                shape_list(value)[:3],
-                message="value and attn_probs must have same dims (except head_dim)",
-            )
-            tf.debugging.assert_equal(
-                shape_list(attn_probs)[3],
-                2 * window_overlap + 1,
-                message="attn_probs last dim has to be 2 * window_overlap + 1",
-            )
+        tf.debugging.assert_equal(
+            seq_len % (window_overlap * 2), 0, message="Seq_len has to be multiple of 2 * window_overlap"
+        )
+        tf.debugging.assert_equal(
+            shape_list(attn_probs)[:3],
+            shape_list(value)[:3],
+            message="value and attn_probs must have same dims (except head_dim)",
+        )
+        tf.debugging.assert_equal(
+            shape_list(attn_probs)[3],
+            2 * window_overlap + 1,
+            message="attn_probs last dim has to be 2 * window_overlap + 1",
+        )
 
         chunks_count = seq_len // window_overlap - 1
 
@@ -1117,12 +1107,11 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
             (batch_size * num_heads, chunks_count + 1, 3 * window_overlap, head_dim),
         )
 
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(chunked_value),
-                [batch_size * num_heads, chunks_count + 1, 3 * window_overlap, head_dim],
-                message="Chunked value has the wrong shape",
-            )
+        tf.debugging.assert_equal(
+            shape_list(chunked_value),
+            [batch_size * num_heads, chunks_count + 1, 3 * window_overlap, head_dim],
+            message="Chunked value has the wrong shape",
+        )
 
         chunked_attn_probs = self._pad_and_diagonalize(chunked_attn_probs)
         context = tf.einsum("bcwd,bcdh->bcwh", chunked_attn_probs, chunked_value)
@@ -1210,15 +1199,14 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # chunk with overlap
         chunked_hidden_states = tf.signal.frame(hidden_states, frame_size, frame_hop_size)
 
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(chunked_hidden_states),
-                [batch_size, num_output_chunks, frame_size],
-                message=(
-                    "Make sure chunking is correctly applied. `Chunked hidden states should have output  dimension"
-                    f" {[batch_size, frame_size, num_output_chunks]}, but got {shape_list(chunked_hidden_states)}."
-                ),
-            )
+        tf.debugging.assert_equal(
+            shape_list(chunked_hidden_states),
+            [batch_size, num_output_chunks, frame_size],
+            message=(
+                "Make sure chunking is correctly applied. `Chunked hidden states should have output  dimension"
+                f" {[batch_size, frame_size, num_output_chunks]}, but got {shape_list(chunked_hidden_states)}."
+            ),
+        )
 
         chunked_hidden_states = tf.reshape(
             chunked_hidden_states,
@@ -1391,16 +1379,15 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # compute attn scores
         global_attn_scores = tf.matmul(global_query_vectors_only_global, global_key_vectors, transpose_b=True)
 
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(global_attn_scores),
-                [batch_size * self.num_heads, max_num_global_attn_indices, seq_len],
-                message=(
-                    "global_attn_scores have the wrong size. Size should be"
-                    f" {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is"
-                    f" {shape_list(global_attn_scores)}."
-                ),
-            )
+        tf.debugging.assert_equal(
+            shape_list(global_attn_scores),
+            [batch_size * self.num_heads, max_num_global_attn_indices, seq_len],
+            message=(
+                "global_attn_scores have the wrong size. Size should be"
+                f" {(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)}, but is"
+                f" {shape_list(global_attn_scores)}."
+            ),
+        )
 
         global_attn_scores = tf.reshape(
             global_attn_scores,
@@ -1434,15 +1421,14 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
 
         # apply layer head masking
         if layer_head_mask is not None:
-            if tf.executing_eagerly():
-                tf.debugging.assert_equal(
-                    shape_list(layer_head_mask),
-                    [self.num_heads],
-                    message=(
-                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
-                        f" {shape_list(layer_head_mask)}"
-                    ),
-                )
+            tf.debugging.assert_equal(
+                shape_list(layer_head_mask),
+                [self.num_heads],
+                message=(
+                    f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                    f" {shape_list(layer_head_mask)}"
+                ),
+            )
             global_attn_probs_float = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
                 global_attn_probs_float, (batch_size, self.num_heads, max_num_global_attn_indices, seq_len)
             )
@@ -1456,16 +1442,15 @@ class TFLongformerSelfAttention(tf.keras.layers.Layer):
         # global attn output
         global_attn_output = tf.matmul(global_attn_probs, global_value_vectors)
 
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(global_attn_output),
-                [batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim],
-                message=(
-                    "global_attn_output tensor has the wrong size. Size should be"
-                    f" {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is"
-                    f" {shape_list(global_attn_output)}."
-                ),
-            )
+        tf.debugging.assert_equal(
+            shape_list(global_attn_output),
+            [batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim],
+            message=(
+                "global_attn_output tensor has the wrong size. Size should be"
+                f" {(batch_size * self.num_heads, max_num_global_attn_indices, self.head_dim)}, but is"
+                f" {shape_list(global_attn_output)}."
+            ),
+        )
 
         global_attn_output = tf.reshape(
             global_attn_output,
