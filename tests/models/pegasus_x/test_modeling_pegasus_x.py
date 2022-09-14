@@ -632,7 +632,7 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         )
 
         EXPECTED = [
-            "we investigate the performance of a new pretrained model for long input summarization. <n> the model"
+            "we investigate the performance of a new pretrained model for long input summarization. <n> the model is a superposition of two well -"
         ]
 
         generated = tok.batch_decode(
