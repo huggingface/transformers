@@ -1240,9 +1240,10 @@ class TFModelTesterMixin:
                 # check that the output for the restored model is the same
                 self.assert_outputs_same(restored_model_outputs, outputs)
 
-    # TODO (Joao): this test is not slow, but it's tagged as such to keep track of failures on the scheduled CI runs,
-    # while passing push CI. Fix the underlying issues and remove the tag.
-    @slow
+    @unittest.skipIf(
+        not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,
+        reason="This test always pass on CPU.",
+    )
     def test_embeddings_out_of_bounds_raise_exception(self):
         # TF embeddings layers don't raise an exception when an index is out of bounds on GPU, so we manually raise it.
         # This test should only fail on GPU for models where we haven't added the safety check.

@@ -758,17 +758,16 @@ class TFBartEncoder(tf.keras.layers.Layer):
             else:
                 context_manager = nullcontext()
             with context_manager:
-                if tf.executing_eagerly():
-                    # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-                    # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-                    tf.debugging.assert_less(
-                        input_ids,
-                        tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
-                        message=(
-                            "input_ids must be smaller than the embedding layer's input dimension (got"
-                            f" {tf.math.reduce_max(input_ids)} >={self.embed_tokens.input_dim})"
-                        ),
-                    )
+                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+                tf.debugging.assert_less(
+                    input_ids,
+                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
+                    message=(
+                        "input_ids must be smaller than the embedding layer's input dimension (got"
+                        f" {tf.math.reduce_max(input_ids)} >={self.embed_tokens.input_dim})"
+                    ),
+                )
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         embed_pos = self.embed_positions(input_shape)
@@ -965,17 +964,16 @@ class TFBartDecoder(tf.keras.layers.Layer):
             else:
                 context_manager = nullcontext()
             with context_manager:
-                if tf.executing_eagerly():
-                    # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
-                    # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
-                    tf.debugging.assert_less(
-                        input_ids,
-                        tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
-                        message=(
-                            "input_ids must be smaller than the embedding layer's input dimension (got"
-                            f" {tf.math.reduce_max(input_ids)} >={self.embed_tokens.input_dim})"
-                        ),
-                    )
+                # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+                # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+                tf.debugging.assert_less(
+                    input_ids,
+                    tf.cast(self.embed_tokens.input_dim, dtype=input_ids.dtype),
+                    message=(
+                        "input_ids must be smaller than the embedding layer's input dimension (got"
+                        f" {tf.math.reduce_max(input_ids)} >={self.embed_tokens.input_dim})"
+                    ),
+                )
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         hidden_states = inputs_embeds
