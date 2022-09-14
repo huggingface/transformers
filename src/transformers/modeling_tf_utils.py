@@ -566,6 +566,8 @@ def input_processing(func, config, **kwargs):
             cast_output[key] = tf.cast(val, tf.int64)
         elif isinstance(val, np.ndarray) and val.dtype == np.int32:
             cast_output[key] = val.astype(np.int64)
+        else:
+            cast_output[key] = val
 
     output = cast_output
     del cast_output
