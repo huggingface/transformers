@@ -288,7 +288,6 @@ class TFSegformerModelTest(TFModelTesterMixin, unittest.TestCase):
             check_hidden_states_output(inputs_dict, config, model_class)
 
     def test_model_outputs_equivalence(self):
-
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         def check_equivalence(model, tuple_inputs, dict_inputs, additional_kwargs={}):

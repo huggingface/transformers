@@ -327,7 +327,6 @@ class DataTrainingArguments:
 
 @dataclass
 class SpeechDataCollatorWithPadding:
-
     processor: AutoProcessor
     decoder_start_token_id: Optional[int] = None
     padding: Union[bool, str] = "longest"
@@ -863,7 +862,6 @@ def main():
 
     # Training
     if training_args.do_train:
-
         # use last checkpoint if exist
         if last_checkpoint is not None:
             checkpoint = last_checkpoint

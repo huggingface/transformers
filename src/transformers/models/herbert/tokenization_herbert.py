@@ -71,7 +71,6 @@ class HerbertTokenizer(XLMTokenizer):
         do_lowercase_and_remove_accent=False,
         **kwargs
     ):
-
         super().__init__(
             vocab_file,
             merges_file,
@@ -92,7 +91,6 @@ class HerbertTokenizer(XLMTokenizer):
         )
 
     def _tokenize(self, text):
-
         pre_tokens = self.bert_pre_tokenizer.tokenize(text)
 
         split_tokens = []

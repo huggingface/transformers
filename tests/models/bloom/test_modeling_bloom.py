@@ -307,7 +307,6 @@ class BloomModelTester:
 
 @require_torch
 class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             BloomModel,
@@ -436,7 +435,6 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     @slow
     @require_torch_gpu
     def test_batch_generation_padd(self):
-
         path_560m = "bigscience/bloom-560m"
         model = BloomForCausalLM.from_pretrained(path_560m, use_cache=True, revision="gs555750").cuda()
         model = model.eval()

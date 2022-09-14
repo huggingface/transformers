@@ -10,7 +10,6 @@ from transformers import AutoTokenizer, TFAutoModelForSequenceClassification
 
 
 if __name__ == "__main__":
-
     parser = argparse.ArgumentParser()
 
     # Hyperparameters sent by the client are passed as command-line arguments to the script.

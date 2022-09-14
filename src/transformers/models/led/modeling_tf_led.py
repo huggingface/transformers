@@ -1790,7 +1790,6 @@ class TFLEDEncoder(tf.keras.layers.Layer):
 
         # encoder layers
         for idx, encoder_layer in enumerate(self.layers):
-
             if output_hidden_states:
                 hidden_states_to_add = self.compute_hidden_states(hidden_states, padding_len)
                 encoder_states = encoder_states + (hidden_states_to_add,)
@@ -2160,7 +2159,6 @@ class TFLEDMainLayer(tf.keras.layers.Layer):
         training=False,
         **kwargs
     ):
-
         if decoder_input_ids is None and decoder_inputs_embeds is None:
             use_cache = False
 
@@ -2263,7 +2261,6 @@ class TFLEDModel(TFLEDPreTrainedModel):
         training=False,
         **kwargs
     ):
-
         outputs = self.led(
             input_ids=input_ids,
             attention_mask=attention_mask,

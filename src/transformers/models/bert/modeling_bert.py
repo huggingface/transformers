@@ -578,7 +578,6 @@ class BertEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1151,7 +1150,6 @@ class BertForPreTraining(BertPreTrainedModel):
     """Bert Model with a `language modeling` head on top for CLM fine-tuning.""", BERT_START_DOCSTRING
 )
 class BertLMHeadModel(BertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
@@ -1286,7 +1284,6 @@ class BertLMHeadModel(BertPreTrainedModel):
 
 @add_start_docstrings("""Bert Model with a `language modeling` head on top.""", BERT_START_DOCSTRING)
 class BertForMaskedLM(BertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
@@ -1703,7 +1700,6 @@ class BertForMultipleChoice(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForTokenClassification(BertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1790,7 +1786,6 @@ class BertForTokenClassification(BertPreTrainedModel):
     BERT_START_DOCSTRING,
 )
 class BertForQuestionAnswering(BertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):

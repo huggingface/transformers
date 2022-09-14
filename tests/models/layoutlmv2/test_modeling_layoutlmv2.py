@@ -258,7 +258,6 @@ class LayoutLMv2ModelTester:
 @require_torch
 @require_detectron2
 class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
-
     test_pruning = False
     test_torchscript = True
     test_mismatched_shapes = False

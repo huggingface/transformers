@@ -464,7 +464,6 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
         sweep_config["name"] = name
 
     def _objective():
-
         run = wandb.run if wandb.run else wandb.init()
         trainer.state.trial_name = run.name
         run.config.update({"assignments": {}, "metric": metric})

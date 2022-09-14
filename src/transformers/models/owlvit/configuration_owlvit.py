@@ -130,7 +130,6 @@ class OwlViTTextConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the text config dict if we are loading from OwlViTConfig
@@ -233,7 +232,6 @@ class OwlViTVisionConfig(PretrainedConfig):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-
         config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
 
         # get the vision config dict if we are loading from OwlViTConfig
@@ -374,7 +372,6 @@ class OwlViTOnnxConfig(OnnxConfig):
         processor: "ProcessorMixin",
         framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
-
         text_input_dict = super().generate_dummy_inputs(processor.tokenizer, framework=framework)
         image_input_dict = super().generate_dummy_inputs(processor.feature_extractor, framework=framework)
         return {**text_input_dict, **image_input_dict}

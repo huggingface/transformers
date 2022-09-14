@@ -365,7 +365,6 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
         plan_num_rand_blocks,
         output_attentions,
     ):
-
         # BigBirdPegasus block-sparse attention as suggested in paper
 
         # ITC:
@@ -2003,7 +2002,6 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
     @staticmethod  # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdModel.create_masks_for_block_sparse_attn
     def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
-
         batch_size, seq_length = attention_mask.size()
         if seq_length % block_size != 0:
             raise ValueError(
@@ -2270,7 +2268,6 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -2295,7 +2292,6 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
@@ -2400,7 +2396,6 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, Seq2SeqModelOutput]:
-
         # different to other models, BigBirdPegasus automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:

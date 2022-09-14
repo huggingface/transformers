@@ -140,7 +140,6 @@ class PTtoTFCommand(BaseTransformersCLICommand):
 
         # 2. For each output attribute, computes the difference
         def _find_pt_tf_differences(pt_out, tf_out, differences, attr_name=""):
-
             # If the current attribute is a tensor, it is a leaf and we make the comparison. Otherwise, we will dig in
             # recursivelly, keeping the name of the attribute.
             if isinstance(pt_out, torch.Tensor):

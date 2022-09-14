@@ -23,7 +23,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class TransfoXLTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = TransfoXLTokenizer
     test_rust_tokenizer = False
     test_seq2seq = False

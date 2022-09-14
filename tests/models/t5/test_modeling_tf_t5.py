@@ -240,7 +240,6 @@ class TFT5ModelTester:
 
 @require_tf
 class TFT5ModelTest(TFModelTesterMixin, unittest.TestCase):
-
     is_encoder_decoder = True
     all_model_classes = (TFT5Model, TFT5ForConditionalGeneration) if is_tf_available() else ()
     all_generative_model_classes = (TFT5ForConditionalGeneration,) if is_tf_available() else ()
@@ -360,7 +359,6 @@ class TFT5EncoderOnlyModelTester:
         pad_token_id=0,
         scope=None,
     ):
-
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -911,19 +909,27 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         )
 
         expected_summaries = [
-            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found a'
-            " cell phone video of the final seconds . \"one can hear cries of 'My God' in several languages,\" one"
-            " magazine says .",
-            "the formal accession was marked by a ceremony at The Hague, in the Netherlands . the ICC opened a"
-            " preliminary examination into the situation in the occupied Palestinian territory . as members of the"
-            " court, Palestinians may be subject to counter-charges as well .",
-            "the u.s. and its negotiating partners reached a very strong framework agreement with Iran . aaron miller:"
-            " the debate that has already begun since the announcement of the new framework will likely result in more"
-            " heat than light . the deal would reduce Iran's low-enriched uranium stockpile, cut centrifuges and"
-            " implement a rigorous inspection regime .",
-            "prosecutors say the marriages were part of an immigration scam . if convicted, barrientos faces two"
-            ' criminal counts of "offering a false instrument for filing in the first degree" she has been married 10'
-            " times, with nine of her marriages occurring between 1999 and 2002 .",
+            (
+                'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found'
+                " a cell phone video of the final seconds . \"one can hear cries of 'My God' in several languages,\""
+                " one magazine says ."
+            ),
+            (
+                "the formal accession was marked by a ceremony at The Hague, in the Netherlands . the ICC opened a"
+                " preliminary examination into the situation in the occupied Palestinian territory . as members of the"
+                " court, Palestinians may be subject to counter-charges as well ."
+            ),
+            (
+                "the u.s. and its negotiating partners reached a very strong framework agreement with Iran . aaron"
+                " miller: the debate that has already begun since the announcement of the new framework will likely"
+                " result in more heat than light . the deal would reduce Iran's low-enriched uranium stockpile, cut"
+                " centrifuges and implement a rigorous inspection regime ."
+            ),
+            (
+                "prosecutors say the marriages were part of an immigration scam . if convicted, barrientos faces two"
+                ' criminal counts of "offering a false instrument for filing in the first degree" she has been married'
+                " 10 times, with nine of her marriages occurring between 1999 and 2002 ."
+            ),
         ]
 
         task_specific_config = getattr(model.config, "task_specific_params", {})

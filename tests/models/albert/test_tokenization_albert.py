@@ -27,7 +27,6 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/spiece.model")
 @require_sentencepiece
 @require_tokenizers
 class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = AlbertTokenizer
     rust_tokenizer_class = AlbertTokenizerFast
     test_rust_tokenizer = True

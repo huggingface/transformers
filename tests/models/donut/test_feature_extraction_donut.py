@@ -82,7 +82,6 @@ class DonutFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class DonutFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
     feature_extraction_class = DonutFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

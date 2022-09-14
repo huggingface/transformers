@@ -45,7 +45,6 @@ class DeeBertTests(TestCasePlus):
     @slow
     @require_torch_non_multi_gpu
     def test_glue_deebert_train(self):
-
         train_args = """
             --model_type roberta
             --model_name_or_path roberta-base

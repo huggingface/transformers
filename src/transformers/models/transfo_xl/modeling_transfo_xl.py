@@ -382,7 +382,6 @@ class RelPartialLearnableDecoderLayer(nn.Module):
         )
 
     def forward(self, dec_inp, r, dec_attn_mask=None, mems=None, head_mask=None, output_attentions=False):
-
         attn_outputs = self.dec_attn(
             dec_inp,
             r,
@@ -861,7 +860,6 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             end_idx = mlen + max(0, qlen)
             beg_idx = max(0, end_idx - self.mem_len)
             for i in range(len(hids)):
-
                 cat = torch.cat([mems[i], hids[i]], dim=0)
                 new_mems.append(cat[beg_idx:end_idx].detach())
 

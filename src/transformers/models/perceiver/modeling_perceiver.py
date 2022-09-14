@@ -2925,7 +2925,6 @@ class PerceiverAudioPostprocessor(nn.Module):
         self.classifier = nn.Linear(in_channels, config.samples_per_patch)
 
     def forward(self, inputs: torch.Tensor, pos: Optional[torch.Tensor] = None, modality_sizes=None) -> torch.Tensor:
-
         logits = self.classifier(inputs)
         return torch.reshape(logits, [inputs.shape[0], -1])
 
