@@ -598,7 +598,7 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        hf = PegasusXForConditionalGeneration.from_pretrained("google/pegasus-x-base").to(torch_device)
+        hf = PegasusXForConditionalGeneration.from_pretrained("google/pegasus-x-base-arxiv").to(torch_device)
         tok = PegasusTokenizer.from_pretrained("google/pegasus-x-base")
 
         batch_input = [
