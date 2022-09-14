@@ -71,12 +71,7 @@ from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
 from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
-from .pytorch_utils import (
-    ALL_LAYERNORM_LAYERS,
-    is_torch_greater_or_equal_than_1_6,
-    is_torch_greater_or_equal_than_1_10,
-    is_torch_less_than_1_11,
-)
+from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_10, is_torch_less_than_1_11
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -155,9 +150,7 @@ from .utils import (
 from .utils.generic import ContextManagers
 
 
-_is_torch_generator_available = False
-_is_native_cuda_amp_available = False
-_is_native_cpu_amp_available = False
+_is_native_cpu_amp_available = is_torch_greater_or_equal_than_1_10
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
 DEFAULT_PROGRESS_CALLBACK = ProgressCallback
@@ -169,13 +162,6 @@ if is_in_notebook():
 
 if is_apex_available():
     from apex import amp
-
-if is_torch_greater_or_equal_than_1_6:
-    _is_torch_generator_available = True
-    _is_native_cuda_amp_available = True
-
-if is_torch_greater_or_equal_than_1_10:
-    _is_native_cpu_amp_available = True
 
 if is_datasets_available():
     import datasets
@@ -565,12 +551,7 @@ class Trainer:
                     else:
                         raise ValueError("Tried to use cpu amp but native cpu amp is not available")
                 else:
-                    if _is_native_cuda_amp_available:
-                        args.half_precision_backend = "cuda_amp"
-                    elif args.bf16:
-                        raise ValueError("Tried to use `bf16` but native amp is not available")
-                    else:
-                        args.half_precision_backend = "apex"
+                    args.half_precision_backend = "cuda_amp"
 
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
@@ -781,7 +762,7 @@ class Trainer:
             return None
 
         generator = None
-        if self.args.world_size <= 1 and _is_torch_generator_available:
+        if self.args.world_size <= 1:
             generator = torch.Generator()
             # for backwards compatibility, we generate a seed here (which is sampled from a generator seeded with
             # `args.seed`) if data_seed isn't provided.
@@ -826,9 +807,7 @@ class Trainer:
 
         else:
             if self.args.world_size <= 1:
-                if _is_torch_generator_available:
-                    return RandomSampler(self.train_dataset, generator=generator)
-                return RandomSampler(self.train_dataset)
+                return RandomSampler(self.train_dataset, generator=generator)
             elif (
                 self.args.parallel_mode in [ParallelMode.TPU, ParallelMode.SAGEMAKER_MODEL_PARALLEL]
                 and not self.args.dataloader_drop_last
