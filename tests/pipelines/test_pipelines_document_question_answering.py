@@ -170,8 +170,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9966, "answer": "us-001", "start": 15, "end": 15},
-                {"score": 0.0009, "answer": "us-001", "start": 15, "end": 15},
+                {'score': 0.9944, 'answer': 'us-001', 'start': 16, 'end': 16},
+                {'score': 0.0009, 'answer': 'us-001', 'start': 16, 'end': 16},
             ],
         )
 
