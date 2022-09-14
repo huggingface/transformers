@@ -113,13 +113,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         question = "How many cats are there?"
 
         expected_output = [
-            {
-                "score": 0.0001,
-                "answer": "2312/2019 DUE DATE 26102/2019 ay DESCRIPTION UNIT PRICE",
-                "start": 38,
-                "end": 45,
-            },
-            {"score": 0.0001, "answer": "2312/2019 DUE", "start": 38, "end": 39},
+            {'score': 0.0001, 'answer': 'oy 2312/2019', 'start': 38, 'end': 39},
+            {'score': 0.0001, 'answer': 'oy 2312/2019 DUE', 'start': 38, 'end': 40},
         ]
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
         self.assertEqual(nested_simplify(outputs, decimals=4), expected_output)
