@@ -41,7 +41,7 @@ from ...file_utils import (
 )
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import is_ninja_available, logging
 from .configuration_deformable_detr import DeformableDetrConfig
 from .load_custom import load_cuda_kernels
 
@@ -49,9 +49,13 @@ from .load_custom import load_cuda_kernels
 logger = logging.get_logger(__name__)
 
 # Move this to not compile only when importing, this needs to happen later, like in __init__.
-if is_torch_cuda_available():
+if is_torch_cuda_available() and is_ninja_available():
     logger.info("Loading custom CUDA kernels...")
-    MultiScaleDeformableAttention = load_cuda_kernels()
+    try:
+        MultiScaleDeformableAttention = load_cuda_kernels()
+    except Exception as e:
+        logger.warning(f"Could not load the custom kernel for multi-scale deformable attention: {e}")
+        MultiScaleDeformableAttention = None
 else:
     MultiScaleDeformableAttention = None
 
