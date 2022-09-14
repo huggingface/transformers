@@ -990,7 +990,7 @@ class GenerationMixin:
             top_k (`int`, *optional*, defaults to `model.config.top_k` or 50 if the config does not set any value):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
             top_p (`float`, *optional*, defaults to `model.config.top_p` or 1.0 if the config does not set any value):
-                If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or higher
+                If set to float < 1, only the smallest set of most probable tokens with probabilities that add up to `top_p` or higher
                 are kept for generation.
             typical_p (`float`, *optional*, defaults to `model.config.typical_p` or 1.0 if the config does not set any value):
                 The amount of probability mass from the original distribution to be considered in typical decoding. If
