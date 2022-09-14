@@ -42,8 +42,7 @@ def convert_tfrecord_to_np(block_records_path: str, num_block_records: int) -> n
 
 
 class ScaNNSearcher:
-    """Note that ScaNNSearcher cannot currently be used within the model. In future versions, it might however be included.
-    """
+    """Note that ScaNNSearcher cannot currently be used within the model. In future versions, it might however be included."""
 
     def __init__(
         self,
