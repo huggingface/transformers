@@ -1443,9 +1443,7 @@ def get_user_input():
     valid_model_type = False
     while not valid_model_type:
         old_model_type = input(
-            """What is the model you would like to duplicate? Please provide the lowercase `model_type`
-            - this can be found inside the configuration of any checkpoint of that model or in the name of the docs URL
-              (e.g. roberta):"""
+            "What is the model you would like to duplicate? Please provide the lowercase `model_type` (e.g. roberta): "
         )
         if old_model_type in model_types:
             valid_model_type = True
