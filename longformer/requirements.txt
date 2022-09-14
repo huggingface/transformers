@@ -1,0 +1,7 @@
+transformers @ git+http://github.com/ibeltagy/transformers.git@longformer_encoder_decoder#egg=transformers
+pytorch-lightning @ git+http://github.com/ibeltagy/pytorch-lightning.git@v0.8.5_fixes#egg=pytorch-lightning
+torch>=1.6.0
+tensorboardX
+test-tube==0.7.5
+nlp
+rouge_score

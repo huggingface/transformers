@@ -1,0 +1,37 @@
+FROM nvidia/cuda:10.0-cudnn7-devel-ubuntu16.04
+
+RUN apt-get update --fix-missing
+
+COPY install/ubuntu_install_core.sh /install/ubuntu_install_core.sh
+RUN bash /install/ubuntu_install_core.sh
+
+RUN apt update
+RUN apt-get install -y software-properties-common
+RUN apt-get install -y vim
+RUN add-apt-repository -y ppa:deadsnakes/ppa
+RUN apt update
+RUN apt install -y python3.7
+RUN ln -sf /usr/bin/python3.7 /usr/bin/python3
+RUN apt install -y python3-pip
+
+# LLVM
+RUN echo deb http://apt.llvm.org/xenial/ llvm-toolchain-xenial-8 main \
+     >> /etc/apt/sources.list.d/llvm.list && \
+     wget -O - http://apt.llvm.org/llvm-snapshot.gpg.key|sudo apt-key add - && \
+     apt-get update && apt-get install -y --force-yes llvm-8
+
+RUN pip3 install numpy pytest cython decorator scipy ipython ipdb torch==1.2.0 torchvision tensorboardx tensorboard pytest
+
+RUN apt-get install -y python3.7-dev
+RUN pip3 install fairseq==v0.9.0
+
+# Build TVM
+COPY install/install_tvm_gpu.sh /install/install_tvm_gpu.sh
+RUN sed -i 's/--depth=1//g' install/install_tvm_gpu.sh
+RUN bash /install/install_tvm_gpu.sh
+
+# Environment variables
+ENV PYTHONPATH=/usr/tvm/python:/usr/tvm/topi/python:/usr/tvm/nnvm/python/:/usr/tvm/vta/python:${PYTHONPATH}
+ENV PATH=/usr/local/nvidia/bin:${PATH}
+ENV PATH=/usr/local/cuda/bin:${PATH}
+ENV LD_LIBRARY_PATH=/usr/local/cuda/lib64:/usr/local/nvidia/lib64:${LD_LIBRARY_PATH}

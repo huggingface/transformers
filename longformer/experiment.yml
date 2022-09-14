@@ -1,0 +1,18 @@
+tasks: 
+  - cluster: {{.Env.CLUSTER}}
+    spec:
+      # This is a python3.7/nvidia base image with basic libraries
+      image: im_j69gti4atcw9
+      resultPath: {{.Env.RESULT_PATH}}
+      args:
+        - /bin/bash 
+        - -c
+        - "cd /longformer_on_beaker && pip install . && {{.Env.ARGS}}"
+      datasetMounts:
+        - datasetId: {{.Env.INPUT_DATASET_ID}}
+          containerPath: /data
+        - datasetId: {{.Env.SCRIPTS}}
+          containerPath: /longformer_on_beaker
+      requirements:
+        gpuCount: {{.Env.GPU_COUNT}}
+        cpu: {{.Env.CPU_COUNT}}

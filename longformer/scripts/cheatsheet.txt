@@ -1,0 +1,90 @@
+### ----- Instructions to compile the TVM CUDA kernel -----
+# This assumes that docker and its gpu runtime are installed. Check the following for reference:
+# Docker: https://docs.docker.com/install/
+# Docker gpu runtime: https://github.com/NVIDIA/nvidia-docker#ubuntu-16041804-debian-jessiestretchbuster
+
+# clone longformer
+git clone https://github.com/allenai/longformer.git
+cd longformer
+# clone tvm inside the `longformer` directory
+git clone --single-branch --branch v0.6.0 https://github.com/apache/incubator-tvm.git
+# build docker image
+docker build -t my_tvm_image -f tvm_docker  incubator-tvm/docker/
+# run docker container
+docker run -it --gpus all  --mount type=bind,source="$(pwd)",target=/code my_tvm_image
+# inside the docker container, do the following ...
+cd code
+mv tvm tvm_runtime  # avoid collision between our small tvm runtime and the full tvm library
+rm longformer/lib/*  # remove old binaries
+python3 -c "from longformer.diagonaled_mm_tvm import *; DiagonaledMM._get_function('float32', 'cuda')"  #  compile new ones
+ls longformer/lib/  # check the `lib` dir for the new binaries
+mv tvm_runtime tvm  # don't forget to put them back
+
+
+### ----- Instructions to train TriviaQA -----
+# Relevant files:
+# - scripts/triviaqa.py - our training code implemented in pytorch-lightning
+# - scripts/triviaqa_utils - copied from https://github.com/mandarjoshi90/triviaqa with slight modifications
+
+# Convert to a squad-like format. This is slighlty modified from the official scripts
+# here https://github.com/mandarjoshi90/triviaqa/blob/master/utils/convert_to_squad_format.py
+# to keep all answers in the document, not just the first answer. It also added the list of
+# textual answers to make evaluation easy.
+python -m scripts.triviaqa_utils.convert_to_squad_format  \
+  --triviaqa_file path/to/qa/wikipedia-dev.json  \
+  --wikipedia_dir path/to/evidence/wikipedia/   \
+  --web_dir path/to/evidence/web/  \
+  --max_num_tokens 4096  \   # only keep the first 4096 tokens
+  --squad_file path/to/output/squad-wikipedia-dev-4096.json
+
+# Run training with the following hyperparameters.
+# Training base model takes 1 day on 4 gpus
+# Training large model takes less than 1 day on 8 gpus
+# The evaluation f1 reported during training are computed using the official
+# evaluation function in scripts/evaluation_utils.py
+python -m scripts.triviaqa  \
+    --train_dataset squad-wikipedia-train-4096.json  \
+    --dev_dataset squad-wikipedia-dev-4096.json  \
+    --gpus 0,1,2,3,4,5,6,7  --batch_size 8  --num_workers 4 \
+    --lr 0.00003 --warmup 1000 --epochs 4  --max_seq_len 4096 --doc_stride -1  \
+    --save_prefix output_dir  \
+    --model_path path/to/pretrained/longformer-base-4096  \  # or longformer-large-4096
+    --seed 4321
+
+# To run our pretrained TriviaQA large model (replicates the leaderboard results),
+# first download the pytorch-lightning checkpoint:
+# https://ai2-s2-research.s3-us-west-2.amazonaws.com/longformer/triviaqa-longformer-large.tar.gz
+# then run:
+python -m scripts.triviaqa  \
+    --train_dataset squad-wikipedia-train-4096.json  \  # loaded but not used
+    --dev_dataset squad-wikipedia-dev-4096.json  \
+    --gpus 0  --num_workers 4 \
+    --max_seq_len 4096 --doc_stride -1  \
+    --save_prefix triviaqa-longformer-large  \  # pretrained pytorch-lighting checkpoint
+    --model_path path/to/pretrained/longformer-large-4096  \  # loaded but not used
+    --test   # predictions will be saved into `predictions.json`
+
+# then run the official evaluation scripts
+python -m scripts.triviaqa_utils.evaluation_utils  \
+    --dataset_file path/to/qa/wikipedia-dev.json   \
+    --prediction_file predictions.json
+# Output should be:
+{'exact_match': 73.07644188665083, 'f1': 77.78523804802242, 'common': 7993, 'denominator': 7993, 'pred_len': 7993, 'gold_len': 7993}
+
+
+# TPU
+import torch_xla.debug.metrics as met; print(met.metrics_report())
+curl -X POST http://10.125.212.42:8475/requestversion/pytorch-dev20200722
+
+/usr/share/torch-xla-nightly/pytorch/xla/scripts/debug_run.py --outfile debug.tar.gz -- python -u scripts/test_tpu.py
+
+/usr/share/torch-xla-nightly/pytorch/xla/scripts/debug_run.py --outfile debug.tar.gz -- python -u scripts/pretrain.py  --input_dir data/ --save_prefix test_xla_2 --gpu_count 0 --tpu_core_count 1 --val_batches 4 --val_every 130 --num_workers 0 --log_rate 1 --model allenai/longformer-base-4096
+
+python scripts/pretrain.py  --input_dir data/ --save_prefix test_grad_accum --gpu_count 0 --tpu_core_count 8 --val_batches 30 --val_every 30 --num_workers 0 --log_rate 1
+
+export TPU_IP_ADDRESS=10.125.212.42
+export XRT_TPU_CONFIG="tpu_worker;0;$TPU_IP_ADDRESS:8470"
+source /anaconda3/bin/activate torch-xla-nightly
+
+# Resume training
+python  scripts/summarization.py --num_workers 12  --save_prefix eval_long16k_nooverlap_large --model_path bart-large-long-16384/ --max_input_len 16368 --batch_size 2 --grad_accum 4 --grad_ckpt   --attention_mode sliding_chunks_no_overlap --attention_window 340 --val_every 0.333333333  --debug --resume summarization/run_long16k_nooverlap_large/_ckpt_epoch_3_v1.ckpt  --val_percent_check 1.0 --disable_checkpointing
