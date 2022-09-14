@@ -1643,8 +1643,7 @@ class TokenizerTesterMixin:
                 self.assertEqual(encoded_sequence, truncated_sequence_left)
 
     def test_padding_to_max_length(self):
-        """We keep this test for backward compatibility but it should be remove when `pad_to_max_length` is deprecated.
-        """
+        """We keep this test for backward compatibility but it should be remove when `pad_to_max_length` is deprecated."""
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
