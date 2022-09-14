@@ -201,7 +201,8 @@ def get_masks(slen, lengths, causal, padding_mask=None):
     # sanity check
     # assert shape_list(mask) == [bs, slen]
     tf.debugging.assert_equal(shape_list(mask), [bs, slen])
-    assert causal is False or shape_list(attn_mask) == [bs, slen, slen]
+    if causal:
+        tf.debugging.assert_equal(shape_list(attn_mask), [bs, slen, slen])
 
     return mask, attn_mask
 
