@@ -1206,7 +1206,7 @@ class TFModelTesterMixin:
     def test_save_load_after_resize_token_embeddings(self):
         if not self.test_resize_embeddings:
             return
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config, original_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             # create a model with resized (expended) embeddings
@@ -1218,9 +1218,12 @@ class TFModelTesterMixin:
             model.resize_token_embeddings(new_total_size)
 
             # fetch the output for an input exclusively made of new members of the vocabulary
+            inputs_dict = copy.deepcopy(original_inputs_dict)
             new_vocab_input_ids = ids_tensor(inputs_dict["input_ids"].shape, new_tokens_size)
             new_vocab_input_ids += old_total_size
             inputs_dict["input_ids"] = new_vocab_input_ids
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"] = new_vocab_input_ids
             prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
             outputs = model(**prepared_inputs)
 
@@ -1233,13 +1236,22 @@ class TFModelTesterMixin:
                 # check that the output for the restored model is the same
                 self.assert_outputs_same(restored_model_outputs, outputs)
 
-    # def test_save_load_after_resize_token_embeddings_with_special_tokens(self):
-    #             # in both cases, vocabulary out of bounds should raise an exception
-    #             inputs_dict["input_ids"] = new_vocab_input_ids * 100
-    #             prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
-    #             with self.assertRaises(tf.errors.InvalidArgumentError):
-    #                 outputs = model(new_vocab_input_ids * 100)
+    @unittest.skipIf(len(tf.config.list_physical_devices("GPU")) == 0, reason="This test always pass on CPU.")
+    def test_embeddings_out_of_bounds_raise_exception(self):
+        # TF embeddings layers don't raise an exception when an index is out of bounds on GPU, so we manually raise it.
+        if not self.test_resize_embeddings:
+            return
+        config, original_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
+        for model_class in self.all_model_classes:
+            model = model_class(config=config)
+            inputs_dict = copy.deepcopy(original_inputs_dict)
+            inputs_dict["input_ids"] = inputs_dict["input_ids"] * int(1e9)
+            if "decoder_input_ids" in inputs_dict:
+                inputs_dict["decoder_input_ids"] = inputs_dict["decoder_input_ids"] * int(1e9)
+            prepared_inputs = self._prepare_for_class(inputs_dict, model_class)
+            with self.assertRaises(tf.errors.InvalidArgumentError):
+                model(**prepared_inputs)
 
     def test_lm_head_model_random_no_beam_search_generate(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
