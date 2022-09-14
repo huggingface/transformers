@@ -1236,9 +1236,9 @@ class TFModelTesterMixin:
                 # check that the output for the restored model is the same
                 self.assert_outputs_same(restored_model_outputs, outputs)
 
-    @unittest.skipIf(len(tf.config.list_physical_devices("GPU")) == 0, reason="This test always pass on CPU.")
     def test_embeddings_out_of_bounds_raise_exception(self):
         # TF embeddings layers don't raise an exception when an index is out of bounds on GPU, so we manually raise it.
+        # This test should only fail on GPU for models where we haven't added the safety check.
         if not self.test_resize_embeddings:
             return
         config, original_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
