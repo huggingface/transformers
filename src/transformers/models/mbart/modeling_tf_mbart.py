@@ -69,7 +69,9 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int):
     if pad_token_id is None:
         raise ValueError("self.model.config.pad_token_id has to be defined.")
     # replace possible -100 values in labels by `pad_token_id`
-    input_ids = tf.where(input_ids == -100, tf.fill(shape_list(input_ids), pad_token_id), input_ids)
+    input_ids = tf.where(
+        input_ids == -100, tf.fill(shape_list(input_ids), tf.cast(pad_token_id, input_ids.dtype)), input_ids
+    )
     language_id_index = (
         tf.reduce_sum(tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=input_ids.dtype), axis=-1) - 1
     )

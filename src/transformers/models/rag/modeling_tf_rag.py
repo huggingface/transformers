@@ -1325,7 +1325,10 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         # shift tokens left (from original Pytorch's version)
 
-        target = tf.concat([target[:, 1:], tf.fill([target.shape[0], 1], self.config.generator.pad_token_id)], axis=1)
+        target = tf.concat(
+            [target[:, 1:], tf.fill([target.shape[0], 1], tf.cast(self.config.generator.pad_token_id, target.dtype))],
+            axis=1,
+        )
         rag_logprobs = self.marginalize(seq_logits, doc_scores, n_docs)
         loss = self.hf_compute_loss(target, rag_logprobs, from_logits=True, reduce_loss=reduce_loss)
 
