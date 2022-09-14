@@ -577,6 +577,7 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[0.0702, -0.1552, 0.1192], [0.0836, -0.1848, 0.1304], [0.0673, -0.1686, 0.1045]], device=torch_device
         )
+
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
@@ -632,7 +633,8 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         )
 
         EXPECTED = [
-            "we investigate the performance of a new pretrained model for long input summarization. <n> the model is a superposition of two well -"
+            "we investigate the performance of a new pretrained model for long input summarization. <n> the model is a"
+            " superposition of two well -"
         ]
 
         generated = tok.batch_decode(
