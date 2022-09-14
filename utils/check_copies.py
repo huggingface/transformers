@@ -492,7 +492,6 @@ MODELS_NOT_IN_README = [
     "Speech2Text2",
     "Vision Encoder decoder",
     "VisionTextDualEncoder",
-    "GPT NeoX Japanese",
 ]
 
 

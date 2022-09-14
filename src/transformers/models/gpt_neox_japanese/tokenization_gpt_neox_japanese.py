@@ -82,12 +82,16 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
     - Conversion of heterographs to the same token_id
     - Emoji and Emoticon are grouped into 12 types as special tags.
 
-    ```
+    Example:
+
+    ```python
     >>> from transformers import GPTNeoXJapaneseTokenizer
+
     >>> tokenizer = GPTNeoXJapaneseTokenizer.from_pretrained("abeja/gpt-neox-japanese-2.7b")
     >>> # You can confirm both 慶応 and 慶應 are encoded to 17749
     >>> tokenizer("吾輩は猫である🐯。実は慶応(慶應)大学出身")["input_ids"]
     [30014, 26883, 26638, 27228, 25, 26650, 31732, 31679, 27809, 26638, 17749, 31592, 17749, 31593, 321, 1281]
+
     >>> # Both 慶応 and 慶應 are decoded to 慶応
     >>> tokenizer.decode(tokenizer("吾輩は猫である🐯。実は慶応(慶應)大学出身")["input_ids"])
     '吾輩は猫である🐯。実は慶応(慶応)大学出身'
@@ -98,14 +102,14 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
             File containing the vocabulary.
         emoji_file (`str`):
             File containing the emoji.
-        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        pad_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The token used for padding
-        bos_token (`str`, *optional*, defaults to `<|startoftext|>`):
+        bos_token (`str`, *optional*, defaults to `"<|startoftext|>"`):
             The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
             The end of sequence token.
         do_clean_text (`bool`, *optional*, defaults to `False`):
             Whether or not to clean text for URL, EMAIL, TEL, Japanese DATE and Japanese PRICE.
