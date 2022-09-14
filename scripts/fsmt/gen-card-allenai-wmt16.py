@@ -19,6 +19,7 @@
 import os
 from pathlib import Path
 
+
 def write_model_card(model_card_dir, src_lang, tgt_lang, model_name):
 
     texts = {
@@ -145,6 +146,7 @@ PYTHONPATH="src:examples/seq2seq" python examples/seq2seq/run_eval.py allenai/{m
     print(f"Generating {path}")
     with open(path, "w", encoding="utf-8") as f:
         f.write(readme)
+
 
 # make sure we are under the root of the project
 repo_dir = Path(__file__).resolve().parent.parent.parent
