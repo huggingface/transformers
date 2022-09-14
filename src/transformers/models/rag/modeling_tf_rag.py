@@ -1312,7 +1312,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         )
 
         # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.cast(0, tf.int32))
+        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.cast(0, shifted_input_ids.dtype))
 
         # Make sure the assertion op is called by wrapping the result in an identity no-op
         with tf.control_dependencies([assert_gte0]):
