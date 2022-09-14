@@ -1,5 +1,7 @@
 # Initially taken from Github's Python gitignore file
-
+*.zip
+*.zip.*
+*.raw
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
