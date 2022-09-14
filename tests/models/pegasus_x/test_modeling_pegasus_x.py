@@ -575,8 +575,9 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
+            [[0.0, 9.5705185, 1.5897303], [ 0.0, 9.833374, 1.5828674], [0.0, 10.429961, 1.5643371]], device=torch_device
         )
+
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
