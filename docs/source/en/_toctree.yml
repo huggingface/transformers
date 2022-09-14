@@ -253,6 +253,8 @@
         title: GPT Neo
       - local: model_doc/gpt_neox
         title: GPT NeoX
+      - local: model_doc/gpt_neox_japanese
+        title: GPT NeoX Japanese
       - local: model_doc/gptj
         title: GPT-J
       - local: model_doc/gpt2
