@@ -59,10 +59,12 @@ from .utils import (
     PushToHubMixin,
     cached_file,
     copy_func,
+    download_url,
     has_file,
     is_accelerate_available,
     is_bitsandbytes_available,
     is_offline_mode,
+    is_remote_url,
     logging,
     replace_return_docstrings,
 )
@@ -418,17 +420,25 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix):
     def load(module: nn.Module, state_dict, prefix=""):
         local_metadata = {} if metadata is None else metadata.get(prefix[:-1], {})
         args = (state_dict, prefix, local_metadata, True, [], [], error_msgs)
-        if is_deepspeed_zero3_enabled():
-            import deepspeed
+        # Parameters of module and children will start with prefix. We can exit early if there are none in this
+        # state_dict
+        if len([key for key in state_dict if key.startswith(prefix)]) > 0:
+            if is_deepspeed_zero3_enabled():
+                import deepspeed
 
-            # because zero3 puts placeholders in model params, this context
-            # manager gathers (unpartitions) the params of the current layer, then loads from
-            # the state dict and then re-partitions them again
-            with deepspeed.zero.GatheredParameters(list(module.parameters(recurse=False)), modifier_rank=0):
-                if torch.distributed.get_rank() == 0:
-                    module._load_from_state_dict(*args)
-        else:
-            module._load_from_state_dict(*args)
+                # In sharded models, each shard has only part of the full state_dict, so only gather
+                # parameters that are in the current state_dict.
+                named_parameters = dict(module.named_parameters(prefix=prefix[:-1], recurse=False))
+                params_to_gather = [named_parameters[k] for k in state_dict.keys() if k in named_parameters]
+                if len(params_to_gather) > 0:
+                    # because zero3 puts placeholders in model params, this context
+                    # manager gathers (unpartitions) the params of the current layer, then loads from
+                    # the state dict and then re-partitions them again
+                    with deepspeed.zero.GatheredParameters(params_to_gather, modifier_rank=0):
+                        if torch.distributed.get_rank() == 0:
+                            module._load_from_state_dict(*args)
+            else:
+                module._load_from_state_dict(*args)
 
         for name, child in module._modules.items():
             if child is not None:
@@ -1990,6 +2000,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                 archive_file = os.path.join(subfolder, pretrained_model_name_or_path + ".index")
                 is_local = True
+            elif is_remote_url(pretrained_model_name_or_path):
+                archive_file = pretrained_model_name_or_path
+                resolved_archive_file = download_url(pretrained_model_name_or_path)
             else:
                 # set correct filename
                 if from_tf:

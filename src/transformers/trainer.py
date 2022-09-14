@@ -1210,7 +1210,7 @@ class Trainer:
                 value = type(old_attr)(value)
             setattr(self.args, key, value)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
-            logger.info("Trial:", trial.params)
+            logger.info(f"Trial: {trial.params}")
         if self.hp_search_backend == HPSearchBackend.SIGOPT:
             logger.info(f"SigOpt Assignments: {trial.assignments}")
         if self.hp_search_backend == HPSearchBackend.WANDB:
@@ -1488,6 +1488,7 @@ class Trainer:
             raise TypeError(f"train() received got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
+        self._train_batch_size = self.args.train_batch_size
 
         # Model re-init
         model_reloaded = False
