@@ -284,6 +284,11 @@ class GPT2Tokenizer(PreTrainedTokenizer):
                 token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
             )
 
+        if not self.add_bos_token:
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=False
+            )
+
         if token_ids_1 is None:
             return [1] + ([0] * len(token_ids_0))
         return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
