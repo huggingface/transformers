@@ -83,6 +83,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 For now ignore those.
                 """
             )
+
             return
         feature_extractor = FeatureExtractionPipeline(
             model=model, tokenizer=tokenizer, feature_extractor=feature_extractor
