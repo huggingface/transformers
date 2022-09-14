@@ -1575,7 +1575,10 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         self, seq_logits, doc_scores, target, reduce_loss=False, epsilon=0.0, exclude_bos_score=False, n_docs=None
     ):
         # shift tokens left
-        target = tf.concat([target[:, 1:], tf.fill([target.shape[0], 1], self.config.generator.pad_token_id)], axis=1)
+        target = tf.concat(
+            [target[:, 1:], tf.fill([target.shape[0], 1], tf.cast(self.config.generator.pad_token_id, target.dtype))],
+            axis=1,
+        )
 
         # bos_token_id is None for T5
         bos_token_id = self.config.bos_token_id or self.config.generator.bos_token_id
@@ -1584,7 +1587,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         use_bos = bos_token_id is not None and equal_bos_token_id_all
 
         def _mask_pads(ll, smooth_obj):
-            pad_mask = tf.equal(target, self.config.generator.pad_token_id)
+            pad_mask = tf.equal(target, tf.cast(self.config.generator.pad_token_id, target.dtype))
             if tf.reduce_any(pad_mask):
                 ll = tf.where(pad_mask, 0.0, ll)
                 smooth_obj = tf.where(pad_mask, 0.0, smooth_obj)

@@ -75,7 +75,9 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int):
     language_id_index = (
         tf.reduce_sum(tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=input_ids.dtype), axis=-1) - 1
     )
-    language_id_index = tf.stack([tf.range(shape_list(input_ids)[0]), language_id_index], axis=-1)
+    language_id_index = tf.stack(
+        [tf.range(shape_list(input_ids)[0], dtype=input_ids.dtype), language_id_index], axis=-1
+    )
     languages_ids = tf.gather_nd(input_ids, language_id_index)
 
     shifted_input_ids = tf.concat([tf.expand_dims(languages_ids, axis=-1), input_ids[:, :-1]], axis=-1)
