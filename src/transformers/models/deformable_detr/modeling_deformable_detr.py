@@ -660,6 +660,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
         try:
+            # GPU
             output = MultiScaleDeformableAttentionFunction.apply(
                 value,
                 spatial_shapes,
@@ -668,7 +669,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
                 attention_weights,
                 self.im2col_step,
             )
-        except AttributeError:
+        except Exception:
             # CPU
             output = ms_deform_attn_core_pytorch(value, spatial_shapes, sampling_locations, attention_weights)
         output = self.output_proj(output)
@@ -1601,11 +1602,16 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("sensetime/deformable-detr")
-        >>> model = DeformableDetrModel.from_pretrained("sensetime/deformable-detr")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("SenseTime/deformable-detr")
+        >>> model = DeformableDetrModel.from_pretrained("SenseTime/deformable-detr")
+
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
+
         >>> outputs = model(**inputs)
+
         >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 300, 256]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1863,14 +1869,26 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("sensetime/deformable-detr")
-        >>> model = DeformableDetrForObjectDetection.from_pretrained("sensetime/deformable-detr")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("SenseTime/deformable-detr")
+        >>> model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> # model predicts bounding boxes and corresponding COCO classes
-        >>> logits = outputs.logits
-        >>> bboxes = outputs.pred_boxes
+
+        >>> # convert outputs (bounding boxes and class logits) to COCO API
+        >>> target_sizes = torch.tensor([image.size[::-1]])
+        >>> results = feature_extractor.post_process(outputs, target_sizes=target_sizes)[0]
+        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     # let's only keep detections with score > 0.7
+        ...     if score > 0.7:
+        ...         print(
+        ...             f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...             f"{round(score.item(), 3)} at location {box}"
+        ...         )
+        Detected cat with confidence 0.856 at location [342.19, 24.3, 640.02, 372.25]
+        Detected remote with confidence 0.739 at location [40.79, 72.78, 176.76, 117.25]
+        Detected cat with confidence 0.859 at location [16.5, 52.84, 318.25, 470.78]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
