@@ -22,7 +22,7 @@ from typing import Dict, List, Tuple
 
 from transformers import DeformableDetrConfig, is_timm_available, is_vision_available
 from transformers.file_utils import cached_property
-from transformers.testing_utils import require_timm, require_vision, slow, torch_device
+from transformers.testing_utils import require_timm, require_torch_gpu, require_vision, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -594,3 +594,32 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
+
+    @require_torch_gpu
+    def test_inference_object_detection_head_equivalence_cpu_gpu(self):
+        feature_extractor = self.default_feature_extractor
+        image = prepare_img()
+        encoding = feature_extractor(images=image, return_tensors="pt")
+        pixel_values = encoding["pixel_values"]
+        pixel_mask = encoding["pixel_mask"]
+
+        # 1. run model on CPU
+        model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr-single-scale")
+
+        with torch.no_grad():
+            cpu_outputs = model(pixel_values, pixel_mask)
+
+        # 2. run model on GPU
+        model.to("cuda")
+
+        with torch.no_grad():
+            gpu_outputs = model(pixel_values.to("cuda"), pixel_mask.to("cuda"))
+
+        # 3. assert equivalence
+        for key in cpu_outputs.keys():
+            assert torch.allclose(cpu_outputs[key], gpu_outputs[key].cpu(), atol=1e-4)
+
+        expected_logits = torch.tensor(
+            [[-9.9051, -4.2541, -6.4852], [-9.6947, -4.0854, -6.8033], [-10.0665, -5.8470, -7.7003]]
+        )
+        assert torch.allclose(cpu_outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
