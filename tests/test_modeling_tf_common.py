@@ -1242,7 +1242,7 @@ class TFModelTesterMixin:
 
     @unittest.skipIf(
         not is_tf_available() or len(tf.config.list_physical_devices("GPU")) == 0,
-        reason="This test always pass on CPU.",
+        reason="This test always passes on CPU.",
     )
     def test_embeddings_out_of_bounds_raise_exception(self):
         # TF embeddings layers don't raise an exception when an index is out of bounds on GPU, so we manually raise it.
