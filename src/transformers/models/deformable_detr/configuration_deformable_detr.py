@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "sensetime/deformable-detr": "https://huggingface.co/sensetime/deformable-detr/resolve/main/config.json",
+    "SenseTime/deformable-detr": "https://huggingface.co/sensetime/deformable-detr/resolve/main/config.json",
     # See all Deformable DETR models at https://huggingface.co/models?filter=deformable-detr
 }
 
@@ -31,11 +31,10 @@ class DeformableDetrConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`DeformableDetrModel`]. It is used to instantiate
     a Deformable DETR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Deformable DETR
-    [sensetime/deformable-detr](https://huggingface.co/sensetime/deformable-detr) architecture.
+    [SenseTime/deformable-detr](https://huggingface.co/SenseTime/deformable-detr) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
-
 
     Args:
         num_queries (`int`, *optional*, defaults to 300):
@@ -121,10 +120,10 @@ class DeformableDetrConfig(PretrainedConfig):
     ```python
     >>> from transformers import DeformableDetrModel, DeformableDetrConfig
 
-    >>> # Initializing a Deformable DETR sensetime/deformable-detr style configuration
+    >>> # Initializing a Deformable DETR SenseTime/deformable-detr style configuration
     >>> configuration = DeformableDetrConfig()
 
-    >>> # Initializing a model from the sensetime/deformable-detr style configuration
+    >>> # Initializing a model from the SenseTime/deformable-detr style configuration
     >>> model = DeformableDetrModel(configuration)
 
     >>> # Accessing the model configuration

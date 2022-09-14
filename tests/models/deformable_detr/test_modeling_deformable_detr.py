@@ -535,12 +535,10 @@ def prepare_img():
 class DeformableDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        # TODO upload feature extractor files to deformable-detr repos
-        return AutoFeatureExtractor.from_pretrained("facebook/detr-resnet-50") if is_vision_available() else None
+        return AutoFeatureExtractor.from_pretrained("SenseTime/deformable-detr") if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        # TODO replace nielsr by sensetime
-        model = DeformableDetrForObjectDetection.from_pretrained("nielsr/deformable-detr").to(torch_device)
+        model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -568,9 +566,8 @@ class DeformableDetrModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
 
     def test_inference_object_detection_head_with_box_refine_two_stage(self):
-        # TODO replace nielsr by sensetime
         model = DeformableDetrForObjectDetection.from_pretrained(
-            "nielsr/deformable-detr-with-box-refine-two-stage"
+            "SenseTime/deformable-detr-with-box-refine-two-stage"
         ).to(torch_device)
 
         feature_extractor = self.default_feature_extractor
