@@ -1618,7 +1618,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         def torch_gather(param, id_tensor):
             # 2d-gather torch equivalent: https://stackoverflow.com/questions/52129909/tensorflow-equivalent-of-torch-gather
             def gather2d(target, id_tensor):
-                idx = tf.stack([tf.range(tf.shape(id_tensor)[0]), id_tensor[:, 0]], axis=-1)
+                idx = tf.stack([tf.range(tf.shape(id_tensor)[0], dtype=id_tensor.dtype), id_tensor[:, 0]], axis=-1)
                 result = tf.gather_nd(target, idx)
                 return tf.expand_dims(result, axis=-1)
 
