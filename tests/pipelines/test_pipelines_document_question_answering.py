@@ -219,8 +219,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9998, "answer": "us-001", "start": 15, "end": 15},
-                {"score": 0.0, "answer": "INVOICE # us-001", "start": 13, "end": 15},
+                {'score': 0.4251, 'answer': 'us-001', 'start': 16, 'end': 16},
+                {'score': 0.0819, 'answer': '1110212019', 'start': 23, 'end': 23},
             ],
         )
 
@@ -228,8 +228,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9998, "answer": "us-001", "start": 15, "end": 15},
-                {"score": 0.0, "answer": "INVOICE # us-001", "start": 13, "end": 15},
+                {'score': 0.4251, 'answer': 'us-001', 'start': 16, 'end': 16},
+                {'score': 0.0819, 'answer': '1110212019', 'start': 23, 'end': 23},
             ],
         )
 
@@ -240,8 +240,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
             nested_simplify(outputs, decimals=4),
             [
                 [
-                    {"score": 0.9998, "answer": "us-001", "start": 15, "end": 15},
-                    {"score": 0.0, "answer": "INVOICE # us-001", "start": 13, "end": 15},
+                    {'score': 0.4251, 'answer': 'us-001', 'start': 16, 'end': 16},
+                    {'score': 0.0819, 'answer': '1110212019', 'start': 23, 'end': 23},
                 ]
             ]
             * 2,
@@ -254,8 +254,8 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9998, "answer": "us-001", "start": 15, "end": 15},
-                {"score": 0.0, "answer": "INVOICE # us-001", "start": 13, "end": 15},
+                {'score': 0.4251, 'answer': 'us-001', 'start': 16, 'end': 16},
+                {'score': 0.0819, 'answer': '1110212019', 'start': 23, 'end': 23},
             ],
         )
 
