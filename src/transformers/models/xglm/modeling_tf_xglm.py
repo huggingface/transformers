@@ -556,10 +556,8 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
         next_decoder_cache = () if use_cache else None
 
         # check if head_mask and cross_attn_head_mask have a correct number of layers specified if desired
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
         for attn_mask_name, attn_mask in [("head_mask", head_mask), ("cross_attn_head_mask", cross_attn_head_mask)]:
-            if attn_mask is not None and tf.executing_eagerly():
+            if attn_mask is not None:
                 tf.debugging.assert_equal(
                     shape_list(attn_mask)[0],
                     len(self.layers),

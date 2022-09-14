@@ -324,14 +324,11 @@ class TFBlenderbotEncoderLayer(tf.keras.layers.Layer):
             hidden_states=hidden_states, attention_mask=attention_mask, layer_head_mask=layer_head_mask
         )
 
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(hidden_states),
-                shape_list(residual),
-                message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
-            )
+        tf.debugging.assert_equal(
+            shape_list(hidden_states),
+            shape_list(residual),
+            message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
+        )
 
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
