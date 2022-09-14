@@ -49,7 +49,7 @@ Inference:
 
 1. DeepSpeed ZeRO Inference supports ZeRO stage 3 with ZeRO-Infinity. It uses the same ZeRO protocol as training, but
    it doesn't use an optimizer and a lr scheduler and only stage 3 is relevant. For more details see:
-   [deepspeed-zero-inference](#deepspeed-zero-inference).
+   [zero-inference](#zero-inference).
 
 There is also DeepSpeed Inference - this is a totally different technology which uses Tensor Parallelism instead of
 ZeRO (coming soon).
@@ -81,7 +81,7 @@ pip install transformers[deepspeed]
 or find more details on [the DeepSpeed's GitHub page](https://github.com/microsoft/deepspeed#installation) and
 [advanced install](https://www.deepspeed.ai/tutorials/advanced-install/).
 
-If you're still struggling with the build, first make sure to read [zero-install-notes](#zero-install-notes).
+If you're still struggling with the build, first make sure to read [CUDA Extension Installation Notes](trainer#cuda-extension-installation-notes).
 
 If you don't prebuild the extensions and rely on them to be built at run time and you tried all of the above solutions
 to no avail, the next thing to try is to pre-build the modules before installing them.
