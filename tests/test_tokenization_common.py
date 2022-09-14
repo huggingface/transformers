@@ -252,16 +252,12 @@ class TokenizerTesterMixin:
 
         if sequences is None:
             sequences = [
-                (
-                    "Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides "
-                    "general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural "
-                    "Language Understanding (NLU) and Natural Language Generation (NLG) with over 32+ pretrained "
-                    "models in 100+ languages and deep interoperability between Jax, PyTorch and TensorFlow."
-                ),
-                (
-                    "BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly "
-                    "conditioning on both left and right context in all layers."
-                ),
+                "Transformers (formerly known as pytorch-transformers and pytorch-pretrained-bert) provides "
+                "general-purpose architectures (BERT, GPT-2, RoBERTa, XLM, DistilBert, XLNet...) for Natural "
+                "Language Understanding (NLU) and Natural Language Generation (NLG) with over 32+ pretrained "
+                "models in 100+ languages and deep interoperability between Jax, PyTorch and TensorFlow.",
+                "BERT is designed to pre-train deep bidirectional representations from unlabeled text by jointly "
+                "conditioning on both left and right context in all layers.",
                 "The quick brown fox jumps over the lazy dog.",
             ]
 
@@ -2474,20 +2470,16 @@ class TokenizerTesterMixin:
                 # Longer text that will definitely require truncation.
                 src_text = [
                     " UN Chief Says There Is No Military Solution in Syria",
-                    (
-                        " Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for"
-                        " Syria is that 'there is no military solution' to the nearly five-year conflict and more"
-                        " weapons will only worsen the violence and misery for millions of people."
-                    ),
+                    " Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for"
+                    " Syria is that 'there is no military solution' to the nearly five-year conflict and more"
+                    " weapons will only worsen the violence and misery for millions of people.",
                 ]
                 tgt_text = [
                     "Şeful ONU declară că nu există o soluţie militară în Siria",
-                    (
-                        "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar"
-                        ' al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci'
-                        " ani şi că noi arme nu vor face decât să înrăutăţească violenţele şi mizeria pentru milioane"
-                        " de oameni."
-                    ),
+                    "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar"
+                    ' al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci'
+                    " ani şi că noi arme nu vor face decât să înrăutăţească violenţele şi mizeria pentru milioane"
+                    " de oameni.",
                 ]
                 try:
                     batch = tokenizer.prepare_seq2seq_batch(
