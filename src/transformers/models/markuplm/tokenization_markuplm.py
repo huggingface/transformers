@@ -511,7 +511,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
         text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
         xpaths: Union[List[List[int]], List[List[List[int]]]] = None,
-        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        node_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -542,9 +542,11 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 (pretokenized string).
             xpaths (`List[List[int]]`, `List[List[List[int]]]`):
                 Node-level xpaths.
-            word_labels (`List[int]`, `List[List[int]]`, *optional*):
+            node_labels (`List[int]`, `List[List[int]]`, *optional*):
                 Node-level integer labels (for token classification tasks).
         """
+        print("Text", text)
+        print("Text_pair:", text_pair)
         # Input type checking for clearer error
         def _is_valid_text_input(t):
             if isinstance(t, str):
@@ -611,7 +613,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 batch_text_or_text_pairs=batch_text_or_text_pairs,
                 is_pair=is_pair,
                 xpaths=xpaths,
-                word_labels=word_labels,
+                node_labels=node_labels,
                 add_special_tokens=add_special_tokens,
                 padding=padding,
                 truncation=truncation,
@@ -633,7 +635,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 text=text,
                 text_pair=text_pair,
                 xpaths=xpaths,
-                word_labels=word_labels,
+                node_labels=node_labels,
                 add_special_tokens=add_special_tokens,
                 padding=padding,
                 truncation=truncation,
@@ -661,7 +663,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         ],
         is_pair: bool = None,
         xpaths: Optional[List[List[List[int]]]] = None,
-        word_labels: Optional[Union[List[int], List[List[int]]]] = None,
+        node_labels: Optional[Union[List[int], List[List[int]]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -692,7 +694,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             batch_text_or_text_pairs=batch_text_or_text_pairs,
             is_pair=is_pair,
             xpaths=xpaths,
-            word_labels=word_labels,
+            node_labels=node_labels,
             add_special_tokens=add_special_tokens,
             padding_strategy=padding_strategy,
             truncation_strategy=truncation_strategy,
@@ -719,7 +721,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         ],
         is_pair: bool = None,
         xpaths: Optional[List[List[List[int]]]] = None,
-        word_labels: Optional[List[List[int]]] = None,
+        node_labels: Optional[List[List[int]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -747,7 +749,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             batch_text_or_text_pairs=batch_text_or_text_pairs,
             is_pair=is_pair,
             xpaths=xpaths,
-            word_labels=word_labels,
+            node_labels=node_labels,
             add_special_tokens=add_special_tokens,
             padding_strategy=padding_strategy,
             truncation_strategy=truncation_strategy,
@@ -771,7 +773,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         batch_text_or_text_pairs,
         is_pair: bool = None,
         xpaths: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[List[int]]] = None,
+        node_labels: Optional[List[List[int]]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -802,7 +804,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                 batch_text_or_text_pair[0] if is_pair else batch_text_or_text_pair,
                 batch_text_or_text_pair[1] if is_pair else None,
                 xpaths_example,
-                word_labels=word_labels[idx] if word_labels is not None else None,
+                node_labels=node_labels[idx] if node_labels is not None else None,
                 add_special_tokens=add_special_tokens,
                 padding=PaddingStrategy.DO_NOT_PAD.value,  # we pad in batch afterward
                 truncation=truncation_strategy.value,
@@ -842,7 +844,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
         xpaths: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[int]] = None,
+        node_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -863,7 +865,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             text=text,
             text_pair=text_pair,
             xpaths=xpaths,
-            word_labels=word_labels,
+            node_labels=node_labels,
             add_special_tokens=add_special_tokens,
             padding=padding,
             truncation=truncation,
@@ -889,7 +891,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
         xpaths: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[int]] = None,
+        node_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -932,7 +934,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             text=text,
             xpaths=xpaths,
             text_pair=text_pair,
-            word_labels=word_labels,
+            node_labels=node_labels,
             add_special_tokens=add_special_tokens,
             padding_strategy=padding_strategy,
             truncation_strategy=truncation_strategy,
@@ -955,7 +957,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
         xpaths: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[int]] = None,
+        node_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -985,7 +987,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             text=text,
             text_pair=text_pair,
             xpaths=xpaths,
-            word_labels=word_labels,
+            node_labels=node_labels,
             add_special_tokens=add_special_tokens,
             padding=padding_strategy.value,
             truncation=truncation_strategy.value,
@@ -1008,7 +1010,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         text: Union[TextInput, PreTokenizedInput],
         text_pair: Optional[PreTokenizedInput] = None,
         xpaths: Optional[List[List[int]]] = None,
-        word_labels: Optional[List[int]] = None,
+        node_labels: Optional[List[int]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -1034,7 +1036,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         combination of arguments will raise an error.
 
         Node-level `xpaths` are turned into token-level `xpath_tags_seq` and `xpath_subs_seq`. If provided, node-level
-        `word_labels` are turned into token-level `labels`. The node label is used for the first token of the node,
+        `node_labels` are turned into token-level `labels`. The node label is used for the first token of the node,
         while remaining tokens are labeled with -100, such that they will be ignored by the loss function.
 
         Args:
@@ -1064,7 +1066,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         labels = []
 
         if text_pair is None:
-            if word_labels is None:
+            if node_labels is None:
                 # CASE 1: web page classification (training + inference) + CASE 2: token classification (inference)
                 for word, xpath in zip(text, xpaths):
                     if len(word) < 1:  # skip empty nodes
@@ -1077,7 +1079,7 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                     xpath_subs_seq.extend([xpath_subs_list] * len(word_tokens))
             else:
                 # CASE 2: token classification (training)
-                for word, xpath, label in zip(text, xpaths, word_labels):
+                for word, xpath, label in zip(text, xpaths, node_labels):
                     if len(word) < 1:  # skip empty nodes
                         continue
                     word_tokens = self.tokenize(word)

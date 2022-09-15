@@ -41,12 +41,15 @@ class MarkupLMProcessor(ProcessorMixin):
     """
     feature_extractor_class = "MarkupLMFeatureExtractor"
     tokenizer_class = ("MarkupLMTokenizer", "MarkupLMTokenizerFast")
+    parse_html = True
 
     def __call__(
         self,
-        html_strings,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
+        html_strings=None,
+        nodes=None,
+        xpaths=None,
+        node_labels=None,
+        questions=None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -72,19 +75,25 @@ class MarkupLMProcessor(ProcessorMixin):
 
         Please refer to the docstring of the above two methods for more information.
         """
-        # first, apply the feature extractor
-        features = self.feature_extractor(html_strings)
+        # first, create nodes and xpaths
+        if self.parse_html:
+            assert nodes is None
+            assert xpaths is None
+            assert node_labels is None
+            features = self.feature_extractor(html_strings)
+            nodes = features["nodes"]
+            xpaths = features["xpaths"]
 
-        # second, apply the tokenizer
-        if text is not None and text_pair is None:
-            if isinstance(text, str):
-                text = [text]  # add batch dimension (as the feature extractor always adds a batch dimension)
-            text_pair = features["nodes"]
+        # # second, apply the tokenizer
+        if questions is not None and self.parse_html:
+            if isinstance(questions, str):
+                questions = [questions]  # add batch dimension (as the feature extractor always adds a batch dimension)
 
         encoded_inputs = self.tokenizer(
-            text=text if text is not None else features["nodes"],
-            text_pair=features["nodes"] if text is not None else None,
-            xpaths=features["xpaths"],
+            text=questions if questions is not None else nodes,
+            text_pair=nodes if questions is not None else None,
+            xpaths=xpaths,
+            node_labels=node_labels,
             add_special_tokens=add_special_tokens,
             padding=padding,
             truncation=truncation,
