@@ -213,16 +213,20 @@ class NllbTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # Longer text that will definitely require truncation.
                 src_text = [
                     " UN Chief Says There Is No Military Solution in Syria",
-                    " Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for"
-                    " Syria is that 'there is no military solution' to the nearly five-year conflict and more"
-                    " weapons will only worsen the violence and misery for millions of people.",
+                    (
+                        " Secretary-General Ban Ki-moon says his response to Russia's stepped up military support for"
+                        " Syria is that 'there is no military solution' to the nearly five-year conflict and more"
+                        " weapons will only worsen the violence and misery for millions of people."
+                    ),
                 ]
                 tgt_text = [
                     "Şeful ONU declară că nu există o soluţie militară în Siria",
-                    "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar"
-                    ' al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci'
-                    " ani şi că noi arme nu vor face decât să înrăutăţească violenţele şi mizeria pentru milioane"
-                    " de oameni.",
+                    (
+                        "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar"
+                        ' al Rusiei pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci'
+                        " ani şi că noi arme nu vor face decât să înrăutăţească violenţele şi mizeria pentru milioane"
+                        " de oameni."
+                    ),
                 ]
                 try:
                     batch = tokenizer.prepare_seq2seq_batch(
@@ -301,9 +305,11 @@ class NllbDistilledIntegrationTest(unittest.TestCase):
     ]
     tgt_text = [
         "Şeful ONU declară că nu există o soluţie militară în Siria",
-        "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei"
-        ' pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu'
-        " vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni.",
+        (
+            "Secretarul General Ban Ki-moon declară că răspunsul său la intensificarea sprijinului militar al Rusiei"
+            ' pentru Siria este că "nu există o soluţie militară" la conflictul de aproape cinci ani şi că noi arme nu'
+            " vor face decât să înrăutăţească violenţele şi mizeria pentru milioane de oameni."
+        ),
     ]
     expected_src_tokens = [
         16297,
