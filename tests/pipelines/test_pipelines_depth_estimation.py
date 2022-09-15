@@ -63,7 +63,7 @@ class DepthEstimationPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
 
     def run_pipeline_test(self, depth_estimator, examples):
         outputs = depth_estimator("./tests/fixtures/tests_samples/COCO/000000039769.png")
-        self.assertEqual({"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image.Image)}, outputs)
+        self.assertEqual({"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image)}, outputs)
         import datasets
 
         dataset = datasets.load_dataset("hf-internal-testing/fixtures_image_utils", "image", split="test")
@@ -81,11 +81,11 @@ class DepthEstimationPipelineTests(unittest.TestCase, metaclass=PipelineTestCase
         )
         self.assertEqual(
             [
-                {"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image.Image)},
-                {"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image.Image)},
-                {"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image.Image)},
-                {"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image.Image)},
-                {"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image.Image)},
+                {"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image)},
+                {"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image)},
+                {"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image)},
+                {"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image)},
+                {"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image)},
             ],
             outputs,
         )
