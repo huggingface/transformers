@@ -79,8 +79,10 @@ class MarkupLMFeatureExtractor(FeatureExtractionMixin):
                 string2xtag_seq.append(xpath_tags)
                 string2xsubs_seq.append(xpath_subscripts)
 
-        assert len(all_doc_strings) == len(string2xtag_seq)
-        assert len(all_doc_strings) == len(string2xsubs_seq)
+        if len(all_doc_strings) != len(string2xtag_seq):
+            raise ValueError("Number of doc strings and xtags does not correspond")
+        if len(all_doc_strings) != len(string2xsubs_seq):
+            raise ValueError("Number of doc strings and xsubs does not correspond")
 
         return all_doc_strings, string2xtag_seq, string2xsubs_seq
 
