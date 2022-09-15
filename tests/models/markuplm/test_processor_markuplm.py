@@ -65,26 +65,28 @@ class MarkupLMProcessorTest(unittest.TestCase):
             "\u0120lowest",
             "\u0120newer",
             "\u0120wider",
+            "\u0120hello",
+            "\u0120world",
             "<unk>",
         ]
         self.tmpdirname = tempfile.mkdtemp()
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
+        self.tags_dict = {"a": 0, "abbr": 1, "acronym": 2, "address": 3}
         self.special_tokens_map = {"unk_token": "<unk>"}
 
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         self.merges_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["merges_file"])
+        self.tokenizer_config_file = os.path.join(self.tmpdirname, "tokenizer_config.json")
+
         with open(self.vocab_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(vocab_tokens) + "\n")
         with open(self.merges_file, "w", encoding="utf-8") as fp:
             fp.write("\n".join(merges))
+        with open(self.tokenizer_config_file, "w", encoding="utf-8") as fp:
+            fp.write(json.dumps({"tags_dict": self.tags_dict}))
 
-        feature_extractor_map = {
-            "do_resize": True,
-            "size": 224,
-            "parse_html": True,
-        }
-
+        feature_extractor_map = {"feature_extractor_type": "MarkupLMFeatureExtractor"}
         self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
         with open(self.feature_extraction_file, "w", encoding="utf-8") as fp:
             fp.write(json.dumps(feature_extractor_map) + "\n")
@@ -406,49 +408,52 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
 
         feature_extractor = MarkupLMFeatureExtractor(parse_html=False)
         tokenizers = self.get_tokenizers
-        html_strings = self.get_html_strings
 
         for tokenizer in tokenizers:
             processor = MarkupLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor.parse_html = False
 
             # not batched
             question = "What's his name?"
-            words = ["hello", "world"]
-            boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
-            inputs = processor(html_strings[0], question, words, boxes, return_tensors="pt")
+            nodes = ["hello", "world", "how", "are"]
+            xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "html/body", "html/body/div"]
+            inputs = processor(nodes=nodes, xpaths=xpaths, questions=question, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
             actual_keys = sorted(list(inputs.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
-            expected_decoding = "[CLS] what's his name? [SEP] hello world [SEP]"
+            expected_decoding = "<s>What's his name?</s>helloworldhoware</s>"
             decoding = processor.decode(inputs.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # batched
             questions = ["How old is he?", "what's the time"]
-            nodes = [["hello", "world"], ["my", "name", "is", "niels"]]
-            xpaths = [[[1, 2, 3, 4], [5, 6, 7, 8]], [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]]]
-            inputs = processor(
-                html_strings, questions=questions, nodes=nodes, xpaths=xpaths, padding=True, return_tensors="pt"
-            )
+            nodes = [["hello", "world"], ["my", "name", "is"]]
+            xpaths = [
+                ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"],
+                ["html/body", "html/body/div", "html/body"],
+            ]
+            inputs = processor(nodes=nodes, xpaths=xpaths, questions=questions, padding=True, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
             actual_keys = sorted(list(inputs.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
-            expected_decoding = "[CLS] how old is he? [SEP] hello world [SEP] [PAD] [PAD] [PAD]"
+            expected_decoding = "<s>How old is he?</s>helloworld</s>"
             decoding = processor.decode(inputs.input_ids[0].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
-            expected_decoding = "[CLS] what's the time [SEP] my name is niels [SEP]"
+            expected_decoding = "<s>what's the time</s>mynameis</s>"
             decoding = processor.decode(inputs.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
-            # verify bbox
-            expected_bbox = [[6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3], [1, 1, 2, 3], [1000, 1000, 1000, 1000]]
-            self.assertListEqual(inputs.bbox[1].tolist()[-5:], expected_bbox)
+            # verify xpath_subs_seq
+            # fmt: off
+            expected_xpath_subs_seq = [[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 50, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]]  # noqa
+            # fmt: on
+            self.assertListEqual(inputs.xpath_subs_seq[1].tolist()[-5:], expected_xpath_subs_seq)
