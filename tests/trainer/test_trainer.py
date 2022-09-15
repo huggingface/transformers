@@ -1800,6 +1800,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_tensorrt_fx
     def test_torchdynamo_full_eval(self):
         import torchdynamo
+
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
         n_gpus = get_gpu_count()
 
