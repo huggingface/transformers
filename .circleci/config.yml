@@ -75,6 +75,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - attach_workspace:
+                at:  ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                   keys:
                       - v0.5-torch_and_tf-{{ checksum "setup.py" }}
@@ -103,42 +110,6 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/reports
 
-    run_tests_torch_and_tf_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            OMP_NUM_THREADS: 1
-            RUN_PT_TF_CROSS_TESTS: yes
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-torch_and_tf-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng git-lfs
-            - run: git lfs install
-            - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
-            - run: pip install tensorflow_probability
-            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
-            - run: pip install git+https://github.com/huggingface/accelerate
-            - save_cache:
-                key: v0.5-{{ checksum "setup.py" }}
-                paths:
-                    - '~/.cache/pip'
-            - run: |
-                  python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf tests -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
     run_tests_torch_and_flax:
         working_directory: ~/transformers
         docker:
@@ -152,6 +123,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - attach_workspace:
+                at:  ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                   keys:
                       - v0.5-torch_and_flax-{{ checksum "setup.py" }}
@@ -178,40 +156,6 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/reports
 
-    run_tests_torch_and_flax_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            OMP_NUM_THREADS: 1
-            RUN_PT_FLAX_CROSS_TESTS: yes
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-torch_and_flax-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
-            - run: pip install --upgrade pip
-            - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
-            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
-            - run: pip install git+https://github.com/huggingface/accelerate
-            - save_cache:
-                key: v0.5-{{ checksum "setup.py" }}
-                paths:
-                    - '~/.cache/pip'
-            - run: |
-                  python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax tests -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
     run_tests_torch:
         working_directory: ~/transformers
         docker:
@@ -223,6 +167,13 @@ jobs:
         resource_class: xlarge
         parallelism: 1
         steps:
+            - attach_workspace:
+                at:  ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - checkout
             - restore_cache:
                   keys:
@@ -566,6 +517,13 @@ jobs:
             TRANSFORMERS_IS_CI: yes
             PYTEST_TIMEOUT: 120
         steps:
+            - attach_workspace:
+                at:  ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - checkout
             - restore_cache:
                   keys:
@@ -1165,7 +1123,6 @@ jobs:
         working_directory: ~/transformers
         docker:
             - image: cimg/python:3.7.12
-        resource_class: large
         parallelism: 1
         steps:
             - attach_workspace:
@@ -1187,10 +1144,10 @@ workflows:
     version: 2
     build_and_test:
         jobs:
-            - fetch_all_tests
-            - run_tests:
+            - fetch_tests
+            - run_tests_custom_tokenizers:
                 requires:
-                  - fetch_all_tests
+                  - fetch_tests
 #            - check_code_quality
 #            - check_repository_consistency
 #            - run_examples_torch
@@ -1216,20 +1173,20 @@ workflows:
                         only:
                             - main
         jobs:
-            - run_examples_torch_all
-            - run_examples_tensorflow_all
-            - run_examples_flax_all
-            - run_tests_custom_tokenizers_all
-            - run_tests_torch_and_tf_all
-            - run_tests_torch_and_flax_all
+#            - run_examples_torch_all
+#            - run_examples_tensorflow_all
+#            - run_examples_flax_all
+#            - run_tests_custom_tokenizers_all
+#            - run_tests_torch_and_tf_all
+#            - run_tests_torch_and_flax_all
             - run_tests_torch_all
-            - run_tests_tf_all
-            - run_tests_flax_all
-            - run_tests_pipelines_torch_all
-            - run_tests_pipelines_tf_all
-            - run_tests_onnxruntime_all
-            - run_tests_hub_all
-            - run_tests_layoutlmv2_and_v3_all
+#            - run_tests_tf_all
+#            - run_tests_flax_all
+#            - run_tests_pipelines_torch_all
+#            - run_tests_pipelines_tf_all
+#            - run_tests_onnxruntime_all
+#            - run_tests_hub_all
+#            - run_tests_layoutlmv2_and_v3_all
 
 #    tpu_testing_jobs:
 #        triggers:
