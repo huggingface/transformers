@@ -16,6 +16,8 @@
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, List, Mapping, Optional
 
+from packaging import version
+
 from transformers import is_torch_available
 
 
@@ -154,6 +156,9 @@ class BloomConfig(PretrainedConfig):
 
 
 class BloomOnnxConfig(OnnxConfigWithPast):
+
+    torch_onnx_minimum_version = version.parse("1.12")
+
     def __init__(
         self,
         config: PretrainedConfig,

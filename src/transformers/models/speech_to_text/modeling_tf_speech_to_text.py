@@ -67,11 +67,15 @@ LARGE_NEGATIVE = -1e8
 def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_token_id: int):
     pad_token_id = tf.cast(pad_token_id, input_ids.dtype)
     decoder_start_token_id = tf.cast(decoder_start_token_id, input_ids.dtype)
-    start_tokens = tf.fill((shape_list(input_ids)[0], 1), decoder_start_token_id)
+    start_tokens = tf.fill(
+        (shape_list(input_ids)[0], 1), tf.convert_to_tensor(decoder_start_token_id, input_ids.dtype)
+    )
     shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
     # replace possible -100 values in labels by `pad_token_id`
     shifted_input_ids = tf.where(
-        shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
+        shifted_input_ids == -100,
+        tf.fill(shape_list(shifted_input_ids), tf.convert_to_tensor(pad_token_id, input_ids.dtype)),
+        shifted_input_ids,
     )
 
     # "Verify that `labels` has only positive values and -100"
@@ -591,9 +595,9 @@ class TFSpeech2TextPreTrainedModel(TFPreTrainedModel):
         input_signature=[
             {
                 "input_features": tf.TensorSpec((None, None, None), tf.float32, name="input_features"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int64, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int64, name="decoder_attention_mask"),
             }
         ]
     )

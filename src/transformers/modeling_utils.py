@@ -1751,7 +1751,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 https://test.pypi.org/simple/ bitsandbytes-cudaXXX` where XXX is your CUDA version (e.g. 11.6 = 116).
                 Make also sure that you have enough GPU RAM to store half of the model size since the 8bit modules are
                 not compiled and adapted for CPUs.
-            int8_threshold (`float`, *optional*, defaults to 6):
+            load_in_8bit_threshold (`float`, *optional*, defaults to 6):
                 Works together with `load_in_8bit`. This corresponds to the outlier threshold for outlier detection as
                 described in `GPT3.int8() : 8-bit Matrix Multiplication for Transformers at Scale` paper. Any hidden
                 states value that is above this threshold will be considered an outlier and the operation on those
@@ -1761,6 +1761,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 quantization works well for values of magnitude ~5, but beyond that, there is a significant performance
                 penalty. A good default threshold is 6, but a lower threshold might be needed for more unstable models
                 (small models, fine-tuning).
+            load_in_8bit_skip_modules (`List[str]`, *optional*):
+                An explicit list of the modules that we do not want to convert in 8-bit. This is useful for models such
+                as Jukebox that has several heads in different places and not necessarily at the last position.
             subfolder (`str`, *optional*, defaults to `""`):
                 In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
                 specify the folder name here.
@@ -1852,7 +1855,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         offload_folder = kwargs.pop("offload_folder", None)
         offload_state_dict = kwargs.pop("offload_state_dict", False)
         load_in_8bit = kwargs.pop("load_in_8bit", False)
-        int8_threshold = kwargs.pop("int8_threshold", 6.0)
+        load_in_8bit_threshold = kwargs.pop("load_in_8bit_threshold", 6.0)
+        load_in_8bit_skip_modules = kwargs.pop("load_in_8bit_skip_modules", None)
         subfolder = kwargs.pop("subfolder", "")
         commit_hash = kwargs.pop("_commit_hash", None)
 
@@ -2156,13 +2160,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             model = cls(config, *model_args, **model_kwargs)
 
         if load_in_8bit:
-            from .utils.bitsandbytes import get_key_to_not_convert, replace_8bit_linear
+            from .utils.bitsandbytes import get_keys_to_not_convert, replace_8bit_linear
 
             logger.info("Detected 8-bit loading: activating 8-bit loading for this model")
 
-            # We never convert lm_head or any last modules for numerical stability reasons
-            modules_to_not_convert = get_key_to_not_convert(model)
-            model = replace_8bit_linear(model, threshold=int8_threshold, modules_to_not_convert=modules_to_not_convert)
+            # We keep some modules such as the lm_head in their original dtype for numerical stability reasons
+            if load_in_8bit_skip_modules is None:
+                modules_to_not_convert = get_keys_to_not_convert(model)
+            else:
+                modules_to_not_convert = load_in_8bit_skip_modules
+            model = replace_8bit_linear(
+                model, threshold=load_in_8bit_threshold, modules_to_not_convert=modules_to_not_convert
+            )
 
         if isinstance(device_map, str):
             if model._no_split_modules is None:
@@ -2193,12 +2202,18 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
 
             if load_in_8bit:
-                # The LM head can stay on disk / CPU
+                # The LM head / tied weights or any last module can stay on disk / CPU
                 device_map_without_lm_head = {
-                    key: device_map[key] for key in device_map.keys() if key != modules_to_not_convert
+                    key: device_map[key] for key in device_map.keys() if key not in modules_to_not_convert
                 }
                 if "cpu" in device_map_without_lm_head.values() or "disk" in device_map_without_lm_head.values():
-                    raise ValueError("8-bit operations on `bitsandbytes` are not supported under CPU!")
+                    raise ValueError(
+                        """
+                        Some modules are dispatched on the CPU or the disk. Make sure you have enough GPU RAM to fit
+                        the quantized model. If you have set a value for `max_memory` you should increase that. To have
+                        an idea of the modules that are set on the CPU or RAM you can print model.hf_device_map.
+                        """
+                    )
                 del device_map_without_lm_head
 
         if from_tf:
