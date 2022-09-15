@@ -616,8 +616,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     )
 
     def test_padding_to_max_length(self):
-        """We keep this test for backward compatibility but it should be removed when `pad_to_max_length` will be deprecated
-        """
+        """We keep this test for backward compatibility but it should be removed when `pad_to_max_length` will be deprecated"""
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
