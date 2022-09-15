@@ -1003,6 +1003,7 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
 
         ```python
         >>> from transformers import MarkupLMProcessor, MarkupLMForQuestionAnswering
+        >>> import torch
 
         >>> processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
         >>> model = MarkupLMForQuestionAnswering.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
@@ -1113,7 +1114,28 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
 
         Returns:
-        """
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, AutoModelForTokenClassification
+        >>> import torch
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/markuplm-base")
+        >>> processor.parse_html = False
+        >>> model = AutoModelForTokenClassification.from_pretrained("microsoft/markuplm-base", num_labels=7)
+
+        >>> nodes = ["hello", "world"]
+        >>> xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"]
+        >>> node_labels = [1, 2]
+        >>> encoding = processor(nodes=nodes, xpaths=xpaths, node_labels=node_labels, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**encoding)
+
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.markuplm(
@@ -1205,8 +1227,26 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
 
-        Returns:   
-        """
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import AutoProcessor, AutoModelForSequenceClassification
+        >>> import torch
+
+        >>> processor = AutoProcessor.from_pretrained("microsoft/markuplm-base")
+        >>> model = AutoModelForSequenceClassification.from_pretrained("microsoft/markuplm-base", num_labels=7)
+
+        >>> html_string = "<html> <head> <title>Page Title</title> </head> </html>"
+        >>> encoding = processor(html_string, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**encoding)
+
+        >>> loss = outputs.loss
+        >>> logits = outputs.logits
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.markuplm(
