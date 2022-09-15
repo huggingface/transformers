@@ -236,7 +236,6 @@ class DepsTableUpdateCommand(Command):
 
 
 extras = {}
-extras["blob"] = []
 
 extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic")
 extras["sklearn"] = deps_list("scikit-learn")

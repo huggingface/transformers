@@ -1119,6 +1119,38 @@ jobs:
                   perform-login: true
             - *delete_gke_jobs
 
+    fetch_tests:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.7.12
+        environment:
+            TRANSFORMERS_IS_CI: yes
+        resource_class: large
+        parallelism: 1
+        steps:
+            - checkout
+            - run: pip install --upgrade pip
+            - run: pip install .
+            - run: mkdir -p test_preparation
+            - run: python utils/tests_fetcher.py | tee test_preparation/to_run.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation/to_run.txt
+            - persist_to_workspace:
+                  root: test_preparation/
+                  paths:
+                      - to_run.txt
+
+    run_tests:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.7.12
+        resource_class: large
+        parallelism: 1
+        steps:
+            - attach_workspace:
+                at:  ~/transformers/test_preparation
+            - run: cat ~/transformers/test_preparation/to_run.txt
+
 workflow_filters: &workflow_filters
     filters:
         branches:
@@ -1128,22 +1160,26 @@ workflows:
     version: 2
     build_and_test:
         jobs:
-            - check_code_quality
-            - check_repository_consistency
-            - run_examples_torch
-            - run_examples_tensorflow
-            - run_examples_flax
-            - run_tests_custom_tokenizers
-            - run_tests_torch_and_tf
-            - run_tests_torch_and_flax
-            - run_tests_torch
-            - run_tests_tf
-            - run_tests_flax
-            - run_tests_pipelines_torch
-            - run_tests_pipelines_tf
-            - run_tests_onnxruntime
-            - run_tests_hub
-            - run_tests_layoutlmv2_and_v3
+            - fetch_tests
+            - run_tests
+                requires
+                  - fetch_tests
+#            - check_code_quality
+#            - check_repository_consistency
+#            - run_examples_torch
+#            - run_examples_tensorflow
+#            - run_examples_flax
+#            - run_tests_custom_tokenizers
+#            - run_tests_torch_and_tf
+#            - run_tests_torch_and_flax
+#            - run_tests_torch
+#            - run_tests_tf
+#            - run_tests_flax
+#            - run_tests_pipelines_torch
+#            - run_tests_pipelines_tf
+#            - run_tests_onnxruntime
+#            - run_tests_hub
+#            - run_tests_layoutlmv2_and_v3
     nightly:
         triggers:
             - schedule:
