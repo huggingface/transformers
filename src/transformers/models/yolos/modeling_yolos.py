@@ -874,21 +874,22 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
     Loss used in RetinaNet for dense detection: https://arxiv.org/abs/1708.02002.
 
     Args:
-        inputs: A float tensor of arbitrary shape.
-                The predictions for each example.
-        targets: A float tensor with the same shape as inputs. Stores the binary
-                 classification label for each element in inputs (0 for the negative class and 1 for the positive
-                 class).
-        alpha: (optional) Weighting factor in range (0,1) to balance
-                positive vs negative examples. Default = -1 (no weighting).
-        gamma: Exponent of the modulating factor (1 - p_t) to
-               balance easy vs hard examples.
+        inputs (`torch.FloatTensor` of arbitrary shape):
+            The predictions for each example.
+        targets (`torch.FloatTensor` with the same shape as `inputs`)
+            A tensor storing the binary classification label for each element in the `inputs` (0 for the negative class
+            and 1 for the positive class).
+        alpha (`float`, *optional*, defaults to `0.25`):
+            Optional weighting factor in the range (0,1) to balance positive vs. negative examples.
+        gamma (`int`, *optional*, defaults to `2`):
+            Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples.
 
     Returns:
         Loss tensor
     """
     prob = inputs.sigmoid()
     ce_loss = nn.functional.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
+    # add modulating factor
     p_t = prob * targets + (1 - prob) * (1 - targets)
     loss = ce_loss * ((1 - p_t) ** gamma)
 
@@ -966,10 +967,10 @@ class YolosLoss(nn.Module):
         """
         logits = outputs["logits"]
         device = logits.device
-        tgt_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
+        target_lengths = torch.as_tensor([len(v["class_labels"]) for v in targets], device=device)
         # Count the number of predictions that are NOT "no-object" (which is the last class)
         card_pred = (logits.argmax(-1) != logits.shape[-1] - 1).sum(1)
-        card_err = nn.functional.l1_loss(card_pred.float(), tgt_lengths.float())
+        card_err = nn.functional.l1_loss(card_pred.float(), target_lengths.float())
         losses = {"cardinality_error": card_err}
         return losses
 
@@ -1176,19 +1177,19 @@ class YolosHungarianMatcher(nn.Module):
         out_bbox = outputs["pred_boxes"].flatten(0, 1)  # [batch_size * num_queries, 4]
 
         # Also concat the target labels and boxes
-        tgt_ids = torch.cat([v["class_labels"] for v in targets])
-        tgt_bbox = torch.cat([v["boxes"] for v in targets])
+        target_ids = torch.cat([v["class_labels"] for v in targets])
+        target_bbox = torch.cat([v["boxes"] for v in targets])
 
         # Compute the classification cost. Contrary to the loss, we don't use the NLL,
         # but approximate it in 1 - proba[target class].
         # The 1 is a constant that doesn't change the matching, it can be ommitted.
-        class_cost = -out_prob[:, tgt_ids]
+        class_cost = -out_prob[:, target_ids]
 
         # Compute the L1 cost between boxes
-        bbox_cost = torch.cdist(out_bbox, tgt_bbox, p=1)
+        bbox_cost = torch.cdist(out_bbox, target_bbox, p=1)
 
         # Compute the giou cost between boxes
-        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(tgt_bbox))
+        giou_cost = -generalized_box_iou(center_to_corners_format(out_bbox), center_to_corners_format(target_bbox))
 
         # Final cost matrix
         cost_matrix = self.bbox_cost * bbox_cost + self.class_cost * class_cost + self.giou_cost * giou_cost
@@ -1252,15 +1253,17 @@ def generalized_box_iou(boxes1, boxes2):
     """
     # degenerate boxes gives inf / nan results
     # so do an early check
-    assert (boxes1[:, 2:] >= boxes1[:, :2]).all()
-    assert (boxes2[:, 2:] >= boxes2[:, :2]).all()
+    if not (boxes1[:, 2:] >= boxes1[:, :2]).all():
+        raise ValueError(f"boxes1 must be in [x0, y0, x1, y1] (corner) format, but got {boxes1}")
+    if not (boxes2[:, 2:] >= boxes2[:, :2]).all():
+        raise ValueError(f"boxes2 must be in [x0, y0, x1, y1] (corner) format, but got {boxes2}")
     iou, union = box_iou(boxes1, boxes2)
 
-    lt = torch.min(boxes1[:, None, :2], boxes2[:, :2])
-    rb = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
+    top_left = torch.min(boxes1[:, None, :2], boxes2[:, :2])
+    bottom_right = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
 
-    wh = (rb - lt).clamp(min=0)  # [N,M,2]
-    area = wh[:, :, 0] * wh[:, :, 1]
+    width_height = (bottom_right - top_left).clamp(min=0)  # [N,M,2]
+    area = width_height[:, :, 0] * width_height[:, :, 1]
 
     return iou - (area - union) / area
 
@@ -1302,11 +1305,11 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     if tensor_list[0].ndim == 3:
         max_size = _max_by_axis([list(img.shape) for img in tensor_list])
         batch_shape = [len(tensor_list)] + max_size
-        b, c, h, w = batch_shape
+        batch_size, num_channels, height, width = batch_shape
         dtype = tensor_list[0].dtype
         device = tensor_list[0].device
         tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
-        mask = torch.ones((b, h, w), dtype=torch.bool, device=device)
+        mask = torch.ones((batch_size, height, width), dtype=torch.bool, device=device)
         for img, pad_img, m in zip(tensor_list, tensor, mask):
             pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
             m[: img.shape[1], : img.shape[2]] = False

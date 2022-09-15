@@ -982,6 +982,7 @@ jobs:
             - run: python utils/check_config_docstrings.py
             - run: make deps_table_check_updated
             - run: python utils/tests_fetcher.py --sanity_check
+            - run: python utils/update_metadata.py --check-only
 
     run_tests_layoutlmv2_and_v3:
         working_directory: ~/transformers

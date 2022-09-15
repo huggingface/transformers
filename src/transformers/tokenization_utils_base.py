@@ -42,9 +42,11 @@ from .utils import (
     add_end_docstrings,
     cached_file,
     copy_func,
+    download_url,
     extract_commit_hash,
     is_flax_available,
     is_offline_mode,
+    is_remote_url,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
@@ -1680,6 +1682,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 FutureWarning,
             )
             file_id = list(cls.vocab_files_names.keys())[0]
+
             vocab_files[file_id] = pretrained_model_name_or_path
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
@@ -1723,6 +1726,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         for file_id, file_path in vocab_files.items():
             if file_path is None:
                 resolved_vocab_files[file_id] = None
+            elif is_remote_url(file_path):
+                resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
             else:
                 resolved_vocab_files[file_id] = cached_file(
                     pretrained_model_name_or_path,

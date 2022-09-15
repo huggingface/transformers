@@ -250,3 +250,28 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     # tokenizer has no padding token
     def test_padding_different_model_input_name(self):
         pass
+
+    def test_special_tokens_mask_input_pairs_and_bos_token(self):
+        # TODO: change to self.get_tokenizers() when the fast version is implemented
+        tokenizers = [self.get_tokenizer(do_lower_case=False, add_bos_token=True)]
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                sequence_0 = "Encode this."
+                sequence_1 = "This one too please."
+                encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
+                encoded_sequence += tokenizer.encode(sequence_1, add_special_tokens=False)
+                encoded_sequence_dict = tokenizer.encode_plus(
+                    sequence_0,
+                    sequence_1,
+                    add_special_tokens=True,
+                    return_special_tokens_mask=True,
+                )
+                encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
+                special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
+                self.assertEqual(len(special_tokens_mask), len(encoded_sequence_w_special))
+
+                filtered_sequence = [
+                    (x if not special_tokens_mask[i] else None) for i, x in enumerate(encoded_sequence_w_special)
+                ]
+                filtered_sequence = [x for x in filtered_sequence if x is not None]
+                self.assertEqual(encoded_sequence, filtered_sequence)

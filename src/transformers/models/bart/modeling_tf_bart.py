@@ -16,6 +16,7 @@
 
 
 import random
+from contextlib import nullcontext
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -70,13 +71,12 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_to
         shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
     )
 
-    if tf.executing_eagerly():
-        # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=input_ids.dtype))
+    # "Verify that `labels` has only positive values and -100"
+    assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=input_ids.dtype))
 
-        # Make sure the assertion op is called by wrapping the result in an identity no-op
-        with tf.control_dependencies([assert_gte0]):
-            shifted_input_ids = tf.identity(shifted_input_ids)
+    # Make sure the assertion op is called by wrapping the result in an identity no-op
+    with tf.control_dependencies([assert_gte0]):
+        shifted_input_ids = tf.identity(shifted_input_ids)
 
     return shifted_input_ids
 
@@ -228,30 +228,24 @@ class TFBartAttention(tf.keras.layers.Layer):
         src_len = shape_list(key_states)[1]
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
 
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(attn_weights),
-                [bsz * self.num_heads, tgt_len, src_len],
-                message=(
-                    f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                    f" {shape_list(attn_weights)}"
-                ),
-            )
+        tf.debugging.assert_equal(
+            shape_list(attn_weights),
+            [bsz * self.num_heads, tgt_len, src_len],
+            message=(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {shape_list(attn_weights)}"
+            ),
+        )
 
         if attention_mask is not None:
-            # The tf.debugging asserts are not compliant with XLA then they
-            # have to be disabled in other modes than eager.
-            if tf.executing_eagerly():
-                tf.debugging.assert_equal(
-                    shape_list(attention_mask),
-                    [bsz, 1, tgt_len, src_len],
-                    message=(
-                        f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
-                        f" {shape_list(attention_mask)}"
-                    ),
-                )
+            tf.debugging.assert_equal(
+                shape_list(attention_mask),
+                [bsz, 1, tgt_len, src_len],
+                message=(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
+                    f" {shape_list(attention_mask)}"
+                ),
+            )
 
             attention_mask = tf.cast(attention_mask, dtype=attn_weights.dtype)
             attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
@@ -260,17 +254,14 @@ class TFBartAttention(tf.keras.layers.Layer):
         attn_weights = stable_softmax(attn_weights, axis=-1)
 
         if layer_head_mask is not None:
-            # The tf.debugging asserts are not compliant with XLA then they
-            # have to be disabled in other modes than eager.
-            if tf.executing_eagerly():
-                tf.debugging.assert_equal(
-                    shape_list(layer_head_mask),
-                    [self.num_heads],
-                    message=(
-                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
-                        f" {shape_list(layer_head_mask)}"
-                    ),
-                )
+            tf.debugging.assert_equal(
+                shape_list(layer_head_mask),
+                [self.num_heads],
+                message=(
+                    f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                    f" {shape_list(layer_head_mask)}"
+                ),
+            )
 
             attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
                 attn_weights, (bsz, self.num_heads, tgt_len, src_len)
@@ -280,17 +271,14 @@ class TFBartAttention(tf.keras.layers.Layer):
         attn_probs = self.dropout(attn_weights, training=training)
         attn_output = tf.matmul(attn_probs, value_states)
 
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(attn_output),
-                [bsz * self.num_heads, tgt_len, self.head_dim],
-                message=(
-                    f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                    f" {shape_list(attn_output)}"
-                ),
-            )
+        tf.debugging.assert_equal(
+            shape_list(attn_output),
+            [bsz * self.num_heads, tgt_len, self.head_dim],
+            message=(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {shape_list(attn_output)}"
+            ),
+        )
 
         attn_output = tf.transpose(
             tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
@@ -338,14 +326,11 @@ class TFBartEncoderLayer(tf.keras.layers.Layer):
             hidden_states=hidden_states, attention_mask=attention_mask, layer_head_mask=layer_head_mask
         )
 
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(hidden_states),
-                shape_list(residual),
-                message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
-            )
+        tf.debugging.assert_equal(
+            shape_list(hidden_states),
+            shape_list(residual),
+            message=f"Self attn modified the shape of query {shape_list(residual)} to {shape_list(hidden_states)}",
+        )
 
         hidden_states = self.dropout(hidden_states, training=training)
         hidden_states = residual + hidden_states
@@ -514,22 +499,27 @@ BART_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
-
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
     - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -743,7 +733,15 @@ class TFBartEncoder(tf.keras.layers.Layer):
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         if inputs_embeds is None:
-            with tf.name_scope(self.embed_tokens.name + "/"):
+            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
+            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
+            # is used with a name ending in `/`, that name replaces the current name scope.
+            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            if hasattr(self.embed_tokens, "load_weight_prefix"):
+                context_manager = tf.name_scope(self.embed_tokens.load_weight_prefix + "/")
+            else:
+                context_manager = nullcontext()
+            with context_manager:
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         embed_pos = self.embed_positions(input_shape)
@@ -762,9 +760,7 @@ class TFBartEncoder(tf.keras.layers.Layer):
         all_attentions = () if output_attentions else None
 
         # check if head_mask has a correct number of layers specified if desired
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if head_mask is not None and tf.executing_eagerly():
+        if head_mask is not None:
             tf.debugging.assert_equal(
                 shape_list(head_mask)[0],
                 len(self.layers),
@@ -931,7 +927,15 @@ class TFBartDecoder(tf.keras.layers.Layer):
             positions = self.embed_positions(input_shape, position_ids=position_ids)
 
         if inputs_embeds is None:
-            with tf.name_scope(self.embed_tokens.name + "/"):
+            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
+            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
+            # is used with a name ending in `/`, that name replaces the current name scope.
+            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            if hasattr(self.embed_tokens, "load_weight_prefix"):
+                context_manager = tf.name_scope(self.embed_tokens.load_weight_prefix + "/")
+            else:
+                context_manager = nullcontext()
+            with context_manager:
                 inputs_embeds = self.embed_tokens(input_ids) * self.embed_scale
 
         hidden_states = inputs_embeds
@@ -961,10 +965,8 @@ class TFBartDecoder(tf.keras.layers.Layer):
         present_key_values = () if use_cache else None
 
         # check if head_mask and cross_attn_head_mask have a correct number of layers specified if desired
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
         for attn_mask_name, attn_mask in [("head_mask", head_mask), ("cross_attn_head_mask", cross_attn_head_mask)]:
-            if attn_mask is not None and tf.executing_eagerly():
+            if attn_mask is not None:
                 tf.debugging.assert_equal(
                     shape_list(attn_mask)[0],
                     len(self.layers),
@@ -1027,8 +1029,9 @@ class TFBartMainLayer(tf.keras.layers.Layer):
     def __init__(self, config: BartConfig, load_weight_prefix=None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        load_weight_prefix = "model.shared" if load_weight_prefix is None else load_weight_prefix
-        self.shared = tf.keras.layers.Embedding(config.vocab_size, config.d_model, name=load_weight_prefix)
+        self.shared = tf.keras.layers.Embedding(config.vocab_size, config.d_model, name="model.shared")
+        # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
+        self.shared.load_weight_prefix = "model.shared" if load_weight_prefix is None else load_weight_prefix
 
         self.encoder = TFBartEncoder(config, self.shared, name="encoder")
         self.decoder = TFBartDecoder(config, self.shared, name="decoder")

@@ -46,6 +46,8 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "DeformableDetrEncoder",  # Building part of bigger (tested) model.
+    "DeformableDetrDecoder",  # Building part of bigger (tested) model.
     "OPTDecoder",  # Building part of bigger (tested) model.
     "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
     "SegformerDecodeHead",  # Building part of bigger (tested) model.
