@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The Microsoft Research Asia MarkupLM Team Authors and the HuggingFace Inc. team.
+# Copyright 2022 Microsoft Research Asia and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -64,9 +64,10 @@ MarkupLMLayerNorm = torch.nn.LayerNorm
 
 
 class XPathEmbeddings(nn.Module):
-    """Construct the embddings from xpath -- tag and subscript"""
+    """Construct the embeddings from xpath tags and subscripts.
 
-    # we drop tree-id in this version, as its info can be covered by xpath
+    We drop tree-id in this version, as its info can be covered by xpath.
+    """
 
     def __init__(self, config):
         super(XPathEmbeddings, self).__init__()

@@ -31,7 +31,8 @@ logger = logging.get_logger(__name__)
 
 class MarkupLMFeatureExtractor(FeatureExtractionMixin):
     r"""
-    Constructs a MarkupLM feature extractor. This can be used to get nodes and corresponding xpaths from HTML strings.
+    Constructs a MarkupLM feature extractor. This can be used to get a list of nodes and corresponding xpaths from HTML
+    strings.
 
     This feature extractor inherits from [`~feature_extraction_utils.PreTrainedFeatureExtractor`] which contains most
     of the main methods. Users should refer to this superclass for more information regarding those methods.
