@@ -497,11 +497,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
             dim=3,
         )
         second_rand_pad = torch.cat(
-            [
-                rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
-                rand_mask[:, :, 0],
-            ],
-            dim=3,
+            [rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]), rand_mask[:, :, 0],], dim=3,
         )
         second_product = second_product * rsqrt_d
         second_product += (1.0 - torch.minimum(second_seq_pad, second_rand_pad)) * attn_mask_penalty
@@ -631,11 +627,7 @@ class BigBirdPegasusBlockSparseAttention(nn.Module):
             dim=3,
         )
         second_last_rand_pad = torch.cat(
-            [
-                rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
-                rand_mask[:, :, -1],
-            ],
-            dim=3,
+            [rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]), rand_mask[:, :, -1],], dim=3,
         )
         second_last_product = second_last_product * rsqrt_d
         second_last_product += (1.0 - torch.minimum(second_last_seq_pad, second_last_rand_pad)) * attn_mask_penalty
@@ -1216,12 +1208,7 @@ class BigBirdPegasusDecoderAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
+        self, embed_dim: int, num_heads: int, dropout: float = 0.0, is_decoder: bool = False, bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -1234,7 +1221,7 @@ class BigBirdPegasusDecoderAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
+        self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -1570,11 +1557,7 @@ class BigBirdPegasusClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(
-        self,
-        input_dim: int,
-        inner_dim: int,
-        num_classes: int,
-        pooler_dropout: float,
+        self, input_dim: int, inner_dim: int, num_classes: int, pooler_dropout: float,
     ):
         super().__init__()
         self.dense = nn.Linear(input_dim, inner_dim)
@@ -1792,10 +1775,7 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
-        self.embed_positions = BigBirdPegasusLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            embed_dim,
-        )
+        self.embed_positions = BigBirdPegasusLearnedPositionalEmbedding(config.max_position_embeddings, embed_dim,)
         self.layers = nn.ModuleList([BigBirdPegasusEncoderLayer(config, seed=i) for i in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
@@ -2086,8 +2066,7 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
             self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = BigBirdPegasusLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
+            config.max_position_embeddings, config.d_model,
         )
         self.layers = nn.ModuleList([BigBirdPegasusDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
@@ -2646,10 +2625,7 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
         super().__init__(config, **kwargs)
         self.model = BigBirdPegasusModel(config)
         self.classification_head = BigBirdPegasusClassificationHead(
-            config.d_model,
-            config.d_model,
-            config.num_labels,
-            config.classifier_dropout,
+            config.d_model, config.d_model, config.num_labels, config.classifier_dropout,
         )
         self.model._init_weights(self.classification_head.dense)
         self.model._init_weights(self.classification_head.out_proj)
@@ -2865,10 +2841,7 @@ class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
             total_loss = (start_loss + end_loss) / 2
 
         if not return_dict:
-            output = (
-                start_logits,
-                end_logits,
-            ) + outputs[1:]
+            output = (start_logits, end_logits,) + outputs[1:]
             return ((total_loss,) + output) if total_loss is not None else output
 
         return Seq2SeqQuestionAnsweringModelOutput(

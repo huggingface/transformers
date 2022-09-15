@@ -171,8 +171,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: Optional[int] = field(
         default=None,
@@ -496,10 +495,7 @@ def main():
             # https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.to_tf_dataset
 
             tf_train_dataset = model.prepare_tf_dataset(
-                train_dataset,
-                shuffle=True,
-                batch_size=total_train_batch_size,
-                collate_fn=data_collator,
+                train_dataset, shuffle=True, batch_size=total_train_batch_size, collate_fn=data_collator,
             ).with_options(dataset_options)
 
             if training_args.do_eval:

@@ -41,9 +41,7 @@ class MegatronGPT2IntegrationTest(unittest.TestCase):
         model.half()
 
         input_ids = torch.tensor(
-            [[101, 7110, 1005, 1056, 2023, 11333, 17413, 1029, 102]],
-            device=torch_device,
-            dtype=torch.long,
+            [[101, 7110, 1005, 1056, 2023, 11333, 17413, 1029, 102]], device=torch_device, dtype=torch.long,
         )
 
         with torch.no_grad():

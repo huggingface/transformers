@@ -281,12 +281,7 @@ class TransformerBlock(nn.Module):
         """
         # Self-Attention
         sa_output = self.attention(
-            query=x,
-            key=x,
-            value=x,
-            mask=attn_mask,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
+            query=x, key=x, value=x, mask=attn_mask, head_mask=head_mask, output_attentions=output_attentions,
         )
         if output_attentions:
             sa_output, sa_weights = sa_output  # (bs, seq_length, dim), (bs, n_heads, seq_length, seq_length)
@@ -575,8 +570,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """DistilBert Model with a `masked language modeling` head on top.""",
-    DISTILBERT_START_DOCSTRING,
+    """DistilBert Model with a `masked language modeling` head on top.""", DISTILBERT_START_DOCSTRING,
 )
 class DistilBertForMaskedLM(DistilBertPreTrainedModel):
     def __init__(self, config: PretrainedConfig):
@@ -1000,10 +994,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1130,8 +1121,5 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )

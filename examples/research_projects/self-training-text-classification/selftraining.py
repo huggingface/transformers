@@ -61,8 +61,7 @@ class STDataArguments:
         default=None, metadata={"help": "A csv or a json file containing the validation data."}
     )
     task_name: Optional[str] = dataclasses.field(
-        default=None,
-        metadata={"help": "The name of the task to train on."},
+        default=None, metadata={"help": "The name of the task to train on."},
     )
     label_list: Optional[List[str]] = dataclasses.field(
         default=None, metadata={"help": "The list of labels for the task."}
@@ -96,28 +95,24 @@ class STTrainingArguments:
         },
     )
     do_filter_by_confidence: Optional[bool] = dataclasses.field(
-        default=False,
-        metadata={"help": "Whether to filter the pseudo-labeled data based on the confidence score."},
+        default=False, metadata={"help": "Whether to filter the pseudo-labeled data based on the confidence score."},
     )
     do_filter_by_val_performance: Optional[bool] = dataclasses.field(
         default=False,
         metadata={"help": "Whether to filter the pseudo-labeled data based on the validation performance."},
     )
     finetune_on_labeled_data: Optional[bool] = dataclasses.field(
-        default=False,
-        metadata={"help": "Whether to fine-tune on labeled data after pseudo training."},
+        default=False, metadata={"help": "Whether to fine-tune on labeled data after pseudo training."},
     )
     confidence_threshold: Optional[float] = dataclasses.field(
-        default=0.0,
-        metadata={"help": "Confidence threshold for pseudo-labeled data filtering."},
+        default=0.0, metadata={"help": "Confidence threshold for pseudo-labeled data filtering."},
     )
     max_selftrain_iterations: Optional[int] = dataclasses.field(
         default=100,
         metadata={"help": "Number of evaluation calls with no improvement after which training will be stopped."},
     )
     seed: Optional[int] = dataclasses.field(
-        default=None,
-        metadata={"help": "Random seed for initialization."},
+        default=None, metadata={"help": "Random seed for initialization."},
     )
 
 
@@ -167,9 +162,7 @@ def selftrain(model_name_or_path, train_file, infer_file, output_dir, **kwargs):
     accelerator = Accelerator()
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
     )
     logger.info(accelerator.state)
 

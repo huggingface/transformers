@@ -375,12 +375,7 @@ class LxmertModelTester:
             matched_label=matched_label,
         )
         result = model(
-            input_ids,
-            visual_feats,
-            bounding_boxes,
-            token_type_ids=token_type_ids,
-            attention_mask=input_mask,
-            ans=ans,
+            input_ids, visual_feats, bounding_boxes, token_type_ids=token_type_ids, attention_mask=input_mask, ans=ans,
         )
         result = model(
             input_ids,
@@ -422,12 +417,7 @@ class LxmertModelTester:
         end_labels = config.num_labels
 
         result_pretrain = model_pretrain(
-            input_ids,
-            visual_feats,
-            bounding_boxes,
-            token_type_ids=token_type_ids,
-            attention_mask=input_mask,
-            ans=ans,
+            input_ids, visual_feats, bounding_boxes, token_type_ids=token_type_ids, attention_mask=input_mask, ans=ans,
         )
 
         result_qa = model_qa(
@@ -684,12 +674,10 @@ class LxmertModelTest(ModelTesterMixin, unittest.TestCase):
             num_visual_features = self.model_tester.num_visual_features
 
             self.assertListEqual(
-                list(language_hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
+                list(language_hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
             )
             self.assertListEqual(
-                list(vision_hidden_states[0].shape[-2:]),
-                [num_visual_features, self.model_tester.hidden_size],
+                list(vision_hidden_states[0].shape[-2:]), [num_visual_features, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

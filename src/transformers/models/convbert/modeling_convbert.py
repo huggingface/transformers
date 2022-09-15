@@ -468,13 +468,7 @@ class ConvBertAttention(nn.Module):
         encoder_hidden_states: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.FloatTensor]]:
-        self_outputs = self.self(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            output_attentions,
-        )
+        self_outputs = self.self(hidden_states, attention_mask, head_mask, encoder_hidden_states, output_attentions,)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -566,10 +560,7 @@ class ConvBertLayer(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.FloatTensor]]:
         self_attention_outputs = self.attention(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions=output_attentions,
+            hidden_states, attention_mask, head_mask, output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -581,11 +572,7 @@ class ConvBertLayer(nn.Module):
                     " by setting `config.add_cross_attention=True`"
                 )
             cross_attention_outputs = self.crossattention(
-                attention_output,
-                encoder_attention_mask,
-                head_mask,
-                encoder_hidden_states,
-                output_attentions,
+                attention_output, encoder_attention_mask, head_mask, encoder_hidden_states, output_attentions,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:]  # add cross attentions if we output attention weights
@@ -1068,10 +1055,7 @@ class ConvBertForSequenceClassification(ConvBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1162,10 +1146,7 @@ class ConvBertForMultipleChoice(ConvBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1244,10 +1225,7 @@ class ConvBertForTokenClassification(ConvBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 

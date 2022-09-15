@@ -210,8 +210,7 @@ class DataTrainingArguments:
         },
     )
     reduce_labels: Optional[bool] = field(
-        default=False,
-        metadata={"help": "Whether or not to reduce all labels by 1 and replace background by 255."},
+        default=False, metadata={"help": "Whether or not to reduce all labels by 1 and replace background by 255."},
     )
 
     def __post_init__(self):
@@ -347,10 +346,7 @@ def main():
         logits_tensor = torch.from_numpy(logits)
         # scale the logits to the size of the label
         logits_tensor = nn.functional.interpolate(
-            logits_tensor,
-            size=labels.shape[-2:],
-            mode="bilinear",
-            align_corners=False,
+            logits_tensor, size=labels.shape[-2:], mode="bilinear", align_corners=False,
         ).argmax(dim=1)
 
         pred_labels = logits_tensor.detach().cpu().numpy()

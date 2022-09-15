@@ -293,8 +293,7 @@ class TFVisionEncoderDecoderMixin:
             1 + (decoder_config.ngram if hasattr(decoder_config, "ngram") else 0)
         )
         self.assertEqual(
-            cross_attentions[0].shape[-3:-1],
-            (decoder_config.num_attention_heads, cross_attention_input_seq_len),
+            cross_attentions[0].shape[-3:-1], (decoder_config.num_attention_heads, cross_attention_input_seq_len),
         )
 
     def check_encoder_decoder_model_generate(self, pixel_values, config, decoder_config, **kwargs):
@@ -646,10 +645,7 @@ class TFVisionEncoderDecoderMixin:
         )
         decoder_input_ids = ids_tensor([13, 1], model_2.config.decoder.vocab_size)
 
-        outputs = model_2(
-            pixel_values=pixel_values,
-            decoder_input_ids=decoder_input_ids,
-        )
+        outputs = model_2(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids,)
         out_2 = np.array(outputs[0])
         out_2[np.isnan(out_2)] = 0
 
@@ -780,12 +776,7 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         encoder_decoder_orig = TFVisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
         pixel_values = floats_tensor(
-            [
-                13,
-                encoder.config.num_channels,
-                encoder.config.image_size,
-                encoder.config.image_size,
-            ]
+            [13, encoder.config.num_channels, encoder.config.image_size, encoder.config.image_size,]
         )
         decoder_input_ids = ids_tensor([13, 1], decoder.config.vocab_size)
 
@@ -828,12 +819,7 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
         encoder_decoder_pt = VisionEncoderDecoderModel(encoder=encoder_pt, decoder=decoder_pt).to(torch_device).eval()
 
         pixel_values = floats_tensor(
-            [
-                13,
-                encoder_pt.config.num_channels,
-                encoder_pt.config.image_size,
-                encoder_pt.config.image_size,
-            ]
+            [13, encoder_pt.config.num_channels, encoder_pt.config.image_size, encoder_pt.config.image_size,]
         )
         decoder_input_ids = ids_tensor([13, 1], decoder_pt.config.vocab_size)
 
@@ -899,8 +885,7 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             del decoder
 
             enc_dec_model = TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-                pretrained_encoder_dir,
-                pretrained_decoder_dir,
+                pretrained_encoder_dir, pretrained_decoder_dir,
             )
             # check that the from pretrained methods work
             enc_dec_model.save_pretrained(tmp_dirname)

@@ -609,7 +609,7 @@ class Swin2BartModelTest(EncoderDecoderMixin, unittest.TestCase):
         self.assertEqual(len(encoder_attentions), config.num_hidden_layers)
 
         # in Swin, the seq_len equals:
-        seq_len = encoder_model.config.window_size**2
+        seq_len = encoder_model.config.window_size ** 2
         self.assertEqual(encoder_attentions[0].shape[-3:], (config.num_attention_heads[0], seq_len, seq_len))
 
         decoder_attentions = outputs_encoder_decoder["decoder_attentions"]

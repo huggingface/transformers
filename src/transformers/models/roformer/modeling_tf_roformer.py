@@ -94,10 +94,7 @@ class TFRoFormerSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
 
         weight = self._init_weight(self.num_positions, self.embedding_dim)
 
-        self.weight = self.add_weight(
-            name="embeddings",
-            shape=[self.num_positions, self.embedding_dim],
-        )
+        self.weight = self.add_weight(name="embeddings", shape=[self.num_positions, self.embedding_dim],)
         weight = tf.cast(weight, dtype=self.weight.dtype)
 
         self.weight.assign(weight)
@@ -441,9 +438,7 @@ class TFRoFormerEncoder(tf.keras.layers.Layer):
     def __init__(self, config: RoFormerConfig, **kwargs):
         super().__init__(**kwargs)
         self.embed_positions = TFRoFormerSinusoidalPositionalEmbedding(
-            config.max_position_embeddings,
-            config.hidden_size // config.num_attention_heads,
-            name="embed_positions",
+            config.max_position_embeddings, config.hidden_size // config.num_attention_heads, name="embed_positions",
         )
         self.layer = [TFRoFormerLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
 
@@ -497,9 +492,7 @@ class TFRoFormerPredictionHeadTransform(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            units=config.embedding_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+            units=config.embedding_size, kernel_initializer=get_initializer(config.initializer_range), name="dense",
         )
 
         if isinstance(config.hidden_act, str):
@@ -631,10 +624,7 @@ class TFRoFormerMainLayer(tf.keras.layers.Layer):
             token_type_ids = tf.fill(dims=input_shape, value=0)
 
         embedding_output = self.embeddings(
-            input_ids=input_ids,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds,
-            training=training,
+            input_ids=input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds, training=training,
         )
         if hasattr(self, "embeddings_project"):
             embedding_output = self.embeddings_project(embedding_output, training=training)
@@ -906,10 +896,7 @@ class TFRoFormerForMaskedLM(TFRoFormerPreTrainedModel, TFMaskedLanguageModelingL
             return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
-            loss=loss,
-            logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
@@ -986,10 +973,7 @@ class TFRoFormerForCausalLM(TFRoFormerPreTrainedModel, TFCausalLanguageModelingL
             return ((loss,) + output) if loss is not None else output
 
         return TFCausalLMOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:
@@ -1091,10 +1075,7 @@ class TFRoFormerForSequenceClassification(TFRoFormerPreTrainedModel, TFSequenceC
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
@@ -1201,10 +1182,7 @@ class TFRoFormerForMultipleChoice(TFRoFormerPreTrainedModel, TFMultipleChoiceLos
             return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     @tf.function(
@@ -1293,10 +1271,7 @@ class TFRoFormerForTokenClassification(TFRoFormerPreTrainedModel, TFTokenClassif
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:

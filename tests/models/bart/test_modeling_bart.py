@@ -124,9 +124,7 @@ class BartModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
-            3,
-        )
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3,)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -289,11 +287,7 @@ class BartHeadTests(unittest.TestCase):
         sequence_labels = ids_tensor([batch_size], 2).to(torch_device)
         model = BartForQuestionAnswering(config)
         model.to(torch_device)
-        outputs = model(
-            input_ids=input_ids,
-            start_positions=sequence_labels,
-            end_positions=sequence_labels,
-        )
+        outputs = model(input_ids=input_ids, start_positions=sequence_labels, end_positions=sequence_labels,)
 
         self.assertEqual(outputs["start_logits"].shape, input_ids.shape)
         self.assertEqual(outputs["end_logits"].shape, input_ids.shape)
@@ -924,11 +918,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             " state."
         )
         dct = tok.batch_encode_plus(
-            [PGE_ARTICLE],
-            max_length=1024,
-            padding="max_length",
-            truncation=True,
-            return_tensors="pt",
+            [PGE_ARTICLE], max_length=1024, padding="max_length", truncation=True, return_tensors="pt",
         ).to(torch_device)
 
         hypotheses_batch = model.generate(
@@ -943,10 +933,7 @@ class BartModelIntegrationTests(unittest.TestCase):
             decoder_start_token_id=model.config.eos_token_id,
         )
 
-        decoded = tok.batch_decode(
-            hypotheses_batch,
-            skip_special_tokens=True,
-        )
+        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True,)
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
     def test_xsum_config_generation_params(self):
@@ -1285,12 +1272,7 @@ class BartStandaloneDecoderModelTester:
         )
 
     def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        ) = self.prepare_config_and_inputs()
+        (config, input_ids, attention_mask, lm_labels,) = self.prepare_config_and_inputs()
 
         encoder_hidden_states = floats_tensor([self.batch_size, self.decoder_seq_length, self.hidden_size])
         encoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
@@ -1305,11 +1287,7 @@ class BartStandaloneDecoderModelTester:
         )
 
     def create_and_check_decoder_model_past(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        lm_labels,
+        self, config, input_ids, attention_mask, lm_labels,
     ):
         config.use_cache = True
         model = BartDecoder(config=config).to(torch_device).eval()
@@ -1341,11 +1319,7 @@ class BartStandaloneDecoderModelTester:
         assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
 
     def create_and_check_decoder_model_attention_mask_past(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        lm_labels,
+        self, config, input_ids, attention_mask, lm_labels,
     ):
         model = BartDecoder(config=config).to(torch_device).eval()
 
@@ -1369,8 +1343,7 @@ class BartStandaloneDecoderModelTester:
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
-            dim=1,
+            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)], dim=1,
         )
 
         # get two different outputs
@@ -1389,12 +1362,7 @@ class BartStandaloneDecoderModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        ) = config_and_inputs
+        (config, input_ids, attention_mask, lm_labels,) = config_and_inputs
 
         inputs_dict = {
             "input_ids": input_ids,
@@ -1411,9 +1379,7 @@ class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, un
     test_pruning = False
     is_encoder_decoder = False
 
-    def setUp(
-        self,
-    ):
+    def setUp(self,):
         self.model_tester = BartStandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=BartConfig)
 

@@ -184,7 +184,7 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
 
     omega = np.arange(embed_dim // 2, dtype=np.float)
     omega /= embed_dim / 2.0
-    omega = 1.0 / 10000**omega  # (D/2,)
+    omega = 1.0 / 10000 ** omega  # (D/2,)
 
     pos = pos.reshape(-1)  # (M,)
     out = np.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
@@ -218,7 +218,7 @@ class ViTMAEEmbeddings(nn.Module):
     def initialize_weights(self):
         # initialize (and freeze) position embeddings by sin-cos embedding
         pos_embed = get_2d_sincos_pos_embed(
-            self.position_embeddings.shape[-1], int(self.patch_embeddings.num_patches**0.5), add_cls_token=True
+            self.position_embeddings.shape[-1], int(self.patch_embeddings.num_patches ** 0.5), add_cls_token=True
         )
         self.position_embeddings.data.copy_(torch.from_numpy(pos_embed).float().unsqueeze(0))
 
@@ -421,10 +421,7 @@ class ViTMAEAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
@@ -482,10 +479,7 @@ class ViTMAELayer(nn.Module):
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in ViTMAE, layernorm is applied before self-attention
@@ -544,9 +538,7 @@ class ViTMAEEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    layer_head_mask,
+                    create_custom_forward(layer_module), hidden_states, layer_head_mask,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
@@ -562,9 +554,7 @@ class ViTMAEEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
         )
 
 
@@ -750,7 +740,7 @@ class ViTMAEDecoder(nn.Module):
 
         self.decoder_norm = nn.LayerNorm(config.decoder_hidden_size, eps=config.layer_norm_eps)
         self.decoder_pred = nn.Linear(
-            config.decoder_hidden_size, config.patch_size**2 * config.num_channels, bias=True
+            config.decoder_hidden_size, config.patch_size ** 2 * config.num_channels, bias=True
         )  # encoder to decoder
         self.gradient_checkpointing = False
         self.config = config
@@ -759,7 +749,7 @@ class ViTMAEDecoder(nn.Module):
     def initialize_weights(self, num_patches):
         # initialize (and freeze) position embeddings by sin-cos embedding
         decoder_pos_embed = get_2d_sincos_pos_embed(
-            self.decoder_pos_embed.shape[-1], int(num_patches**0.5), add_cls_token=True
+            self.decoder_pos_embed.shape[-1], int(num_patches ** 0.5), add_cls_token=True
         )
         self.decoder_pos_embed.data.copy_(torch.from_numpy(decoder_pos_embed).float().unsqueeze(0))
 
@@ -767,12 +757,7 @@ class ViTMAEDecoder(nn.Module):
         torch.nn.init.normal_(self.mask_token, std=self.config.initializer_range)
 
     def forward(
-        self,
-        hidden_states,
-        ids_restore,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        self, hidden_states, ids_restore, output_attentions=False, output_hidden_states=False, return_dict=True,
     ):
         # embed tokens
         x = self.decoder_embed(hidden_states)
@@ -802,9 +787,7 @@ class ViTMAEDecoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    None,
+                    create_custom_forward(layer_module), hidden_states, None,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions)
@@ -827,16 +810,11 @@ class ViTMAEDecoder(nn.Module):
 
         if not return_dict:
             return tuple(v for v in [logits, all_hidden_states, all_self_attentions] if v is not None)
-        return ViTMAEDecoderOutput(
-            logits=logits,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return ViTMAEDecoderOutput(logits=logits, hidden_states=all_hidden_states, attentions=all_self_attentions,)
 
 
 @add_start_docstrings(
-    "The ViTMAE Model transformer with the decoder on top for self-supervised pre-training.",
-    VIT_MAE_START_DOCSTRING,
+    "The ViTMAE Model transformer with the decoder on top for self-supervised pre-training.", VIT_MAE_START_DOCSTRING,
 )
 class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
     def __init__(self, config):
@@ -887,7 +865,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         )
         patchified_pixel_values = torch.einsum("nchpwq->nhwpqc", patchified_pixel_values)
         patchified_pixel_values = patchified_pixel_values.reshape(
-            batch_size, num_patches_one_direction * num_patches_one_direction, patch_size**2 * num_channels
+            batch_size, num_patches_one_direction * num_patches_one_direction, patch_size ** 2 * num_channels
         )
         return patchified_pixel_values
 
@@ -904,25 +882,17 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         patch_size, num_channels = self.config.patch_size, self.config.num_channels
         num_patches_one_direction = int(patchified_pixel_values.shape[1] ** 0.5)
         # sanity check
-        if num_patches_one_direction**2 != patchified_pixel_values.shape[1]:
+        if num_patches_one_direction ** 2 != patchified_pixel_values.shape[1]:
             raise ValueError("Make sure that the number of patches can be squared")
 
         # unpatchify
         batch_size = patchified_pixel_values.shape[0]
         patchified_pixel_values = patchified_pixel_values.reshape(
-            batch_size,
-            num_patches_one_direction,
-            num_patches_one_direction,
-            patch_size,
-            patch_size,
-            num_channels,
+            batch_size, num_patches_one_direction, num_patches_one_direction, patch_size, patch_size, num_channels,
         )
         patchified_pixel_values = torch.einsum("nhwpqc->nchpwq", patchified_pixel_values)
         pixel_values = patchified_pixel_values.reshape(
-            batch_size,
-            num_channels,
-            num_patches_one_direction * patch_size,
-            num_patches_one_direction * patch_size,
+            batch_size, num_channels, num_patches_one_direction * patch_size, num_patches_one_direction * patch_size,
         )
         return pixel_values
 

@@ -825,8 +825,7 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             outputs = model(
-                inputs_dict.input_values.to(torch_device),
-                attention_mask=inputs_dict.attention_mask.to(torch_device),
+                inputs_dict.input_values.to(torch_device), attention_mask=inputs_dict.attention_mask.to(torch_device),
             )
 
         # fmt: off
@@ -851,8 +850,7 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             outputs = model(
-                inputs_dict.input_values.to(torch_device),
-                attention_mask=inputs_dict.attention_mask.to(torch_device),
+                inputs_dict.input_values.to(torch_device), attention_mask=inputs_dict.attention_mask.to(torch_device),
             )
 
         # fmt: off

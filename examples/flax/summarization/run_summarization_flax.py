@@ -225,8 +225,7 @@ class DataTrainingArguments:
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
     test_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "An optional input predict data file to do prediction on (a text file)."},
+        default=None, metadata={"help": "An optional input predict data file to do prediction on (a text file)."},
     )
     max_source_length: Optional[int] = field(
         default=1024,
@@ -285,8 +284,7 @@ class DataTrainingArguments:
         },
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     source_prefix: Optional[str] = field(
         default=None, metadata={"help": "A prefix to add before every source text (useful for T5 models)."}
@@ -426,9 +424,7 @@ def main():
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
     )
     # Setup logging, we only want one process per machine to log things on the screen.
     logger.setLevel(logging.INFO if jax.process_index() == 0 else logging.ERROR)
@@ -536,9 +532,7 @@ def main():
         )
     else:
         model = FlaxAutoModelForSeq2SeqLM.from_config(
-            config,
-            seed=training_args.seed,
-            dtype=getattr(jnp, model_args.dtype),
+            config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype),
         )
 
     if training_args.gradient_checkpointing:

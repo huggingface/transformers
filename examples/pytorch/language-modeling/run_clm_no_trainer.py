@@ -70,10 +70,7 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a causal language modeling task")
     parser.add_argument(
-        "--dataset_name",
-        type=str,
-        default=None,
-        help="The name of the dataset to use (via the datasets library).",
+        "--dataset_name", type=str, default=None, help="The name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
         "--dataset_config_name",
@@ -99,10 +96,7 @@ def parse_args():
         required=False,
     )
     parser.add_argument(
-        "--config_name",
-        type=str,
-        default=None,
-        help="Pretrained config name or path if not the same as model_name",
+        "--config_name", type=str, default=None, help="Pretrained config name or path if not the same as model_name",
     )
     parser.add_argument(
         "--tokenizer_name",
@@ -206,9 +200,7 @@ def parse_args():
         help="If the training should continue from a checkpoint folder.",
     )
     parser.add_argument(
-        "--with_tracking",
-        action="store_true",
-        help="Whether to enable experiment trackers for logging.",
+        "--with_tracking", action="store_true", help="Whether to enable experiment trackers for logging.",
     )
     parser.add_argument(
         "--report_to",
@@ -259,9 +251,7 @@ def main():
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
     )
     logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
@@ -307,14 +297,10 @@ def main():
         raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
-                args.dataset_name,
-                args.dataset_config_name,
-                split=f"train[:{args.validation_split_percentage}%]",
+                args.dataset_name, args.dataset_config_name, split=f"train[:{args.validation_split_percentage}%]",
             )
             raw_datasets["train"] = load_dataset(
-                args.dataset_name,
-                args.dataset_config_name,
-                split=f"train[{args.validation_split_percentage}%:]",
+                args.dataset_name, args.dataset_config_name, split=f"train[{args.validation_split_percentage}%:]",
             )
     else:
         data_files = {}
@@ -331,16 +317,10 @@ def main():
         # If no validation data is there, validation_split_percentage will be used to divide the dataset.
         if "validation" not in raw_datasets.keys():
             raw_datasets["validation"] = load_dataset(
-                extension,
-                data_files=data_files,
-                split=f"train[:{args.validation_split_percentage}%]",
-                **dataset_args,
+                extension, data_files=data_files, split=f"train[:{args.validation_split_percentage}%]", **dataset_args,
             )
             raw_datasets["train"] = load_dataset(
-                extension,
-                data_files=data_files,
-                split=f"train[{args.validation_split_percentage}%:]",
-                **dataset_args,
+                extension, data_files=data_files, split=f"train[{args.validation_split_percentage}%:]", **dataset_args,
             )
 
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
@@ -370,9 +350,7 @@ def main():
 
     if args.model_name_or_path:
         model = AutoModelForCausalLM.from_pretrained(
-            args.model_name_or_path,
-            from_tf=bool(".ckpt" in args.model_name_or_path),
-            config=config,
+            args.model_name_or_path, from_tf=bool(".ckpt" in args.model_name_or_path), config=config,
         )
     else:
         logger.info("Training new model from scratch")
@@ -470,10 +448,7 @@ def main():
             "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
             "weight_decay": args.weight_decay,
         },
-        {
-            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
-            "weight_decay": 0.0,
-        },
+        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0,},
     ]
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 

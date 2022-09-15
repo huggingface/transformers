@@ -261,8 +261,7 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_len, seq_len],
+                list(self_attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, seq_len, seq_len],
             )
 
     def test_hidden_states_output(self):
@@ -288,8 +287,7 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
             seq_length = num_patches + 1
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -770,13 +768,16 @@ class FlavaModelTester:
 
         config = self.get_config()
 
-        return config, {
-            "input_ids": input_ids,
-            "token_type_ids": token_type_ids,
-            "attention_mask": attention_mask,
-            "pixel_values": pixel_values,
-            "bool_masked_pos": bool_masked_pos,
-        }
+        return (
+            config,
+            {
+                "input_ids": input_ids,
+                "token_type_ids": token_type_ids,
+                "attention_mask": attention_mask,
+                "pixel_values": pixel_values,
+                "bool_masked_pos": bool_masked_pos,
+            },
+        )
 
     def get_config(self):
         return FlavaConfig.from_configs(
@@ -1007,18 +1008,21 @@ class FlavaForPreTrainingTester(FlavaModelTester):
         mim_labels[bool_masked_pos.ne(True)] = config.ce_ignore_index
         itm_labels = torch.ones(mlm_labels.size(0), device=bool_masked_pos.device).long()
 
-        return config, {
-            "input_ids": input_ids,
-            "input_ids_masked": input_ids_masked,
-            "token_type_ids": token_type_ids,
-            "attention_mask": attention_mask,
-            "pixel_values": pixel_values,
-            "bool_masked_pos": bool_masked_pos,
-            "mlm_labels": mlm_labels,
-            "mim_labels": mim_labels,
-            "itm_labels": itm_labels,
-            "return_loss": True,
-        }
+        return (
+            config,
+            {
+                "input_ids": input_ids,
+                "input_ids_masked": input_ids_masked,
+                "token_type_ids": token_type_ids,
+                "attention_mask": attention_mask,
+                "pixel_values": pixel_values,
+                "bool_masked_pos": bool_masked_pos,
+                "mlm_labels": mlm_labels,
+                "mim_labels": mim_labels,
+                "itm_labels": itm_labels,
+                "return_loss": True,
+            },
+        )
 
     def _test_model(self, config, inputs, test_image=False, test_text=False):
         model = self.model_class(config).to(torch_device).eval()
@@ -1046,8 +1050,7 @@ class FlavaForPreTrainingTester(FlavaModelTester):
             )
             if not test_text:
                 self.parent.assertEqual(
-                    result.loss_info.mim.dim(),
-                    0,
+                    result.loss_info.mim.dim(), 0,
                 )
                 self.parent.assertEqual(
                     result.mim_logits.shape,
@@ -1088,8 +1091,7 @@ class FlavaForPreTrainingTester(FlavaModelTester):
                 ),
             )
             self.parent.assertEqual(
-                result.itm_logits.shape,
-                (self.text_model_tester.batch_size, 2),
+                result.itm_logits.shape, (self.text_model_tester.batch_size, 2),
             )
             self.parent.assertEqual(
                 result.mmm_text_logits.shape,

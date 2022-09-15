@@ -136,14 +136,17 @@ class VisualBertModelTester:
             visual_token_type_ids = ids_tensor([self.batch_size, self.visual_seq_length], self.type_vocab_size)
 
         config = self.get_config()
-        return config, {
-            "input_ids": input_ids,
-            "token_type_ids": token_type_ids,
-            "attention_mask": attention_mask,
-            "visual_embeds": visual_embeds,
-            "visual_token_type_ids": visual_token_type_ids,
-            "visual_attention_mask": visual_attention_mask,
-        }
+        return (
+            config,
+            {
+                "input_ids": input_ids,
+                "token_type_ids": token_type_ids,
+                "attention_mask": attention_mask,
+                "visual_embeds": visual_embeds,
+                "visual_token_type_ids": visual_token_type_ids,
+                "visual_attention_mask": visual_attention_mask,
+            },
+        )
 
     def prepare_config_and_inputs_for_pretraining(self):
         masked_lm_labels = None
@@ -151,10 +154,7 @@ class VisualBertModelTester:
 
         if self.use_labels:
             masked_lm_labels = ids_tensor([self.batch_size, self.seq_length + self.visual_seq_length], self.vocab_size)
-            sentence_image_labels = ids_tensor(
-                [self.batch_size],
-                self.type_sequence_label_size,
-            )
+            sentence_image_labels = ids_tensor([self.batch_size], self.type_sequence_label_size,)
 
         config, input_dict = self.prepare_config_and_inputs_for_common()
 
@@ -196,15 +196,18 @@ class VisualBertModelTester:
             labels = ids_tensor([self.batch_size], self.num_choices)
 
         config = self.get_config()
-        return config, {
-            "input_ids": input_ids,
-            "token_type_ids": token_type_ids,
-            "attention_mask": attention_mask,
-            "visual_embeds": visual_embeds,
-            "visual_token_type_ids": visual_token_type_ids,
-            "visual_attention_mask": visual_attention_mask,
-            "labels": labels,
-        }
+        return (
+            config,
+            {
+                "input_ids": input_ids,
+                "token_type_ids": token_type_ids,
+                "attention_mask": attention_mask,
+                "visual_embeds": visual_embeds,
+                "visual_token_type_ids": visual_token_type_ids,
+                "visual_attention_mask": visual_attention_mask,
+                "labels": labels,
+            },
+        )
 
     def prepare_config_and_inputs_for_vqa(self):
         vqa_labels = None
@@ -337,9 +340,7 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
             total_length = self.model_tester.seq_length + self.model_tester.visual_seq_length
             batch_size = self.model_tester.batch_size
             inputs_dict["region_to_phrase_position"] = torch.zeros(
-                (batch_size, total_length),
-                dtype=torch.long,
-                device=torch_device,
+                (batch_size, total_length), dtype=torch.long, device=torch_device,
             )
 
         if return_labels:
@@ -350,11 +351,7 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
             elif model_class == VisualBertForPreTraining:
                 total_length = self.model_tester.seq_length + self.model_tester.visual_seq_length
                 batch_size = self.model_tester.batch_size
-                inputs_dict["labels"] = torch.zeros(
-                    (batch_size, total_length),
-                    dtype=torch.long,
-                    device=torch_device,
-                )
+                inputs_dict["labels"] = torch.zeros((batch_size, total_length), dtype=torch.long, device=torch_device,)
                 inputs_dict["sentence_image_labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
@@ -365,11 +362,7 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
                 total_length = self.model_tester.seq_length + self.model_tester.visual_seq_length
 
                 inputs_dict["labels"] = torch.ones(
-                    (
-                        batch_size,
-                        total_length,
-                        self.model_tester.visual_seq_length,
-                    ),
+                    (batch_size, total_length, self.model_tester.visual_seq_length,),
                     dtype=torch.float,
                     device=torch_device,
                 )
@@ -498,8 +491,7 @@ class VisualBertModelTest(ModelTesterMixin, unittest.TestCase):
                 seq_length = self.model_tester.seq_length + self.model_tester.visual_seq_length
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

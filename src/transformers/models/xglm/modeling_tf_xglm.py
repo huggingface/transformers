@@ -172,7 +172,7 @@ class TFXGLMAttention(tf.keras.layers.Layer):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
+        self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
         self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
@@ -456,10 +456,7 @@ class TFXGLMMainLayer(tf.keras.layers.Layer):
         self.embed_tokens = value
 
     def _prepare_decoder_attention_mask(
-        self,
-        attention_mask: Optional[tf.Tensor],
-        input_shape: tf.TensorShape,
-        past_key_values_length: int,
+        self, attention_mask: Optional[tf.Tensor], input_shape: tf.TensorShape, past_key_values_length: int,
     ) -> tf.Tensor:
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -862,10 +859,7 @@ class TFXGLMForCausalLM(TFXGLMPreTrainedModel, TFCausalLanguageModelingLoss):
 
         self.model = TFXGLMMainLayer(config, embed_tokens=embed_tokens, name="model")
         self.lm_head = tf.keras.layers.Dense(
-            config.vocab_size,
-            use_bias=False,
-            kernel_initializer=get_initializer(config.init_std),
-            name="lm_head",
+            config.vocab_size, use_bias=False, kernel_initializer=get_initializer(config.init_std), name="lm_head",
         )
 
         # TODO (Joao): investigate why XGLM has numerical issues in XLA generate

@@ -82,7 +82,7 @@ class TFLayoutLMv3PatchEmbeddings(tf.keras.layers.Layer):
             name="proj",
         )
         self.hidden_size = config.hidden_size
-        self.num_patches = (config.input_size**2) // (patch_sizes[0] * patch_sizes[1])
+        self.num_patches = (config.input_size ** 2) // (patch_sizes[0] * patch_sizes[1])
 
     def call(self, pixel_values: tf.Tensor) -> tf.Tensor:
         # When running on CPU, `tf.keras.layers.Conv2D` doesn't support `NCHW` format.
@@ -271,19 +271,13 @@ class TFLayoutLMv3SelfAttention(tf.keras.layers.Layer):
         self.attention_score_normaliser = math.sqrt(self.attention_head_size)
 
         self.query = tf.keras.layers.Dense(
-            self.all_head_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="query",
+            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query",
         )
         self.key = tf.keras.layers.Dense(
-            self.all_head_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="key",
+            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key",
         )
         self.value = tf.keras.layers.Dense(
-            self.all_head_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="value",
+            self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value",
         )
 
         self.dropout = tf.keras.layers.Dropout(config.attention_probs_dropout_prob)
@@ -404,13 +398,7 @@ class TFLayoutLMv3Attention(tf.keras.layers.Layer):
         training: bool = False,
     ) -> Union[Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor]]:
         self_outputs = self.self_attention(
-            hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions,
-            rel_pos,
-            rel_2d_pos,
-            training=training,
+            hidden_states, attention_mask, head_mask, output_attentions, rel_pos, rel_2d_pos, training=training,
         )
         attention_output = self.self_output(self_outputs[0], hidden_states, training=training)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -552,11 +540,7 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
         )
 
     def _cal_pos_emb(
-        self,
-        dense_layer: tf.keras.layers.Dense,
-        position_ids: tf.Tensor,
-        num_buckets: int,
-        max_distance: int,
+        self, dense_layer: tf.keras.layers.Dense, position_ids: tf.Tensor, num_buckets: int, max_distance: int,
     ):
         rel_pos_matrix = tf.expand_dims(position_ids, axis=-2) - tf.expand_dims(position_ids, axis=-1)
         rel_pos = self.relative_position_bucket(rel_pos_matrix, num_buckets, max_distance)
@@ -574,16 +558,10 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
         position_coord_x = bbox[:, :, 0]  # left
         position_coord_y = bbox[:, :, 3]  # bottom
         rel_pos_x = self._cal_pos_emb(
-            self.rel_pos_x_bias,
-            position_coord_x,
-            self.rel_2d_pos_bins,
-            self.max_rel_2d_pos,
+            self.rel_pos_x_bias, position_coord_x, self.rel_2d_pos_bins, self.max_rel_2d_pos,
         )
         rel_pos_y = self._cal_pos_emb(
-            self.rel_pos_y_bias,
-            position_coord_y,
-            self.rel_2d_pos_bins,
-            self.max_rel_2d_pos,
+            self.rel_pos_y_bias, position_coord_y, self.rel_2d_pos_bins, self.max_rel_2d_pos,
         )
         rel_2d_pos = rel_pos_x + rel_pos_y
         return rel_2d_pos
@@ -600,10 +578,7 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
         position_ids: Optional[tf.Tensor] = None,
         training: bool = False,
     ) -> Union[
-        TFBaseModelOutput,
-        Tuple[tf.Tensor],
-        Tuple[tf.Tensor, tf.Tensor],
-        Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+        TFBaseModelOutput, Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor], Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
     ]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -636,9 +611,7 @@ class TFLayoutLMv3Encoder(tf.keras.layers.Layer):
 
         if return_dict:
             return TFBaseModelOutput(
-                last_hidden_state=hidden_states,
-                hidden_states=all_hidden_states,
-                attentions=all_self_attentions,
+                last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
             )
         else:
             return tuple(
@@ -720,8 +693,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         visual_bbox_y = tf.tile(visual_bbox_y, [1, height])  # (height + 1, height)
 
         visual_bbox = tf.stack(
-            [visual_bbox_x[:, :-1], visual_bbox_y[:-1], visual_bbox_x[:, 1:], visual_bbox_y[1:]],
-            axis=-1,
+            [visual_bbox_x[:, :-1], visual_bbox_y[:-1], visual_bbox_x[:, 1:], visual_bbox_y[1:]], axis=-1,
         )
         visual_bbox = tf.reshape(visual_bbox, [-1, 4])
 
@@ -817,10 +789,7 @@ class TFLayoutLMv3MainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[
-        TFBaseModelOutput,
-        Tuple[tf.Tensor],
-        Tuple[tf.Tensor, tf.Tensor],
-        Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+        TFBaseModelOutput, Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor], Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
     ]:
         # This method can be called with a variety of modalities:
         # 1. text + layout
@@ -1156,10 +1125,7 @@ class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[
-        TFBaseModelOutput,
-        Tuple[tf.Tensor],
-        Tuple[tf.Tensor, tf.Tensor],
-        Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
+        TFBaseModelOutput, Tuple[tf.Tensor], Tuple[tf.Tensor, tf.Tensor], Tuple[tf.Tensor, tf.Tensor, tf.Tensor],
     ]:
         r"""
         Returns:
@@ -1206,11 +1172,7 @@ class TFLayoutLMv3Model(TFLayoutLMv3PreTrainedModel):
         hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-        return TFBaseModelOutput(
-            last_hidden_state=output.last_hidden_state,
-            hidden_states=hs,
-            attentions=attns,
-        )
+        return TFBaseModelOutput(last_hidden_state=output.last_hidden_state, hidden_states=hs, attentions=attns,)
 
 
 class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
@@ -1229,14 +1191,9 @@ class TFLayoutLMv3ClassificationHead(tf.keras.layers.Layer):
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
-        self.dropout = tf.keras.layers.Dropout(
-            classifier_dropout,
-            name="dropout",
-        )
+        self.dropout = tf.keras.layers.Dropout(classifier_dropout, name="dropout",)
         self.out_proj = tf.keras.layers.Dense(
-            config.num_labels,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="out_proj",
+            config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="out_proj",
         )
 
     def call(self, inputs: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -1343,10 +1300,7 @@ class TFLayoutLMv3ForSequenceClassification(TFLayoutLMv3PreTrainedModel, TFSeque
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
@@ -1378,9 +1332,7 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
         self.dropout = tf.keras.layers.Dropout(config.hidden_dropout_prob, name="dropout")
         if config.num_labels < 10:
             self.classifier = tf.keras.layers.Dense(
-                config.num_labels,
-                kernel_initializer=get_initializer(config.initializer_range),
-                name="classifier",
+                config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier",
             )
         else:
             self.classifier = TFLayoutLMv3ClassificationHead(config, name="classifier")
@@ -1473,10 +1425,7 @@ class TFLayoutLMv3ForTokenClassification(TFLayoutLMv3PreTrainedModel, TFTokenCla
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output

@@ -48,10 +48,7 @@ class SummarizationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMe
         self.assertEqual(outputs, [{"summary_text": ANY(str)}])
 
         outputs = summarizer(
-            "(CNN)The Palestinian Authority officially became ",
-            num_beams=2,
-            min_length=2,
-            max_length=5,
+            "(CNN)The Palestinian Authority officially became ", num_beams=2, min_length=2, max_length=5,
         )
         self.assertEqual(outputs, [{"summary_text": ANY(str)}])
 

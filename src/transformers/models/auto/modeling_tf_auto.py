@@ -171,10 +171,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 )
 
 TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
-    [
-        ("deit", "TFDeiTForMaskedImageModeling"),
-        ("swin", "TFSwinForMaskedImageModeling"),
-    ]
+    [("deit", "TFDeiTForMaskedImageModeling"), ("swin", "TFSwinForMaskedImageModeling"),]
 )
 
 TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
@@ -201,11 +198,7 @@ TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
-    [
-        ("vision-encoder-decoder", "TFVisionEncoderDecoderModel"),
-    ]
-)
+TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict([("vision-encoder-decoder", "TFVisionEncoderDecoderModel"),])
 
 TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
@@ -250,9 +243,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 )
 
 TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
-    [
-        ("speech_to_text", "TFSpeech2TextForConditionalGeneration"),
-    ]
+    [("speech_to_text", "TFSpeech2TextForConditionalGeneration"),]
 )
 
 TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
@@ -315,11 +306,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
-    [
-        ("layoutlm", "TFLayoutLMForQuestionAnswering"),
-    ]
-)
+TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict([("layoutlm", "TFLayoutLMForQuestionAnswering"),])
 
 
 TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
@@ -380,10 +367,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
 )
 
 TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
-    [
-        ("bert", "TFBertForNextSentencePrediction"),
-        ("mobilebert", "TFMobileBertForNextSentencePrediction"),
-    ]
+    [("bert", "TFBertForNextSentencePrediction"), ("mobilebert", "TFMobileBertForNextSentencePrediction"),]
 )
 
 TF_MODEL_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TF_MODEL_MAPPING_NAMES)

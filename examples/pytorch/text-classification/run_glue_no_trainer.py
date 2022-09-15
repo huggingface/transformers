@@ -169,9 +169,7 @@ def parse_args():
         help="If the training should continue from a checkpoint folder.",
     )
     parser.add_argument(
-        "--with_tracking",
-        action="store_true",
-        help="Whether to enable experiment trackers for logging.",
+        "--with_tracking", action="store_true", help="Whether to enable experiment trackers for logging.",
     )
     parser.add_argument(
         "--report_to",
@@ -221,9 +219,7 @@ def main():
     )
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
     )
     logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
@@ -417,10 +413,7 @@ def main():
             "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
             "weight_decay": args.weight_decay,
         },
-        {
-            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
-            "weight_decay": 0.0,
-        },
+        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0,},
     ]
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
@@ -554,8 +547,7 @@ def main():
                 else:
                     samples_seen += references.shape[0]
             metric.add_batch(
-                predictions=predictions,
-                references=references,
+                predictions=predictions, references=references,
             )
 
         eval_metric = metric.compute()
@@ -617,8 +609,7 @@ def main():
             outputs = model(**batch)
             predictions = outputs.logits.argmax(dim=-1)
             metric.add_batch(
-                predictions=accelerator.gather(predictions),
-                references=accelerator.gather(batch["labels"]),
+                predictions=accelerator.gather(predictions), references=accelerator.gather(batch["labels"]),
             )
 
         eval_metric = metric.compute()

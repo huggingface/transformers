@@ -31,15 +31,9 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt"}
 
 # See all MVP models at https://huggingface.co/models?filter=mvp
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {
-        "RUCAIBox/mvp": "https://huggingface.co/RUCAIBox/mvp/resolve/main/vocab.json",
-    },
-    "added_tokens.json": {
-        "RUCAIBox/mvp": "https://huggingface.co/RUCAIBox/mvp/resolve/main/added_tokens.json",
-    },
-    "merges_file": {
-        "RUCAIBox/mvp": "https://huggingface.co/RUCAIBox/mvp/resolve/main/merges.txt",
-    },
+    "vocab_file": {"RUCAIBox/mvp": "https://huggingface.co/RUCAIBox/mvp/resolve/main/vocab.json",},
+    "added_tokens.json": {"RUCAIBox/mvp": "https://huggingface.co/RUCAIBox/mvp/resolve/main/added_tokens.json",},
+    "merges_file": {"RUCAIBox/mvp": "https://huggingface.co/RUCAIBox/mvp/resolve/main/merges.txt",},
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
@@ -63,10 +57,10 @@ def bytes_to_unicode():
     )
     cs = bs[:]
     n = 0
-    for b in range(2**8):
+    for b in range(2 ** 8):
         if b not in bs:
             bs.append(b)
-            cs.append(2**8 + n)
+            cs.append(2 ** 8 + n)
             n += 1
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))

@@ -75,10 +75,13 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
         image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
-        return image_segmenter, [
-            "./tests/fixtures/tests_samples/COCO/000000039769.png",
-            "./tests/fixtures/tests_samples/COCO/000000039769.png",
-        ]
+        return (
+            image_segmenter,
+            [
+                "./tests/fixtures/tests_samples/COCO/000000039769.png",
+                "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            ],
+        )
 
     def run_pipeline_test(self, image_segmenter, examples):
         outputs = image_segmenter("./tests/fixtures/tests_samples/COCO/000000039769.png", threshold=0.0)
@@ -162,16 +165,8 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {
-                    "score": 0.004,
-                    "label": "LABEL_215",
-                    "mask": "34eecd16bbfb0f476083ef947d81bf66",
-                },
-                {
-                    "score": 0.004,
-                    "label": "LABEL_215",
-                    "mask": "34eecd16bbfb0f476083ef947d81bf66",
-                },
+                {"score": 0.004, "label": "LABEL_215", "mask": "34eecd16bbfb0f476083ef947d81bf66",},
+                {"score": 0.004, "label": "LABEL_215", "mask": "34eecd16bbfb0f476083ef947d81bf66",},
             ],
         )
 
@@ -190,28 +185,12 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             nested_simplify(outputs, decimals=4),
             [
                 [
-                    {
-                        "score": 0.004,
-                        "label": "LABEL_215",
-                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
-                    },
-                    {
-                        "score": 0.004,
-                        "label": "LABEL_215",
-                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
-                    },
+                    {"score": 0.004, "label": "LABEL_215", "mask": "34eecd16bbfb0f476083ef947d81bf66",},
+                    {"score": 0.004, "label": "LABEL_215", "mask": "34eecd16bbfb0f476083ef947d81bf66",},
                 ],
                 [
-                    {
-                        "score": 0.004,
-                        "label": "LABEL_215",
-                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
-                    },
-                    {
-                        "score": 0.004,
-                        "label": "LABEL_215",
-                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
-                    },
+                    {"score": 0.004, "label": "LABEL_215", "mask": "34eecd16bbfb0f476083ef947d81bf66",},
+                    {"score": 0.004, "label": "LABEL_215", "mask": "34eecd16bbfb0f476083ef947d81bf66",},
                 ],
             ],
         )
@@ -228,16 +207,8 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {
-                    "score": None,
-                    "label": "LABEL_0",
-                    "mask": "6225140faf502d272af076222776d7e4",
-                },
-                {
-                    "score": None,
-                    "label": "LABEL_1",
-                    "mask": "8297c9f8eb43ddd3f32a6dae21e015a1",
-                },
+                {"score": None, "label": "LABEL_0", "mask": "6225140faf502d272af076222776d7e4",},
+                {"score": None, "label": "LABEL_1", "mask": "8297c9f8eb43ddd3f32a6dae21e015a1",},
             ],
         )
 

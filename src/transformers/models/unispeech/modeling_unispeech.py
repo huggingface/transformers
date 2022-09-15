@@ -395,10 +395,7 @@ class UniSpeechFeatureEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(conv_layer),
-                    hidden_states,
-                )
+                hidden_states = torch.utils.checkpoint.checkpoint(create_custom_forward(conv_layer), hidden_states,)
             else:
                 hidden_states = conv_layer(hidden_states)
 
@@ -437,12 +434,7 @@ class UniSpeechAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
+        self, embed_dim: int, num_heads: int, dropout: float = 0.0, is_decoder: bool = False, bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -455,7 +447,7 @@ class UniSpeechAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
+        self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -733,9 +725,7 @@ class UniSpeechEncoder(nn.Module):
                         return custom_forward
 
                     layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
-                        hidden_states,
-                        attention_mask,
+                        create_custom_forward(layer), hidden_states, attention_mask,
                     )
                 else:
                     layer_outputs = layer(
@@ -755,9 +745,7 @@ class UniSpeechEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
         )
 
 
@@ -823,9 +811,7 @@ class UniSpeechEncoderStableLayerNorm(nn.Module):
                         return custom_forward
 
                     layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
-                        hidden_states,
-                        attention_mask,
+                        create_custom_forward(layer), hidden_states, attention_mask,
                     )
                 else:
                     layer_outputs = layer(
@@ -847,9 +833,7 @@ class UniSpeechEncoderStableLayerNorm(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
         )
 
 
@@ -1580,8 +1564,5 @@ class UniSpeechForSequenceClassification(UniSpeechPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )

@@ -338,11 +338,7 @@ class TFHubertRobustModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TFHubertModelTester(
-            self,
-            conv_stride=(3, 3, 3),
-            feat_extract_norm="layer",
-            do_stable_layer_norm=True,
-            scope="robust",
+            self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True, scope="robust",
         )
         self.config_tester = ConfigTester(self, config_class=HubertConfig, hidden_size=37)
 

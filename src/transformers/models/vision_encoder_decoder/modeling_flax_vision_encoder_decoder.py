@@ -333,11 +333,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
         random_params = self.module.init(
-            rngs,
-            pixel_values,
-            decoder_input_ids,
-            decoder_attention_mask,
-            decoder_position_ids,
+            rngs, pixel_values, decoder_input_ids, decoder_attention_mask, decoder_position_ids,
         )["params"]
 
         if params is not None:
@@ -561,11 +557,7 @@ class FlaxVisionEncoderDecoderModel(FlaxPreTrainedModel):
                 encoder_hidden_states = projection_module(encoder_hidden_states)
 
             return decoder_module(
-                decoder_input_ids,
-                decoder_attention_mask,
-                decoder_position_ids,
-                encoder_hidden_states,
-                **kwargs,
+                decoder_input_ids, decoder_attention_mask, decoder_position_ids, encoder_hidden_states, **kwargs,
             )
 
         outputs = self.module.apply(

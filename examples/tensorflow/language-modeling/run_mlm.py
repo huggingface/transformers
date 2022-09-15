@@ -163,8 +163,7 @@ class DataTrainingArguments:
         },
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     mlm_probability: float = field(
         default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
@@ -321,9 +320,7 @@ def main():
         if extension == "txt":
             extension = "text"
         raw_datasets = load_dataset(
-            extension,
-            data_files=data_files,
-            use_auth_token=True if model_args.use_auth_token else None,
+            extension, data_files=data_files, use_auth_token=True if model_args.use_auth_token else None,
         )
 
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at

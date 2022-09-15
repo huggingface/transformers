@@ -87,11 +87,7 @@ def check_details(line, spm_ids, tok_ids, slow, fast):
                 ]
                 for j in possible_matches:
                     if check_diff(spm_ids[first : first + i], tok_ids[first : first + j], sp, tok) and check_details(
-                        line,
-                        spm_ids[first + i : last],
-                        tok_ids[first + j : last],
-                        slow,
-                        fast,
+                        line, spm_ids[first + i : last], tok_ids[first + j : last], slow, fast,
                     ):
                         return True
 

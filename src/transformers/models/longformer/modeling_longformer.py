@@ -1089,8 +1089,7 @@ class LongformerSelfAttention(nn.Module):
         global_attn_scores = global_attn_scores.transpose(1, 2)
 
         global_attn_scores = global_attn_scores.masked_fill(
-            is_index_masked[:, None, None, :],
-            torch.finfo(global_attn_scores.dtype).min,
+            is_index_masked[:, None, None, :], torch.finfo(global_attn_scores.dtype).min,
         )
 
         global_attn_scores = global_attn_scores.view(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)
@@ -1618,9 +1617,7 @@ class LongformerModel(LongformerPreTrainedModel):
                 position_ids = nn.functional.pad(position_ids, (0, padding_len), value=pad_token_id)
             if inputs_embeds is not None:
                 input_ids_padding = inputs_embeds.new_full(
-                    (batch_size, padding_len),
-                    self.config.pad_token_id,
-                    dtype=torch.long,
+                    (batch_size, padding_len), self.config.pad_token_id, dtype=torch.long,
                 )
                 inputs_embeds_padding = self.embeddings(input_ids_padding)
                 inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_padding], dim=-2)

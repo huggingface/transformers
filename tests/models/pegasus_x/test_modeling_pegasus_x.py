@@ -37,11 +37,7 @@ if is_torch_available():
 
 
 def prepare_pegasus_x_inputs_dict(
-    config,
-    input_ids,
-    decoder_input_ids,
-    attention_mask=None,
-    decoder_attention_mask=None,
+    config, input_ids, decoder_input_ids, attention_mask=None, decoder_attention_mask=None,
 ):
     if attention_mask is None:
         attention_mask = input_ids.ne(config.pad_token_id)
@@ -96,9 +92,7 @@ class PegasusXModelTester:
         self.bos_token_id = bos_token_id
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
-            3,
-        )
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3,)
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -345,11 +339,7 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
                 self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        decoder_seq_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, decoder_seq_length, encoder_key_length,],
                 )
 
             # Check attention is always last and order is fine
@@ -406,8 +396,7 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         )
         # Only the last layer will have the hidden states truncated back to token level
         self.assertEqual(
-            hidden_states[-1][0].shape,
-            (batch_size, seq_length, config.hidden_size),
+            hidden_states[-1][0].shape, (batch_size, seq_length, config.hidden_size),
         )
 
     def test_hidden_states_output(self):
@@ -447,8 +436,7 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
                 decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
 
                 self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [decoder_seq_length, self.model_tester.hidden_size],
+                    list(hidden_states[0].shape[-2:]), [decoder_seq_length, self.model_tester.hidden_size],
                 )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -735,11 +723,7 @@ class PegasusXStandaloneDecoderModelTester:
         )
 
     def create_and_check_decoder_model_past(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        lm_labels,
+        self, config, input_ids, attention_mask, lm_labels,
     ):
         config.use_cache = True
         model = PegasusXDecoder(config=config).to(torch_device).eval()
@@ -771,11 +755,7 @@ class PegasusXStandaloneDecoderModelTester:
         assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
 
     def create_and_check_decoder_model_attention_mask_past(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        lm_labels,
+        self, config, input_ids, attention_mask, lm_labels,
     ):
         model = PegasusXDecoder(config=config).to(torch_device).eval()
 
@@ -799,8 +779,7 @@ class PegasusXStandaloneDecoderModelTester:
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
-            dim=1,
+            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)], dim=1,
         )
 
         # get two different outputs
@@ -817,12 +796,7 @@ class PegasusXStandaloneDecoderModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        ) = config_and_inputs
+        (config, input_ids, attention_mask, lm_labels,) = config_and_inputs
 
         inputs_dict = {
             "input_ids": input_ids,
@@ -839,9 +813,7 @@ class PegasusXStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin
     is_encoder_decoder = False
     test_head_masking = False
 
-    def setUp(
-        self,
-    ):
+    def setUp(self,):
         self.model_tester = PegasusXStandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=PegasusXConfig)
 

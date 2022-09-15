@@ -188,12 +188,7 @@ class PerceiverOnnxConfig(OnnxConfig):
             dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
         else:
             dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("inputs", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-            ]
-        )
+        return OrderedDict([("inputs", dynamic_axis), ("attention_mask", dynamic_axis),])
 
     @property
     def atol_for_validation(self) -> float:

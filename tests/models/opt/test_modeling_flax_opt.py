@@ -132,8 +132,7 @@ class FlaxOPTModelTester:
         attention_mask = jnp.ones((input_ids.shape[0], max_length), dtype="i4")
 
         position_ids = jnp.broadcast_to(
-            jnp.arange(input_ids.shape[-1] - 1)[None, :],
-            (input_ids.shape[0], input_ids.shape[-1] - 1),
+            jnp.arange(input_ids.shape[-1] - 1)[None, :], (input_ids.shape[0], input_ids.shape[-1] - 1),
         )
         outputs_cache = model(
             input_ids[:, :-1],
@@ -165,17 +164,12 @@ class FlaxOPTModelTester:
         )
 
         attention_mask_cache = jnp.concatenate(
-            [
-                attention_mask,
-                jnp.zeros((attention_mask.shape[0], max_length - attention_mask.shape[1])),
-            ],
-            axis=-1,
+            [attention_mask, jnp.zeros((attention_mask.shape[0], max_length - attention_mask.shape[1])),], axis=-1,
         )
 
         past_key_values = model.init_cache(input_ids.shape[0], max_length)
         position_ids = jnp.broadcast_to(
-            jnp.arange(input_ids.shape[-1] - 1)[None, :],
-            (input_ids.shape[0], input_ids.shape[-1] - 1),
+            jnp.arange(input_ids.shape[-1] - 1)[None, :], (input_ids.shape[0], input_ids.shape[-1] - 1),
         )
 
         outputs_cache = model(
@@ -348,12 +342,7 @@ class FlaxOPTGenerationTest(unittest.TestCase):
         model = FlaxOPTForCausalLM.from_pretrained(model_id)
         tokenizer = GPT2Tokenizer.from_pretrained(model_id)
         inputs = tokenizer(
-            [
-                "Today is a beautiful day and I want to",
-                "In the city of",
-            ],
-            return_tensors="jax",
-            padding=True,
+            ["Today is a beautiful day and I want to", "In the city of",], return_tensors="jax", padding=True,
         )
 
         jit_generate = jax.jit(model.generate)

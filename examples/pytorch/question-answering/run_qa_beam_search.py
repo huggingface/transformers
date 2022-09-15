@@ -107,15 +107,13 @@ class DataTrainingArguments:
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
     test_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "An optional input test data file to test the perplexity on (a text file)."},
+        default=None, metadata={"help": "An optional input test data file to test the perplexity on (a text file)."},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
         default=384,

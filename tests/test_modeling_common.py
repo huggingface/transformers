@@ -204,7 +204,7 @@ class ModelTesterMixin:
             elif model_class in get_values(MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING):
                 num_patches = self.model_tester.image_size // self.model_tester.patch_size
                 inputs_dict["bool_masked_pos"] = torch.zeros(
-                    (self.model_tester.batch_size, num_patches**2), dtype=torch.long, device=torch_device
+                    (self.model_tester.batch_size, num_patches ** 2), dtype=torch.long, device=torch_device
                 )
             elif model_class in get_values(MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING):
                 batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
@@ -569,11 +569,7 @@ class ModelTesterMixin:
                 self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        decoder_seq_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, decoder_seq_length, encoder_key_length,],
                 )
 
             # Check attention is always last and order is fine
@@ -886,9 +882,7 @@ class ModelTesterMixin:
             # Prepare head_mask
             # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior)
             head_mask = torch.ones(
-                self.model_tester.num_hidden_layers,
-                self.model_tester.num_attention_heads,
-                device=torch_device,
+                self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads, device=torch_device,
             )
             head_mask[0, 0] = 0
             head_mask[-1, :-1] = 0
@@ -942,10 +936,7 @@ class ModelTesterMixin:
             return
 
         for model_class in self.all_model_classes:
-            (
-                config,
-                inputs_dict,
-            ) = self.model_tester.prepare_config_and_inputs_for_common()
+            (config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
 
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
@@ -974,10 +965,7 @@ class ModelTesterMixin:
             return
 
         for model_class in self.all_model_classes:
-            (
-                config,
-                inputs_dict,
-            ) = self.model_tester.prepare_config_and_inputs_for_common()
+            (config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
 
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
@@ -1010,10 +998,7 @@ class ModelTesterMixin:
             return
 
         for model_class in self.all_model_classes:
-            (
-                config,
-                inputs_dict,
-            ) = self.model_tester.prepare_config_and_inputs_for_common()
+            (config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
 
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
@@ -1044,10 +1029,7 @@ class ModelTesterMixin:
             return
 
         for model_class in self.all_model_classes:
-            (
-                config,
-                inputs_dict,
-            ) = self.model_tester.prepare_config_and_inputs_for_common()
+            (config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
 
             if "head_mask" in inputs_dict:
                 del inputs_dict["head_mask"]
@@ -1123,8 +1105,7 @@ class ModelTesterMixin:
                 seq_length = self.model_tester.seq_length
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
             )
 
             if config.is_encoder_decoder:
@@ -1136,8 +1117,7 @@ class ModelTesterMixin:
                 decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
 
                 self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [decoder_seq_length, self.model_tester.hidden_size],
+                    list(hidden_states[0].shape[-2:]), [decoder_seq_length, self.model_tester.hidden_size],
                 )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1212,10 +1192,7 @@ class ModelTesterMixin:
                 self.assertIsNotNone(attentions.grad)
 
     def test_feed_forward_chunking(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             torch.manual_seed(0)
             config = copy.deepcopy(original_config)
@@ -1238,10 +1215,7 @@ class ModelTesterMixin:
         if not self.test_resize_position_embeddings:
             return
 
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             config = copy.deepcopy(original_config)
@@ -1314,10 +1288,7 @@ class ModelTesterMixin:
             self.assertTrue(models_equal)
 
     def test_resize_tokens_embeddings(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
 
@@ -1366,10 +1337,7 @@ class ModelTesterMixin:
             self.assertTrue(models_equal)
 
     def test_resize_embeddings_untied(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
 
@@ -2785,9 +2753,9 @@ class ModelUtilsTest(TestCasePlus):
                 # Check a file is bigger than max_size only when it has a single weight
                 for shard_file, size in shard_to_size.items():
                     if max_size.endswith("kiB"):
-                        max_size_int = int(max_size[:-3]) * 2**10
+                        max_size_int = int(max_size[:-3]) * 2 ** 10
                     else:
-                        max_size_int = int(max_size[:-2]) * 10**3
+                        max_size_int = int(max_size[:-2]) * 10 ** 3
                     # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
                     # the size asked for (since we count parameters)
                     if size >= max_size_int + 50000:
@@ -2916,10 +2884,7 @@ class ModelUtilsTest(TestCasePlus):
             # With state dict temp offload
             offload_folder = os.path.join(tmp_dir, "offload")
             new_model_with_offload = AutoModelForCausalLM.from_pretrained(
-                tmp_dir,
-                device_map=device_map,
-                offload_folder=offload_folder,
-                offload_state_dict=True,
+                tmp_dir, device_map=device_map, offload_folder=offload_folder, offload_state_dict=True,
             )
             outputs2 = new_model_with_offload(inputs)
 

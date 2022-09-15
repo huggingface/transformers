@@ -31,8 +31,7 @@ if is_tf_available():
 
 class TFT5ModelTester:
     def __init__(
-        self,
-        parent,
+        self, parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -175,10 +174,7 @@ class TFT5ModelTester:
 
         # append to next input_ids and attn_mask
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-        attn_mask = tf.concat(
-            [attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)],
-            axis=1,
-        )
+        attn_mask = tf.concat([attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)], axis=1,)
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)[0]
@@ -409,16 +405,10 @@ class TFT5EncoderOnlyModelTester:
         )
 
     def create_and_check_model(
-        self,
-        config,
-        input_ids,
-        attention_mask,
+        self, config, input_ids, attention_mask,
     ):
         model = TFT5EncoderModel(config=config)
-        result = model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-        )
+        result = model(input_ids=input_ids, attention_mask=attention_mask,)
         result = model(input_ids=input_ids)
         encoder_output = result.last_hidden_state
 
@@ -426,11 +416,7 @@ class TFT5EncoderOnlyModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-        ) = config_and_inputs
+        (config, input_ids, attention_mask,) = config_and_inputs
 
         inputs_dict = {
             "input_ids": input_ids,
@@ -954,8 +940,7 @@ class TFT5ModelIntegrationTests(unittest.TestCase):
         ]
 
         self.assertListEqual(
-            expected_summaries,
-            decoded,
+            expected_summaries, decoded,
         )
 
     @slow

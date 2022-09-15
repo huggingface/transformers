@@ -132,12 +132,7 @@ class TFConvNextModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TFConvNextModelTester(self)
-        self.config_tester = ConfigTester(
-            self,
-            config_class=ConvNextConfig,
-            has_text_modality=False,
-            hidden_size=37,
-        )
+        self.config_tester = ConfigTester(self, config_class=ConvNextConfig, has_text_modality=False, hidden_size=37,)
 
     @unittest.skip(reason="ConvNext does not use inputs_embeds")
     def test_inputs_embeds(self):

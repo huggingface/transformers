@@ -55,9 +55,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     test_seq2seq = False
 
     def get_table(
-        self,
-        tokenizer: TapasTokenizer,
-        length=5,
+        self, tokenizer: TapasTokenizer, length=5,
     ):
         toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
 
@@ -71,9 +69,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         return table
 
     def get_table_and_query(
-        self,
-        tokenizer: TapasTokenizer,
-        length=5,
+        self, tokenizer: TapasTokenizer, length=5,
     ):
         toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
         table = self.get_table(tokenizer, length=length - 3)
@@ -476,10 +472,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokenizer.padding_side = "right"
 
                 not_padded_sequence = tokenizer.encode_plus(
-                    table,
-                    sequence,
-                    padding=False,
-                    return_special_tokens_mask=True,
+                    table, sequence, padding=False, return_special_tokens_mask=True,
                 )
                 not_padded_input_ids = not_padded_sequence["input_ids"]
 
@@ -491,10 +484,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 assert special_tokens_mask == not_padded_special_tokens_mask
 
                 not_padded_sequence = tokenizer.encode_plus(
-                    table,
-                    sequence,
-                    padding=False,
-                    return_special_tokens_mask=True,
+                    table, sequence, padding=False, return_special_tokens_mask=True,
                 )
                 not_padded_input_ids = not_padded_sequence["input_ids"]
 
@@ -724,8 +714,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 for key in encoded_sequences_batch_padded_1.keys():
                     self.assertListEqual(
-                        encoded_sequences_batch_padded_1[key],
-                        encoded_sequences_batch_padded_2[key],
+                        encoded_sequences_batch_padded_1[key], encoded_sequences_batch_padded_2[key],
                     )
 
                 # check 'no_padding' is unsensitive to a max length
@@ -735,8 +724,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 )
                 for key in encoded_sequences_batch_padded_1.keys():
                     self.assertListEqual(
-                        encoded_sequences_batch_padded_1[key],
-                        encoded_sequences_batch_padded_2[key],
+                        encoded_sequences_batch_padded_1[key], encoded_sequences_batch_padded_2[key],
                     )
 
     @unittest.skip("batch_encode_plus does not handle overflowing tokens.")
@@ -1133,12 +1121,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 if tokenizer.pad_token_id is None:
                     self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        table,
-                        sequences,
-                        padding=True,
-                        return_tensors="pt",
+                        ValueError, tokenizer.batch_encode_plus, table, sequences, padding=True, return_tensors="pt",
                     )
                     self.assertRaises(
                         ValueError,

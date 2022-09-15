@@ -23,10 +23,7 @@ class JiebaPreTokenizer:
     def __init__(self, vocab) -> None:
         self.vocab = vocab
         self.normalizers = normalizers.BertNormalizer(
-            clean_text=False,
-            handle_chinese_chars=True,
-            strip_accents=False,
-            lowercase=False,
+            clean_text=False, handle_chinese_chars=True, strip_accents=False, lowercase=False,
         )
         try:
             import rjieba

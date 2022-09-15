@@ -156,15 +156,7 @@ class DetrModelTester:
 
 @require_timm
 class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            DetrModel,
-            DetrForObjectDetection,
-            DetrForSegmentation,
-        )
-        if is_timm_available()
-        else ()
-    )
+    all_model_classes = (DetrModel, DetrForObjectDetection, DetrForSegmentation,) if is_timm_available() else ()
     is_encoder_decoder = True
     test_torchscript = False
     test_pruning = False
@@ -304,11 +296,7 @@ class DetrModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        decoder_seq_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, decoder_seq_length, encoder_key_length,],
                 )
 
             # Check attention is always last and order is fine

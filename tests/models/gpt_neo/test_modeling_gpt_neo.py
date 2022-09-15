@@ -260,8 +260,7 @@ class GPTNeoModelTester:
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
-            dim=1,
+            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)], dim=1,
         )
 
         # get two different outputs
@@ -526,10 +525,7 @@ class GPTNeoModelLanguageGenerationTest(unittest.TestCase):
         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
         input_ids = inputs["input_ids"].to(torch_device)
 
-        outputs = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"].to(torch_device),
-        )
+        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"].to(torch_device),)
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
         output_non_padded = model.generate(input_ids=inputs_non_padded)

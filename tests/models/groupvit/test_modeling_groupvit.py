@@ -655,12 +655,10 @@ class GroupViTModelIntegrationTest(unittest.TestCase):
 
         # verify the logits
         self.assertEqual(
-            outputs.logits_per_image.shape,
-            torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
+            outputs.logits_per_image.shape, torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
         )
         self.assertEqual(
-            outputs.logits_per_text.shape,
-            torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
+            outputs.logits_per_text.shape, torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
         expected_logits = torch.tensor([[13.3523, 6.3629]])

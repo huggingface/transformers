@@ -666,12 +666,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         try:
             # GPU
             output = MultiScaleDeformableAttentionFunction.apply(
-                value,
-                spatial_shapes,
-                level_start_index,
-                sampling_locations,
-                attention_weights,
-                self.im2col_step,
+                value, spatial_shapes, level_start_index, sampling_locations, attention_weights, self.im2col_step,
             )
         except Exception:
             # CPU
@@ -689,11 +684,7 @@ class DeformableDetrMultiheadAttention(nn.Module):
     """
 
     def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        bias: bool = True,
+        self, embed_dim: int, num_heads: int, dropout: float = 0.0, bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -705,7 +696,7 @@ class DeformableDetrMultiheadAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
+        self.scaling = self.head_dim ** -0.5
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -893,9 +884,7 @@ class DeformableDetrDecoderLayer(nn.Module):
 
         # self-attention
         self.self_attn = DeformableDetrMultiheadAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
-            dropout=config.attention_dropout,
+            embed_dim=self.embed_dim, num_heads=config.decoder_attention_heads, dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
@@ -951,9 +940,7 @@ class DeformableDetrDecoderLayer(nn.Module):
 
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
+            hidden_states=hidden_states, position_embeddings=position_embeddings, output_attentions=output_attentions,
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1447,8 +1434,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
                 in_channels = backbone.intermediate_channel_sizes[_]
                 input_proj_list.append(
                     nn.Sequential(
-                        nn.Conv2d(in_channels, config.d_model, kernel_size=1),
-                        nn.GroupNorm(32, config.d_model),
+                        nn.Conv2d(in_channels, config.d_model, kernel_size=1), nn.GroupNorm(32, config.d_model),
                     )
                 )
             for _ in range(config.num_feature_levels - num_backbone_outs):
@@ -1561,7 +1547,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
 
             scale = torch.cat([valid_width.unsqueeze(-1), valid_height.unsqueeze(-1)], 1).view(batch_size, 1, 1, 2)
             grid = (grid.unsqueeze(0).expand(batch_size, -1, -1, -1) + 0.5) / scale
-            width_heigth = torch.ones_like(grid) * 0.05 * (2.0**level)
+            width_heigth = torch.ones_like(grid) * 0.05 * (2.0 ** level)
             proposal = torch.cat((grid, width_heigth), -1).view(batch_size, -1, 4)
             proposals.append(proposal)
             _cur += height * width

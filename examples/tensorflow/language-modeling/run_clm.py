@@ -166,8 +166,7 @@ class DataTrainingArguments:
         },
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     line_by_line: bool = field(
         default=False,
@@ -491,9 +490,7 @@ def main():
         # https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.to_tf_dataset
 
         tf_train_dataset = model.prepare_tf_dataset(
-            train_dataset,
-            shuffle=True,
-            batch_size=num_replicas * training_args.per_device_train_batch_size,
+            train_dataset, shuffle=True, batch_size=num_replicas * training_args.per_device_train_batch_size,
         ).with_options(options)
 
         tf_eval_dataset = model.prepare_tf_dataset(

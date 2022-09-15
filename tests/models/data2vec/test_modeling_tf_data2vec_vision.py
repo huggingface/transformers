@@ -326,8 +326,7 @@ class TFData2VecVisionModelTest(TFModelTesterMixin, unittest.TestCase):
             seq_length = num_patches + 1
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

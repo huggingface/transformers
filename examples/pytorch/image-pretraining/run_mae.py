@@ -254,10 +254,7 @@ def main():
 
     # adapt config
     config.update(
-        {
-            "mask_ratio": model_args.mask_ratio,
-            "norm_pix_loss": model_args.norm_pix_loss,
-        }
+        {"mask_ratio": model_args.mask_ratio, "norm_pix_loss": model_args.norm_pix_loss,}
     )
 
     # create feature extractor

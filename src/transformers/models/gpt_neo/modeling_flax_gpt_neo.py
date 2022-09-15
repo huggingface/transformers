@@ -522,16 +522,8 @@ class FlaxGPTNeoModule(nn.Module):
     def setup(self):
         self.embed_dim = self.config.hidden_size
         embedding_init = jax.nn.initializers.normal(stddev=self.config.initializer_range)
-        self.wte = nn.Embed(
-            self.config.vocab_size,
-            self.embed_dim,
-            embedding_init=embedding_init,
-        )
-        self.wpe = nn.Embed(
-            self.config.max_position_embeddings,
-            self.embed_dim,
-            embedding_init=embedding_init,
-        )
+        self.wte = nn.Embed(self.config.vocab_size, self.embed_dim, embedding_init=embedding_init,)
+        self.wpe = nn.Embed(self.config.max_position_embeddings, self.embed_dim, embedding_init=embedding_init,)
         self.dropout = nn.Dropout(rate=self.config.embed_dropout)
         self.h = FlaxGPTNeoBlockCollection(self.config, dtype=self.dtype)
         self.ln_f = nn.LayerNorm(epsilon=self.config.layer_norm_epsilon, dtype=self.dtype)
@@ -578,11 +570,7 @@ class FlaxGPTNeoModule(nn.Module):
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
 
-        return FlaxBaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=outputs[1],
-            attentions=outputs[-1],
-        )
+        return FlaxBaseModelOutput(last_hidden_state=hidden_states, hidden_states=outputs[1], attentions=outputs[-1],)
 
 
 @add_start_docstrings(

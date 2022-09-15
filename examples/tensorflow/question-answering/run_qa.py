@@ -113,8 +113,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
         default=384,
@@ -749,9 +748,7 @@ def main():
                 eval_end_logits = eval_predictions.end_logits
 
             post_processed_eval = post_processing_function(
-                datasets["validation"],
-                processed_datasets["validation"],
-                (eval_start_logits, eval_end_logits),
+                datasets["validation"], processed_datasets["validation"], (eval_start_logits, eval_end_logits),
             )
             metrics = compute_metrics(post_processed_eval)
             logging.info("Evaluation metrics:")
@@ -779,9 +776,7 @@ def main():
                 test_start_logits = test_predictions.start_logits
                 test_end_logits = test_predictions.end_logits
             post_processed_test = post_processing_function(
-                datasets["test"],
-                processed_datasets["test"],
-                (test_start_logits, test_end_logits),
+                datasets["test"], processed_datasets["test"], (test_start_logits, test_end_logits),
             )
             metrics = compute_metrics(post_processed_test)
 

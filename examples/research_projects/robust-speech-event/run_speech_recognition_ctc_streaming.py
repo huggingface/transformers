@@ -96,8 +96,7 @@ class ModelArguments:
         },
     )
     final_dropout: float = field(
-        default=0.0,
-        metadata={"help": "The dropout probability for the final projection layer."},
+        default=0.0, metadata={"help": "The dropout probability for the final projection layer."},
     )
     mask_time_prob: float = field(
         default=0.05,
@@ -110,8 +109,7 @@ class ModelArguments:
         },
     )
     mask_time_length: int = field(
-        default=10,
-        metadata={"help": "Length of vector span to mask along the time axis."},
+        default=10, metadata={"help": "Length of vector span to mask along the time axis."},
     )
     mask_feature_prob: float = field(
         default=0.0,
@@ -124,8 +122,7 @@ class ModelArguments:
         },
     )
     mask_feature_length: int = field(
-        default=10,
-        metadata={"help": "Length of vector span to mask along the feature axis."},
+        default=10, metadata={"help": "Length of vector span to mask along the feature axis."},
     )
     layerdrop: float = field(default=0.0, metadata={"help": "The LayerDrop probability."})
     ctc_loss_reduction: Optional[str] = field(
@@ -176,8 +173,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_train_samples: Optional[int] = field(
         default=None,
@@ -207,16 +203,13 @@ class DataTrainingArguments:
         },
     )
     chars_to_ignore: Optional[List[str]] = list_field(
-        default=None,
-        metadata={"help": "A list of characters to remove from the transcripts."},
+        default=None, metadata={"help": "A list of characters to remove from the transcripts."},
     )
     eval_metrics: List[str] = list_field(
-        default=["wer"],
-        metadata={"help": "A list of metrics the model should be evaluated on. E.g. `'wer cer'`"},
+        default=["wer"], metadata={"help": "A list of metrics the model should be evaluated on. E.g. `'wer cer'`"},
     )
     max_duration_in_seconds: float = field(
-        default=20.0,
-        metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds."},
+        default=20.0, metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds."},
     )
     preprocessing_only: bool = field(
         default=False,
@@ -295,10 +288,7 @@ class DataCollatorCTCWithPadding:
             label_features.append({"input_ids": feature["labels"]})
 
         batch = self.processor.pad(
-            input_features,
-            padding=self.padding,
-            pad_to_multiple_of=self.pad_to_multiple_of,
-            return_tensors="pt",
+            input_features, padding=self.padding, pad_to_multiple_of=self.pad_to_multiple_of, return_tensors="pt",
         )
 
         labels_batch = self.processor.pad(
@@ -458,9 +448,7 @@ def main():
 
     with training_args.main_process_first(desc="dataset map special characters removal"):
         for split, dataset in raw_datasets.items():
-            raw_datasets[split] = dataset.map(
-                remove_special_characters,
-            ).remove_columns([text_column_name])
+            raw_datasets[split] = dataset.map(remove_special_characters,).remove_columns([text_column_name])
 
     # 3. Next, let's load the config as we might need it to create
     # the tokenizer
@@ -479,9 +467,7 @@ def main():
         )
     # load feature_extractor and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
-        tokenizer_name_or_path,
-        config=config,
-        use_auth_token=data_args.use_auth_token,
+        tokenizer_name_or_path, config=config, use_auth_token=data_args.use_auth_token,
     )
 
     # adapt config
@@ -550,8 +536,7 @@ def main():
             )
             if split == "train":
                 vectorized_datasets[split] = vectorized_datasets[split].shuffle(
-                    buffer_size=data_args.shuffle_buffer_size,
-                    seed=training_args.seed,
+                    buffer_size=data_args.shuffle_buffer_size, seed=training_args.seed,
                 )
 
     # 6. Next, we can prepare the training.

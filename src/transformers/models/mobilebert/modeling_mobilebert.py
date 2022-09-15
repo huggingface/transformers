@@ -355,14 +355,7 @@ class MobileBertAttention(nn.Module):
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
     ) -> Tuple[torch.Tensor]:
-        self_outputs = self.self(
-            query_tensor,
-            key_tensor,
-            value_tensor,
-            attention_mask,
-            head_mask,
-            output_attentions,
-        )
+        self_outputs = self.self(query_tensor, key_tensor, value_tensor, attention_mask, head_mask, output_attentions,)
         # Run a linear projection of `hidden_size` then add a residual
         # with `layer_input`.
         attention_output = self.output(self_outputs[0], layer_input)
@@ -578,12 +571,7 @@ class MobileBertEncoder(nn.Module):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module(
-                hidden_states,
-                attention_mask,
-                head_mask[i],
-                output_attentions,
-            )
+            layer_outputs = layer_module(hidden_states, attention_mask, head_mask[i], output_attentions,)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -1128,8 +1116,7 @@ class MobileBertOnlyNSPHead(nn.Module):
 
 
 @add_start_docstrings(
-    """MobileBert Model with a `next sentence prediction (classification)` head on top.""",
-    MOBILEBERT_START_DOCSTRING,
+    """MobileBert Model with a `next sentence prediction (classification)` head on top.""", MOBILEBERT_START_DOCSTRING,
 )
 class MobileBertForNextSentencePrediction(MobileBertPreTrainedModel):
     def __init__(self, config):
@@ -1325,10 +1312,7 @@ class MobileBertForSequenceClassification(MobileBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1530,10 +1514,7 @@ class MobileBertForMultipleChoice(MobileBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1617,8 +1598,5 @@ class MobileBertForTokenClassification(MobileBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )

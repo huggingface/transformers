@@ -463,7 +463,7 @@ def pair_wise_sigmoid_focal_loss(inputs: Tensor, labels: Tensor, alpha: float = 
 
     cross_entropy_loss_neg = criterion(inputs, torch.zeros_like(inputs))
 
-    focal_neg = (prob**gamma) * cross_entropy_loss_neg
+    focal_neg = (prob ** gamma) * cross_entropy_loss_neg
     focal_neg *= 1 - alpha
 
     loss = torch.einsum("nc,mc->nm", focal_pos, labels) + torch.einsum("nc,mc->nm", focal_neg, (1 - labels))
@@ -1024,8 +1024,8 @@ class MaskFormerSwinEncoder(nn.Module):
             [
                 MaskFormerSwinLayer(
                     config=config,
-                    dim=int(config.embed_dim * 2**i_layer),
-                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
+                    dim=int(config.embed_dim * 2 ** i_layer),
+                    input_resolution=(grid_size[0] // (2 ** i_layer), grid_size[1] // (2 ** i_layer)),
                     depth=config.depths[i_layer],
                     num_heads=config.num_heads[i_layer],
                     drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
@@ -1069,11 +1069,7 @@ class MaskFormerSwinEncoder(nn.Module):
                 )
             else:
                 layer_hidden_states, output_dimensions, layer_all_hidden_states = layer_module(
-                    hidden_states,
-                    input_dimensions,
-                    layer_head_mask,
-                    output_attentions,
-                    output_hidden_states,
+                    hidden_states, input_dimensions, layer_head_mask, output_attentions, output_hidden_states,
                 )
 
             input_dimensions = (output_dimensions[-2], output_dimensions[-1])
@@ -1122,12 +1118,7 @@ class MaskFormerSwinModel(nn.Module, ModuleUtilsMixin):
             self.encoder.layer[layer].attention.prune_heads(heads)
 
     def forward(
-        self,
-        pixel_values=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        self, pixel_values=None, head_mask=None, output_attentions=None, output_hidden_states=None, return_dict=None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1187,12 +1178,7 @@ class DetrAttention(nn.Module):
     """
 
     def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
+        self, embed_dim: int, num_heads: int, dropout: float = 0.0, is_decoder: bool = False, bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -1204,7 +1190,7 @@ class DetrAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
+        self.scaling = self.head_dim ** -0.5
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -1328,10 +1314,7 @@ class DetrDecoderLayer(nn.Module):
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.encoder_attn = DetrAttention(
-            self.embed_dim,
-            config.decoder_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=True,
+            self.embed_dim, config.decoder_attention_heads, dropout=config.attention_dropout, is_decoder=True,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
@@ -1712,11 +1695,7 @@ class MaskFormerHungarianMatcher(nn.Module):
 # copied and adapted from original implementation
 class MaskFormerLoss(nn.Module):
     def __init__(
-        self,
-        num_labels: int,
-        matcher: MaskFormerHungarianMatcher,
-        weight_dict: Dict[str, float],
-        eos_coef: float,
+        self, num_labels: int, matcher: MaskFormerHungarianMatcher, weight_dict: Dict[str, float], eos_coef: float,
     ):
         """
         The MaskFormer Loss. The loss is computed very similar to DETR. The process happens in two steps: 1) we compute
@@ -2443,10 +2422,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         }
 
         self.criterion = MaskFormerLoss(
-            config.num_labels,
-            matcher=self.matcher,
-            weight_dict=self.weight_dict,
-            eos_coef=config.no_object_weight,
+            config.num_labels, matcher=self.matcher, weight_dict=self.weight_dict, eos_coef=config.no_object_weight,
         )
 
         self.post_init()

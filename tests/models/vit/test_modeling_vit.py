@@ -159,11 +159,7 @@ class ViTModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        (config, pixel_values, labels,) = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -176,13 +172,7 @@ class ViTModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (
-        (
-            ViTModel,
-            ViTForImageClassification,
-            ViTForMaskedImageModeling,
-        )
-        if is_torch_available()
-        else ()
+        (ViTModel, ViTForImageClassification, ViTForMaskedImageModeling,) if is_torch_available() else ()
     )
     fx_compatible = True
 

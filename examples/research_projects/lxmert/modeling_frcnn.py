@@ -44,13 +44,7 @@ def norm_box(boxes, raw_sizes):
 
 
 def pad_list_tensors(
-    list_tensors,
-    preds_per_image,
-    max_detections=None,
-    return_tensors=None,
-    padding=None,
-    pad_value=0,
-    location=None,
+    list_tensors, preds_per_image, max_detections=None, return_tensors=None, padding=None, pad_value=0, location=None,
 ):
     """
     location will always be cpu for np tensors
@@ -85,10 +79,7 @@ def pad_list_tensors(
             tensor_i = tensor_i.unsqueeze(-1)
         assert isinstance(tensor_i, torch.Tensor)
         tensor_i = nn.functional.pad(
-            input=tensor_i,
-            pad=(0, 0, 0, max_detections - preds_per_image[i]),
-            mode="constant",
-            value=pad_value,
+            input=tensor_i, pad=(0, 0, 0, max_detections - preds_per_image[i]), mode="constant", value=pad_value,
         )
         if too_small:
             tensor_i = tensor_i.squeeze(-1)
@@ -170,20 +161,8 @@ def get_norm(norm, out_channels):
 
 def _create_grid_offsets(size: List[int], stride: int, offset: float, device):
     grid_height, grid_width = size
-    shifts_x = torch.arange(
-        offset * stride,
-        grid_width * stride,
-        step=stride,
-        dtype=torch.float32,
-        device=device,
-    )
-    shifts_y = torch.arange(
-        offset * stride,
-        grid_height * stride,
-        step=stride,
-        dtype=torch.float32,
-        device=device,
-    )
+    shifts_x = torch.arange(offset * stride, grid_width * stride, step=stride, dtype=torch.float32, device=device,)
+    shifts_y = torch.arange(offset * stride, grid_height * stride, step=stride, dtype=torch.float32, device=device,)
 
     shift_y, shift_x = torch.meshgrid(shifts_y, shifts_x)
     shift_x = shift_x.reshape(-1)
@@ -365,29 +344,17 @@ def add_ground_truth_to_proposals_single_image(gt_boxes, proposals):
 
 
 def _fmt_box_list(box_tensor, batch_index: int):
-    repeated_index = torch.full(
-        (len(box_tensor), 1),
-        batch_index,
-        dtype=box_tensor.dtype,
-        device=box_tensor.device,
-    )
+    repeated_index = torch.full((len(box_tensor), 1), batch_index, dtype=box_tensor.dtype, device=box_tensor.device,)
     return torch.cat((repeated_index, box_tensor), dim=1)
 
 
 def convert_boxes_to_pooler_format(box_lists: List[torch.Tensor]):
-    pooler_fmt_boxes = torch.cat(
-        [_fmt_box_list(box_list, i) for i, box_list in enumerate(box_lists)],
-        dim=0,
-    )
+    pooler_fmt_boxes = torch.cat([_fmt_box_list(box_list, i) for i, box_list in enumerate(box_lists)], dim=0,)
     return pooler_fmt_boxes
 
 
 def assign_boxes_to_levels(
-    box_lists: List[torch.Tensor],
-    min_level: int,
-    max_level: int,
-    canonical_box_size: int,
-    canonical_level: int,
+    box_lists: List[torch.Tensor], min_level: int, max_level: int, canonical_box_size: int, canonical_level: int,
 ):
     box_sizes = torch.sqrt(torch.cat([boxes.area() for boxes in box_lists]))
     # Eqn.(1) in FPN paper
@@ -533,10 +500,7 @@ class Matcher(object):
     """
 
     def __init__(
-        self,
-        thresholds: List[float],
-        labels: List[int],
-        allow_low_quality_matches: bool = False,
+        self, thresholds: List[float], labels: List[int], allow_low_quality_matches: bool = False,
     ):
         """
         Args:
@@ -714,13 +678,7 @@ class Conv2d(nn.Conv2d):
             assert not isinstance(self.norm, nn.GroupNorm)
             output_shape = [
                 (i + 2 * p - (di * (k - 1) + 1)) // s + 1
-                for i, p, di, k, s in zip(
-                    x.shape[-2:],
-                    self.padding,
-                    self.dilation,
-                    self.kernel_size,
-                    self.stride,
-                )
+                for i, p, di, k, s in zip(x.shape[-2:], self.padding, self.dilation, self.kernel_size, self.stride,)
             ]
             output_shape = [x.shape[0], self.weight.shape[0]] + output_shape
             empty = _NewEmptyTensorOp.apply(x, output_shape)
@@ -832,12 +790,7 @@ class BottleneckBlock(ResNetBlockBase):
 
         if in_channels != out_channels:
             self.shortcut = Conv2d(
-                in_channels,
-                out_channels,
-                kernel_size=1,
-                stride=stride,
-                bias=False,
-                norm=get_norm(norm, out_channels),
+                in_channels, out_channels, kernel_size=1, stride=stride, bias=False, norm=get_norm(norm, out_channels),
             )
         else:
             self.shortcut = None
@@ -869,11 +822,7 @@ class BottleneckBlock(ResNetBlockBase):
         )
 
         self.conv3 = Conv2d(
-            bottleneck_channels,
-            out_channels,
-            kernel_size=1,
-            bias=False,
-            norm=get_norm(norm, out_channels),
+            bottleneck_channels, out_channels, kernel_size=1, bias=False, norm=get_norm(norm, out_channels),
         )
 
     def forward(self, x):
@@ -914,10 +863,7 @@ class Backbone(nn.Module, metaclass=ABCMeta):
 
     def output_shape(self):
         return {
-            name: ShapeSpec(
-                channels=self._out_feature_channels[name],
-                stride=self._out_feature_strides[name],
-            )
+            name: ShapeSpec(channels=self._out_feature_channels[name], stride=self._out_feature_strides[name],)
             for name in self._out_features
         }
 
@@ -1005,22 +951,13 @@ class ResNet(Backbone):
 
     def output_shape(self):
         return {
-            name: ShapeSpec(
-                channels=self._out_feature_channels[name],
-                stride=self._out_feature_strides[name],
-            )
+            name: ShapeSpec(channels=self._out_feature_channels[name], stride=self._out_feature_strides[name],)
             for name in self._out_features
         }
 
     @staticmethod
     def make_stage(
-        block_class,
-        num_blocks,
-        first_stride=None,
-        *,
-        in_channels,
-        out_channels,
-        **kwargs,
+        block_class, num_blocks, first_stride=None, *, in_channels, out_channels, **kwargs,
     ):
         """
         Usually, layers that produce the same feature map spatial size
@@ -1057,12 +994,7 @@ class ROIPooler(nn.Module):
     """
 
     def __init__(
-        self,
-        output_size,
-        scales,
-        sampling_ratio,
-        canonical_box_size=224,
-        canonical_level=4,
+        self, output_size, scales, sampling_ratio, canonical_box_size=224, canonical_level=4,
     ):
         super().__init__()
         # assumption that stride is a power of 2.
@@ -1105,11 +1037,7 @@ class ROIPooler(nn.Module):
             return self.level_poolers[0](x[0], pooler_fmt_boxes)
 
         level_assignments = assign_boxes_to_levels(
-            boxes,
-            self.min_level,
-            self.max_level,
-            self.canonical_box_size,
-            self.canonical_level,
+            boxes, self.min_level, self.max_level, self.canonical_box_size, self.canonical_level,
         )
 
         num_boxes = len(pooler_fmt_boxes)
@@ -1117,11 +1045,7 @@ class ROIPooler(nn.Module):
         output_size = self.output_size[0]
 
         dtype, device = x[0].dtype, x[0].device
-        output = torch.zeros(
-            (num_boxes, num_channels, output_size, output_size),
-            dtype=dtype,
-            device=device,
-        )
+        output = torch.zeros((num_boxes, num_channels, output_size, output_size), dtype=dtype, device=device,)
 
         for level, (x_level, pooler) in enumerate(zip(x, self.level_poolers)):
             inds = torch.nonzero(level_assignments == level).squeeze(1)
@@ -1167,14 +1091,7 @@ class ROIOutputs(object):
 
     @torch.no_grad()
     def inference(
-        self,
-        obj_logits,
-        attr_logits,
-        box_deltas,
-        pred_boxes,
-        features,
-        sizes,
-        scales=None,
+        self, obj_logits, attr_logits, box_deltas, pred_boxes, features, sizes, scales=None,
     ):
         # only the pred boxes is the
         preds_per_image = [p.size(0) for p in pred_boxes]
@@ -1189,13 +1106,7 @@ class ROIOutputs(object):
         for i, (boxes, obj_scores, attr_probs, attrs, size) in enumerate(zipped):
             for nms_t in self.nms_thresh:
                 outputs = do_nms(
-                    boxes,
-                    obj_scores,
-                    size,
-                    self.score_thresh,
-                    nms_t,
-                    self.min_detections,
-                    self.max_detections,
+                    boxes, obj_scores, size, self.score_thresh, nms_t, self.min_detections, self.max_detections,
                 )
                 if outputs is not None:
                     max_boxes, max_scores, classes, ids = outputs
@@ -1206,16 +1117,7 @@ class ROIOutputs(object):
                 max_boxes[:, 0::2] *= scale_yx[1]
                 max_boxes[:, 1::2] *= scale_yx[0]
 
-            final_results.append(
-                (
-                    max_boxes,
-                    classes,
-                    max_scores,
-                    attrs[ids],
-                    attr_probs[ids],
-                    features[i][ids],
-                )
-            )
+            final_results.append((max_boxes, classes, max_scores, attrs[ids], attr_probs[ids], features[i][ids],))
         boxes, classes, class_probs, attrs, attr_probs, roi_features = map(list, zip(*final_results))
         return boxes, classes, class_probs, attrs, attr_probs, roi_features
 
@@ -1223,26 +1125,11 @@ class ROIOutputs(object):
         pass
 
     def __call__(
-        self,
-        obj_logits,
-        attr_logits,
-        box_deltas,
-        pred_boxes,
-        features,
-        sizes,
-        scales=None,
+        self, obj_logits, attr_logits, box_deltas, pred_boxes, features, sizes, scales=None,
     ):
         if self.training:
             raise NotImplementedError()
-        return self.inference(
-            obj_logits,
-            attr_logits,
-            box_deltas,
-            pred_boxes,
-            features,
-            sizes,
-            scales=scales,
-        )
+        return self.inference(obj_logits, attr_logits, box_deltas, pred_boxes, features, sizes, scales=scales,)
 
 
 class Res5ROIHeads(nn.Module):
@@ -1262,7 +1149,7 @@ class Res5ROIHeads(nn.Module):
         self.feature_strides = {k: v.stride for k, v in input_shape.items()}
         self.feature_channels = {k: v.channels for k, v in input_shape.items()}
         self.cls_agnostic_bbox_reg = cfg.ROI_BOX_HEAD.CLS_AGNOSTIC_BBOX_REG
-        self.stage_channel_factor = 2**3  # res5 is 8x res2
+        self.stage_channel_factor = 2 ** 3  # res5 is 8x res2
         self.out_channels = cfg.RESNETS.RES2_OUT_CHANNELS * self.stage_channel_factor
 
         # self.proposal_matcher = Matcher(
@@ -1278,11 +1165,7 @@ class Res5ROIHeads(nn.Module):
         use_attr = cfg.ROI_BOX_HEAD.ATTR
         num_attrs = cfg.ROI_BOX_HEAD.NUM_ATTRS
 
-        self.pooler = ROIPooler(
-            output_size=pooler_resolution,
-            scales=pooler_scales,
-            sampling_ratio=sampling_ratio,
-        )
+        self.pooler = ROIPooler(output_size=pooler_resolution, scales=pooler_scales, sampling_ratio=sampling_ratio,)
 
         self.res5 = self._build_res5_block(cfg)
         if not res5_halve:
@@ -1298,11 +1181,7 @@ class Res5ROIHeads(nn.Module):
                 self.res5[i].conv2.dilation = (2, 2)
 
         self.box_predictor = FastRCNNOutputLayers(
-            self.out_channels,
-            self.num_classes,
-            self.cls_agnostic_bbox_reg,
-            use_attr=use_attr,
-            num_attrs=num_attrs,
+            self.out_channels, self.num_classes, self.cls_agnostic_bbox_reg, use_attr=use_attr, num_attrs=num_attrs,
         )
 
     def _build_res5_block(self, cfg):
@@ -1417,7 +1296,7 @@ class AnchorGenerator(nn.Module):
 
         anchors = []
         for size in sizes:
-            area = size**2.0
+            area = size ** 2.0
             for aspect_ratio in aspect_ratios:
                 w = math.sqrt(area / aspect_ratio)
                 h = aspect_ratio * w
@@ -1521,11 +1400,7 @@ class RPN(nn.Module):
 
         self.anchor_generator = AnchorGenerator(cfg, [input_shape[f] for f in self.in_features])
         self.box2box_transform = Box2BoxTransform(weights=cfg.RPN.BBOX_REG_WEIGHTS)
-        self.anchor_matcher = Matcher(
-            cfg.RPN.IOU_THRESHOLDS,
-            cfg.RPN.IOU_LABELS,
-            allow_low_quality_matches=True,
-        )
+        self.anchor_matcher = Matcher(cfg.RPN.IOU_THRESHOLDS, cfg.RPN.IOU_LABELS, allow_low_quality_matches=True,)
         self.rpn_head = RPNHead(cfg, [input_shape[f] for f in self.in_features])
 
     def training(self, images, image_shapes, features, gt_boxes):
@@ -1595,13 +1470,7 @@ class FastRCNNOutputLayers(nn.Module):
     """
 
     def __init__(
-        self,
-        input_size,
-        num_classes,
-        cls_agnostic_bbox_reg,
-        box_dim=4,
-        use_attr=False,
-        num_attrs=-1,
+        self, input_size, num_classes, cls_agnostic_bbox_reg, box_dim=4, use_attr=False, num_attrs=-1,
     ):
         """
         Args:
@@ -1699,24 +1568,20 @@ class GeneralizedRCNN(nn.Module):
                 else:
                     raise EnvironmentError(
                         "Error no file named {} found in directory {} ".format(
-                            WEIGHTS_NAME,
-                            pretrained_model_name_or_path,
+                            WEIGHTS_NAME, pretrained_model_name_or_path,
                         )
                     )
             elif os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
                 archive_file = pretrained_model_name_or_path
             elif os.path.isfile(pretrained_model_name_or_path + ".index"):
-                assert from_tf, (
-                    "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint"
-                    .format(pretrained_model_name_or_path + ".index")
+                assert (
+                    from_tf
+                ), "We found a TensorFlow checkpoint at {}, please set from_tf to True to load from this checkpoint".format(
+                    pretrained_model_name_or_path + ".index"
                 )
                 archive_file = pretrained_model_name_or_path + ".index"
             else:
-                archive_file = hf_bucket_url(
-                    pretrained_model_name_or_path,
-                    filename=WEIGHTS_NAME,
-                    use_cdn=use_cdn,
-                )
+                archive_file = hf_bucket_url(pretrained_model_name_or_path, filename=WEIGHTS_NAME, use_cdn=use_cdn,)
 
             try:
                 # Load from URL or cache if already cached
@@ -1829,13 +1694,7 @@ class GeneralizedRCNN(nn.Module):
         return model
 
     def forward(
-        self,
-        images,
-        image_shapes,
-        gt_boxes=None,
-        proposals=None,
-        scales_yx=None,
-        **kwargs,
+        self, images, image_shapes, gt_boxes=None, proposals=None, scales_yx=None, **kwargs,
     ):
         """
         kwargs:
@@ -1855,13 +1714,7 @@ class GeneralizedRCNN(nn.Module):
 
     @torch.no_grad()
     def inference(
-        self,
-        images,
-        image_shapes,
-        gt_boxes=None,
-        proposals=None,
-        scales_yx=None,
-        **kwargs,
+        self, images, image_shapes, gt_boxes=None, proposals=None, scales_yx=None, **kwargs,
     ):
         # run images through backbone
         original_sizes = image_shapes * scales_yx

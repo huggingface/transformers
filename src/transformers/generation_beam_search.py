@@ -174,9 +174,7 @@ class BeamSearchScorer(BeamScorer):
         self._is_init = False
         self._beam_hyps = [
             BeamHypotheses(
-                num_beams=self.num_beams,
-                length_penalty=self.length_penalty,
-                early_stopping=self.do_early_stopping,
+                num_beams=self.num_beams, length_penalty=self.length_penalty, early_stopping=self.do_early_stopping,
             )
             for _ in range(batch_size)
         ]
@@ -265,9 +263,7 @@ class BeamSearchScorer(BeamScorer):
                         beam_index = None
 
                     beam_hyp.add(
-                        input_ids[batch_beam_idx].clone(),
-                        next_score.item(),
-                        beam_indices=beam_index,
+                        input_ids[batch_beam_idx].clone(), next_score.item(), beam_indices=beam_index,
                     )
                 else:
                     # add next predicted token since it is not eos_token
@@ -378,13 +374,7 @@ class BeamSearchScorer(BeamScorer):
             if sent_lengths[i] < sent_max_len:
                 decoded[i, sent_lengths[i]] = eos_token_id
 
-        return UserDict(
-            {
-                "sequences": decoded,
-                "sequence_scores": best_scores,
-                "beam_indices": indices,
-            }
-        )
+        return UserDict({"sequences": decoded, "sequence_scores": best_scores, "beam_indices": indices,})
 
 
 class ConstrainedBeamSearchScorer(BeamScorer):
@@ -444,9 +434,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
         self._is_init = False
         self._beam_hyps = [
             BeamHypotheses(
-                num_beams=self.num_beams,
-                length_penalty=self.length_penalty,
-                early_stopping=self.do_early_stopping,
+                num_beams=self.num_beams, length_penalty=self.length_penalty, early_stopping=self.do_early_stopping,
             )
             for _ in range(batch_size)
         ]
@@ -577,8 +565,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
                     completes_constraint = self.check_completes_constraints(input_ids[batch_beam_idx].cpu().tolist())
                     if completes_constraint:
                         beam_hyp.add(
-                            input_ids[batch_beam_idx].clone(),
-                            next_score.item(),
+                            input_ids[batch_beam_idx].clone(), next_score.item(),
                         )
                 else:
                     # add next predicted token since it is not eos_token
@@ -841,12 +828,7 @@ class ConstrainedBeamSearchScorer(BeamScorer):
             if sent_lengths[i] < sent_max_len:
                 decoded[i, sent_lengths[i]] = eos_token_id
 
-        return UserDict(
-            {
-                "sequences": decoded,
-                "sequence_scores": best_scores,
-            }
-        )
+        return UserDict({"sequences": decoded, "sequence_scores": best_scores,})
 
 
 class BeamHypotheses:
@@ -891,6 +873,6 @@ class BeamHypotheses:
         elif self.early_stopping:
             return True
         else:
-            cur_score = best_sum_logprobs / cur_len**self.length_penalty
+            cur_score = best_sum_logprobs / cur_len ** self.length_penalty
             ret = self.worst_score >= cur_score
             return ret

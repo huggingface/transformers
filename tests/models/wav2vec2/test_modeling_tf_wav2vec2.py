@@ -354,11 +354,7 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TFWav2Vec2ModelTester(
-            self,
-            conv_stride=(3, 3, 3),
-            feat_extract_norm="layer",
-            do_stable_layer_norm=True,
-            scope="robust",
+            self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True, scope="robust",
         )
         self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
 

@@ -77,9 +77,7 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
         num_return_sequences = 3
         outputs = generator(
-            "Something there",
-            num_return_sequences=num_return_sequences,
-            num_beams=num_return_sequences,
+            "Something there", num_return_sequences=num_return_sequences, num_beams=num_return_sequences,
         )
         target_outputs = [
             {"generated_text": "Beide Beide Beide Beide Beide Beide Beide Beide Beide"},
@@ -90,11 +88,7 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
 
         outputs = generator("This is a test", do_sample=True, num_return_sequences=2, return_tensors=True)
         self.assertEqual(
-            outputs,
-            [
-                {"generated_token_ids": ANY(torch.Tensor)},
-                {"generated_token_ids": ANY(torch.Tensor)},
-            ],
+            outputs, [{"generated_token_ids": ANY(torch.Tensor)}, {"generated_token_ids": ANY(torch.Tensor)},],
         )
         generator.tokenizer.pad_token_id = generator.model.config.eos_token_id
         generator.tokenizer.pad_token = "<pad>"
@@ -108,14 +102,8 @@ class Text2TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             outputs,
             [
-                [
-                    {"generated_token_ids": ANY(torch.Tensor)},
-                    {"generated_token_ids": ANY(torch.Tensor)},
-                ],
-                [
-                    {"generated_token_ids": ANY(torch.Tensor)},
-                    {"generated_token_ids": ANY(torch.Tensor)},
-                ],
+                [{"generated_token_ids": ANY(torch.Tensor)}, {"generated_token_ids": ANY(torch.Tensor)},],
+                [{"generated_token_ids": ANY(torch.Tensor)}, {"generated_token_ids": ANY(torch.Tensor)},],
             ],
         )
 

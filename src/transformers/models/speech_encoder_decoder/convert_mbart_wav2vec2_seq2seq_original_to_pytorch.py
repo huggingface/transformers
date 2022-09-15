@@ -105,11 +105,7 @@ def recursively_load_weights_wav2vec2(fairseq_model, hf_model):
         is_used = False
         if "conv_layers" in name:
             load_conv_layer(
-                name,
-                value,
-                feature_extractor,
-                unused_weights,
-                hf_model.config.feat_extract_norm == "group",
+                name, value, feature_extractor, unused_weights, hf_model.config.feat_extract_norm == "group",
             )
             is_used = True
         elif any(x in name for x in ["adaptor", "w2v_encoder.proj.", "w2v_proj_ln."]):

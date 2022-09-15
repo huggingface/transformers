@@ -165,8 +165,7 @@ class VisionTextDualEncoderMixin:
         self.assertEqual(len(text_attentions), text_config.num_hidden_layers)
 
         self.assertEqual(
-            text_attentions[0].shape[-3:],
-            (text_config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1]),
+            text_attentions[0].shape[-3:], (text_config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1]),
         )
 
     def assert_almost_equals(self, a: np.ndarray, b: np.ndarray, tol: float):
@@ -392,8 +391,7 @@ class DeiTRobertaModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
         self.assertEqual(len(text_attentions), text_config.num_hidden_layers)
 
         self.assertEqual(
-            text_attentions[0].shape[-3:],
-            (text_config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1]),
+            text_attentions[0].shape[-3:], (text_config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1]),
         )
 
     def get_vision_text_model(self, vision_config, text_config):
@@ -513,8 +511,7 @@ class VisionTextDualEncoderIntegrationTest(unittest.TestCase):
         # verify the logits
         self.assertEqual(outputs.logits_per_image.shape, (inputs.pixel_values.shape[0], inputs.input_ids.shape[0]))
         self.assertEqual(
-            outputs.logits_per_text.shape,
-            (inputs.input_ids.shape[0], inputs.pixel_values.shape[0]),
+            outputs.logits_per_text.shape, (inputs.input_ids.shape[0], inputs.pixel_values.shape[0]),
         )
 
         expected_logits = torch.tensor([[1.2284727, 0.3104122]])

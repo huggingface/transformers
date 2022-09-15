@@ -82,8 +82,7 @@ class ModelArguments:
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
     cache_dir: Optional[str] = field(
-        default=None,
-        metadata={"help": "Where to store the pretrained models downloaded from huggingface.co"},
+        default=None, metadata={"help": "Where to store the pretrained models downloaded from huggingface.co"},
     )
     use_fast_tokenizer: bool = field(
         default=True,
@@ -139,8 +138,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_source_length: Optional[int] = field(
         default=1024,
@@ -514,10 +512,7 @@ def main():
         # https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.to_tf_dataset
 
         tf_train_dataset = model.prepare_tf_dataset(
-            train_dataset,
-            collate_fn=data_collator,
-            batch_size=total_train_batch_size,
-            shuffle=True,
+            train_dataset, collate_fn=data_collator, batch_size=total_train_batch_size, shuffle=True,
         ).with_options(dataset_options)
         tf_eval_dataset = model.prepare_tf_dataset(
             eval_dataset, collate_fn=data_collator, batch_size=total_eval_batch_size, shuffle=False

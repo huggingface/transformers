@@ -802,10 +802,7 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
             if input_ids is not None:
                 sequence_lengths = (
                     tf.reduce_sum(
-                        tf.cast(
-                            tf.math.not_equal(input_ids, self.config.pad_token_id),
-                            dtype=input_ids.dtype,
-                        ),
+                        tf.cast(tf.math.not_equal(input_ids, self.config.pad_token_id), dtype=input_ids.dtype,),
                         -1,
                         keepdims=False,
                     )

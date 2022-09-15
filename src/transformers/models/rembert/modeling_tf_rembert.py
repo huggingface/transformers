@@ -711,8 +711,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         if self.is_decoder:
             seq_ids = tf.range(mask_seq_length)
             causal_mask = tf.less_equal(
-                tf.tile(seq_ids[None, None, :], (batch_size, mask_seq_length, 1)),
-                seq_ids[None, :, None],
+                tf.tile(seq_ids[None, None, :], (batch_size, mask_seq_length, 1)), seq_ids[None, :, None],
             )
             causal_mask = tf.cast(causal_mask, dtype=attention_mask.dtype)
             extended_attention_mask = causal_mask * attention_mask[:, None, :]
@@ -787,10 +786,7 @@ class TFRemBertMainLayer(tf.keras.layers.Layer):
         pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (
-                sequence_output,
-                pooled_output,
-            ) + encoder_outputs[1:]
+            return (sequence_output, pooled_output,) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
@@ -1090,10 +1086,7 @@ class TFRemBertForMaskedLM(TFRemBertPreTrainedModel, TFMaskedLanguageModelingLos
             return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
-            loss=loss,
-            logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
@@ -1257,9 +1250,7 @@ class TFRemBertForSequenceClassification(TFRemBertPreTrainedModel, TFSequenceCla
         self.rembert = TFRemBertMainLayer(config, name="rembert")
         self.dropout = tf.keras.layers.Dropout(rate=config.classifier_dropout_prob)
         self.classifier = tf.keras.layers.Dense(
-            units=config.num_labels,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="classifier",
+            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier",
         )
 
     @unpack_inputs
@@ -1312,10 +1303,7 @@ class TFRemBertForSequenceClassification(TFRemBertPreTrainedModel, TFSequenceCla
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
@@ -1425,10 +1413,7 @@ class TFRemBertForMultipleChoice(TFRemBertPreTrainedModel, TFMultipleChoiceLoss)
             return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     @tf.function(
@@ -1519,10 +1504,7 @@ class TFRemBertForTokenClassification(TFRemBertPreTrainedModel, TFTokenClassific
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:

@@ -53,9 +53,5 @@ class DiTIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 16))
         self.assertEqual(logits.shape, expected_shape)
 
-        expected_slice = torch.tensor(
-            [-0.4158, -0.4092, -0.4347],
-            device=torch_device,
-            dtype=torch.float,
-        )
+        expected_slice = torch.tensor([-0.4158, -0.4092, -0.4347], device=torch_device, dtype=torch.float,)
         self.assertTrue(torch.allclose(logits[0, :3], expected_slice, atol=1e-4))

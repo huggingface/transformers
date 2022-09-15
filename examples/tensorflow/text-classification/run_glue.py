@@ -75,12 +75,9 @@ class DataTrainingArguments:
     the command line.
     """
 
-    task_name: str = field(
-        metadata={"help": "The name of the task to train on: " + ", ".join(task_to_keys.keys())},
-    )
+    task_name: str = field(metadata={"help": "The name of the task to train on: " + ", ".join(task_to_keys.keys())},)
     predict_file: str = field(
-        metadata={"help": "A file containing user-supplied examples to make predictions for"},
-        default=None,
+        metadata={"help": "A file containing user-supplied examples to make predictions for"}, default=None,
     )
     max_seq_length: int = field(
         default=128,
@@ -417,11 +414,7 @@ def main():
             # https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.TFPreTrainedModel.prepare_tf_dataset
             # https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.to_tf_dataset
             data = model.prepare_tf_dataset(
-                dataset,
-                shuffle=shuffle,
-                batch_size=batch_size,
-                collate_fn=data_collator,
-                tokenizer=tokenizer,
+                dataset, shuffle=shuffle, batch_size=batch_size, collate_fn=data_collator, tokenizer=tokenizer,
             )
             data = data.with_options(dataset_options)
             tf_data[key] = data

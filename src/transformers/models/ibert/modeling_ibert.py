@@ -399,11 +399,7 @@ class IBertAttention(nn.Module):
         output_attentions=False,
     ):
         self_outputs, self_outputs_scaling_factor = self.self(
-            hidden_states,
-            hidden_states_scaling_factor,
-            attention_mask,
-            head_mask,
-            output_attentions,
+            hidden_states, hidden_states_scaling_factor, attention_mask, head_mask, output_attentions,
         )
         attention_output, attention_output_scaling_factor = self.output(
             self_outputs[0], self_outputs_scaling_factor[0], hidden_states, hidden_states_scaling_factor
@@ -581,11 +577,7 @@ class IBertEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
 
             layer_outputs = layer_module(
-                hidden_states,
-                hidden_states_scaling_factor,
-                attention_mask,
-                layer_head_mask,
-                output_attentions,
+                hidden_states, hidden_states_scaling_factor, attention_mask, layer_head_mask, output_attentions,
             )
 
             hidden_states = layer_outputs[0]
@@ -824,10 +816,7 @@ class IBertModel(IBertPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output, embedding_output_scaling_factor = self.embeddings(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds,
+            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds,
         )
         encoder_outputs = self.encoder(
             embedding_output,
@@ -1052,10 +1041,7 @@ class IBertForSequenceClassification(IBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1145,10 +1131,7 @@ class IBertForMultipleChoice(IBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1227,10 +1210,7 @@ class IBertForTokenClassification(IBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 

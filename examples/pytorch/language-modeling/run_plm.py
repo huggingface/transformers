@@ -148,8 +148,7 @@ class DataTrainingArguments:
         },
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     plm_probability: float = field(
         default=1 / 6,
@@ -477,9 +476,7 @@ def main():
 
     # Data collator
     data_collator = DataCollatorForPermutationLanguageModeling(
-        tokenizer=tokenizer,
-        plm_probability=data_args.plm_probability,
-        max_span_length=data_args.max_span_length,
+        tokenizer=tokenizer, plm_probability=data_args.plm_probability, max_span_length=data_args.max_span_length,
     )
 
     # Initialize our Trainer

@@ -50,10 +50,7 @@ def parse_args():
         "--validation_file", type=str, default=None, help="A csv or a json file containing the validation data."
     )
     parser.add_argument(
-        "--max_length",
-        type=int,
-        default=5,
-        help="The maximum total input sequence length after tokenization.",
+        "--max_length", type=int, default=5, help="The maximum total input sequence length after tokenization.",
     )
     parser.add_argument(
         "--num_beams",
@@ -71,16 +68,10 @@ def parse_args():
         required=True,
     )
     parser.add_argument(
-        "--config_name",
-        type=str,
-        default=None,
-        help="Pretrained config name or path if not the same as model_name",
+        "--config_name", type=str, default=None, help="Pretrained config name or path if not the same as model_name",
     )
     parser.add_argument(
-        "--device",
-        type=str,
-        default="cpu",
-        help="Device where the model will be run",
+        "--device", type=str, default="cpu", help="Device where the model will be run",
     )
     parser.add_argument("--output_file_path", type=str, default=None, help="Where to store the final ONNX file.")
 
@@ -133,10 +124,7 @@ def export_and_validate_model(model, tokenizer, onnx_file_path, num_beams, max_l
             opset_version=14,
             input_names=["input_ids", "attention_mask", "num_beams", "max_length", "decoder_start_token_id"],
             output_names=["output_ids"],
-            dynamic_axes={
-                "input_ids": {0: "batch", 1: "seq"},
-                "output_ids": {0: "batch", 1: "seq_out"},
-            },
+            dynamic_axes={"input_ids": {0: "batch", 1: "seq"}, "output_ids": {0: "batch", 1: "seq_out"},},
             example_outputs=summary_ids,
         )
 
@@ -171,9 +159,7 @@ def main():
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
     )
 
     logger.setLevel(logging.INFO)

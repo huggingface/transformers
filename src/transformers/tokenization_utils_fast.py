@@ -424,9 +424,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         )
 
         encodings = self._tokenizer.encode_batch(
-            batch_text_or_text_pairs,
-            add_special_tokens=add_special_tokens,
-            is_pretokenized=is_split_into_words,
+            batch_text_or_text_pairs, add_special_tokens=add_special_tokens, is_pretokenized=is_split_into_words,
         )
 
         # Convert encoding to dict
@@ -601,13 +599,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return file_names
 
     def train_new_from_iterator(
-        self,
-        text_iterator,
-        vocab_size,
-        length=None,
-        new_special_tokens=None,
-        special_tokens_map=None,
-        **kwargs,
+        self, text_iterator, vocab_size, length=None, new_special_tokens=None, special_tokens_map=None, **kwargs,
     ):
         """
         Trains a tokenizer on a new corpus with the same defaults (in terms of special tokens or tokenization pipeline)

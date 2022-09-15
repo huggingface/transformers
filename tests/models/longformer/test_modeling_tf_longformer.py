@@ -41,8 +41,7 @@ if is_tf_available():
 
 class TFLongformerModelTester:
     def __init__(
-        self,
-        parent,
+        self, parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -236,8 +235,7 @@ class TFLongformerModelTester:
         # global attention mask has to be partly defined
         # to trace all weights
         global_attention_mask = tf.concat(
-            [tf.zeros_like(input_ids)[:, :-1], tf.ones_like(input_ids)[:, -1:]],
-            axis=-1,
+            [tf.zeros_like(input_ids)[:, :-1], tf.ones_like(input_ids)[:, -1:]], axis=-1,
         )
 
         inputs_dict = {

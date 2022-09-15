@@ -89,10 +89,7 @@ def evaluate_batch_retrieval(args, rag_model, questions):
         return title
 
     retriever_input_ids = rag_model.retriever.question_encoder_tokenizer.batch_encode_plus(
-        questions,
-        return_tensors="pt",
-        padding=True,
-        truncation=True,
+        questions, return_tensors="pt", padding=True, truncation=True,
     )["input_ids"].to(args.device)
 
     question_enc_outputs = rag_model.rag.question_encoder(retriever_input_ids)
@@ -159,10 +156,7 @@ def get_args():
         help="RAG model retriever type",
     )
     parser.add_argument(
-        "--index_path",
-        default=None,
-        type=str,
-        help="Path to the retrieval index",
+        "--index_path", default=None, type=str, help="Path to the retrieval index",
     )
     parser.add_argument("--n_docs", default=5, type=int, help="Number of retrieved docs")
     parser.add_argument(
@@ -184,11 +178,7 @@ def get_args():
     )
     parser.add_argument("--k", default=1, type=int, help="k for the precision@k calculation")
     parser.add_argument(
-        "--evaluation_set",
-        default=None,
-        type=str,
-        required=True,
-        help="Path to a file containing evaluation samples",
+        "--evaluation_set", default=None, type=str, required=True, help="Path to a file containing evaluation samples",
     )
     parser.add_argument(
         "--gold_data_path",
@@ -220,34 +210,22 @@ def get_args():
         help="Evaluate all checkpoints starting with the same prefix as model_name ending and ending with step number",
     )
     parser.add_argument(
-        "--eval_batch_size",
-        default=8,
-        type=int,
-        help="Batch size per GPU/CPU for evaluation.",
+        "--eval_batch_size", default=8, type=int, help="Batch size per GPU/CPU for evaluation.",
     )
     parser.add_argument(
-        "--recalculate",
-        help="Recalculate predictions even if the prediction file exists",
-        action="store_true",
+        "--recalculate", help="Recalculate predictions even if the prediction file exists", action="store_true",
     )
     parser.add_argument(
-        "--num_beams",
-        default=4,
-        type=int,
-        help="Number of beams to be used when generating answers",
+        "--num_beams", default=4, type=int, help="Number of beams to be used when generating answers",
     )
     parser.add_argument("--min_length", default=1, type=int, help="Min length of the generated answers")
     parser.add_argument("--max_length", default=50, type=int, help="Max length of the generated answers")
 
     parser.add_argument(
-        "--print_predictions",
-        action="store_true",
-        help="If True, prints predictions while evaluating.",
+        "--print_predictions", action="store_true", help="If True, prints predictions while evaluating.",
     )
     parser.add_argument(
-        "--print_docs",
-        action="store_true",
-        help="If True, prints docs retried while generating.",
+        "--print_docs", action="store_true", help="If True, prints docs retried while generating.",
     )
     args = parser.parse_args()
     args.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

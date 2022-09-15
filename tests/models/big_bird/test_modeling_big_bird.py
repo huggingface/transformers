@@ -394,14 +394,7 @@ class BigBirdModelTester:
         return config, inputs_dict
 
     def create_and_check_for_auto_padding(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels,
     ):
         model = BigBirdModel(config)
         model.to(torch_device)
@@ -410,14 +403,7 @@ class BigBirdModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_change_to_full_attn(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels,
     ):
         model = BigBirdModel(config)
         model.to(torch_device)

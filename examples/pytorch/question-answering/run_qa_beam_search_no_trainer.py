@@ -89,10 +89,7 @@ def save_prefixed_metrics(results, output_dir, file_name: str = "all_results.jso
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a Question Answering task")
     parser.add_argument(
-        "--dataset_name",
-        type=str,
-        default=None,
-        help="The name of the dataset to use (via the datasets library).",
+        "--dataset_name", type=str, default=None, help="The name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
         "--dataset_config_name",
@@ -200,9 +197,7 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--version_2_with_negative",
-        action="store_true",
-        help="If true, some of the examples do not have an answer.",
+        "--version_2_with_negative", action="store_true", help="If true, some of the examples do not have an answer.",
     )
     parser.add_argument(
         "--max_answer_length",
@@ -309,9 +304,7 @@ def main():
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
     )
     logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
@@ -730,10 +723,7 @@ def main():
             "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
             "weight_decay": args.weight_decay,
         },
-        {
-            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
-            "weight_decay": 0.0,
-        },
+        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0,},
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 

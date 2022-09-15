@@ -244,11 +244,7 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         )
         self.assertEqual(
             encoding["labels"].shape,
-            (
-                1,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
-            ),
+            (1, self.feature_extract_tester.crop_size, self.feature_extract_tester.crop_size,),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
         self.assertTrue(encoding["labels"].min().item() >= 0)
@@ -292,11 +288,7 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         )
         self.assertEqual(
             encoding["labels"].shape,
-            (
-                1,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
-            ),
+            (1, self.feature_extract_tester.crop_size, self.feature_extract_tester.crop_size,),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
         self.assertTrue(encoding["labels"].min().item() >= 0)
@@ -317,11 +309,7 @@ class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         )
         self.assertEqual(
             encoding["labels"].shape,
-            (
-                2,
-                self.feature_extract_tester.crop_size,
-                self.feature_extract_tester.crop_size,
-            ),
+            (2, self.feature_extract_tester.crop_size, self.feature_extract_tester.crop_size,),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
         self.assertTrue(encoding["labels"].min().item() >= 0)

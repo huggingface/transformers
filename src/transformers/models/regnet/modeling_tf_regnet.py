@@ -93,11 +93,7 @@ class TFRegNetEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.num_channels = config.num_channels
         self.embedder = TFRegNetConvLayer(
-            out_channels=config.embedding_size,
-            kernel_size=3,
-            stride=2,
-            activation=config.hidden_act,
-            name="embedder",
+            out_channels=config.embedding_size, kernel_size=3, stride=2, activation=config.hidden_act, name="embedder",
         )
 
     def call(self, pixel_values):
@@ -357,11 +353,7 @@ class TFRegNetPreTrainedModel(TFPreTrainedModel):
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
+        input_signature=[{"pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),}]
     )
     def serving(self, inputs):
         """
@@ -400,8 +392,7 @@ REGNET_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare RegNet model outputting raw features without any specific head on top.",
-    REGNET_START_DOCSTRING,
+    "The bare RegNet model outputting raw features without any specific head on top.", REGNET_START_DOCSTRING,
 )
 class TFRegNetModel(TFRegNetPreTrainedModel):
     def __init__(self, config: RegNetConfig, *inputs, **kwargs):

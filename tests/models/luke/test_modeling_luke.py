@@ -794,8 +794,7 @@ class LukeModelTest(ModelTesterMixin, unittest.TestCase):
             entity_length = self.model_tester.entity_length
 
             self.assertListEqual(
-                list(entity_hidden_states[0].shape[-2:]),
-                [entity_length, self.model_tester.hidden_size],
+                list(entity_hidden_states[0].shape[-2:]), [entity_length, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

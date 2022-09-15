@@ -198,7 +198,5 @@ class XGLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         # fmt: on
 
         self.tokenizer_integration_test_util(
-            expected_encoding=expected_encoding,
-            model_name="facebook/xglm-564M",
-            padding=False,
+            expected_encoding=expected_encoding, model_name="facebook/xglm-564M", padding=False,
         )

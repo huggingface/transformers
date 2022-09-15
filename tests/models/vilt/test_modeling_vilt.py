@@ -156,13 +156,7 @@ class ViltModelTester:
         )
 
     def create_and_check_model(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        pixel_values,
-        token_labels,
+        self, config, input_ids, token_type_ids, input_mask, pixel_values, token_labels,
     ):
         model = ViltModel(config=config)
         model.to(torch_device)
@@ -175,13 +169,7 @@ class ViltModelTester:
         )
 
     def create_and_check_for_token_classification(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        pixel_values,
-        token_labels,
+        self, config, input_ids, token_type_ids, input_mask, pixel_values, token_labels,
     ):
         model = ViltForTokenClassification(config=config)
         model.to(torch_device)
@@ -193,14 +181,7 @@ class ViltModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            token_type_ids,
-            input_mask,
-            pixel_values,
-            token_labels,
-        ) = config_and_inputs
+        (config, input_ids, token_type_ids, input_mask, pixel_values, token_labels,) = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
             "token_type_ids": token_type_ids,
@@ -377,13 +358,11 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
 
             if model_class.__name__ == "ViltForImagesAndTextClassification":
                 self.assertListEqual(
-                    list(attentions[0][0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                    list(attentions[0][0].shape[-3:]), [self.model_tester.num_attention_heads, seq_len, seq_len],
                 )
             else:
                 self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                    list(attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, seq_len, seq_len],
                 )
             out_len = len(outputs)
 
@@ -404,14 +383,12 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertEqual(len(self_attentions), self.model_tester.num_images)
                 self.assertEqual(len(self_attentions[0]), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
-                    list(self_attentions[0][0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                    list(self_attentions[0][0].shape[-3:]), [self.model_tester.num_attention_heads, seq_len, seq_len],
                 )
             else:
                 self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                    list(self_attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, seq_len, seq_len],
                 )
 
     def test_hidden_states_output(self):
@@ -440,13 +417,11 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
 
             if model_class.__name__ == "ViltForImagesAndTextClassification":
                 self.assertListEqual(
-                    list(hidden_states[0][0].shape[-2:]),
-                    [seq_length, self.model_tester.hidden_size],
+                    list(hidden_states[0][0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
                 )
             else:
                 self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [seq_length, self.model_tester.hidden_size],
+                    list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
                 )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -621,10 +596,7 @@ class ViltModelIntegrationTest(unittest.TestCase):
         pixel_values = torch.stack([encoding_1.pixel_values, encoding_2.pixel_values], dim=1)
 
         # forward pass
-        outputs = model(
-            input_ids=encoding_1.input_ids.to(torch_device),
-            pixel_values=pixel_values.to(torch_device),
-        )
+        outputs = model(input_ids=encoding_1.input_ids.to(torch_device), pixel_values=pixel_values.to(torch_device),)
 
         # verify the logits
         expected_shape = torch.Size([1, 2])
@@ -633,14 +605,8 @@ class ViltModelIntegrationTest(unittest.TestCase):
         is_pillow_less_than_9 = version.parse(PIL.__version__) < version.parse("9.0.0")
 
         if is_pillow_less_than_9:
-            expected_slice = torch.tensor(
-                [-2.4013, 2.9342],
-                device=torch_device,
-            )
+            expected_slice = torch.tensor([-2.4013, 2.9342], device=torch_device,)
         else:
-            expected_slice = torch.tensor(
-                [-2.3713, 2.9168],
-                device=torch_device,
-            )
+            expected_slice = torch.tensor([-2.3713, 2.9168], device=torch_device,)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))

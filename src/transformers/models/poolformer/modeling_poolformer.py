@@ -348,9 +348,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         encoder_outputs = self.encoder(
-            pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
 
@@ -358,8 +356,7 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
             return (sequence_output, None) + encoder_outputs[1:]
 
         return BaseModelOutputWithNoAttention(
-            last_hidden_state=sequence_output,
-            hidden_states=encoder_outputs.hidden_states,
+            last_hidden_state=sequence_output, hidden_states=encoder_outputs.hidden_states,
         )
 
 
@@ -418,11 +415,7 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.poolformer(
-            pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        outputs = self.poolformer(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict,)
 
         sequence_output = outputs[0]
 

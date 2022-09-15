@@ -173,10 +173,10 @@ def bytes_to_unicode():
     )
     cs = bs[:]
     n = 0
-    for b in range(2**8):
+    for b in range(2 ** 8):
         if b not in bs:
             bs.append(b)
-            cs.append(2**8 + n)
+            cs.append(2 ** 8 + n)
             n += 1
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
@@ -697,11 +697,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer.batch_encode_plus
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
-        ],
+        batch_text_or_text_pairs: Union[List[TextInput], List[TextInputPair], List[PreTokenizedInput],],
         is_pair: bool = None,
         boxes: Optional[List[List[List[int]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
@@ -756,11 +752,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2.LayoutLMv2Tokenizer._batch_encode_plus
     def _batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
-        ],
+        batch_text_or_text_pairs: Union[List[TextInput], List[TextInputPair], List[PreTokenizedInput],],
         is_pair: bool = None,
         boxes: Optional[List[List[List[int]]]] = None,
         word_labels: Optional[List[List[int]]] = None,
@@ -1344,8 +1336,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
                 )
                 if truncation_strategy == TruncationStrategy.ONLY_FIRST:
                     error_msg = (
-                        error_msg
-                        + "Please select another truncation strategy than "
+                        error_msg + "Please select another truncation strategy than "
                         f"{truncation_strategy}, for instance 'longest_first' or 'only_second'."
                     )
                 logger.error(error_msg)

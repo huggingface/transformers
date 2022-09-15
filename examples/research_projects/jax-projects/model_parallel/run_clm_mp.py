@@ -160,8 +160,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
 
     def __post_init__(self):
@@ -252,9 +251,7 @@ def main():
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
     )
     # Setup logging, we only want one process per machine to log things on the screen.
     logger.setLevel(logging.INFO if jax.process_index() == 0 else logging.ERROR)
@@ -499,9 +496,7 @@ def main():
     # pjit the get_initial_state function to shard params and init
     # optimizer state in sharded way
     p_get_initial_state = pjit(
-        get_initial_state,
-        in_axis_resources=None,
-        out_axis_resources=(opt_state_spec, param_spec),
+        get_initial_state, in_axis_resources=None, out_axis_resources=(opt_state_spec, param_spec),
     )
 
     # hack: move the inital params to CPU to free up device memory
@@ -565,11 +560,7 @@ def main():
         donate_argnums=(0, 1),
     )
 
-    p_eval_step = pjit(
-        eval_step,
-        in_axis_resources=(None, None, param_spec),
-        out_axis_resources=None,
-    )
+    p_eval_step = pjit(eval_step, in_axis_resources=(None, None, param_spec), out_axis_resources=None,)
 
     logger.info("***** Running training *****")
     logger.info(f"  Num examples = {len(train_dataset)}")
@@ -600,11 +591,7 @@ def main():
             for _ in tqdm(range(steps_per_epoch), desc="Training...", position=1, leave=False):
                 batch = next(train_loader)
                 params, opt_state, dropout_rng, train_metric, global_step = p_train_step(
-                    params,
-                    opt_state,
-                    dropout_rng,
-                    batch,
-                    global_step,
+                    params, opt_state, dropout_rng, batch, global_step,
                 )
                 train_metrics.append(train_metric)
 

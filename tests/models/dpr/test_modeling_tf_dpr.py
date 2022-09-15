@@ -172,15 +172,7 @@ class TFDPRModelTester:
 
 @require_tf
 class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            TFDPRContextEncoder,
-            TFDPRQuestionEncoder,
-            TFDPRReader,
-        )
-        if is_tf_available()
-        else ()
-    )
+    all_model_classes = (TFDPRContextEncoder, TFDPRQuestionEncoder, TFDPRReader,) if is_tf_available() else ()
 
     test_resize_embeddings = False
     test_missing_keys = False

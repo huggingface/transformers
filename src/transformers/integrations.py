@@ -328,10 +328,7 @@ def run_hp_search_ray(trainer, n_trials: int, direction: str, **kwargs) -> BestR
         dynamic_modules_import_trainable.__mixins__ = trainable.__mixins__
 
     analysis = ray.tune.run(
-        dynamic_modules_import_trainable,
-        config=trainer.hp_space(None),
-        num_samples=n_trials,
-        **kwargs,
+        dynamic_modules_import_trainable, config=trainer.hp_space(None), num_samples=n_trials, **kwargs,
     )
     best_trial = analysis.get_best_trial(metric="objective", mode=direction[:3], scope=trainer.args.ray_scope)
     best_run = BestRun(best_trial.trial_id, best_trial.last_result["objective"], best_trial.config)
@@ -686,9 +683,7 @@ class WandbCallback(TrainerCallback):
 
             if self._wandb.run is None:
                 self._wandb.init(
-                    project=os.getenv("WANDB_PROJECT", "huggingface"),
-                    name=run_name,
-                    **init_args,
+                    project=os.getenv("WANDB_PROJECT", "huggingface"), name=run_name, **init_args,
                 )
             # add config parameters (run may have been created manually)
             self._wandb.config.update(combined_dict, allow_val_change=True)
@@ -973,9 +968,7 @@ class MLflowCallback(TrainerCallback):
             artifact_path = os.path.join(args.output_dir, ckpt_dir)
             logger.info(f"Logging checkpoint artifacts in {ckpt_dir}. This may take time.")
             self._ml_flow.pyfunc.log_model(
-                ckpt_dir,
-                artifacts={"model_path": artifact_path},
-                python_model=self._ml_flow.pyfunc.PythonModel(),
+                ckpt_dir, artifacts={"model_path": artifact_path}, python_model=self._ml_flow.pyfunc.PythonModel(),
             )
 
     def __del__(self):

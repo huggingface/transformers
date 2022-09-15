@@ -138,10 +138,7 @@ class MPNetModelTester:
         model.to(torch_device)
         model.eval()
         result = model(
-            input_ids,
-            attention_mask=input_mask,
-            start_positions=sequence_labels,
-            end_positions=sequence_labels,
+            input_ids, attention_mask=input_mask, start_positions=sequence_labels, end_positions=sequence_labels,
         )
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
@@ -165,11 +162,7 @@ class MPNetModelTester:
         model.eval()
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        result = model(
-            multiple_choice_inputs_ids,
-            attention_mask=multiple_choice_input_mask,
-            labels=choice_labels,
-        )
+        result = model(multiple_choice_inputs_ids, attention_mask=multiple_choice_input_mask, labels=choice_labels,)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def create_and_check_mpnet_for_token_classification(

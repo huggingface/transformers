@@ -283,9 +283,7 @@ class ConversationalPipeline(Pipeline):
     def postprocess(self, model_outputs, clean_up_tokenization_spaces=True):
         output_ids = model_outputs["output_ids"]
         answer = self.tokenizer.decode(
-            output_ids[0],
-            skip_special_tokens=True,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            output_ids[0], skip_special_tokens=True, clean_up_tokenization_spaces=clean_up_tokenization_spaces,
         )
         conversation = model_outputs["conversation"]
         conversation.mark_processed()

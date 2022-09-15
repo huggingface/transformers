@@ -61,11 +61,7 @@ def main():
     train_test = dataset.train_test_split(test_size=0.2)
     test_validation = train_test["test"].train_test_split(test_size=0.5)
     train_test_validation = DatasetDict(
-        {
-            "train": train_test["train"],
-            "test": test_validation["train"],
-            "valid": test_validation["test"],
-        }
+        {"train": train_test["train"], "test": test_validation["train"], "valid": test_validation["test"],}
     )
 
     print("Loading tokenizer and model")
@@ -90,9 +86,7 @@ def main():
         }
 
     tokenized_datasets = train_test_validation.map(
-        tokenize,
-        batched=True,
-        remove_columns=train_test_validation["train"].column_names,
+        tokenize, batched=True, remove_columns=train_test_validation["train"].column_names,
     )
     data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 

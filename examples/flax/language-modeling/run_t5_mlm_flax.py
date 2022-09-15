@@ -197,8 +197,7 @@ class DataTrainingArguments:
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
     train_ref_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "An optional input train ref data file for whole word masking in Chinese."},
+        default=None, metadata={"help": "An optional input train ref data file for whole word masking in Chinese."},
     )
     validation_ref_file: Optional[str] = field(
         default=None,
@@ -223,15 +222,13 @@ class DataTrainingArguments:
         },
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     mlm_probability: float = field(
         default=0.15, metadata={"help": "Ratio of tokens to mask for span masked language modeling loss"}
     )
     mean_noise_span_length: float = field(
-        default=3.0,
-        metadata={"help": "Mean span length of masked tokens"},
+        default=3.0, metadata={"help": "Mean span length of masked tokens"},
     )
 
     def __post_init__(self):
@@ -520,9 +517,7 @@ def main():
 
     # Setup logging
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s",
-        level=logging.INFO,
-        datefmt="[%X]",
+        format="%(asctime)s - %(levelname)s - %(name)s -   %(message)s", level=logging.INFO, datefmt="[%X]",
     )
 
     # Log on each process the small summary:
@@ -740,11 +735,7 @@ def main():
         )
     else:
         config.vocab_size = len(tokenizer)
-        model = FlaxT5ForConditionalGeneration(
-            config,
-            seed=training_args.seed,
-            dtype=getattr(jnp, model_args.dtype),
-        )
+        model = FlaxT5ForConditionalGeneration(config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype),)
 
     # Data collator
     # This one will take care of randomly masking the tokens.
@@ -805,9 +796,7 @@ def main():
     if training_args.adafactor:
         # We use the default parameters here to initialize adafactor,
         # For more details about the parameters please check https://github.com/deepmind/optax/blob/ed02befef9bf81cbbf236be3d2b0e032e9ed4a40/optax/_src/alias.py#L74
-        optimizer = optax.adafactor(
-            learning_rate=linear_decay_lr_schedule_fn,
-        )
+        optimizer = optax.adafactor(learning_rate=linear_decay_lr_schedule_fn,)
     else:
         optimizer = optax.adamw(
             learning_rate=linear_decay_lr_schedule_fn,

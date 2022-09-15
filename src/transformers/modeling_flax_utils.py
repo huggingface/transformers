@@ -1085,7 +1085,6 @@ def append_call_sample_docstring(model_class, tokenizer_class, checkpoint, outpu
 
 def append_replace_return_docstrings(model_class, output_type, config_class):
     model_class.__call__ = copy_func(model_class.__call__)
-    model_class.__call__ = replace_return_docstrings(
-        output_type=output_type,
-        config_class=config_class,
-    )(model_class.__call__)
+    model_class.__call__ = replace_return_docstrings(output_type=output_type, config_class=config_class,)(
+        model_class.__call__
+    )

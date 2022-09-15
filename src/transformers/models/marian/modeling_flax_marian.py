@@ -499,12 +499,7 @@ class FlaxMarianEncoderLayerCollection(nn.Module):
             if not deterministic and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None)
             else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                    deterministic,
-                )
+                layer_outputs = encoder_layer(hidden_states, attention_mask, output_attentions, deterministic,)
             hidden_states = layer_outputs[0]
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
@@ -1105,12 +1100,7 @@ class FlaxMarianPreTrainedModel(FlaxPreTrainedModel):
 
         def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
             decoder_module = module._get_decoder_module()
-            return decoder_module(
-                decoder_input_ids,
-                decoder_attention_mask,
-                decoder_position_ids,
-                **kwargs,
-            )
+            return decoder_module(decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs,)
 
         outputs = self.module.apply(
             inputs,
@@ -1374,12 +1364,7 @@ class FlaxMarianMTModel(FlaxMarianPreTrainedModel):
 
         def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
             decoder_module = module._get_decoder_module()
-            outputs = decoder_module(
-                decoder_input_ids,
-                decoder_attention_mask,
-                decoder_position_ids,
-                **kwargs,
-            )
+            outputs = decoder_module(decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs,)
             hidden_states = outputs[0]
 
             if self.config.tie_word_embeddings:
@@ -1495,7 +1480,6 @@ FLAX_MARIAN_MT_DOCSTRING = """
 """
 
 overwrite_call_docstring(
-    FlaxMarianMTModel,
-    MARIAN_INPUTS_DOCSTRING + FLAX_MARIAN_MT_DOCSTRING,
+    FlaxMarianMTModel, MARIAN_INPUTS_DOCSTRING + FLAX_MARIAN_MT_DOCSTRING,
 )
 append_replace_return_docstrings(FlaxMarianMTModel, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)

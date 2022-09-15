@@ -293,9 +293,7 @@ class FlaxOPTDecoderLayer(nn.Module):
 
         self.self_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
         self.fc1 = nn.Dense(
-            self.config.ffn_dim,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std),
+            self.config.ffn_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.fc2 = nn.Dense(
             self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
@@ -507,9 +505,7 @@ class FlaxOPTDecoder(nn.Module):
             return tuple(v for v in outputs if v is not None)
 
         return FlaxBaseModelOutput(
-            last_hidden_state=hidden_state,
-            hidden_states=all_hidden_states,
-            attentions=attentions,
+            last_hidden_state=hidden_state, hidden_states=all_hidden_states, attentions=attentions,
         )
 
 
@@ -541,13 +537,7 @@ class FlaxOPTPreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        module_init_outputs = self.module.init(
-            rngs,
-            input_ids,
-            attention_mask,
-            position_ids,
-            return_dict=False,
-        )
+        module_init_outputs = self.module.init(rngs, input_ids, attention_mask, position_ids, return_dict=False,)
 
         random_params = module_init_outputs["params"]
         if params is not None:
@@ -748,9 +738,7 @@ class FlaxOPTForCausalLMModule(nn.Module):
             return (lm_logits,) + outputs[1:]
 
         return FlaxMaskedLMOutput(
-            logits=lm_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            logits=lm_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -793,9 +781,5 @@ class FlaxOPTForCausalLM(FlaxOPTPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxOPTForCausalLM,
-    _TOKENIZER_FOR_DOC,
-    _CHECKPOINT_FOR_DOC,
-    FlaxBaseModelOutput,
-    _CONFIG_FOR_DOC,
+    FlaxOPTForCausalLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxBaseModelOutput, _CONFIG_FOR_DOC,
 )

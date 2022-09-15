@@ -149,9 +149,7 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
 
                 # attention_mask should put 1 everywhere, so sum over length should be 1
-                self.assertEqual(
-                    sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),
-                )
+                self.assertEqual(sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),)
 
                 tokens_p_str = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
 
@@ -410,11 +408,7 @@ class LukeTokenizerIntegrationTests(unittest.TestCase):
         spans_pair = [(0, 3)]
 
         encoding = tokenizer(
-            sentence,
-            sentence_pair,
-            entity_spans=spans,
-            entity_spans_pair=spans_pair,
-            return_token_type_ids=True,
+            sentence, sentence_pair, entity_spans=spans, entity_spans_pair=spans_pair, return_token_type_ids=True,
         )
 
         self.assertEqual(

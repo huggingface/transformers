@@ -399,12 +399,7 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
         random_params = self.module.init(
-            rngs,
-            inputs,
-            attention_mask,
-            decoder_input_ids,
-            decoder_attention_mask,
-            decoder_position_ids,
+            rngs, inputs, attention_mask, decoder_input_ids, decoder_attention_mask, decoder_position_ids,
         )["params"]
 
         if params is not None:

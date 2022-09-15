@@ -315,13 +315,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (tf.reshape(hidden_states, output_shape),)
 
-            outputs = block(
-                hidden_states,
-                attention_mask,
-                head_mask[i],
-                output_attentions,
-                training=training,
-            )
+            outputs = block(hidden_states, attention_mask, head_mask[i], output_attentions, training=training,)
             hidden_states = outputs[0]
             if output_attentions:
                 all_attentions = all_attentions + (outputs[1],)
@@ -340,9 +334,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions,
         )
 
 
@@ -845,10 +837,7 @@ class TFOpenAIGPTForSequenceClassification(TFOpenAIGPTPreTrainedModel, TFSequenc
             if input_ids is not None:
                 sequence_lengths = (
                     tf.reduce_sum(
-                        tf.cast(
-                            tf.math.not_equal(input_ids, self.config.pad_token_id),
-                            dtype=input_ids.dtype,
-                        ),
+                        tf.cast(tf.math.not_equal(input_ids, self.config.pad_token_id), dtype=input_ids.dtype,),
                         -1,
                         keepdims=False,
                     )

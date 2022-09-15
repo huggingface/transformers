@@ -102,10 +102,7 @@ class ServeCommand(BaseTransformersCLICommand):
             "serve", help="CLI tool to run inference requests through REST and GraphQL endpoints."
         )
         serve_parser.add_argument(
-            "--task",
-            type=str,
-            choices=get_supported_tasks(),
-            help="The task to run the pipeline on",
+            "--task", type=str, choices=get_supported_tasks(), help="The task to run the pipeline on",
         )
         serve_parser.add_argument("--host", type=str, default="localhost", help="Interface the server will listen on.")
         serve_parser.add_argument("--port", type=int, default=8888, help="Port the serving will listen to.")

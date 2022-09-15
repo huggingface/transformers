@@ -579,12 +579,7 @@ def input_processing(func, config, **kwargs):
             if k in ["return_dict", "output_attentions", "output_hidden_states", "use_cache"]
         }
 
-        output.update(
-            booleans_processing(
-                config=config,
-                **boolean_dict,
-            )
-        )
+        output.update(booleans_processing(config=config, **boolean_dict,))
 
     return output
 
@@ -1913,10 +1908,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 bias_mask = tf.fill(tf.convert_to_tensor(final_shape), True)
 
             new_bias = self.add_weight(
-                shape=final_shape,
-                initializer="zeros",
-                trainable=True,
-                name=weight.name.split(":")[0],
+                shape=final_shape, initializer="zeros", trainable=True, name=weight.name.split(":")[0],
             )
             init_bias = tf.where(bias_mask, current_bias, new_bias.value())
 
@@ -2505,9 +2497,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     os.path.isfile(file), f"Error retrieving files {file}"
 
                 missing_keys, unexpected_keys, mismatched_keys = load_tf_sharded_weights(
-                    model,
-                    resolved_archive_file,
-                    ignore_mismatched_sizes=ignore_mismatched_sizes,
+                    model, resolved_archive_file, ignore_mismatched_sizes=ignore_mismatched_sizes,
                 )
             else:
                 missing_keys, unexpected_keys, mismatched_keys = load_tf_weights(
@@ -2775,7 +2765,7 @@ class TFSharedEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
-        self.initializer_range = hidden_size**-0.5 if initializer_range is None else initializer_range
+        self.initializer_range = hidden_size ** -0.5 if initializer_range is None else initializer_range
 
     def build(self, input_shape):
         """

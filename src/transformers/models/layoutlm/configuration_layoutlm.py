@@ -134,10 +134,7 @@ class LayoutLMConfig(BertConfig):
 
 class LayoutLMOnnxConfig(OnnxConfig):
     def __init__(
-        self,
-        config: PretrainedConfig,
-        task: str = "default",
-        patching_specs: List[PatchingSpec] = None,
+        self, config: PretrainedConfig, task: str = "default", patching_specs: List[PatchingSpec] = None,
     ):
         super().__init__(config, task=task, patching_specs=patching_specs)
         self.max_2d_positions = config.max_2d_position_embeddings - 1

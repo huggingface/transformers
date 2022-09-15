@@ -651,9 +651,7 @@ class TFTapasPredictionHeadTransform(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense",
         )
 
         if isinstance(config.hidden_act, str):
@@ -838,10 +836,7 @@ class TFTapasMainLayer(tf.keras.layers.Layer):
         pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (
-                sequence_output,
-                pooled_output,
-            ) + encoder_outputs[1:]
+            return (sequence_output, pooled_output,) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -1137,10 +1132,7 @@ class TFTapasForMaskedLM(TFTapasPreTrainedModel, TFMaskedLanguageModelingLoss):
             return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
-            loss=loss,
-            logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
@@ -1679,10 +1671,7 @@ class TFTapasForSequenceClassification(TFTapasPreTrainedModel, TFSequenceClassif
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:

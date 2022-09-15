@@ -85,12 +85,7 @@ def get_context_and_ans(example, assertion=False):
     if answer["start_token"] == [-1]:
         return {
             "context": "None",
-            "answer": {
-                "start_token": -1,
-                "end_token": -1,
-                "category": "null",
-                "span": "None",  # extra
-            },
+            "answer": {"start_token": -1, "end_token": -1, "category": "null", "span": "None",},  # extra
         }
 
     # handling normal samples
@@ -146,11 +141,7 @@ def get_strided_contexts_and_ans(example, tokenizer, doc_stride=2048, max_length
         return {
             "example_id": example["id"],
             "input_ids": [[-1]],
-            "labels": {
-                "start_token": [-1],
-                "end_token": [-1],
-                "category": ["null"],
-            },
+            "labels": {"start_token": [-1], "end_token": [-1], "category": ["null"],},
         }
 
     input_ids = tokenizer(example["question"]["text"], out["context"]).input_ids
@@ -183,10 +174,7 @@ def get_strided_contexts_and_ans(example, tokenizer, doc_stride=2048, max_length
     splitted_context = out["context"].split()
     complete_end_token = splitted_context[answer["end_token"]]
     answer["start_token"] = len(
-        tokenizer(
-            " ".join(splitted_context[: answer["start_token"]]),
-            add_special_tokens=False,
-        ).input_ids
+        tokenizer(" ".join(splitted_context[: answer["start_token"]]), add_special_tokens=False,).input_ids
     )
     answer["end_token"] = len(
         tokenizer(" ".join(splitted_context[: answer["end_token"]]), add_special_tokens=False).input_ids
@@ -260,21 +248,13 @@ def get_strided_contexts_and_ans(example, tokenizer, doc_stride=2048, max_length
     return {
         "example_id": example["id"],
         "input_ids": inputs,
-        "labels": {
-            "start_token": answers_start_token,
-            "end_token": answers_end_token,
-            "category": answers_category,
-        },
+        "labels": {"start_token": answers_start_token, "end_token": answers_end_token, "category": answers_category,},
     }
 
 
 def prepare_inputs(example, tokenizer, doc_stride=2048, max_length=4096, assertion=False):
     example = get_strided_contexts_and_ans(
-        example,
-        tokenizer,
-        doc_stride=doc_stride,
-        max_length=max_length,
-        assertion=assertion,
+        example, tokenizer, doc_stride=doc_stride, max_length=max_length, assertion=assertion,
     )
 
     return example
@@ -285,22 +265,14 @@ def save_to_disk(hf_data, file_name):
         for example in tqdm(hf_data, total=len(hf_data), desc="Saving samples ... "):
             labels = example["labels"]
             for ids, start, end, cat in zip(
-                example["input_ids"],
-                labels["start_token"],
-                labels["end_token"],
-                labels["category"],
+                example["input_ids"], labels["start_token"], labels["end_token"], labels["category"],
             ):
                 if start == -1 and end == -1:
                     continue  # leave waste samples with no answer
                 if cat == "null" and np.random.rand() < 0.6:
                     continue  # removing 50 % samples
                 writer.write(
-                    {
-                        "input_ids": ids,
-                        "start_token": start,
-                        "end_token": end,
-                        "category": CATEGORY_MAPPING[cat],
-                    }
+                    {"input_ids": ids, "start_token": start, "end_token": end, "category": CATEGORY_MAPPING[cat],}
                 )
 
 
@@ -315,12 +287,7 @@ if __name__ == "__main__":
 
     data = data["train" if PROCESS_TRAIN == "true" else "validation"]
 
-    fn_kwargs = dict(
-        tokenizer=tokenizer,
-        doc_stride=DOC_STRIDE,
-        max_length=MAX_LENGTH,
-        assertion=False,
-    )
+    fn_kwargs = dict(tokenizer=tokenizer, doc_stride=DOC_STRIDE, max_length=MAX_LENGTH, assertion=False,)
     data = data.map(prepare_inputs, fn_kwargs=fn_kwargs)
     data = data.remove_columns(["annotations", "document", "id", "question"])
     print(data)

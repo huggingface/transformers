@@ -127,11 +127,7 @@ class SegformerOverlapPatchEmbeddings(nn.Module):
     def __init__(self, patch_size, stride, num_channels, hidden_size):
         super().__init__()
         self.proj = nn.Conv2d(
-            num_channels,
-            hidden_size,
-            kernel_size=patch_size,
-            stride=stride,
-            padding=patch_size // 2,
+            num_channels, hidden_size, kernel_size=patch_size, stride=stride, padding=patch_size // 2,
         )
 
         self.layer_norm = nn.LayerNorm(hidden_size)
@@ -183,11 +179,7 @@ class SegformerEfficientSelfAttention(nn.Module):
         return hidden_states.permute(0, 2, 1, 3)
 
     def forward(
-        self,
-        hidden_states,
-        height,
-        width,
-        output_attentions=False,
+        self, hidden_states, height, width, output_attentions=False,
     ):
         query_layer = self.transpose_for_scores(self.query(hidden_states))
 
@@ -442,9 +434,7 @@ class SegformerEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
         )
 
 
@@ -659,10 +649,7 @@ class SegformerForImageClassification(SegformerPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SegFormerImageClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 

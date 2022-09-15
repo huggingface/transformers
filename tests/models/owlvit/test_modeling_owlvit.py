@@ -359,11 +359,7 @@ class OwlViTModelTester:
         model = OwlViTModel(config).to(torch_device).eval()
 
         with torch.no_grad():
-            result = model(
-                input_ids=input_ids,
-                pixel_values=pixel_values,
-                attention_mask=attention_mask,
-            )
+            result = model(input_ids=input_ids, pixel_values=pixel_values, attention_mask=attention_mask,)
 
         image_logits_size = (
             self.vision_model_tester.batch_size,
@@ -535,10 +531,7 @@ class OwlViTForObjectDetectionTester:
         model = OwlViTForObjectDetection(config).to(torch_device).eval()
         with torch.no_grad():
             result = model(
-                pixel_values=pixel_values,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                return_dict=True,
+                pixel_values=pixel_values, input_ids=input_ids, attention_mask=attention_mask, return_dict=True,
             )
 
         pred_boxes_size = (
@@ -754,12 +747,10 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
 
         # verify the logits
         self.assertEqual(
-            outputs.logits_per_image.shape,
-            torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
+            outputs.logits_per_image.shape, torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
         )
         self.assertEqual(
-            outputs.logits_per_text.shape,
-            torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
+            outputs.logits_per_text.shape, torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
         expected_logits = torch.tensor([[3.4613, 0.9403]], device=torch_device)
         self.assertTrue(torch.allclose(outputs.logits_per_image, expected_logits, atol=1e-3))

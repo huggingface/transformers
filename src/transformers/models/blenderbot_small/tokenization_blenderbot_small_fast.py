@@ -76,10 +76,7 @@ class BlenderbotSmallTokenizerFast(PreTrainedTokenizerFast):
     ):
         super().__init__(
             ByteLevelBPETokenizer(
-                vocab=vocab_file,
-                merges=merges_file,
-                add_prefix_space=add_prefix_space,
-                trim_offsets=trim_offsets,
+                vocab=vocab_file, merges=merges_file, add_prefix_space=add_prefix_space, trim_offsets=trim_offsets,
             ),
             bos_token=bos_token,
             eos_token=eos_token,

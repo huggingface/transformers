@@ -202,12 +202,7 @@ class RoFormerTokenizerFast(PreTrainedTokenizerFast):
         return tuple(files)
 
     def save_pretrained(
-        self,
-        save_directory,
-        legacy_format=None,
-        filename_prefix=None,
-        push_to_hub=False,
-        **kwargs,
+        self, save_directory, legacy_format=None, filename_prefix=None, push_to_hub=False, **kwargs,
     ):
         self.backend_tokenizer.pre_tokenizer = BertPreTokenizer()
         return super().save_pretrained(save_directory, legacy_format, filename_prefix, push_to_hub, **kwargs)

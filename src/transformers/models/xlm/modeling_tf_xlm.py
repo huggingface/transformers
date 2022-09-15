@@ -464,13 +464,7 @@ class TFXLMMainLayer(tf.keras.layers.Layer):
 
             # self attention
             attn_outputs = self.attentions[i](
-                tensor,
-                attn_mask,
-                None,
-                cache,
-                head_mask[i],
-                output_attentions,
-                training=training,
+                tensor, attn_mask, None, cache, head_mask[i], output_attentions, training=training,
             )
             attn = attn_outputs[0]
 

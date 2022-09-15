@@ -37,12 +37,7 @@ class SentencePieceUnigramTokenizer(BaseTokenizer):
         tokenizer = Tokenizer(Unigram())
 
         tokenizer.normalizer = normalizers.Sequence(
-            [
-                normalizers.Nmt(),
-                normalizers.NFKC(),
-                normalizers.Replace(Regex(" {2,}"), " "),
-                normalizers.Lowercase(),
-            ]
+            [normalizers.Nmt(), normalizers.NFKC(), normalizers.Replace(Regex(" {2,}"), " "), normalizers.Lowercase(),]
         )
         tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
             [
@@ -67,17 +62,12 @@ class SentencePieceUnigramTokenizer(BaseTokenizer):
         super().__init__(tokenizer, parameters)
 
     def train(
-        self,
-        files: Union[str, List[str]],
-        vocab_size: int = 8000,
-        show_progress: bool = True,
+        self, files: Union[str, List[str]], vocab_size: int = 8000, show_progress: bool = True,
     ):
         """Train the model using the given files"""
 
         trainer = trainers.UnigramTrainer(
-            vocab_size=vocab_size,
-            special_tokens=self.special_tokens_list,
-            show_progress=show_progress,
+            vocab_size=vocab_size, special_tokens=self.special_tokens_list, show_progress=show_progress,
         )
 
         if isinstance(files, str):
@@ -95,9 +85,7 @@ class SentencePieceUnigramTokenizer(BaseTokenizer):
         """Train the model using the given iterator"""
 
         trainer = trainers.UnigramTrainer(
-            vocab_size=vocab_size,
-            special_tokens=self.special_tokens_list,
-            show_progress=show_progress,
+            vocab_size=vocab_size, special_tokens=self.special_tokens_list, show_progress=show_progress,
         )
 
         self._tokenizer.train_from_iterator(iterator, trainer=trainer)

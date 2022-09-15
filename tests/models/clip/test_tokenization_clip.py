@@ -139,10 +139,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 text_of_1_token = "hello"  # `hello` is a token in the vocabulary of `pretrained_name`
                 text = f"{text_of_1_token} {text_of_1_token}"
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name,
-                    use_fast=True,
-                )
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, use_fast=True,)
                 encoding = tokenizer_r(text, return_offsets_mapping=True, add_special_tokens=False)
                 self.assertEqual(encoding.offset_mapping[0], (0, len(text_of_1_token)))
                 self.assertEqual(
@@ -152,10 +149,7 @@ class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 text = f" {text}"
 
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(
-                    pretrained_name,
-                    use_fast=True,
-                )
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, use_fast=True,)
                 encoding = tokenizer_r(text, return_offsets_mapping=True, add_special_tokens=False)
                 self.assertEqual(encoding.offset_mapping[0], (1, 1 + len(text_of_1_token)))
                 self.assertEqual(

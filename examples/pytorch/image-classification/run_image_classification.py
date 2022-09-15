@@ -234,10 +234,7 @@ def main():
         if data_args.validation_dir is not None:
             data_files["validation"] = os.path.join(data_args.validation_dir, "**")
         dataset = load_dataset(
-            "imagefolder",
-            data_files=data_files,
-            cache_dir=model_args.cache_dir,
-            task="image-classification",
+            "imagefolder", data_files=data_files, cache_dir=model_args.cache_dir, task="image-classification",
         )
 
     # If we don't have a validation split, split off a percentage of train as validation.
@@ -293,20 +290,10 @@ def main():
     # Define torchvision transforms to be applied to each image.
     normalize = Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
     _train_transforms = Compose(
-        [
-            RandomResizedCrop(feature_extractor.size),
-            RandomHorizontalFlip(),
-            ToTensor(),
-            normalize,
-        ]
+        [RandomResizedCrop(feature_extractor.size), RandomHorizontalFlip(), ToTensor(), normalize,]
     )
     _val_transforms = Compose(
-        [
-            Resize(feature_extractor.size),
-            CenterCrop(feature_extractor.size),
-            ToTensor(),
-            normalize,
-        ]
+        [Resize(feature_extractor.size), CenterCrop(feature_extractor.size), ToTensor(), normalize,]
     )
 
     def train_transforms(example_batch):

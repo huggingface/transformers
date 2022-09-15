@@ -66,15 +66,7 @@ def prepare_image_inputs(feature_extract_tester, equal_resolution=False, numpify
                 min_resolution = max(feature_extract_tester.size_divisor, min_resolution)
             width, height = np.random.choice(np.arange(min_resolution, feature_extract_tester.max_resolution), 2)
         image_inputs.append(
-            np.random.randint(
-                255,
-                size=(
-                    feature_extract_tester.num_channels,
-                    width,
-                    height,
-                ),
-                dtype=np.uint8,
-            )
+            np.random.randint(255, size=(feature_extract_tester.num_channels, width, height,), dtype=np.uint8,)
         )
 
     if not numpify and not torchify:
@@ -258,8 +250,7 @@ class FeatureExtractorPushToHubTester(unittest.TestCase):
 
         # This has added the proper auto_map field to the config
         self.assertDictEqual(
-            feature_extractor.auto_map,
-            {"AutoFeatureExtractor": "custom_feature_extraction.CustomFeatureExtractor"},
+            feature_extractor.auto_map, {"AutoFeatureExtractor": "custom_feature_extraction.CustomFeatureExtractor"},
         )
 
         new_feature_extractor = AutoFeatureExtractor.from_pretrained(

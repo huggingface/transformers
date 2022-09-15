@@ -129,10 +129,7 @@ class TFConvNextLayer(tf.keras.layers.Layer):
             bias_initializer="zeros",
             name="dwconv",
         )  # depthwise conv
-        self.layernorm = tf.keras.layers.LayerNormalization(
-            epsilon=1e-6,
-            name="layernorm",
-        )
+        self.layernorm = tf.keras.layers.LayerNormalization(epsilon=1e-6, name="layernorm",)
         self.pwconv1 = tf.keras.layers.Dense(
             units=4 * dim,
             kernel_initializer=get_initializer(config.initializer_range),
@@ -200,10 +197,7 @@ class TFConvNextStage(tf.keras.layers.Layer):
         super().__init__(**kwargs)
         if in_channels != out_channels or stride > 1:
             self.downsampling_layer = [
-                tf.keras.layers.LayerNormalization(
-                    epsilon=1e-6,
-                    name="downsampling_layer.0",
-                ),
+                tf.keras.layers.LayerNormalization(epsilon=1e-6, name="downsampling_layer.0",),
                 # Inputs to this layer will follow NHWC format since we
                 # transposed the inputs from NCHW to NHWC in the `TFConvNextEmbeddings`
                 # layer. All the outputs throughout the model will be in NHWC
@@ -223,12 +217,7 @@ class TFConvNextStage(tf.keras.layers.Layer):
 
         drop_path_rates = drop_path_rates or [0.0] * depth
         self.layers = [
-            TFConvNextLayer(
-                config,
-                dim=out_channels,
-                drop_path=drop_path_rates[j],
-                name=f"layers.{j}",
-            )
+            TFConvNextLayer(config, dim=out_channels, drop_path=drop_path_rates[j], name=f"layers.{j}",)
             for j in range(depth)
         ]
 
@@ -314,10 +303,7 @@ class TFConvNextMainLayer(tf.keras.layers.Layer):
         embedding_output = self.embeddings(pixel_values, training=training)
 
         encoder_outputs = self.encoder(
-            embedding_output,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
+            embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict, training=training,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -359,22 +345,12 @@ class TFConvNextPreTrainedModel(TFPreTrainedModel):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(
-                3,
-                self.config.num_channels,
-                self.config.image_size,
-                self.config.image_size,
-            ),
-            dtype=tf.float32,
+            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size,), dtype=tf.float32,
         )
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
+        input_signature=[{"pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),}]
     )
     def serving(self, inputs):
         """
@@ -446,8 +422,7 @@ CONVNEXT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare ConvNext model outputting raw features without any specific head on top.",
-    CONVNEXT_START_DOCSTRING,
+    "The bare ConvNext model outputting raw features without any specific head on top.", CONVNEXT_START_DOCSTRING,
 )
 class TFConvNextModel(TFConvNextPreTrainedModel):
     def __init__(self, config, *inputs, add_pooling_layer=True, **kwargs):
@@ -588,10 +563,7 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
             raise ValueError("You have to specify pixel_values")
 
         outputs = self.convnext(
-            pixel_values,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            training=training,
+            pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict, training=training,
         )
 
         pooled_output = outputs.pooler_output if return_dict else outputs[1]
@@ -603,11 +575,7 @@ class TFConvNextForImageClassification(TFConvNextPreTrainedModel, TFSequenceClas
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return TFSequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-        )
+        return TFSequenceClassifierOutput(loss=loss, logits=logits, hidden_states=outputs.hidden_states,)
 
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
         # hidden_states not converted to Tensor with tf.convert_to_tensor as they are all of different dimensions

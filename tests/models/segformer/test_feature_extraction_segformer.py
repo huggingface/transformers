@@ -234,12 +234,7 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             ),
         )
         self.assertEqual(
-            encoding["labels"].shape,
-            (
-                1,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
-            ),
+            encoding["labels"].shape, (1, self.feature_extract_tester.size, self.feature_extract_tester.size,),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
         self.assertTrue(encoding["labels"].min().item() >= 0)
@@ -282,12 +277,7 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             ),
         )
         self.assertEqual(
-            encoding["labels"].shape,
-            (
-                1,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
-            ),
+            encoding["labels"].shape, (1, self.feature_extract_tester.size, self.feature_extract_tester.size,),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
         self.assertTrue(encoding["labels"].min().item() >= 0)
@@ -307,12 +297,7 @@ class SegformerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.
             ),
         )
         self.assertEqual(
-            encoding["labels"].shape,
-            (
-                2,
-                self.feature_extract_tester.size,
-                self.feature_extract_tester.size,
-            ),
+            encoding["labels"].shape, (2, self.feature_extract_tester.size, self.feature_extract_tester.size,),
         )
         self.assertEqual(encoding["labels"].dtype, torch.long)
         self.assertTrue(encoding["labels"].min().item() >= 0)

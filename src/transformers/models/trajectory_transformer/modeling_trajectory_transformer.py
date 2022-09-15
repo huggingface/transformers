@@ -555,11 +555,7 @@ class TrajectoryTransformerModel(TrajectoryTransformerPreTrainedModel):
                     return custom_forward
 
                 outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
-                    hidden_states,
-                    layer_past,
-                    use_cache,
-                    output_attentions,
+                    create_custom_forward(block), hidden_states, layer_past, use_cache, output_attentions,
                 )
             else:
                 outputs = block(hidden_states, layer_past, use_cache, output_attentions)

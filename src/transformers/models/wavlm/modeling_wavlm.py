@@ -365,10 +365,7 @@ class WavLMFeatureEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(conv_layer),
-                    hidden_states,
-                )
+                hidden_states = torch.utils.checkpoint.checkpoint(create_custom_forward(conv_layer), hidden_states,)
             else:
                 hidden_states = conv_layer(hidden_states)
 
@@ -425,7 +422,7 @@ class WavLMAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
+        self.scaling = self.head_dim ** -0.5
 
         self.k_proj = nn.Linear(embed_dim, embed_dim)
         self.v_proj = nn.Linear(embed_dim, embed_dim)
@@ -725,10 +722,7 @@ class WavLMEncoder(nn.Module):
                         return custom_forward
 
                     layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
-                        hidden_states,
-                        attention_mask,
-                        position_bias,
+                        create_custom_forward(layer), hidden_states, attention_mask, position_bias,
                     )
                 else:
                     layer_outputs = layer(
@@ -753,9 +747,7 @@ class WavLMEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
         )
 
 
@@ -816,10 +808,7 @@ class WavLMEncoderStableLayerNorm(nn.Module):
                         return custom_forward
 
                     layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
-                        hidden_states,
-                        attention_mask,
-                        position_bias,
+                        create_custom_forward(layer), hidden_states, attention_mask, position_bias,
                     )
                 else:
                     layer_outputs = layer(
@@ -1517,10 +1506,7 @@ class WavLMForSequenceClassification(WavLMPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1631,10 +1617,7 @@ class WavLMForAudioFrameClassification(WavLMPreTrainedModel):
             return output
 
         return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 

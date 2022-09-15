@@ -86,13 +86,7 @@ def prepare_img():
 
 @torch.no_grad()
 def convert_deformable_detr_checkpoint(
-    checkpoint_path,
-    single_scale,
-    dilation,
-    with_box_refine,
-    two_stage,
-    pytorch_dump_folder_path,
-    push_to_hub,
+    checkpoint_path, single_scale, dilation, with_box_refine, two_stage, pytorch_dump_folder_path, push_to_hub,
 ):
     """
     Copy/paste/tweak model's weights to our Deformable DETR structure.

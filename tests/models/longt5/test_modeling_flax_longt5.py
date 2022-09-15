@@ -148,12 +148,7 @@ class FlaxLongT5ModelTester:
         )
 
     def create_and_check_model(
-        self,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
+        self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask,
     ):
         model = FlaxLongT5Model(config=config)
         result = model(
@@ -170,13 +165,7 @@ class FlaxLongT5ModelTester:
         self.parent.assertEqual(decoder_output.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size))
 
     def check_use_cache_forward_with_attn_mask(
-        self,
-        model_class_name,
-        config,
-        input_ids,
-        decoder_input_ids,
-        attention_mask,
-        decoder_attention_mask,
+        self, model_class_name, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask,
     ):
         max_decoder_length = 20
         model = model_class_name(config)
@@ -216,13 +205,7 @@ class FlaxLongT5ModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            decoder_input_ids,
-            attention_mask,
-            decoder_attention_mask,
-        ) = config_and_inputs
+        (config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask,) = config_and_inputs
 
         inputs_dict = {
             "input_ids": input_ids,
@@ -410,8 +393,7 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, block_len, 3 * block_len],
+                list(attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, block_len, 3 * block_len],
             )
             out_len = len(outputs)
 
@@ -439,11 +421,7 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
                 self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        decoder_seq_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, decoder_seq_length, encoder_key_length,],
                 )
 
             # Check attention is always last and order is fine
@@ -464,8 +442,7 @@ class FlaxLongT5ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unitt
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, block_len, 3 * block_len],
+                list(self_attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, block_len, 3 * block_len],
             )
 
     # overwrite since special base model prefix is used
@@ -622,11 +599,7 @@ class FlaxLongT5TGlobalModelTest(FlaxLongT5ModelTest):
                 self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        decoder_seq_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, decoder_seq_length, encoder_key_length,],
                 )
 
             # Check attention is always last and order is fine
@@ -730,13 +703,7 @@ class FlaxLongT5ModelIntegrationTests(unittest.TestCase):
             s is required for the recommendation of only ct coronary angiography for the coronary evaluation in major non - cardiac surgeries . \n mehta institute of cardiology and research center ( affiliated to bj medical college , ahmedabad , guja
             rat , india ) . \n u.n . mehta institute of cardiology and research center ( affiliated to bj medical college , ahmedabad , gujarat , india ) . \n """
 
-        dct = tok(
-            [ARTICLE],
-            max_length=1024,
-            padding="max_length",
-            truncation=True,
-            return_tensors="np",
-        )
+        dct = tok([ARTICLE], max_length=1024, padding="max_length", truncation=True, return_tensors="np",)
 
         hypotheses_batch = model.generate(
             **dct,
@@ -750,6 +717,5 @@ class FlaxLongT5ModelIntegrationTests(unittest.TestCase):
 
         decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         self.assertListEqual(
-            self.expected_summary(),
-            decoded,
+            self.expected_summary(), decoded,
         )

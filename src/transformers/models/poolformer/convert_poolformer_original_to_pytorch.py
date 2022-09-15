@@ -199,10 +199,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--model_name",
-        default="poolformer_s12",
-        type=str,
-        help="Name of the model you'd like to convert.",
+        "--model_name", default="poolformer_s12", type=str, help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
         "--checkpoint_path", default=None, type=str, help="Path to the original PyTorch checkpoint (.pth file)."

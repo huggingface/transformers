@@ -91,8 +91,7 @@ class ModelArguments:
     )
     do_calib: bool = field(default=False, metadata={"help": "Whether to run calibration of quantization ranges."})
     num_calib_batch: int = field(
-        default=4,
-        metadata={"help": "Number of batches for calibration. 0 will disable calibration "},
+        default=4, metadata={"help": "Number of batches for calibration. 0 will disable calibration "},
     )
     save_onnx: bool = field(default=False, metadata={"help": "Whether to save model to onnx."})
 
@@ -122,8 +121,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
         default=384,

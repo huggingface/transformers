@@ -997,9 +997,7 @@ class NezhaModel(NezhaPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
-            input_ids=input_ids,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds,
+            input_ids=input_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds,
         )
         encoder_outputs = self.encoder(
             embedding_output,
@@ -1241,8 +1239,7 @@ class NezhaForMaskedLM(NezhaPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Nezha Model with a `next sentence prediction (classification)` head on top.""",
-    NEZHA_START_DOCSTRING,
+    """Nezha Model with a `next sentence prediction (classification)` head on top.""", NEZHA_START_DOCSTRING,
 )
 class NezhaForNextSentencePrediction(NezhaPreTrainedModel):
     def __init__(self, config):
@@ -1433,10 +1430,7 @@ class NezhaForSequenceClassification(NezhaPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1526,10 +1520,7 @@ class NezhaForMultipleChoice(NezhaPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1608,10 +1599,7 @@ class NezhaForTokenClassification(NezhaPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 

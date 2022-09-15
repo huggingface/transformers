@@ -611,9 +611,7 @@ class FlaxElectraEncoder(nn.Module):
 
     def setup(self):
         self.layer = FlaxElectraLayerCollection(
-            self.config,
-            dtype=self.dtype,
-            gradient_checkpointing=self.gradient_checkpointing,
+            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing,
         )
 
     def __call__(
@@ -700,11 +698,7 @@ class FlaxElectraPreTrainedModel(FlaxPreTrainedModel):
 
     # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel.enable_gradient_checkpointing
     def enable_gradient_checkpointing(self):
-        self._module = self.module_class(
-            config=self.config,
-            dtype=self.dtype,
-            gradient_checkpointing=True,
-        )
+        self._module = self.module_class(config=self.config, dtype=self.dtype, gradient_checkpointing=True,)
 
     # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel.init_weights
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
@@ -940,12 +934,7 @@ class FlaxElectraTiedDense(nn.Module):
     def __call__(self, x, kernel):
         x = jnp.asarray(x, self.dtype)
         kernel = jnp.asarray(kernel, self.dtype)
-        y = lax.dot_general(
-            x,
-            kernel,
-            (((x.ndim - 1,), (0,)), ((), ())),
-            precision=self.precision,
-        )
+        y = lax.dot_general(x, kernel, (((x.ndim - 1,), (0,)), ((), ())), precision=self.precision,)
         bias = jnp.asarray(self.bias, self.dtype)
         return y + bias
 
@@ -1001,9 +990,7 @@ class FlaxElectraForMaskedLMModule(nn.Module):
             return (prediction_scores,) + outputs[1:]
 
         return FlaxMaskedLMOutput(
-            logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1060,9 +1047,7 @@ class FlaxElectraForPreTrainingModule(nn.Module):
             return (logits,) + outputs[1:]
 
         return FlaxElectraForPreTrainingOutput(
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1155,9 +1140,7 @@ class FlaxElectraForTokenClassificationModule(nn.Module):
             return (logits,) + outputs[1:]
 
         return FlaxTokenClassifierOutput(
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1304,9 +1287,7 @@ class FlaxElectraForMultipleChoiceModule(nn.Module):
             return (reshaped_logits,) + outputs[1:]
 
         return FlaxMultipleChoiceModelOutput(
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1474,9 +1455,7 @@ class FlaxElectraForSequenceClassificationModule(nn.Module):
             return (logits,) + outputs[1:]
 
         return FlaxSequenceClassifierOutput(
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 

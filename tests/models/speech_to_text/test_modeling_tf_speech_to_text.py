@@ -127,10 +127,7 @@ class TFSpeech2TextModelTester:
 
         config = self.get_config()
         inputs_dict = prepare_speech_to_text_inputs_dict(
-            config,
-            input_features=input_features,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
+            config, input_features=input_features, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,
         )
         return config, inputs_dict
 
@@ -265,8 +262,7 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
             subsampled_seq_length = model._get_feat_extract_output_lengths(seq_length)
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [subsampled_seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]), [subsampled_seq_length, self.model_tester.hidden_size],
             )
 
             if config.is_encoder_decoder:
@@ -278,8 +274,7 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
                 decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
 
                 self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [decoder_seq_length, self.model_tester.hidden_size],
+                    list(hidden_states[0].shape[-2:]), [decoder_seq_length, self.model_tester.hidden_size],
                 )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -357,11 +352,7 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(cross_attentions[0].shape[-3:]),
-                [
-                    self.model_tester.num_attention_heads,
-                    decoder_seq_length,
-                    subsampled_encoder_key_length,
-                ],
+                [self.model_tester.num_attention_heads, decoder_seq_length, subsampled_encoder_key_length,],
             )
 
             # Check attention is always last and order is fine
@@ -514,12 +505,7 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
 
             # num_return_sequences > 1, sample
             self._check_generated_ids(
-                model.generate(
-                    input_features,
-                    do_sample=True,
-                    num_beams=2,
-                    num_return_sequences=2,
-                )
+                model.generate(input_features, do_sample=True, num_beams=2, num_return_sequences=2,)
             )
             # num_return_sequences > 1, greedy
             self._check_generated_ids(

@@ -170,11 +170,7 @@ class DeiTModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        (config, pixel_values, labels,) = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -187,12 +183,7 @@ class DeiTModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (
-        (
-            DeiTModel,
-            DeiTForImageClassification,
-            DeiTForImageClassificationWithTeacher,
-            DeiTForMaskedImageModeling,
-        )
+        (DeiTModel, DeiTForImageClassification, DeiTForImageClassificationWithTeacher, DeiTForMaskedImageModeling,)
         if is_torch_available()
         else ()
     )

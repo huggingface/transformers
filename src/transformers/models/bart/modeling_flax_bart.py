@@ -486,12 +486,7 @@ class FlaxBartEncoderLayerCollection(nn.Module):
             if not deterministic and (dropout_probability < self.layerdrop):  # skip the layer
                 layer_outputs = (None, None)
             else:
-                layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    output_attentions,
-                    deterministic,
-                )
+                layer_outputs = encoder_layer(hidden_states, attention_mask, output_attentions, deterministic,)
             hidden_states = layer_outputs[0]
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
@@ -681,9 +676,7 @@ class FlaxBartClassificationHead(nn.Module):
         )
         self.dropout = nn.Dropout(rate=self.pooler_dropout)
         self.out_proj = nn.Dense(
-            self.num_classes,
-            dtype=self.dtype,
-            kernel_init=jax.nn.initializers.normal(self.config.init_std),
+            self.num_classes, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
     def __call__(self, hidden_states: jnp.ndarray, deterministic: bool):
@@ -978,12 +971,7 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
 
         def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
             decoder_module = module._get_decoder_module()
-            return decoder_module(
-                decoder_input_ids,
-                decoder_attention_mask,
-                decoder_position_ids,
-                **kwargs,
-            )
+            return decoder_module(decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs,)
 
         init_variables = self.module.init(
             jax.random.PRNGKey(0),
@@ -1139,12 +1127,7 @@ class FlaxBartPreTrainedModel(FlaxPreTrainedModel):
 
         def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
             decoder_module = module._get_decoder_module()
-            return decoder_module(
-                decoder_input_ids,
-                decoder_attention_mask,
-                decoder_position_ids,
-                **kwargs,
-            )
+            return decoder_module(decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs,)
 
         outputs = self.module.apply(
             inputs,
@@ -1408,12 +1391,7 @@ class FlaxBartForConditionalGeneration(FlaxBartPreTrainedModel):
 
         def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs):
             decoder_module = module._get_decoder_module()
-            outputs = decoder_module(
-                decoder_input_ids,
-                decoder_attention_mask,
-                decoder_position_ids,
-                **kwargs,
-            )
+            outputs = decoder_module(decoder_input_ids, decoder_attention_mask, decoder_position_ids, **kwargs,)
             hidden_states = outputs[0]
 
             if self.config.tie_word_embeddings:
@@ -1885,9 +1863,7 @@ class FlaxBartDecoderWrapper(nn.Module):
     def setup(self):
         embed_dim = self.config.d_model
         embed_tokens = nn.Embed(
-            self.config.vocab_size,
-            embed_dim,
-            embedding_init=jax.nn.initializers.normal(self.config.init_std),
+            self.config.vocab_size, embed_dim, embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.decoder = FlaxBartDecoder(config=self.config, embed_tokens=embed_tokens, dtype=self.dtype)
 

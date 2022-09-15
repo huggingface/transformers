@@ -221,8 +221,7 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
     )
     parser.add_argument(
-        "--push_to_hub",
-        action="store_true",
+        "--push_to_hub", action="store_true",
     )
     args = parser.parse_args()
     convert_dit_checkpoint(args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)

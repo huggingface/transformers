@@ -573,11 +573,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
     @add_end_docstrings(LAYOUTLMV2_ENCODE_KWARGS_DOCSTRING, LAYOUTLMV2_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
-        ],
+        batch_text_or_text_pairs: Union[List[TextInput], List[TextInputPair], List[PreTokenizedInput],],
         is_pair: bool = None,
         boxes: Optional[List[List[List[int]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
@@ -631,11 +627,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
 
     def _batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[
-            List[TextInput],
-            List[TextInputPair],
-            List[PreTokenizedInput],
-        ],
+        batch_text_or_text_pairs: Union[List[TextInput], List[TextInputPair], List[PreTokenizedInput],],
         is_pair: bool = None,
         boxes: Optional[List[List[List[int]]]] = None,
         word_labels: Optional[List[List[int]]] = None,
@@ -1212,8 +1204,7 @@ class LayoutLMv2Tokenizer(PreTrainedTokenizer):
                 )
                 if truncation_strategy == TruncationStrategy.ONLY_FIRST:
                     error_msg = (
-                        error_msg
-                        + "Please select another truncation strategy than "
+                        error_msg + "Please select another truncation strategy than "
                         f"{truncation_strategy}, for instance 'longest_first' or 'only_second'."
                     )
                 logger.error(error_msg)

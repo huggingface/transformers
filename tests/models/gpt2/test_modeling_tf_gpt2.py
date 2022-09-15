@@ -39,8 +39,7 @@ if is_tf_available():
 
 class TFGPT2ModelTester:
     def __init__(
-        self,
-        parent,
+        self, parent,
     ):
         self.parent = parent
         self.batch_size = 13

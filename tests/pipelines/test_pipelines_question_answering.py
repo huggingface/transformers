@@ -71,10 +71,7 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
 
         outputs = question_answerer(
             question=["What field is HuggingFace working ?", "In what field is HuggingFace ?"],
-            context=[
-                "HuggingFace is a startup based in New-York",
-                "HuggingFace is a startup founded in Paris",
-            ],
+            context=["HuggingFace is a startup based in New-York", "HuggingFace is a startup founded in Paris",],
         )
         self.assertEqual(
             outputs,
@@ -148,10 +145,7 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         # Tweak start and stop to make sure we encounter the softmax logits
         # bug.
         def ensure_large_logits_postprocess(
-            model_outputs,
-            top_k=1,
-            handle_impossible_answer=False,
-            max_answer_len=15,
+            model_outputs, top_k=1, handle_impossible_answer=False, max_answer_len=15,
         ):
             for output in model_outputs:
                 output["start"] = output["start"] * 1e6
@@ -174,24 +168,19 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     @slow
     @require_torch
     def test_small_model_japanese(self):
-        question_answerer = pipeline(
-            "question-answering",
-            model="KoichiYasuoka/deberta-base-japanese-aozora-ud-head",
-        )
+        question_answerer = pipeline("question-answering", model="KoichiYasuoka/deberta-base-japanese-aozora-ud-head",)
         output = question_answerer(question="国語", context="全学年にわたって小学校の国語の教科書に挿し絵が用いられている")
 
         # Wrong answer, the whole text is identified as one "word" since the tokenizer does not include
         # a pretokenizer
         self.assertEqual(
-            nested_simplify(output),
-            {"score": 1.0, "start": 0, "end": 30, "answer": "全学年にわたって小学校の国語の教科書に挿し絵が用いられている"},
+            nested_simplify(output), {"score": 1.0, "start": 0, "end": 30, "answer": "全学年にわたって小学校の国語の教科書に挿し絵が用いられている"},
         )
 
         # Disable word alignment
         output = question_answerer(question="国語", context="全学年にわたって小学校の国語の教科書に挿し絵が用いられている", align_to_words=False)
         self.assertEqual(
-            nested_simplify(output),
-            {"score": 1.0, "start": 15, "end": 18, "answer": "教科書"},
+            nested_simplify(output), {"score": 1.0, "start": 15, "end": 18, "answer": "教科書"},
         )
 
     @slow
@@ -223,9 +212,7 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     @slow
     @require_torch
     def test_large_model_pt(self):
-        question_answerer = pipeline(
-            "question-answering",
-        )
+        question_answerer = pipeline("question-answering",)
         outputs = question_answerer(
             question="Where was HuggingFace founded ?", context="HuggingFace was founded in Paris."
         )
@@ -235,10 +222,7 @@ class QAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     @slow
     @require_torch
     def test_large_model_issue(self):
-        qa_pipeline = pipeline(
-            "question-answering",
-            model="mrm8488/bert-multi-cased-finetuned-xquadv1",
-        )
+        qa_pipeline = pipeline("question-answering", model="mrm8488/bert-multi-cased-finetuned-xquadv1",)
         outputs = qa_pipeline(
             {
                 "context": (

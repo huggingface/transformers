@@ -39,8 +39,7 @@ if is_tf_available():
 
 class TFElectraModelTester:
     def __init__(
-        self,
-        parent,
+        self, parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -191,14 +190,7 @@ class TFElectraModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_causal_lm_base_model_past(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels,
     ):
         config.is_decoder = True
 
@@ -234,14 +226,7 @@ class TFElectraModelTester:
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-6)
 
     def create_and_check_causal_lm_base_model_past_with_attn_mask(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels,
     ):
         config.is_decoder = True
 
@@ -272,15 +257,10 @@ class TFElectraModelTester:
 
         # append to next input_ids and
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-        attn_mask = tf.concat(
-            [attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)],
-            axis=1,
-        )
+        attn_mask = tf.concat([attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)], axis=1,)
 
         output_from_no_past = model(
-            next_input_ids,
-            attention_mask=attn_mask,
-            output_hidden_states=True,
+            next_input_ids, attention_mask=attn_mask, output_hidden_states=True,
         ).hidden_states[0]
         output_from_past = model(
             next_tokens, past_key_values=past_key_values, attention_mask=attn_mask, output_hidden_states=True
@@ -295,14 +275,7 @@ class TFElectraModelTester:
         tf.debugging.assert_near(output_from_past_slice, output_from_no_past_slice, rtol=1e-6)
 
     def create_and_check_causal_lm_base_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        token_type_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels,
     ):
         config.is_decoder = True
 
@@ -325,9 +298,7 @@ class TFElectraModelTester:
         next_attention_mask = tf.concat([input_mask, next_attn_mask], axis=-1)
 
         output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            output_hidden_states=True,
+            next_input_ids, attention_mask=next_attention_mask, output_hidden_states=True,
         ).hidden_states[0]
         output_from_past = model(
             next_tokens,

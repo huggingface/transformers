@@ -72,9 +72,7 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
 
     @require_torch
     def test_small_model_pt(self):
-        image_classifier = pipeline(
-            model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification",
-        )
+        image_classifier = pipeline(model="hf-internal-testing/tiny-random-clip-zero-shot-image-classification",)
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         output = image_classifier(image, candidate_labels=["a", "b", "c"])
 
@@ -175,10 +173,7 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase, metaclass=Pipe
     @slow
     @require_torch
     def test_large_model_pt(self):
-        image_classifier = pipeline(
-            task="zero-shot-image-classification",
-            model="openai/clip-vit-base-patch32",
-        )
+        image_classifier = pipeline(task="zero-shot-image-classification", model="openai/clip-vit-base-patch32",)
         # This is an image of 2 cats with remotes and no planes
         image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
         output = image_classifier(image, candidate_labels=["cat", "plane", "remote"])

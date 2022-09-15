@@ -413,11 +413,7 @@ class LukeEmbeddings(nn.Module):
         )
 
     def forward(
-        self,
-        input_ids=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
+        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None,
     ):
         if position_ids is None:
             if input_ids is not None:
@@ -534,12 +530,7 @@ class LukeSelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self,
-        word_hidden_states,
-        entity_hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
+        self, word_hidden_states, entity_hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
     ):
         word_size = word_hidden_states.size(1)
 
@@ -642,20 +633,11 @@ class LukeAttention(nn.Module):
         raise NotImplementedError("LUKE does not support the pruning of attention heads")
 
     def forward(
-        self,
-        word_hidden_states,
-        entity_hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
+        self, word_hidden_states, entity_hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
     ):
         word_size = word_hidden_states.size(1)
         self_outputs = self.self(
-            word_hidden_states,
-            entity_hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions,
+            word_hidden_states, entity_hidden_states, attention_mask, head_mask, output_attentions,
         )
         if entity_hidden_states is None:
             concat_self_outputs = self_outputs[0]
@@ -719,21 +701,12 @@ class LukeLayer(nn.Module):
         self.output = LukeOutput(config)
 
     def forward(
-        self,
-        word_hidden_states,
-        entity_hidden_states,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
+        self, word_hidden_states, entity_hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
     ):
         word_size = word_hidden_states.size(1)
 
         self_attention_outputs = self.attention(
-            word_hidden_states,
-            entity_hidden_states,
-            attention_mask,
-            head_mask,
-            output_attentions=output_attentions,
+            word_hidden_states, entity_hidden_states, attention_mask, head_mask, output_attentions=output_attentions,
         )
         if entity_hidden_states is None:
             concat_attention_output = self_attention_outputs[0]
@@ -805,11 +778,7 @@ class LukeEncoder(nn.Module):
                 )
             else:
                 layer_outputs = layer_module(
-                    word_hidden_states,
-                    entity_hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    output_attentions,
+                    word_hidden_states, entity_hidden_states, attention_mask, layer_head_mask, output_attentions,
                 )
 
             word_hidden_states = layer_outputs[0]
@@ -1147,10 +1116,7 @@ class LukeModel(LukePreTrainedModel):
 
         # First, compute word embeddings
         word_embedding_output = self.embeddings(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds,
+            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds,
         )
 
         # Second, compute extended attention mask

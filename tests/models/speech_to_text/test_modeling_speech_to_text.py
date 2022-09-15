@@ -139,10 +139,7 @@ class Speech2TextModelTester:
 
         config = self.get_config()
         inputs_dict = prepare_speech_to_text_inputs_dict(
-            config,
-            input_features=input_features,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
+            config, input_features=input_features, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,
         )
         return config, inputs_dict
 
@@ -375,8 +372,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             subsampled_seq_length = model._get_feat_extract_output_lengths(seq_length)
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [subsampled_seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]), [subsampled_seq_length, self.model_tester.hidden_size],
             )
 
             if config.is_encoder_decoder:
@@ -388,8 +384,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
                 decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
 
                 self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [decoder_seq_length, self.model_tester.hidden_size],
+                    list(hidden_states[0].shape[-2:]), [decoder_seq_length, self.model_tester.hidden_size],
                 )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -472,11 +467,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(cross_attentions[0].shape[-3:]),
-                [
-                    self.model_tester.num_attention_heads,
-                    decoder_seq_length,
-                    subsampled_encoder_key_length,
-                ],
+                [self.model_tester.num_attention_heads, decoder_seq_length, subsampled_encoder_key_length,],
             )
 
             # Check attention is always last and order is fine
@@ -500,10 +491,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             )
 
     def test_resize_tokens_embeddings(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
 
@@ -548,10 +536,7 @@ class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
             self.assertTrue(models_equal)
 
     def test_resize_embeddings_untied(self):
-        (
-            original_config,
-            inputs_dict,
-        ) = self.model_tester.prepare_config_and_inputs_for_common()
+        (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
 

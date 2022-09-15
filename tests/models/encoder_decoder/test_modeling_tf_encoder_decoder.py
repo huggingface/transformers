@@ -711,11 +711,7 @@ class TFEncoderDecoderMixin:
         decoder_input_ids = ids_tensor([13, 1], model_2.config.decoder.vocab_size)
         attention_mask = ids_tensor([13, 5], vocab_size=2)
 
-        outputs = model_2(
-            input_ids=input_ids,
-            decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
-        )
+        outputs = model_2(input_ids=input_ids, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,)
         out_2 = np.array(outputs[0])
         out_2[np.isnan(out_2)] = 0
 
@@ -724,9 +720,7 @@ class TFEncoderDecoderMixin:
             model_1 = TFEncoderDecoderModel.from_pretrained(tmp_dirname)
 
             after_outputs = model_1(
-                input_ids=input_ids,
-                decoder_input_ids=decoder_input_ids,
-                attention_mask=attention_mask,
+                input_ids=input_ids, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,
             )
             out_1 = np.array(after_outputs[0])
             out_1[np.isnan(out_1)] = 0
@@ -742,8 +736,7 @@ class TFBertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
 
     def get_pretrained_model(self):
         return TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "hf-internal-testing/tiny-random-bert",
-            "hf-internal-testing/tiny-random-bert",
+            "hf-internal-testing/tiny-random-bert", "hf-internal-testing/tiny-random-bert",
         )
 
     def get_encoder_decoder_model(self, config, decoder_config):
@@ -841,8 +834,7 @@ class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
 
     def get_pretrained_model(self):
         return TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "hf-internal-testing/tiny-random-bert",
-            "hf-internal-testing/tiny-random-gpt2",
+            "hf-internal-testing/tiny-random-bert", "hf-internal-testing/tiny-random-gpt2",
         )
 
     def get_encoder_decoder_model(self, config, decoder_config):
@@ -934,8 +926,7 @@ class TFRoBertaEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase)
 
     def get_pretrained_model(self):
         return TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "hf-internal-testing/tiny-random-roberta",
-            "hf-internal-testing/tiny-random-roberta",
+            "hf-internal-testing/tiny-random-roberta", "hf-internal-testing/tiny-random-roberta",
         )
 
     def get_encoder_decoder_model(self, config, decoder_config):
@@ -995,8 +986,7 @@ class TFRembertEncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase)
 
     def get_pretrained_model(self):
         return TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "hf-internal-testing/tiny-random-rembert",
-            "hf-internal-testing/tiny-random-rembert",
+            "hf-internal-testing/tiny-random-rembert", "hf-internal-testing/tiny-random-rembert",
         )
 
     def get_encoder_decoder_model(self, config, decoder_config):
@@ -1223,8 +1213,7 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
             del decoder
 
             enc_dec_model = TFEncoderDecoderModel.from_encoder_decoder_pretrained(
-                pretrained_encoder_dir,
-                pretrained_decoder_dir,
+                pretrained_encoder_dir, pretrained_decoder_dir,
             )
             # check that the from pretrained methods work
             enc_dec_model.save_pretrained(tmp_dirname)

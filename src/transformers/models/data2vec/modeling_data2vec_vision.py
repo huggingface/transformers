@@ -531,9 +531,7 @@ class Data2VecVisionEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    layer_head_mask,
+                    create_custom_forward(layer_module), hidden_states, layer_head_mask,
                 )
             else:
                 relative_position_bias = (
@@ -552,9 +550,7 @@ class Data2VecVisionEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
         )
 
 
@@ -820,10 +816,7 @@ class Data2VecVisionForImageClassification(Data2VecVisionPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -943,16 +936,10 @@ class Data2VecVisionUperHead(nn.Module):
 
         # PSP Module
         self.psp_modules = Data2VecVisionPyramidPoolingModule(
-            self.pool_scales,
-            self.in_channels[-1],
-            self.channels,
-            align_corners=self.align_corners,
+            self.pool_scales, self.in_channels[-1], self.channels, align_corners=self.align_corners,
         )
         self.bottleneck = Data2VecVisionConvModule(
-            self.in_channels[-1] + len(self.pool_scales) * self.channels,
-            self.channels,
-            kernel_size=3,
-            padding=1,
+            self.in_channels[-1] + len(self.pool_scales) * self.channels, self.channels, kernel_size=3, padding=1,
         )
         # FPN Module
         self.lateral_convs = nn.ModuleList()
@@ -964,10 +951,7 @@ class Data2VecVisionUperHead(nn.Module):
             self.fpn_convs.append(fpn_conv)
 
         self.fpn_bottleneck = Data2VecVisionConvModule(
-            len(self.in_channels) * self.channels,
-            self.channels,
-            kernel_size=3,
-            padding=1,
+            len(self.in_channels) * self.channels, self.channels, kernel_size=3, padding=1,
         )
 
     def psp_forward(self, inputs):
@@ -1094,9 +1078,7 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
             nn.GELU(),
             nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
         )
-        self.fpn2 = nn.Sequential(
-            nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),
-        )
+        self.fpn2 = nn.Sequential(nn.ConvTranspose2d(config.hidden_size, config.hidden_size, kernel_size=2, stride=2),)
         self.fpn3 = nn.Identity()
         self.fpn4 = nn.MaxPool2d(kernel_size=2, stride=2)
 

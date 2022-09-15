@@ -95,20 +95,14 @@ class FlaxT5DenseActDense(nn.Module):
     dtype: jnp.dtype = jnp.float32
 
     def setup(self):
-        wi_init_std = self.config.initializer_factor * (self.config.d_model**-0.5)
-        wo_init_std = self.config.initializer_factor * (self.config.d_ff**-0.5)
+        wi_init_std = self.config.initializer_factor * (self.config.d_model ** -0.5)
+        wo_init_std = self.config.initializer_factor * (self.config.d_ff ** -0.5)
 
         self.wi = nn.Dense(
-            self.config.d_ff,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wi_init_std),
-            dtype=self.dtype,
+            self.config.d_ff, use_bias=False, kernel_init=jax.nn.initializers.normal(wi_init_std), dtype=self.dtype,
         )
         self.wo = nn.Dense(
-            self.config.d_model,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wo_init_std),
-            dtype=self.dtype,
+            self.config.d_model, use_bias=False, kernel_init=jax.nn.initializers.normal(wo_init_std), dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
         self.act = ACT2FN[self.config.dense_act_fn]
@@ -126,26 +120,17 @@ class FlaxT5DenseGatedActDense(nn.Module):
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
     def setup(self):
-        wi_init_std = self.config.initializer_factor * (self.config.d_model**-0.5)
-        wo_init_std = self.config.initializer_factor * (self.config.d_ff**-0.5)
+        wi_init_std = self.config.initializer_factor * (self.config.d_model ** -0.5)
+        wo_init_std = self.config.initializer_factor * (self.config.d_ff ** -0.5)
 
         self.wi_0 = nn.Dense(
-            self.config.d_ff,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wi_init_std),
-            dtype=self.dtype,
+            self.config.d_ff, use_bias=False, kernel_init=jax.nn.initializers.normal(wi_init_std), dtype=self.dtype,
         )
         self.wi_1 = nn.Dense(
-            self.config.d_ff,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wi_init_std),
-            dtype=self.dtype,
+            self.config.d_ff, use_bias=False, kernel_init=jax.nn.initializers.normal(wi_init_std), dtype=self.dtype,
         )
         self.wo = nn.Dense(
-            self.config.d_model,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(wo_init_std),
-            dtype=self.dtype,
+            self.config.d_model, use_bias=False, kernel_init=jax.nn.initializers.normal(wo_init_std), dtype=self.dtype,
         )
         self.dropout = nn.Dropout(self.config.dropout_rate)
         self.act = ACT2FN[self.config.dense_act_fn]
@@ -195,32 +180,20 @@ class FlaxT5Attention(nn.Module):
         self.inner_dim = self.n_heads * self.key_value_proj_dim
 
         q_init_std = self.config.initializer_factor * ((self.inner_dim * self.key_value_proj_dim) ** -0.5)
-        kv_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
-        o_init_std = self.config.initializer_factor * (self.inner_dim**-0.5)
+        kv_init_std = self.config.initializer_factor * (self.inner_dim ** -0.5)
+        o_init_std = self.config.initializer_factor * (self.inner_dim ** -0.5)
 
         self.q = nn.Dense(
-            self.inner_dim,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(q_init_std),
-            dtype=self.dtype,
+            self.inner_dim, use_bias=False, kernel_init=jax.nn.initializers.normal(q_init_std), dtype=self.dtype,
         )
         self.k = nn.Dense(
-            self.inner_dim,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(kv_init_std),
-            dtype=self.dtype,
+            self.inner_dim, use_bias=False, kernel_init=jax.nn.initializers.normal(kv_init_std), dtype=self.dtype,
         )
         self.v = nn.Dense(
-            self.inner_dim,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(kv_init_std),
-            dtype=self.dtype,
+            self.inner_dim, use_bias=False, kernel_init=jax.nn.initializers.normal(kv_init_std), dtype=self.dtype,
         )
         self.o = nn.Dense(
-            self.d_model,
-            use_bias=False,
-            kernel_init=jax.nn.initializers.normal(o_init_std),
-            dtype=self.dtype,
+            self.d_model, use_bias=False, kernel_init=jax.nn.initializers.normal(o_init_std), dtype=self.dtype,
         )
 
         if self.has_relative_attention_bias:
@@ -652,20 +625,14 @@ class FlaxT5BlockCollection(nn.Module):
             FlaxT5CheckpointLayer = remat(FlaxT5LayerCollection, static_argnums=(6, 7, 8))
             self.blocks = [
                 FlaxT5CheckpointLayer(
-                    self.config,
-                    has_relative_attention_bias=(i == 0),
-                    dtype=self.dtype,
-                    name=str(i),
+                    self.config, has_relative_attention_bias=(i == 0), dtype=self.dtype, name=str(i),
                 )
                 for i in range(self.config.num_layers)
             ]
         else:
             self.blocks = [
                 FlaxT5LayerCollection(
-                    self.config,
-                    has_relative_attention_bias=(i == 0),
-                    dtype=self.dtype,
-                    name=str(i),
+                    self.config, has_relative_attention_bias=(i == 0), dtype=self.dtype, name=str(i),
                 )
                 for i in range(self.config.num_layers)
             ]
@@ -784,10 +751,7 @@ class FlaxT5Stack(nn.Module):
 
         if not return_dict:
             if output_hidden_states:
-                return (
-                    hidden_states,
-                    all_hidden_states,
-                ) + outputs[2:]
+                return (hidden_states, all_hidden_states,) + outputs[2:]
             return (hidden_states,) + outputs[1:]
 
         return FlaxBaseModelOutputWithPastAndCrossAttentions(
@@ -949,11 +913,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
     def enable_gradient_checkpointing(self):
-        self._module = self.module_class(
-            config=self.config,
-            dtype=self.dtype,
-            gradient_checkpointing=True,
-        )
+        self._module = self.module_class(config=self.config, dtype=self.dtype, gradient_checkpointing=True,)
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
@@ -969,10 +929,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
         params_rng, dropout_rng = jax.random.split(rng)
         rngs = {"params": params_rng, "dropout": dropout_rng}
 
-        random_params = self.module.init(
-            rngs,
-            *args,
-        )["params"]
+        random_params = self.module.init(rngs, *args,)["params"]
 
         if params is not None:
             random_params = flatten_dict(unfreeze(random_params))
@@ -1054,11 +1011,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
 
         def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, **kwargs):
             decoder_module = module._get_decoder_module()
-            return decoder_module(
-                decoder_input_ids,
-                decoder_attention_mask,
-                **kwargs,
-            )
+            return decoder_module(decoder_input_ids, decoder_attention_mask, **kwargs,)
 
         init_variables = self.module.init(
             jax.random.PRNGKey(0),
@@ -1199,11 +1152,7 @@ class FlaxT5PreTrainedModel(FlaxPreTrainedModel):
 
         def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, **kwargs):
             decoder_module = module._get_decoder_module()
-            return decoder_module(
-                decoder_input_ids,
-                decoder_attention_mask,
-                **kwargs,
-            )
+            return decoder_module(decoder_input_ids, decoder_attention_mask, **kwargs,)
 
         outputs = self.module.apply(
             inputs,
@@ -1273,8 +1222,7 @@ T5_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting raw hidden-stateswithout any specific head on top.",
-    T5_START_DOCSTRING,
+    "The bare T5 Model transformer outputting raw hidden-stateswithout any specific head on top.", T5_START_DOCSTRING,
 )
 class FlaxT5Module(nn.Module):
     config: T5Config
@@ -1579,7 +1527,7 @@ class FlaxT5ForConditionalGenerationModule(nn.Module):
         if self.config.tie_word_embeddings:
             # Rescale output before projecting on vocab
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-            sequence_output = sequence_output * (self.model_dim**-0.5)
+            sequence_output = sequence_output * (self.model_dim ** -0.5)
 
         if self.config.tie_word_embeddings:
             shared_embedding = self.shared.variables["params"]["embedding"]
@@ -1676,18 +1624,14 @@ class FlaxT5ForConditionalGeneration(FlaxT5PreTrainedModel):
 
         def _decoder_forward(module, decoder_input_ids, decoder_attention_mask, **kwargs):
             decoder_module = module._get_decoder_module()
-            decoder_outputs = decoder_module(
-                decoder_input_ids,
-                decoder_attention_mask,
-                **kwargs,
-            )
+            decoder_outputs = decoder_module(decoder_input_ids, decoder_attention_mask, **kwargs,)
 
             sequence_output = decoder_outputs[0]
 
             if self.config.tie_word_embeddings:
                 # Rescale output before projecting on vocab
                 # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-                sequence_output = sequence_output * (self.config.d_model**-0.5)
+                sequence_output = sequence_output * (self.config.d_model ** -0.5)
 
             if self.config.tie_word_embeddings:
                 shared_embedding = module.shared.variables["params"]["embedding"]

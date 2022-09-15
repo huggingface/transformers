@@ -306,14 +306,10 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
 
                 input_r = tokenizer_r.batch_encode_plus(
-                    ["This is a simple input 1", "This is a simple input 2"],
-                    max_length=max_length,
-                    padding="longest",
+                    ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding="longest",
                 )
                 input_p = tokenizer_p.batch_encode_plus(
-                    ["This is a simple input 1", "This is a simple input 2"],
-                    max_length=max_length,
-                    padding=True,
+                    ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding=True,
                 )
                 self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
 

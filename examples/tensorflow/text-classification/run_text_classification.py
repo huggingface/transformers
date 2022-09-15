@@ -450,12 +450,7 @@ def main():
             # https://huggingface.co/docs/transformers/main/en/main_classes/model#transformers.TFPreTrainedModel.prepare_tf_dataset
             # https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.to_tf_dataset
 
-            data = model.prepare_tf_dataset(
-                dataset,
-                shuffle=shuffle,
-                batch_size=batch_size,
-                tokenizer=tokenizer,
-            )
+            data = model.prepare_tf_dataset(dataset, shuffle=shuffle, batch_size=batch_size, tokenizer=tokenizer,)
             data = data.with_options(dataset_options)
             tf_data[key] = data
         # endregion

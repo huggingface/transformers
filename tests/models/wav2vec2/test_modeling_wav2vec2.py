@@ -818,10 +818,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         features_shape = (batch_size, feature_seq_length)
 
         mask_time_indices = _compute_mask_indices(
-            features_shape,
-            model.config.mask_time_prob,
-            model.config.mask_time_length,
-            min_masks=2,
+            features_shape, model.config.mask_time_prob, model.config.mask_time_length, min_masks=2,
         )
         sampled_negative_indices = _sample_negative_indices(features_shape, 10, mask_time_indices)
 
@@ -1201,18 +1198,12 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         np.random.seed(4)
         mask_time_indices = _compute_mask_indices(
-            features_shape,
-            model.config.mask_time_prob,
-            model.config.mask_time_length,
-            min_masks=2,
+            features_shape, model.config.mask_time_prob, model.config.mask_time_length, min_masks=2,
         )
         mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
 
         with torch.no_grad():
-            outputs = model(
-                inputs_dict.input_values.to(torch_device),
-                mask_time_indices=mask_time_indices,
-            )
+            outputs = model(inputs_dict.input_values.to(torch_device), mask_time_indices=mask_time_indices,)
 
         # compute cosine similarity
         cosine_sim = torch.cosine_similarity(outputs.projected_states, outputs.projected_quantized_states, dim=-1)
@@ -1251,10 +1242,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
 
         torch.manual_seed(0)
         mask_time_indices = _compute_mask_indices(
-            features_shape,
-            model.config.mask_time_prob,
-            model.config.mask_time_length,
-            min_masks=2,
+            features_shape, model.config.mask_time_prob, model.config.mask_time_length, min_masks=2,
         )
         mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
 
@@ -1300,11 +1288,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     @unittest.skipIf(torch_device != "cpu", "cannot make deterministic on GPU")
     def test_loss_pretraining(self):
         model = Wav2Vec2ForPreTraining.from_pretrained(
-            "facebook/wav2vec2-base",
-            attention_dropout=0.0,
-            feat_proj_dropout=0.0,
-            hidden_dropout=0.0,
-            layerdrop=0.0,
+            "facebook/wav2vec2-base", attention_dropout=0.0, feat_proj_dropout=0.0, hidden_dropout=0.0, layerdrop=0.0,
         )
         model.to(torch_device).train()
 
@@ -1324,10 +1308,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         np.random.seed(0)
 
         mask_time_indices = _compute_mask_indices(
-            features_shape,
-            model.config.mask_time_prob,
-            model.config.mask_time_length,
-            min_masks=2,
+            features_shape, model.config.mask_time_prob, model.config.mask_time_length, min_masks=2,
         )
         sampled_negative_indices = _sample_negative_indices(
             mask_time_indices.shape, model.config.num_negatives, mask_time_indices

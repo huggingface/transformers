@@ -274,8 +274,7 @@ class GPT2ModelTester:
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
-            dim=1,
+            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)], dim=1,
         )
 
         # get two different outputs
@@ -547,10 +546,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             dim=-1,
         )
 
-        outputs = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"].to(torch_device),
-        )
+        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"].to(torch_device),)
 
         outputs_tt = model.generate(
             input_ids=input_ids,
@@ -607,10 +603,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             dim=-1,
         )
 
-        outputs = model.generate(
-            input_ids=input_ids,
-            attention_mask=inputs["attention_mask"].to(torch_device),
-        )
+        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"].to(torch_device),)
 
         outputs_tt = model.generate(
             input_ids=input_ids,

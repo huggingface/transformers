@@ -471,11 +471,7 @@ class Wav2Vec2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
         wav2vec2_model_tester = Wav2Vec2ModelTester(self)
         encoder_config_and_inputs = wav2vec2_model_tester.prepare_config_and_inputs()
         decoder_config_and_inputs = bert_model_tester.prepare_config_and_inputs_for_decoder()
-        (
-            config,
-            input_values,
-            input_mask,
-        ) = encoder_config_and_inputs
+        (config, input_values, input_mask,) = encoder_config_and_inputs
         (
             decoder_config,
             decoder_input_ids,
@@ -595,11 +591,7 @@ class Wav2Vec2Speech2Text2(EncoderDecoderMixin, unittest.TestCase):
         )
         encoder_config_and_inputs = model_tester_encoder.prepare_config_and_inputs()
         decoder_config_and_inputs = model_tester_decoder.prepare_config_and_inputs()
-        (
-            config,
-            input_values,
-            input_mask,
-        ) = encoder_config_and_inputs
+        (config, input_values, input_mask,) = encoder_config_and_inputs
         (decoder_config, decoder_input_ids, decoder_attention_mask, _) = decoder_config_and_inputs
 
         # make sure that cross attention layers are added

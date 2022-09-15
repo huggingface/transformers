@@ -204,8 +204,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
 
 
@@ -360,9 +359,7 @@ def main():
         )
     else:
         model = FlaxAutoModelForImageClassification.from_config(
-            config,
-            seed=training_args.seed,
-            dtype=getattr(jnp, model_args.dtype),
+            config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype),
         )
 
     # Store some constant

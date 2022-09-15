@@ -148,9 +148,7 @@ def convert_weight_and_push(
 
     if push_to_hub:
         our_model.push_to_hub(
-            repo_path_or_name=save_directory / checkpoint_name,
-            commit_message="Add model",
-            use_temp_dir=True,
+            repo_path_or_name=save_directory / checkpoint_name, commit_message="Add model", use_temp_dir=True,
         )
 
         # we can use the convnext one
@@ -180,24 +178,16 @@ def convert_weights_and_push(save_directory: Path, model_name: str = None, push_
 
     names_to_config = {
         "van-tiny": ImageNetPreTrainedConfig(
-            hidden_sizes=[32, 64, 160, 256],
-            depths=[3, 3, 5, 2],
-            mlp_ratios=[8, 8, 4, 4],
+            hidden_sizes=[32, 64, 160, 256], depths=[3, 3, 5, 2], mlp_ratios=[8, 8, 4, 4],
         ),
         "van-small": ImageNetPreTrainedConfig(
-            hidden_sizes=[64, 128, 320, 512],
-            depths=[2, 2, 4, 2],
-            mlp_ratios=[8, 8, 4, 4],
+            hidden_sizes=[64, 128, 320, 512], depths=[2, 2, 4, 2], mlp_ratios=[8, 8, 4, 4],
         ),
         "van-base": ImageNetPreTrainedConfig(
-            hidden_sizes=[64, 128, 320, 512],
-            depths=[3, 3, 12, 3],
-            mlp_ratios=[8, 8, 4, 4],
+            hidden_sizes=[64, 128, 320, 512], depths=[3, 3, 12, 3], mlp_ratios=[8, 8, 4, 4],
         ),
         "van-large": ImageNetPreTrainedConfig(
-            hidden_sizes=[64, 128, 320, 512],
-            depths=[3, 5, 27, 3],
-            mlp_ratios=[8, 8, 4, 4],
+            hidden_sizes=[64, 128, 320, 512], depths=[3, 5, 27, 3], mlp_ratios=[8, 8, 4, 4],
         ),
     }
 

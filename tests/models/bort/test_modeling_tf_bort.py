@@ -35,8 +35,7 @@ class TFBortIntegrationTest(unittest.TestCase):
         model = TFAutoModel.from_pretrained("amazon/bort")
 
         input_ids = tf.convert_to_tensor(
-            [[0, 18077, 4082, 7804, 8606, 6195, 2457, 3321, 11, 10489, 16, 269, 2579, 328, 2]],
-            dtype=tf.int32,
+            [[0, 18077, 4082, 7804, 8606, 6195, 2457, 3321, 11, 10489, 16, 269, 2579, 328, 2]], dtype=tf.int32,
         )  # Schloß Nymphenburg in Munich is really nice!
 
         output = model(input_ids)["last_hidden_state"]
@@ -44,8 +43,7 @@ class TFBortIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         # compare the actual values for a slice.
         expected_slice = tf.convert_to_tensor(
-            [[[-0.0349, 0.0436, -1.8654], [-0.6964, 0.0835, -1.7393], [-0.9819, 0.2956, -0.2868]]],
-            dtype=tf.float32,
+            [[[-0.0349, 0.0436, -1.8654], [-0.6964, 0.0835, -1.7393], [-0.9819, 0.2956, -0.2868]]], dtype=tf.float32,
         )
 
         self.assertTrue(np.allclose(output[:, :3, :3].numpy(), expected_slice.numpy(), atol=1e-4))

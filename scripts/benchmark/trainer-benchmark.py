@@ -345,11 +345,7 @@ def process_results(results, target_metric_key, report_metric_keys, base_variati
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--base-cmd",
-        default=None,
-        type=str,
-        required=True,
-        help="Base cmd",
+        "--base-cmd", default=None, type=str, required=True, help="Base cmd",
     )
     parser.add_argument(
         "--variations",

@@ -407,9 +407,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
 
         if output_word_offsets or output_char_offsets:
             return Wav2Vec2CTCTokenizerOutput(
-                text=text,
-                char_offsets=string_output["char_offsets"],
-                word_offsets=string_output["word_offsets"],
+                text=text, char_offsets=string_output["char_offsets"], word_offsets=string_output["word_offsets"],
             )
         else:
             return text

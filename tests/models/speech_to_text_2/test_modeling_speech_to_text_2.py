@@ -119,11 +119,7 @@ class Speech2Text2StandaloneDecoderModelTester:
         )
 
     def create_and_check_decoder_model_past(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        lm_labels,
+        self, config, input_ids, attention_mask, lm_labels,
     ):
         config.use_cache = True
         model = Speech2Text2Decoder(config=config).to(torch_device).eval()
@@ -161,12 +157,7 @@ class Speech2Text2StandaloneDecoderModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        ) = config_and_inputs
+        (config, input_ids, attention_mask, lm_labels,) = config_and_inputs
 
         inputs_dict = {
             "input_ids": input_ids,
@@ -182,9 +173,7 @@ class Speech2Text2StandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterM
     fx_compatible = True
     test_pruning = False
 
-    def setUp(
-        self,
-    ):
+    def setUp(self,):
         self.model_tester = Speech2Text2StandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=Speech2Text2Config)
 

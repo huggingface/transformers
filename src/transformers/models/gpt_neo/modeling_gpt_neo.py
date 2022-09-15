@@ -611,11 +611,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
                     return custom_forward
 
                 outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
-                    hidden_states,
-                    None,
-                    attention_mask,
-                    head_mask[i],
+                    create_custom_forward(block), hidden_states, None, attention_mask, head_mask[i],
                 )
             else:
                 outputs = block(

@@ -118,12 +118,7 @@ class OPTAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
-        self,
-        embed_dim: int,
-        num_heads: int,
-        dropout: float = 0.0,
-        is_decoder: bool = False,
-        bias: bool = True,
+        self, embed_dim: int, num_heads: int, dropout: float = 0.0, is_decoder: bool = False, bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -136,7 +131,7 @@ class OPTAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
+        self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -382,8 +377,7 @@ OPT_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare OPT Model outputting raw hidden-states without any specific head on top.",
-    OPT_START_DOCSTRING,
+    "The bare OPT Model outputting raw hidden-states without any specific head on top.", OPT_START_DOCSTRING,
 )
 class OPTPreTrainedModel(PreTrainedModel):
     config_class = OPTConfig
@@ -723,8 +717,7 @@ class OPTDecoder(OPTPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare OPT Model outputting raw hidden-states without any specific head on top.",
-    OPT_START_DOCSTRING,
+    "The bare OPT Model outputting raw hidden-states without any specific head on top.", OPT_START_DOCSTRING,
 )
 class OPTModel(OPTPreTrainedModel):
     def __init__(self, config: OPTConfig):

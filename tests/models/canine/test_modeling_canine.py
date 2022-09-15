@@ -271,8 +271,7 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
                     # the expected length of the hidden_states of the first and final shallow encoders
                     # is equal to the seq_length
                     self.assertListEqual(
-                        list(hidden_states[i].shape[-2:]),
-                        [seq_length, self.model_tester.hidden_size],
+                        list(hidden_states[i].shape[-2:]), [seq_length, self.model_tester.hidden_size],
                     )
                 else:
                     # the expected length of the hidden_states of the deep encoder need to be updated
@@ -326,8 +325,7 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers + 2)
 
             self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_len, seq_len],
+                list(attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, seq_len, seq_len],
             )
             out_len = len(outputs)
 
@@ -350,8 +348,7 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers + 2)
             self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_len, seq_len],
+                list(self_attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, seq_len, seq_len],
             )
 
     def test_model_outputs_equivalence(self):
@@ -442,9 +439,7 @@ class CanineModelTest(ModelTesterMixin, unittest.TestCase):
             # Prepare head_mask
             # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior)
             head_mask = torch.ones(
-                self.model_tester.num_hidden_layers,
-                self.model_tester.num_attention_heads,
-                device=torch_device,
+                self.model_tester.num_hidden_layers, self.model_tester.num_attention_heads, device=torch_device,
             )
             head_mask[0, 0] = 0
             head_mask[-1, :-1] = 0

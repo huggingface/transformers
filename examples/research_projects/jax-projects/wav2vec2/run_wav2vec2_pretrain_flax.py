@@ -49,8 +49,7 @@ class ModelArguments:
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
     verbose_logging: Optional[bool] = field(
-        default=False,
-        metadata={"help": "Whether to log verbose messages or not."},
+        default=False, metadata={"help": "Whether to log verbose messages or not."},
     )
     max_gumbel_temperature: Optional[float] = field(
         default=2.0, metadata={"help": "Maximum temperature for gumbel softmax."}
@@ -103,8 +102,7 @@ class DataTrainingArguments:
         },
     )
     speech_file_column: Optional[str] = field(
-        default="file",
-        metadata={"help": "Column in the dataset that contains speech file path. Defaults to 'file'"},
+        default="file", metadata={"help": "Column in the dataset that contains speech file path. Defaults to 'file'"},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
@@ -116,8 +114,7 @@ class DataTrainingArguments:
         },
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_duration_in_seconds: Optional[float] = field(
         default=20.0, metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds"}
@@ -312,10 +309,7 @@ def main():
         # make sure only "validation" and "train" keys remain"
         datasets = DatasetDict()
         datasets["validation"] = load_dataset(
-            data_args.dataset_name,
-            data_args.dataset_config_name,
-            split="validation",
-            cache_dir=model_args.cache_dir,
+            data_args.dataset_name, data_args.dataset_config_name, split="validation", cache_dir=model_args.cache_dir,
         )
         datasets["train"] = load_dataset(
             data_args.dataset_name,
@@ -358,10 +352,7 @@ def main():
 
     # pretraining is only supported for "newer" stable layer norm architecture
     # apply_spec_augment has to be True, mask_feature_prob has to be 0.0
-    config = Wav2Vec2Config.from_pretrained(
-        model_args.model_name_or_path,
-        cache_dir=model_args.cache_dir,
-    )
+    config = Wav2Vec2Config.from_pretrained(model_args.model_name_or_path, cache_dir=model_args.cache_dir,)
 
     if not config.do_stable_layer_norm or config.feat_extract_norm != "layer":
         raise ValueError(
@@ -459,7 +450,7 @@ def main():
             negative_indices = batch.pop("sampled_negative_indices")
 
             gumbel_temperature = jnp.clip(
-                model_args.max_gumbel_temperature * model_args.gumbel_temperature_decay**state.step,
+                model_args.max_gumbel_temperature * model_args.gumbel_temperature_decay ** state.step,
                 a_min=model_args.min_gumbel_temperature,
             )
 

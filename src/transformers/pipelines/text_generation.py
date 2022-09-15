@@ -235,9 +235,7 @@ class TextGenerationPipeline(Pipeline):
             elif return_type in {ReturnType.NEW_TEXT, ReturnType.FULL_TEXT}:
                 # Decode text
                 text = self.tokenizer.decode(
-                    sequence,
-                    skip_special_tokens=True,
-                    clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+                    sequence, skip_special_tokens=True, clean_up_tokenization_spaces=clean_up_tokenization_spaces,
                 )
 
                 # Remove PADDING prompt of the sequence if XLNet or Transfo-XL model is used

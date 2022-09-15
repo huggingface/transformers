@@ -64,9 +64,7 @@ _re_pt_models = re.compile(r"(.*)(?:Model|Encoder|Decoder|ForConditionalGenerati
 
 # This is to make sure the transformers module imported is the one in the repo.
 spec = importlib.util.spec_from_file_location(
-    "transformers",
-    os.path.join(TRANSFORMERS_PATH, "__init__.py"),
-    submodule_search_locations=[TRANSFORMERS_PATH],
+    "transformers", os.path.join(TRANSFORMERS_PATH, "__init__.py"), submodule_search_locations=[TRANSFORMERS_PATH],
 )
 transformers_module = spec.loader.load_module()
 

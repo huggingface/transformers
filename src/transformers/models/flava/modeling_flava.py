@@ -672,10 +672,7 @@ class FlavaEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
+                    create_custom_forward(layer_module), hidden_states, attention_mask, layer_head_mask,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
@@ -1063,9 +1060,7 @@ class FlavaTextModel(FlavaPreTrainedModel):
         )
 
         embedding_output = self.embeddings(
-            input_ids=input_ids,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
+            input_ids=input_ids, token_type_ids=token_type_ids, position_ids=position_ids,
         )
 
         encoder_outputs = self.encoder(
@@ -1471,7 +1466,7 @@ class FlavaImageCodebookBlock(nn.Module):
     def __init__(self, in_size: int, out_size: int, num_layers: int, **kwargs):
         super().__init__()
 
-        self.post_gain = 1 / (num_layers**2)
+        self.post_gain = 1 / (num_layers ** 2)
 
         if in_size != out_size:
             self.id_path = nn.Conv2d(in_size, out_size, kernel_size=1, padding=0)
@@ -1519,9 +1514,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
     supports_gradient_checkpointing = False
 
     def __init__(
-        self,
-        config: FlavaImageCodebookConfig,
-        **kwargs: Any,
+        self, config: FlavaImageCodebookConfig, **kwargs: Any,
     ):
         super().__init__(config)
 
@@ -2060,10 +2053,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
                 mmm_text_logits,
             )
             if return_loss and not flava_losses.all_none():
-                output = (
-                    total_loss,
-                    flava_losses,
-                ) + output
+                output = (total_loss, flava_losses,) + output
 
             # Filter None as transformer by default won't handle it
             return tuple(x for x in output if x is None)

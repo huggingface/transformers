@@ -161,7 +161,7 @@ class TFBlenderbotSmallAttention(tf.keras.layers.Layer):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim**-0.5
+        self.scaling = self.head_dim ** -0.5
         self.is_decoder = is_decoder
 
         self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
@@ -654,9 +654,7 @@ class TFBlenderbotSmallEncoder(tf.keras.layers.Layer):
 
         self.embed_tokens = embed_tokens
         self.embed_positions = TFBlenderbotSmallLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-            name="embed_positions",
+            config.max_position_embeddings, config.d_model, name="embed_positions",
         )
         self.layers = [TFBlenderbotSmallEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layernorm_embedding = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layernorm_embedding")
@@ -769,9 +767,7 @@ class TFBlenderbotSmallEncoder(tf.keras.layers.Layer):
                 continue
 
             hidden_states, attn = encoder_layer(
-                hidden_states,
-                attention_mask,
-                head_mask[idx] if head_mask is not None else None,
+                hidden_states, attention_mask, head_mask[idx] if head_mask is not None else None,
             )
 
             if output_attentions:
@@ -805,9 +801,7 @@ class TFBlenderbotSmallDecoder(tf.keras.layers.Layer):
         self.embed_tokens = embed_tokens
         self.layerdrop = config.decoder_layerdrop
         self.embed_positions = TFBlenderbotSmallLearnedPositionalEmbedding(
-            config.max_position_embeddings,
-            config.d_model,
-            name="embed_positions",
+            config.max_position_embeddings, config.d_model, name="embed_positions",
         )
         self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
         self.layers = [TFBlenderbotSmallDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
@@ -1305,9 +1299,7 @@ class TFBlenderbotSmallForConditionalGeneration(TFBlenderbotSmallPreTrainedModel
 
         if labels is not None:
             labels = tf.where(
-                labels == self.config.pad_token_id,
-                tf.cast(tf.fill(shape_list(labels), -100), labels.dtype),
-                labels,
+                labels == self.config.pad_token_id, tf.cast(tf.fill(shape_list(labels), -100), labels.dtype), labels,
             )
             use_cache = False
             if decoder_input_ids is None:

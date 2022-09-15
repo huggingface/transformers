@@ -76,39 +76,27 @@ class TestDeepSpeedWav2Vec2(TestCasePlus):
     @parameterized.expand(params, name_func=custom_name_func)
     def test_fp32_non_distributed(self, stage, model):
         self.run_and_check(
-            stage=stage,
-            model=model,
-            distributed=False,
-            fp16=False,
+            stage=stage, model=model, distributed=False, fp16=False,
         )
 
     @require_torch_multi_gpu
     @parameterized.expand(params, name_func=custom_name_func)
     def test_fp32_distributed(self, stage, model):
         self.run_and_check(
-            stage=stage,
-            model=model,
-            distributed=True,
-            fp16=False,
+            stage=stage, model=model, distributed=True, fp16=False,
         )
 
     @parameterized.expand(params, name_func=custom_name_func)
     def test_fp16_non_distributed(self, stage, model):
         self.run_and_check(
-            stage=stage,
-            model=model,
-            distributed=False,
-            fp16=True,
+            stage=stage, model=model, distributed=False, fp16=True,
         )
 
     @require_torch_multi_gpu
     @parameterized.expand(params, name_func=custom_name_func)
     def test_fp16_distributed(self, stage, model):
         self.run_and_check(
-            stage=stage,
-            model=model,
-            distributed=True,
-            fp16=True,
+            stage=stage, model=model, distributed=True, fp16=True,
         )
 
     def do_checks(self, output_dir):

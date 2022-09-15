@@ -114,8 +114,7 @@ class TFLEDModelTester:
         )
         inputs_dict = prepare_led_inputs_dict(config, input_ids, decoder_input_ids)
         global_attention_mask = tf.concat(
-            [tf.zeros_like(input_ids)[:, :-1], tf.ones_like(input_ids)[:, -1:]],
-            axis=-1,
+            [tf.zeros_like(input_ids)[:, :-1], tf.ones_like(input_ids)[:, -1:]], axis=-1,
         )
         inputs_dict["global_attention_mask"] = global_attention_mask
         return config, inputs_dict
@@ -319,8 +318,7 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
             self.assertEqual(len(global_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_length, seq_length],
+                list(attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, seq_length, seq_length],
             )
             self.assertListEqual(
                 list(global_attentions[0].shape[-3:]),

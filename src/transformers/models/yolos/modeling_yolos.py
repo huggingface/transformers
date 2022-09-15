@@ -356,10 +356,7 @@ class YolosAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
@@ -417,10 +414,7 @@ class YolosLayer(nn.Module):
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in Yolos, layernorm is applied before self-attention
@@ -453,17 +447,10 @@ class YolosEncoder(nn.Module):
         self.gradient_checkpointing = False
 
         seq_length = (
-            1 + (config.image_size[0] * config.image_size[1] // config.patch_size**2) + config.num_detection_tokens
+            1 + (config.image_size[0] * config.image_size[1] // config.patch_size ** 2) + config.num_detection_tokens
         )
         self.mid_position_embeddings = (
-            nn.Parameter(
-                torch.zeros(
-                    config.num_hidden_layers - 1,
-                    1,
-                    seq_length,
-                    config.hidden_size,
-                )
-            )
+            nn.Parameter(torch.zeros(config.num_hidden_layers - 1, 1, seq_length, config.hidden_size,))
             if config.use_mid_position_embeddings
             else None
         )
@@ -501,9 +488,7 @@ class YolosEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    layer_head_mask,
+                    create_custom_forward(layer_module), hidden_states, layer_head_mask,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
@@ -523,9 +508,7 @@ class YolosEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
         )
 
 
@@ -734,12 +717,7 @@ class YolosForObjectDetection(YolosPreTrainedModel):
     @add_start_docstrings_to_model_forward(YOLOS_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=YolosObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self,
-        pixel_values,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
+        self, pixel_values, labels=None, output_attentions=None, output_hidden_states=None, return_dict=None,
     ):
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):

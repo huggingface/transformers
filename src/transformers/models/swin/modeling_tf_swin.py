@@ -860,8 +860,8 @@ class TFSwinEncoder(tf.keras.layers.Layer):
         self.layers = [
             TFSwinStage(
                 config=config,
-                dim=int(config.embed_dim * 2**i_layer),
-                input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
+                dim=int(config.embed_dim * 2 ** i_layer),
+                input_resolution=(grid_size[0] // (2 ** i_layer), grid_size[1] // (2 ** i_layer)),
                 depth=config.depths[i_layer],
                 num_heads=config.num_heads[i_layer],
                 drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
@@ -953,17 +953,12 @@ class TFSwinPreTrainedModel(TFPreTrainedModel):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
-            dtype=tf.float32,
+            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32,
         )
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
+        input_signature=[{"pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),}]
     )
     def serving(self, inputs):
         output = self.call(inputs)
@@ -1254,7 +1249,7 @@ class TFSwinPixelShuffle(tf.keras.layers.Layer):
     def call(self, x: tf.Tensor) -> tf.Tensor:
         hidden_states = x
         batch_size, _, _, num_input_channels = shape_list(hidden_states)
-        block_size_squared = self.upscale_factor**2
+        block_size_squared = self.upscale_factor ** 2
         output_depth = int(num_input_channels / block_size_squared)
         # When the number of output channels >= 2, PyTorch's PixelShuffle and
         # TF's depth_to_space differ in their output as the order of channels selected for combining
@@ -1272,7 +1267,7 @@ class TFSwinDecoder(tf.keras.layers.Layer):
     def __init__(self, config: SwinConfig, **kwargs):
         super().__init__(**kwargs)
         self.conv2d = tf.keras.layers.Conv2D(
-            filters=config.encoder_stride**2 * config.num_channels, kernel_size=1, strides=1, name="0"
+            filters=config.encoder_stride ** 2 * config.num_channels, kernel_size=1, strides=1, name="0"
         )
         self.pixel_shuffle = TFSwinPixelShuffle(config.encoder_stride, name="1")
 
@@ -1358,7 +1353,7 @@ class TFSwinForMaskedImageModeling(TFSwinPreTrainedModel):
         # Reshape to (batch_size, num_channels, height, width)
         sequence_output = tf.transpose(sequence_output, (0, 2, 1))
         batch_size, num_channels, sequence_length = shape_list(sequence_output)
-        height = width = int(sequence_length**0.5)
+        height = width = int(sequence_length ** 0.5)
         sequence_output = tf.reshape(sequence_output, (batch_size, num_channels, height, width))
 
         # Reconstruct pixel values

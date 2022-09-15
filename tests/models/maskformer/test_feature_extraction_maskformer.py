@@ -168,8 +168,7 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs)
 
         self.assertEqual(
-            encoded_images.shape,
-            (1, self.feature_extract_tester.num_channels, expected_height, expected_width),
+            encoded_images.shape, (1, self.feature_extract_tester.num_channels, expected_height, expected_width),
         )
 
         # Test batched
@@ -200,8 +199,7 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs)
 
         self.assertEqual(
-            encoded_images.shape,
-            (1, self.feature_extract_tester.num_channels, expected_height, expected_width),
+            encoded_images.shape, (1, self.feature_extract_tester.num_channels, expected_height, expected_width),
         )
 
         # Test batched
@@ -233,8 +231,7 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         expected_height, expected_width = self.feature_extract_tester.get_expected_values(image_inputs)
 
         self.assertEqual(
-            encoded_images.shape,
-            (1, self.feature_extract_tester.num_channels, expected_height, expected_width),
+            encoded_images.shape, (1, self.feature_extract_tester.num_channels, expected_height, expected_width),
         )
 
         # Test batched

@@ -141,12 +141,7 @@ class CodeGenAttention(nn.Module):
         return tensor.view(new_shape)
 
     def _attn(
-        self,
-        query,
-        key,
-        value,
-        attention_mask=None,
-        head_mask=None,
+        self, query, key, value, attention_mask=None, head_mask=None,
     ):
         # compute causal mask from causal mask buffer
         query_length, key_length = query.size(-2), key.size(-2)
@@ -564,11 +559,7 @@ class CodeGenModel(CodeGenPreTrainedModel):
                     return custom_forward
 
                 outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block),
-                    hidden_states,
-                    None,
-                    attention_mask,
-                    head_mask[i],
+                    create_custom_forward(block), hidden_states, None, attention_mask, head_mask[i],
                 )
             else:
                 outputs = block(

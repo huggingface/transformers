@@ -115,13 +115,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(outputs),
             [
-                {
-                    "entity_group": ANY(str),
-                    "score": ANY(float),
-                    "start": ANY(int),
-                    "end": ANY(int),
-                    "word": ANY(str),
-                }
+                {"entity_group": ANY(str), "score": ANY(float), "start": ANY(int), "end": ANY(int), "word": ANY(str),}
                 for i in range(n)
             ],
         )
@@ -134,13 +128,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(outputs),
             [
-                {
-                    "entity_group": ANY(str),
-                    "score": ANY(float),
-                    "start": ANY(int),
-                    "end": ANY(int),
-                    "word": ANY(str),
-                }
+                {"entity_group": ANY(str), "score": ANY(float), "start": ANY(int), "end": ANY(int), "word": ANY(str),}
                 for i in range(n)
             ],
         )
@@ -153,13 +141,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(outputs),
             [
-                {
-                    "entity_group": ANY(str),
-                    "score": ANY(float),
-                    "start": ANY(int),
-                    "end": ANY(int),
-                    "word": ANY(str),
-                }
+                {"entity_group": ANY(str), "score": ANY(float), "start": ANY(int), "end": ANY(int), "word": ANY(str),}
                 for i in range(n)
             ],
         )
@@ -174,13 +156,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             nested_simplify(outputs),
             [
-                {
-                    "entity_group": ANY(str),
-                    "score": ANY(float),
-                    "start": ANY(int),
-                    "end": ANY(int),
-                    "word": ANY(str),
-                }
+                {"entity_group": ANY(str), "score": ANY(float), "start": ANY(int), "end": ANY(int), "word": ANY(str),}
                 for i in range(n)
             ],
         )
@@ -262,11 +238,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
     @slow
     def test_gpu(self):
         sentence = "This is dummy sentence"
-        ner = pipeline(
-            "token-classification",
-            device=0,
-            aggregation_strategy=AggregationStrategy.SIMPLE,
-        )
+        ner = pipeline("token-classification", device=0, aggregation_strategy=AggregationStrategy.SIMPLE,)
 
         output = ner(sentence)
         self.assertEqual(nested_simplify(output), [])
@@ -583,14 +555,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
             nested_simplify(pre_entities),
             [
                 {"word": "Hello", "scores": [0.1, 0.3, 0.6], "start": 0, "end": 5, "is_subword": False, "index": 1},
-                {
-                    "word": "there",
-                    "scores": [0.8, 0.1, 0.1],
-                    "index": 2,
-                    "start": 6,
-                    "end": 11,
-                    "is_subword": False,
-                },
+                {"word": "there", "scores": [0.8, 0.1, 0.1], "index": 2, "start": 6, "end": 11, "is_subword": False,},
             ],
         )
 
@@ -681,8 +646,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         )
         outputs = token_classifier("This is a test !")
         self.assertEqual(
-            nested_simplify(outputs),
-            [],
+            nested_simplify(outputs), [],
         )
 
         token_classifier = pipeline(task="token-classification", model=model_name, framework="pt")
@@ -742,13 +706,7 @@ class TokenClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             output_,
             [
-                {
-                    "entity_group": "PER",
-                    "score": 0.996,
-                    "word": "Sarah Jessica Parker",
-                    "start": 6,
-                    "end": 26,
-                },
+                {"entity_group": "PER", "score": 0.996, "word": "Sarah Jessica Parker", "start": 6, "end": 26,},
                 {"entity_group": "PER", "score": 0.977, "word": "Jessica", "start": 31, "end": 38},
                 {"entity_group": "LOC", "score": 0.999, "word": "New York", "start": 48, "end": 56},
             ],

@@ -172,9 +172,4 @@ class BigBirdOnnxConfig(OnnxConfig):
             dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
         else:
             dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-            ]
-        )
+        return OrderedDict([("input_ids", dynamic_axis), ("attention_mask", dynamic_axis),])

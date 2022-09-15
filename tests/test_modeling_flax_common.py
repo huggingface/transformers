@@ -612,8 +612,7 @@ class FlaxModelTesterMixin:
                 seq_length = self.model_tester.seq_length
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
             )
 
             if config.is_encoder_decoder:
@@ -625,8 +624,7 @@ class FlaxModelTesterMixin:
                 decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
 
                 self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]),
-                    [decoder_seq_length, self.model_tester.hidden_size],
+                    list(hidden_states[0].shape[-2:]), [decoder_seq_length, self.model_tester.hidden_size],
                 )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -697,11 +695,7 @@ class FlaxModelTesterMixin:
                 self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
                     list(cross_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        decoder_seq_length,
-                        encoder_key_length,
-                    ],
+                    [self.model_tester.num_attention_heads, decoder_seq_length, encoder_key_length,],
                 )
 
             # Check attention is always last and order is fine
@@ -1073,9 +1067,9 @@ class FlaxModelTesterMixin:
                 # Check a file is bigger than max_size only when it has a single weight
                 for shard_file, size in shard_to_size.items():
                     if max_size.endswith("kiB"):
-                        max_size_int = int(max_size[:-3]) * 2**10
+                        max_size_int = int(max_size[:-3]) * 2 ** 10
                     else:
-                        max_size_int = int(max_size[:-2]) * 10**3
+                        max_size_int = int(max_size[:-2]) * 10 ** 3
                     # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
                     # the size asked for (since we count parameters)
                     if size >= max_size_int + 50000:

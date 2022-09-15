@@ -89,11 +89,7 @@ class FakeRegNetVisslWrapper(nn.Module):
         self._feature_blocks = nn.ModuleDict(feature_blocks)
 
     def forward(self, x: Tensor):
-        return get_trunk_forward_outputs(
-            x,
-            out_feat_keys=None,
-            feature_blocks=self._feature_blocks,
-        )
+        return get_trunk_forward_outputs(x, out_feat_keys=None, feature_blocks=self._feature_blocks,)
 
 
 class FakeRegNetParams(RegNetParams):

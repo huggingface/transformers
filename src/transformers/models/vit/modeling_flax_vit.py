@@ -598,9 +598,7 @@ class FlaxViTForImageClassificationModule(nn.Module):
             return output
 
         return FlaxSequenceClassifierOutput(
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 

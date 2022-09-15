@@ -295,7 +295,7 @@ class BigBirdEmbeddings(nn.Module):
             inputs_embeds = self.word_embeddings(input_ids)
 
         if self.rescale_embeddings:
-            inputs_embeds = inputs_embeds * (self.hidden_size**0.5)
+            inputs_embeds = inputs_embeds * (self.hidden_size ** 0.5)
 
         token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
@@ -667,11 +667,7 @@ class BigBirdBlockSparseAttention(nn.Module):
             dim=3,
         )
         second_rand_pad = torch.cat(
-            [
-                rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
-                rand_mask[:, :, 0],
-            ],
-            dim=3,
+            [rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]), rand_mask[:, :, 0],], dim=3,
         )
         second_product = second_product * rsqrt_d
         second_product += (1.0 - torch.minimum(second_seq_pad, second_rand_pad)) * attn_mask_penalty
@@ -801,11 +797,7 @@ class BigBirdBlockSparseAttention(nn.Module):
             dim=3,
         )
         second_last_rand_pad = torch.cat(
-            [
-                rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]),
-                rand_mask[:, :, -1],
-            ],
-            dim=3,
+            [rand_mask.new_ones([bsz, n_heads, from_block_size, 4 * to_block_size]), rand_mask[:, :, -1],], dim=3,
         )
         second_last_product = second_last_product * rsqrt_d
         second_last_product += (1.0 - torch.minimum(second_last_seq_pad, second_last_rand_pad)) * attn_mask_penalty
@@ -2242,9 +2234,7 @@ class BigBirdModel(BigBirdPreTrainedModel):
                 position_ids = nn.functional.pad(position_ids, (0, padding_len), value=pad_token_id)
             if inputs_embeds is not None:
                 input_ids_padding = inputs_embeds.new_full(
-                    (batch_size, padding_len),
-                    self.config.pad_token_id,
-                    dtype=torch.long,
+                    (batch_size, padding_len), self.config.pad_token_id, dtype=torch.long,
                 )
                 inputs_embeds_padding = self.embeddings(input_ids_padding)
                 inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_padding], dim=-2)
@@ -2780,10 +2770,7 @@ class BigBirdForSequenceClassification(BigBirdPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -2874,10 +2861,7 @@ class BigBirdForMultipleChoice(BigBirdPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -2961,10 +2945,7 @@ class BigBirdForTokenClassification(BigBirdPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 

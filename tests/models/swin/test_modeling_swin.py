@@ -175,11 +175,7 @@ class SwinModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            pixel_values,
-            labels,
-        ) = config_and_inputs
+        (config, pixel_values, labels,) = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
@@ -187,13 +183,7 @@ class SwinModelTester:
 @require_torch
 class SwinModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (
-            SwinModel,
-            SwinForImageClassification,
-            SwinForMaskedImageModeling,
-        )
-        if is_torch_available()
-        else ()
+        (SwinModel, SwinForImageClassification, SwinForMaskedImageModeling,) if is_torch_available() else ()
     )
     fx_compatible = True
 
@@ -274,7 +264,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            window_size_squared = config.window_size**2
+            window_size_squared = config.window_size ** 2
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -339,8 +329,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
         self.assertListEqual(
-            list(hidden_states[0].shape[-2:]),
-            [num_patches, self.model_tester.embed_dim],
+            list(hidden_states[0].shape[-2:]), [num_patches, self.model_tester.embed_dim],
         )
 
         reshaped_hidden_states = outputs.reshaped_hidden_states
@@ -351,8 +340,7 @@ class SwinModelTest(ModelTesterMixin, unittest.TestCase):
             reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
         )
         self.assertListEqual(
-            list(reshaped_hidden_states.shape[-2:]),
-            [num_patches, self.model_tester.embed_dim],
+            list(reshaped_hidden_states.shape[-2:]), [num_patches, self.model_tester.embed_dim],
         )
 
     def test_hidden_states_output(self):

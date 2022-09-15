@@ -118,8 +118,7 @@ def init_gpu_params(params):
     if params.multi_gpu:
         logger.info("Initializing PyTorch distributed")
         torch.distributed.init_process_group(
-            init_method="env://",
-            backend="nccl",
+            init_method="env://", backend="nccl",
         )
 
 

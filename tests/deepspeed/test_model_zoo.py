@@ -177,9 +177,7 @@ def make_task_cmds():
             "t5_v1",
             # "mt5", missing model files
         ],
-        sum=[
-            "pegasus",
-        ],
+        sum=["pegasus",],
         clm=[
             "big_bird",
             "bigbird_pegasus",
@@ -223,9 +221,7 @@ def make_task_cmds():
             # "openai-gpt", missing model files
             # "tapas", multiple issues
         ],
-        img_clas=[
-            "vit",
-        ],
+        img_clas=["vit",],
     )
 
     scripts_dir = f"{ROOT_DIRECTORY}/examples/pytorch"

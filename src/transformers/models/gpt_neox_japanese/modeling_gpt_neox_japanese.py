@@ -93,13 +93,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
         self.dense_bias = nn.Parameter(torch.zeros(config.hidden_size)) if use_bias else None
 
     def forward(
-        self,
-        hidden_states,
-        attention_mask,
-        head_mask=None,
-        layer_past=None,
-        use_cache=False,
-        output_attentions=False,
+        self, hidden_states, attention_mask, head_mask=None, layer_past=None, use_cache=False, output_attentions=False,
     ):
         has_layer_past = layer_past is not None and layer_past[0].numel() > 0
 
@@ -200,11 +194,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
         attn_scores = torch.zeros(
-            batch_size * num_attention_heads,
-            query_length,
-            key_length,
-            dtype=query.dtype,
-            device=key.device,
+            batch_size * num_attention_heads, query_length, key_length, dtype=query.dtype, device=key.device,
         )
         attn_scores = torch.baddbmm(
             attn_scores,

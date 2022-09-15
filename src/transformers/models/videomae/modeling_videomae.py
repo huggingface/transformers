@@ -318,10 +318,7 @@ class VideoMAEAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_outputs = self.attention(hidden_states, head_mask, output_attentions)
 
@@ -379,10 +376,7 @@ class VideoMAELayer(nn.Module):
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
+        self, hidden_states: torch.Tensor, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         self_attention_outputs = self.attention(
             self.layernorm_before(hidden_states),  # in VideoMAE, layernorm is applied before self-attention
@@ -441,9 +435,7 @@ class VideoMAEEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    layer_head_mask,
+                    create_custom_forward(layer_module), hidden_states, layer_head_mask,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
@@ -459,9 +451,7 @@ class VideoMAEEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
+            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
         )
 
 
@@ -654,7 +644,7 @@ class VideoMAEDecoder(nn.Module):
     def __init__(self, config, num_patches):
         super().__init__()
 
-        decoder_num_labels = config.num_channels * config.tubelet_size * config.patch_size**2
+        decoder_num_labels = config.num_channels * config.tubelet_size * config.patch_size ** 2
 
         decoder_config = deepcopy(config)
         decoder_config.hidden_size = config.decoder_hidden_size
@@ -674,12 +664,7 @@ class VideoMAEDecoder(nn.Module):
         self.config = config
 
     def forward(
-        self,
-        hidden_states,
-        return_token_num,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        self, hidden_states, return_token_num, output_attentions=False, output_hidden_states=False, return_dict=True,
     ):
         # apply Transformer layers (blocks)
         all_hidden_states = () if output_hidden_states else None
@@ -697,9 +682,7 @@ class VideoMAEDecoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    None,
+                    create_custom_forward(layer_module), hidden_states, None,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions)
@@ -887,10 +870,7 @@ class VideoMAEForPreTraining(VideoMAEPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return VideoMAEForPreTrainingOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
 
@@ -1026,8 +1006,5 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return ImageClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )

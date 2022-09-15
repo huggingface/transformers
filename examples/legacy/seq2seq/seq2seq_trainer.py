@@ -119,11 +119,7 @@ class Seq2SeqTrainer(Trainer):
                 }
             optimizer_kwargs["lr"] = self.args.learning_rate
             if self.sharded_ddp:
-                self.optimizer = OSS(
-                    params=optimizer_grouped_parameters,
-                    optim=optimizer_cls,
-                    **optimizer_kwargs,
-                )
+                self.optimizer = OSS(params=optimizer_grouped_parameters, optim=optimizer_cls, **optimizer_kwargs,)
             else:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
 
@@ -221,9 +217,7 @@ class Seq2SeqTrainer(Trainer):
 
         if self.args.predict_with_generate and not self.args.prediction_loss_only:
             generated_tokens = self.model.generate(
-                inputs["input_ids"],
-                attention_mask=inputs["attention_mask"],
-                **gen_kwargs,
+                inputs["input_ids"], attention_mask=inputs["attention_mask"], **gen_kwargs,
             )
             # in case the batch is shorter than max length, the output should be padded
             if generated_tokens.shape[-1] < gen_kwargs["max_length"]:

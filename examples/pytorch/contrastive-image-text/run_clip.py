@@ -121,15 +121,13 @@ class DataTrainingArguments:
         metadata={"help": "The name of the column in the datasets containing the full image file paths."},
     )
     caption_column: Optional[str] = field(
-        default="caption",
-        metadata={"help": "The name of the column in the datasets containing the image captions."},
+        default="caption", metadata={"help": "The name of the column in the datasets containing the image captions."},
     )
     train_file: Optional[str] = field(
         default=None, metadata={"help": "The input training data file (a jsonlines file)."}
     )
     validation_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "An optional input evaluation data file (a jsonlines file)."},
+        default=None, metadata={"help": "An optional input evaluation data file (a jsonlines file)."},
     )
     max_seq_length: Optional[int] = field(
         default=128,
@@ -165,8 +163,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
 
     def __post_init__(self):

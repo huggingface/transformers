@@ -238,8 +238,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     keep_linebreaks: bool = field(
         default=True, metadata={"help": "Whether to keep line breaks when using TXT files or not."}
@@ -349,9 +348,7 @@ def main():
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
     )
     # Setup logging, we only want one process per machine to log things on the screen.
     logger.setLevel(logging.INFO if jax.process_index() == 0 else logging.ERROR)
@@ -502,9 +499,7 @@ def main():
         )
     else:
         model = FlaxAutoModelForCausalLM.from_config(
-            config,
-            seed=training_args.seed,
-            dtype=getattr(jnp, model_args.dtype),
+            config, seed=training_args.seed, dtype=getattr(jnp, model_args.dtype),
         )
 
     # Preprocessing the datasets.
@@ -662,9 +657,7 @@ def main():
     if training_args.adafactor:
         # We use the default parameters here to initialize adafactor,
         # For more details about the parameters please check https://github.com/deepmind/optax/blob/ed02befef9bf81cbbf236be3d2b0e032e9ed4a40/optax/_src/alias.py#L74
-        optimizer = optax.adafactor(
-            learning_rate=linear_decay_lr_schedule_fn,
-        )
+        optimizer = optax.adafactor(learning_rate=linear_decay_lr_schedule_fn,)
     else:
         optimizer = optax.adamw(
             learning_rate=linear_decay_lr_schedule_fn,

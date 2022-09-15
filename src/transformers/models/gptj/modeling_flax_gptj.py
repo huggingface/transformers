@@ -604,11 +604,7 @@ class FlaxGPTJModule(nn.Module):
         if not return_dict:
             return tuple(v for v in outputs if v is not None)
 
-        return FlaxBaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=outputs[1],
-            attentions=outputs[-1],
-        )
+        return FlaxBaseModelOutput(last_hidden_state=hidden_states, hidden_states=outputs[1], attentions=outputs[-1],)
 
 
 @add_start_docstrings(
@@ -620,11 +616,7 @@ class FlaxGPTJModel(FlaxGPTJPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxGPTJModel,
-    _TOKENIZER_FOR_DOC,
-    _CHECKPOINT_FOR_DOC,
-    FlaxCausalLMOutput,
-    _CONFIG_FOR_DOC,
+    FlaxGPTJModel, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC,
 )
 
 
@@ -713,9 +705,5 @@ class FlaxGPTJForCausalLM(FlaxGPTJPreTrainedModel):
 
 
 append_call_sample_docstring(
-    FlaxGPTJForCausalLM,
-    _TOKENIZER_FOR_DOC,
-    _CHECKPOINT_FOR_DOC,
-    FlaxCausalLMOutput,
-    _CONFIG_FOR_DOC,
+    FlaxGPTJForCausalLM, _TOKENIZER_FOR_DOC, _CHECKPOINT_FOR_DOC, FlaxCausalLMOutput, _CONFIG_FOR_DOC,
 )

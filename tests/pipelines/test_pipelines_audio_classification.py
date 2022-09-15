@@ -48,18 +48,11 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         output = audio_classifier(audio)
         # by default a model is initialized with num_labels=2
         self.assertEqual(
-            output,
-            [
-                {"score": ANY(float), "label": ANY(str)},
-                {"score": ANY(float), "label": ANY(str)},
-            ],
+            output, [{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)},],
         )
         output = audio_classifier(audio, top_k=1)
         self.assertEqual(
-            output,
-            [
-                {"score": ANY(float), "label": ANY(str)},
-            ],
+            output, [{"score": ANY(float), "label": ANY(str)},],
         )
 
         self.run_torchaudio(audio_classifier)
@@ -73,11 +66,7 @@ class AudioClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         audio = dataset[0]["audio"]["array"]
         output = audio_classifier(audio)
         self.assertEqual(
-            output,
-            [
-                {"score": ANY(float), "label": ANY(str)},
-                {"score": ANY(float), "label": ANY(str)},
-            ],
+            output, [{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)},],
         )
 
     @require_torch

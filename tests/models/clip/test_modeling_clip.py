@@ -659,12 +659,10 @@ class CLIPModelIntegrationTest(unittest.TestCase):
 
         # verify the logits
         self.assertEqual(
-            outputs.logits_per_image.shape,
-            torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
+            outputs.logits_per_image.shape, torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
         )
         self.assertEqual(
-            outputs.logits_per_text.shape,
-            torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
+            outputs.logits_per_text.shape, torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
         expected_logits = torch.tensor([[24.5701, 19.3049]], device=torch_device)

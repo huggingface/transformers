@@ -144,8 +144,7 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
             seq_length = num_patches + 1
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -187,8 +186,7 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_length, seq_length],
+                list(attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, seq_length, seq_length],
             )
             out_len = len(outputs)
 
@@ -205,8 +203,7 @@ class FlaxCLIPVisionModelTest(FlaxModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, seq_length, seq_length],
+                list(self_attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, seq_length, seq_length],
             )
 
     # FlaxCLIPVisionModel does not have any base model

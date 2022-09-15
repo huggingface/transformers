@@ -206,10 +206,7 @@ def prepare_video(num_frames):
         filename = "eating_spaghetti.npy"
     elif num_frames == 32:
         filename = "eating_spaghetti_32_frames.npy"
-    file = hf_hub_download(
-        repo_id="datasets/hf-internal-testing/spaghetti-video",
-        filename=filename,
-    )
+    file = hf_hub_download(repo_id="datasets/hf-internal-testing/spaghetti-video", filename=filename,)
     video = np.load(file)
     return list(video)
 
@@ -369,10 +366,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--model_name",
-        default="xclip-base-patch32",
-        type=str,
-        help="Name of the model.",
+        "--model_name", default="xclip-base-patch32", type=str, help="Name of the model.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."

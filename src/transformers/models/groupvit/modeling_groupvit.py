@@ -186,7 +186,7 @@ class GroupViTCrossAttentionLayer(nn.Module):
 class GroupViTAssignAttention(nn.Module):
     def __init__(self, config: GroupViTVisionConfig):
         super().__init__()
-        self.scale = config.hidden_size**-0.5
+        self.scale = config.hidden_size ** -0.5
 
         self.q_proj = nn.Linear(config.hidden_size, config.hidden_size)
         self.k_proj = nn.Linear(config.hidden_size, config.hidden_size)
@@ -413,10 +413,7 @@ class GroupViTVisionEmbeddings(nn.Module):
         )
         scale_factor = (feat_height / original_height, feat_width / original_width)
         patch_pos_embed = nn.functional.interpolate(
-            reshaped_patch_pos_embed,
-            scale_factor=scale_factor,
-            mode="bicubic",
-            align_corners=False,
+            reshaped_patch_pos_embed, scale_factor=scale_factor, mode="bicubic", align_corners=False,
         )
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
@@ -495,9 +492,7 @@ class GroupViTStage(nn.Module):
 
         if num_group_token > 0:
             self.downsample = GroupViTTokenAssign(
-                config=config,
-                num_group_token=num_group_token,
-                num_output_group=num_output_group,
+                config=config, num_group_token=num_group_token, num_output_group=num_output_group,
             )
         else:
             self.downsample = None
@@ -611,7 +606,7 @@ class GroupViTAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {self.num_heads})."
             )
-        self.scale = self.head_dim**-0.5
+        self.scale = self.head_dim ** -0.5
         self.dropout = config.attention_dropout
 
         self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
@@ -789,8 +784,8 @@ class GroupViTPreTrainedModel(PreTrainedModel):
             module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
         elif isinstance(module, GroupViTAttention):
             factor = self.config.initializer_factor
-            in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
-            out_proj_std = (module.embed_dim**-0.5) * factor
+            in_proj_std = (module.embed_dim ** -0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+            out_proj_std = (module.embed_dim ** -0.5) * factor
             nn.init.normal_(module.q_proj.weight, std=in_proj_std)
             nn.init.normal_(module.k_proj.weight, std=in_proj_std)
             nn.init.normal_(module.v_proj.weight, std=in_proj_std)
@@ -798,7 +793,7 @@ class GroupViTPreTrainedModel(PreTrainedModel):
         elif isinstance(module, GroupViTMLP):
             factor = self.config.initializer_factor
             in_proj_std = (
-                (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
+                (module.config.hidden_size ** -0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             )
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
             nn.init.normal_(module.fc1.weight, std=fc_std)
@@ -1038,17 +1033,11 @@ class GroupViTTextEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(encoder_layer),
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
+                    create_custom_forward(encoder_layer), hidden_states, attention_mask, causal_attention_mask,
                 )
             else:
                 layer_outputs = encoder_layer(
-                    hidden_states,
-                    attention_mask,
-                    causal_attention_mask,
-                    output_attentions=output_attentions,
+                    hidden_states, attention_mask, causal_attention_mask, output_attentions=output_attentions,
                 )
 
             hidden_states = layer_outputs[0]

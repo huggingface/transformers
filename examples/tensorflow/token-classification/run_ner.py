@@ -104,12 +104,10 @@ class DataTrainingArguments:
         default=None, metadata={"help": "The input training data file (a csv or JSON file)."}
     )
     validation_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."},
+        default=None, metadata={"help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."},
     )
     test_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
+        default=None, metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
     )
     text_column_name: Optional[str] = field(
         default=None, metadata={"help": "The column name of text to input in the file (a csv or JSON file)."}
@@ -121,8 +119,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_length: Optional[int] = field(default=256, metadata={"help": "Max length (in tokens) for truncation/padding"})
     pad_to_max_length: bool = field(
@@ -239,9 +236,7 @@ def main():
             data_files["validation"] = data_args.validation_file
         extension = data_args.train_file.split(".")[-1]
         raw_datasets = load_dataset(
-            extension,
-            data_files=data_files,
-            use_auth_token=True if model_args.use_auth_token else None,
+            extension, data_files=data_files, use_auth_token=True if model_args.use_auth_token else None,
         )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
@@ -377,10 +372,7 @@ def main():
     with training_args.strategy.scope():
         # region Initialize model
         if model_args.model_name_or_path:
-            model = TFAutoModelForTokenClassification.from_pretrained(
-                model_args.model_name_or_path,
-                config=config,
-            )
+            model = TFAutoModelForTokenClassification.from_pretrained(model_args.model_name_or_path, config=config,)
         else:
             logger.info("Training new model from scratch")
             model = TFAutoModelForTokenClassification.from_config(config)
@@ -409,17 +401,11 @@ def main():
         # https://huggingface.co/docs/datasets/main/en/package_reference/main_classes#datasets.Dataset.to_tf_dataset
 
         tf_train_dataset = model.prepare_tf_dataset(
-            train_dataset,
-            collate_fn=collate_fn,
-            batch_size=total_train_batch_size,
-            shuffle=True,
+            train_dataset, collate_fn=collate_fn, batch_size=total_train_batch_size, shuffle=True,
         ).with_options(dataset_options)
         total_eval_batch_size = training_args.per_device_eval_batch_size * num_replicas
         tf_eval_dataset = model.prepare_tf_dataset(
-            eval_dataset,
-            collate_fn=collate_fn,
-            batch_size=total_eval_batch_size,
-            shuffle=False,
+            eval_dataset, collate_fn=collate_fn, batch_size=total_eval_batch_size, shuffle=False,
         ).with_options(dataset_options)
 
         # endregion
@@ -565,8 +551,7 @@ def main():
         labels[attention_mask == 0] = -100
         preds, refs = get_labels(predictions, labels)
         metric.add_batch(
-            predictions=preds,
-            references=refs,
+            predictions=preds, references=refs,
         )
         eval_metric = compute_metrics()
         logger.info("Evaluation metrics:")

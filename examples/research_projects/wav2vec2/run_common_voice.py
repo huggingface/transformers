@@ -112,8 +112,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_train_samples: Optional[int] = field(
         default=None,
@@ -325,18 +324,10 @@ def main():
         return {"vocab": [vocab], "all_text": [all_text]}
 
     vocab_train = train_dataset.map(
-        extract_all_chars,
-        batched=True,
-        batch_size=-1,
-        keep_in_memory=True,
-        remove_columns=train_dataset.column_names,
+        extract_all_chars, batched=True, batch_size=-1, keep_in_memory=True, remove_columns=train_dataset.column_names,
     )
     vocab_test = train_dataset.map(
-        extract_all_chars,
-        batched=True,
-        batch_size=-1,
-        keep_in_memory=True,
-        remove_columns=eval_dataset.column_names,
+        extract_all_chars, batched=True, batch_size=-1, keep_in_memory=True, remove_columns=eval_dataset.column_names,
     )
 
     vocab_list = list(set(vocab_train["vocab"][0]) | set(vocab_test["vocab"][0]))
@@ -354,12 +345,7 @@ def main():
     # Distributed training:
     # The .from_pretrained methods guarantee that only one local process can concurrently
     # download model & vocab.
-    tokenizer = Wav2Vec2CTCTokenizer(
-        "vocab.json",
-        unk_token="[UNK]",
-        pad_token="[PAD]",
-        word_delimiter_token="|",
-    )
+    tokenizer = Wav2Vec2CTCTokenizer("vocab.json", unk_token="[UNK]", pad_token="[PAD]", word_delimiter_token="|",)
     feature_extractor = Wav2Vec2FeatureExtractor(
         feature_size=1, sampling_rate=16_000, padding_value=0.0, do_normalize=True, return_attention_mask=True
     )

@@ -642,9 +642,7 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
 
         self.assertEqual(1024, dct["input_ids"].shape[1])
         hypotheses_batch = model.generate(
-            input_ids=dct["input_ids"],
-            attention_mask=dct["attention_mask"],
-            num_beams=2,
+            input_ids=dct["input_ids"], attention_mask=dct["attention_mask"], num_beams=2,
         ).sequences
         assert (hypotheses_batch[:, 1] == 0).all().item()
 

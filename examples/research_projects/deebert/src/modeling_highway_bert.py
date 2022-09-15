@@ -103,8 +103,7 @@ class DeeBertEncoder(nn.Module):
 
 
 @add_start_docstrings(
-    "The Bert Model transformer with early exiting (DeeBERT). ",
-    BERT_START_DOCSTRING,
+    "The Bert Model transformer with early exiting (DeeBERT). ", BERT_START_DOCSTRING,
 )
 class DeeBertModel(BertPreTrainedModel):
     def __init__(self, config):

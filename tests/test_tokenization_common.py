@@ -269,10 +269,7 @@ class TokenizerTesterMixin:
             tokenizer_classes.append(self.rust_tokenizer_class)
 
         for tokenizer_class in tokenizer_classes:
-            tokenizer = tokenizer_class.from_pretrained(
-                model_name,
-                revision=revision,  # to pin the tokenizer version
-            )
+            tokenizer = tokenizer_class.from_pretrained(model_name, revision=revision,)  # to pin the tokenizer version
 
             encoding = tokenizer(sequences, padding=padding)
             decoded_sequences = [
@@ -1753,11 +1750,7 @@ class TokenizerTesterMixin:
                 # Test 'longest' and 'no_padding' don't do anything
                 tokenizer.padding_side = "right"
 
-                not_padded_sequence = tokenizer.encode_plus(
-                    sequence,
-                    padding=True,
-                    return_special_tokens_mask=True,
-                )
+                not_padded_sequence = tokenizer.encode_plus(sequence, padding=True, return_special_tokens_mask=True,)
                 not_padded_input_ids = not_padded_sequence["input_ids"]
 
                 not_padded_special_tokens_mask = not_padded_sequence["special_tokens_mask"]
@@ -1767,11 +1760,7 @@ class TokenizerTesterMixin:
                 self.assertEqual(input_ids, not_padded_input_ids)
                 self.assertEqual(special_tokens_mask, not_padded_special_tokens_mask)
 
-                not_padded_sequence = tokenizer.encode_plus(
-                    sequence,
-                    padding=False,
-                    return_special_tokens_mask=True,
-                )
+                not_padded_sequence = tokenizer.encode_plus(sequence, padding=False, return_special_tokens_mask=True,)
                 not_padded_input_ids = not_padded_sequence["input_ids"]
 
                 not_padded_special_tokens_mask = not_padded_sequence["special_tokens_mask"]
@@ -1872,8 +1861,7 @@ class TokenizerTesterMixin:
             tokenizer_slow.pad(encoding_slow)
         self.assertEqual(len(cm.records), 1)
         self.assertIn(
-            "Dummy warning",
-            cm.records[0].message,
+            "Dummy warning", cm.records[0].message,
         )
 
     def test_separate_tokenizers(self):
@@ -1988,8 +1976,7 @@ class TokenizerTesterMixin:
                 )
                 for key in encoded_sequences_batch_padded_1.keys():
                     self.assertListEqual(
-                        encoded_sequences_batch_padded_1[key],
-                        encoded_sequences_batch_padded_2[key],
+                        encoded_sequences_batch_padded_1[key], encoded_sequences_batch_padded_2[key],
                     )
 
                 # check 'no_padding' is unsensitive to a max length
@@ -1999,8 +1986,7 @@ class TokenizerTesterMixin:
                 )
                 for key in encoded_sequences_batch_padded_1.keys():
                     self.assertListEqual(
-                        encoded_sequences_batch_padded_1[key],
-                        encoded_sequences_batch_padded_2[key],
+                        encoded_sequences_batch_padded_1[key], encoded_sequences_batch_padded_2[key],
                     )
 
     @require_tokenizers
@@ -2248,18 +2234,10 @@ class TokenizerTesterMixin:
 
                 if tokenizer.pad_token_id is None:
                     self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        sequences,
-                        padding=True,
-                        return_tensors="pt",
+                        ValueError, tokenizer.batch_encode_plus, sequences, padding=True, return_tensors="pt",
                     )
                     self.assertRaises(
-                        ValueError,
-                        tokenizer.batch_encode_plus,
-                        sequences,
-                        padding="longest",
-                        return_tensors="tf",
+                        ValueError, tokenizer.batch_encode_plus, sequences, padding="longest", return_tensors="tf",
                     )
                 else:
                     pytorch_tensor = tokenizer.batch_encode_plus(sequences, padding=True, return_tensors="pt")
@@ -2285,11 +2263,7 @@ class TokenizerTesterMixin:
             # add pad_token_id to pass subsequent tests
             tokenizer.add_special_tokens({"pad_token": "<PAD>"})
 
-    def check_subword_sampling(
-        self,
-        tokenizer: PreTrainedTokenizer,
-        text: str = None,
-    ) -> None:
+    def check_subword_sampling(self, tokenizer: PreTrainedTokenizer, text: str = None,) -> None:
         """
         Check if the tokenizer generates different results when subword regularization is enabled.
 
@@ -2841,8 +2815,7 @@ class TokenizerTesterMixin:
 
                 # Assert the set of special tokens match.
                 self.assertSequenceEqual(
-                    tokenizer_p.special_tokens_map.items(),
-                    tokenizer_r.special_tokens_map.items(),
+                    tokenizer_p.special_tokens_map.items(), tokenizer_r.special_tokens_map.items(),
                 )
 
     def test_add_tokens(self):
@@ -3233,14 +3206,10 @@ class TokenizerTesterMixin:
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
 
                 input_r = tokenizer_r.batch_encode_plus(
-                    ["This is a simple input 1", "This is a simple input 2"],
-                    max_length=max_length,
-                    padding="longest",
+                    ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding="longest",
                 )
                 input_p = tokenizer_p.batch_encode_plus(
-                    ["This is a simple input 1", "This is a simple input 2"],
-                    max_length=max_length,
-                    padding=True,
+                    ["This is a simple input 1", "This is a simple input 2"], max_length=max_length, padding=True,
                 )
                 self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
 
@@ -3462,14 +3431,8 @@ class TokenizerTesterMixin:
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 sentence = "A, <mask> AllenNLP sentence."
-                tokens_r = tokenizer_r.encode_plus(
-                    sentence,
-                    add_special_tokens=True,
-                )
-                tokens_p = tokenizer_p.encode_plus(
-                    sentence,
-                    add_special_tokens=True,
-                )
+                tokens_r = tokenizer_r.encode_plus(sentence, add_special_tokens=True,)
+                tokens_p = tokenizer_p.encode_plus(sentence, add_special_tokens=True,)
 
                 for key in tokens_p.keys():
                     self.assertEqual(tokens_r[key], tokens_p[key])
@@ -3599,9 +3562,7 @@ class TokenizerTesterMixin:
                 # the following checks allow us to verify that our test works as expected, i.e. that the tokenizer takes
                 # into account the new value of additional_special_tokens given in the "tokenizer_config.json" and
                 # "special_tokens_map.json" files
-                tokenizer_without_change_in_init = tokenizer_class.from_pretrained(
-                    tmp_dir,
-                )
+                tokenizer_without_change_in_init = tokenizer_class.from_pretrained(tmp_dir,)
                 self.assertIn(
                     "an_additional_special_token", tokenizer_without_change_in_init.additional_special_tokens
                 )
@@ -3615,10 +3576,7 @@ class TokenizerTesterMixin:
 
                 # Now we test that we can change the value of additional_special_tokens in the from_pretrained
                 new_added_tokens = [AddedToken("a_new_additional_special_token", lstrip=True)]
-                tokenizer = tokenizer_class.from_pretrained(
-                    tmp_dir,
-                    additional_special_tokens=new_added_tokens,
-                )
+                tokenizer = tokenizer_class.from_pretrained(tmp_dir, additional_special_tokens=new_added_tokens,)
 
                 self.assertIn("a_new_additional_special_token", tokenizer.additional_special_tokens)
                 self.assertEqual(
@@ -3657,8 +3615,7 @@ class TokenizerTesterMixin:
 
         # Assert the set of special tokens match as we didn't ask to change them
         self.assertSequenceEqual(
-            tokenizer.all_special_tokens_extended,
-            new_tokenizer.all_special_tokens_extended,
+            tokenizer.all_special_tokens_extended, new_tokenizer.all_special_tokens_extended,
         )
 
         self.assertDictEqual(tokenizer.special_tokens_map, new_tokenizer.special_tokens_map)

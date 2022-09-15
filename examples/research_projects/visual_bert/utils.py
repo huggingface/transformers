@@ -253,11 +253,7 @@ def hf_bucket_url(model_id: str, filename: str, use_cdn=True) -> str:
 
 
 def http_get(
-    url,
-    temp_file,
-    proxies=None,
-    resume_size=0,
-    user_agent=None,
+    url, temp_file, proxies=None, resume_size=0, user_agent=None,
 ):
     ua = "python/{}".format(sys.version.split()[0])
     if _torch_available:
@@ -274,13 +270,7 @@ def http_get(
         return
     content_length = response.headers.get("Content-Length")
     total = resume_size + int(content_length) if content_length is not None else None
-    progress = tqdm(
-        unit="B",
-        unit_scale=True,
-        total=total,
-        initial=resume_size,
-        desc="Downloading",
-    )
+    progress = tqdm(unit="B", unit_scale=True, total=total, initial=resume_size, desc="Downloading",)
     for chunk in response.iter_content(chunk_size=1024):
         if chunk:  # filter out keep-alive new chunks
             progress.update(len(chunk))
@@ -378,17 +368,11 @@ def get_from_cache(
         # Otherwise you get corrupt cache entries if the download gets interrupted.
         with temp_file_manager() as temp_file:
             print(
-                "%s not found in cache or force_download set to True, downloading to %s",
-                url,
-                temp_file.name,
+                "%s not found in cache or force_download set to True, downloading to %s", url, temp_file.name,
             )
 
             http_get(
-                url,
-                temp_file,
-                proxies=proxies,
-                resume_size=resume_size,
-                user_agent=user_agent,
+                url, temp_file, proxies=proxies, resume_size=resume_size, user_agent=user_agent,
             )
 
         os.replace(temp_file.name, cache_path)

@@ -86,9 +86,6 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
     model = convert_fairseq_plbart_checkpoint_from_disk(
-        args.fairseq_path,
-        hf_config_path=args.hf_config,
-        finetuned=args.finetuned,
-        classification=args.classification,
+        args.fairseq_path, hf_config_path=args.hf_config, finetuned=args.finetuned, classification=args.classification,
     )
     model.save_pretrained(args.pytorch_dump_folder_path)

@@ -237,9 +237,7 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 # the following checks allow us to verify that our test works as expected, i.e. that the tokenizer takes
                 # into account the new value of additional_special_tokens given in the "tokenizer_config.json" and
                 # "special_tokens_map.json" files
-                tokenizer_without_change_in_init = tokenizer_class.from_pretrained(
-                    tmp_dir,
-                )
+                tokenizer_without_change_in_init = tokenizer_class.from_pretrained(tmp_dir,)
                 self.assertIn(
                     "an_additional_special_token", tokenizer_without_change_in_init.additional_special_tokens
                 )
@@ -252,10 +250,7 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Now we test that we can change the value of additional_special_tokens in the from_pretrained
                 new_added_tokens = added_tokens_extra_ids + [AddedToken("a_new_additional_special_token", lstrip=True)]
-                tokenizer = tokenizer_class.from_pretrained(
-                    tmp_dir,
-                    additional_special_tokens=new_added_tokens,
-                )
+                tokenizer = tokenizer_class.from_pretrained(tmp_dir, additional_special_tokens=new_added_tokens,)
 
                 self.assertIn("a_new_additional_special_token", tokenizer.additional_special_tokens)
                 self.assertEqual(

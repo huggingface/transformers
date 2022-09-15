@@ -87,11 +87,7 @@ class OnnxUtilsTestCaseV2(TestCase):
         """
         self.assertEqual(
             OnnxConfig.flatten_output_collection_property("past_key", [[0], [1], [2]]),
-            {
-                "past_key.0": 0,
-                "past_key.1": 1,
-                "past_key.2": 2,
-            },
+            {"past_key.0": 0, "past_key.1": 1, "past_key.2": 2,},
         )
 
 
@@ -317,12 +313,7 @@ class OnnxExportTestCaseV2(TestCase):
                     preprocessor, model, onnx_config, onnx_config.default_onnx_opset, Path(output.name), device=device
                 )
                 validate_model_outputs(
-                    onnx_config,
-                    preprocessor,
-                    model,
-                    Path(output.name),
-                    onnx_outputs,
-                    onnx_config.atol_for_validation,
+                    onnx_config, preprocessor, model, Path(output.name), onnx_outputs, onnx_config.atol_for_validation,
                 )
             except (RuntimeError, ValueError) as e:
                 self.fail(f"{name}, {feature} -> {e}")
@@ -407,10 +398,5 @@ class StableDropoutTestCase(TestCase):
         # Expected to fail with opset_version < 12
         with self.assertRaises(Exception):
             torch.onnx.export(
-                sd,
-                input,
-                devnull,
-                opset_version=11,
-                do_constant_folding=do_constant_folding,
-                training=training,
+                sd, input, devnull, opset_version=11, do_constant_folding=do_constant_folding, training=training,
             )

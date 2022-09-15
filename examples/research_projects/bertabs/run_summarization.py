@@ -190,12 +190,7 @@ def build_data_iterator(args, tokenizer):
     def collate_fn(data):
         return collate(data, tokenizer, block_size=512, device=args.device)
 
-    iterator = DataLoader(
-        dataset,
-        sampler=sampler,
-        batch_size=args.batch_size,
-        collate_fn=collate_fn,
-    )
+    iterator = DataLoader(dataset, sampler=sampler, batch_size=args.batch_size, collate_fn=collate_fn,)
 
     return iterator
 
@@ -272,41 +267,23 @@ def main():
     )
     # EVALUATION options
     parser.add_argument(
-        "--no_cuda",
-        default=False,
-        type=bool,
-        help="Whether to force the execution on CPU.",
+        "--no_cuda", default=False, type=bool, help="Whether to force the execution on CPU.",
     )
     parser.add_argument(
-        "--batch_size",
-        default=4,
-        type=int,
-        help="Batch size per GPU/CPU for training.",
+        "--batch_size", default=4, type=int, help="Batch size per GPU/CPU for training.",
     )
     # BEAM SEARCH arguments
     parser.add_argument(
-        "--min_length",
-        default=50,
-        type=int,
-        help="Minimum number of tokens for the summaries.",
+        "--min_length", default=50, type=int, help="Minimum number of tokens for the summaries.",
     )
     parser.add_argument(
-        "--max_length",
-        default=200,
-        type=int,
-        help="Maixmum number of tokens for the summaries.",
+        "--max_length", default=200, type=int, help="Maixmum number of tokens for the summaries.",
     )
     parser.add_argument(
-        "--beam_size",
-        default=5,
-        type=int,
-        help="The number of beams to start with for each example.",
+        "--beam_size", default=5, type=int, help="The number of beams to start with for each example.",
     )
     parser.add_argument(
-        "--alpha",
-        default=0.95,
-        type=float,
-        help="The value of alpha for the length penalty in the beam search.",
+        "--alpha", default=0.95, type=float, help="The value of alpha for the length penalty in the beam search.",
     )
     parser.add_argument(
         "--block_trigram",

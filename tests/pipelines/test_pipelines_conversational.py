@@ -277,9 +277,7 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         conversation_agent = ConversationalPipeline(model=model, tokenizer=tokenizer)
 
         conversation_1 = Conversation("hello")
-        result = conversation_agent(
-            conversation_1,
-        )
+        result = conversation_agent(conversation_1,)
         self.assertEqual(
             result.generated_responses[0],
             # ParlAI implementation output, we have a different one, but it's our
@@ -298,10 +296,7 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         conversation_1 = Conversation(
             "Lasagne   hello   Lasagne is my favorite Italian dish. Do you like lasagne?   I like lasagne."
         )
-        result = conversation_agent(
-            conversation_1,
-            encoder_no_repeat_ngram_size=3,
-        )
+        result = conversation_agent(conversation_1, encoder_no_repeat_ngram_size=3,)
         self.assertEqual(
             result.generated_responses[0],
             " Me too. I like how it can be topped with vegetables, meats, and condiments.",
@@ -379,6 +374,5 @@ class ConversationalPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
             "hi sarah, i live in london as well. do you have any plans for the weekend?",
         )
         self.assertEqual(
-            result_model_id.generated_responses[0],
-            result_model.generated_responses[0],
+            result_model_id.generated_responses[0], result_model.generated_responses[0],
         )

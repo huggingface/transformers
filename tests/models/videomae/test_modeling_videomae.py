@@ -151,7 +151,7 @@ class VideoMAEModelTester:
         result = model(pixel_values, bool_masked_pos)
         # model only returns predictions for masked patches
         num_masked_patches = mask.sum().item()
-        decoder_num_labels = 3 * self.tubelet_size * self.patch_size**2
+        decoder_num_labels = 3 * self.tubelet_size * self.patch_size ** 2
         self.parent.assertEqual(result.logits.shape, (self.batch_size, num_masked_patches, decoder_num_labels))
 
     def prepare_config_and_inputs_for_common(self):
@@ -281,8 +281,7 @@ class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
                 self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                    list(attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, seq_len, seq_len],
                 )
                 out_len = len(outputs)
 
@@ -301,8 +300,7 @@ class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
 
                 self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
                 self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                    list(self_attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, seq_len, seq_len],
                 )
 
     def test_hidden_states_output(self):
@@ -322,8 +320,7 @@ class VideoMAEModelTest(ModelTesterMixin, unittest.TestCase):
             seq_length = num_visible_patches if model_class == VideoMAEForPreTraining else self.model_tester.seq_length
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()

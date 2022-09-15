@@ -232,8 +232,7 @@ if is_torch_available():
         ):
             # Load data features from cache or dataset file
             cached_features_file = os.path.join(
-                data_dir,
-                "cached_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length)),
+                data_dir, "cached_{}_{}_{}".format(mode.value, tokenizer.__class__.__name__, str(max_seq_length)),
             )
 
             # Make sure only the first process in distributed training processes the dataset,

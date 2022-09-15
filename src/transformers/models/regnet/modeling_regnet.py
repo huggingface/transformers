@@ -210,12 +210,7 @@ class RegNetStage(nn.Module):
     """
 
     def __init__(
-        self,
-        config: RegNetConfig,
-        in_channels: int,
-        out_channels: int,
-        stride: int = 2,
-        depth: int = 2,
+        self, config: RegNetConfig, in_channels: int, out_channels: int, stride: int = 2, depth: int = 2,
     ):
         super().__init__()
 
@@ -223,12 +218,7 @@ class RegNetStage(nn.Module):
 
         self.layers = nn.Sequential(
             # downsampling is done in the first layer with stride of 2
-            layer(
-                config,
-                in_channels,
-                out_channels,
-                stride=stride,
-            ),
+            layer(config, in_channels, out_channels, stride=stride,),
             *[layer(config, out_channels, out_channels) for _ in range(depth - 1)],
         )
 
@@ -325,8 +315,7 @@ REGNET_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare RegNet model outputting raw features without any specific head on top.",
-    REGNET_START_DOCSTRING,
+    "The bare RegNet model outputting raw features without any specific head on top.", REGNET_START_DOCSTRING,
 )
 # Copied from transformers.models.resnet.modeling_resnet.ResNetModel with RESNET->REGNET,ResNet->RegNet
 class RegNetModel(RegNetPreTrainedModel):

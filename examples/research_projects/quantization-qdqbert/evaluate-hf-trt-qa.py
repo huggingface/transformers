@@ -46,11 +46,7 @@ parser = argparse.ArgumentParser()
 
 # Required parameters
 parser.add_argument(
-    "--onnx_model_path",
-    default=None,
-    type=str,
-    required=True,
-    help="Path to ONNX model: ",
+    "--onnx_model_path", default=None, type=str, required=True, help="Path to ONNX model: ",
 )
 
 parser.add_argument(
@@ -137,14 +133,10 @@ parser.add_argument(
 )
 parser.add_argument("--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets")
 parser.add_argument(
-    "--fp16",
-    action="store_true",
-    help="Whether to use 16-bit (mixed) precision instead of 32-bit",
+    "--fp16", action="store_true", help="Whether to use 16-bit (mixed) precision instead of 32-bit",
 )
 parser.add_argument(
-    "--int8",
-    action="store_true",
-    help="Whether to use INT8",
+    "--int8", action="store_true", help="Whether to use INT8",
 )
 
 args = parser.parse_args()
@@ -241,9 +233,7 @@ def model_infer(inputs, context, d_inputs, h_output0, h_output1, d_output0, d_ou
 accelerator = Accelerator()
 # Make one log on every process with the configuration for debugging.
 logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-    datefmt="%m/%d/%Y %H:%M:%S",
-    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
 )
 
 # Setup logging, we only want one process per machine to log things on the screen.

@@ -821,9 +821,7 @@ class TFDebertaPredictionHeadTransform(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.dense = tf.keras.layers.Dense(
-            units=config.hidden_size,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="dense",
+            units=config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense",
         )
 
         if isinstance(config.hidden_act, str):
@@ -1189,10 +1187,7 @@ class TFDebertaForMaskedLM(TFDebertaPreTrainedModel, TFMaskedLanguageModelingLos
             return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
-            loss=loss,
-            logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFMaskedLMOutput) -> TFMaskedLMOutput:
@@ -1222,9 +1217,7 @@ class TFDebertaForSequenceClassification(TFDebertaPreTrainedModel, TFSequenceCla
         drop_out = self.config.hidden_dropout_prob if drop_out is None else drop_out
         self.dropout = TFDebertaStableDropout(drop_out, name="cls_dropout")
         self.classifier = tf.keras.layers.Dense(
-            units=config.num_labels,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="classifier",
+            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier",
         )
 
     @unpack_inputs
@@ -1277,10 +1270,7 @@ class TFDebertaForSequenceClassification(TFDebertaPreTrainedModel, TFSequenceCla
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
@@ -1355,10 +1345,7 @@ class TFDebertaForTokenClassification(TFDebertaPreTrainedModel, TFTokenClassific
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:

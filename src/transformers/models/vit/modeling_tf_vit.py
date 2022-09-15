@@ -236,11 +236,7 @@ class TFViTSelfAttention(tf.keras.layers.Layer):
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
 
     def call(
-        self,
-        hidden_states: tf.Tensor,
-        head_mask: tf.Tensor,
-        output_attentions: bool,
-        training: bool = False,
+        self, hidden_states: tf.Tensor, head_mask: tf.Tensor, output_attentions: bool, training: bool = False,
     ) -> Tuple[tf.Tensor]:
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
@@ -309,11 +305,7 @@ class TFViTAttention(tf.keras.layers.Layer):
         raise NotImplementedError
 
     def call(
-        self,
-        input_tensor: tf.Tensor,
-        head_mask: tf.Tensor,
-        output_attentions: bool,
-        training: bool = False,
+        self, input_tensor: tf.Tensor, head_mask: tf.Tensor, output_attentions: bool, training: bool = False,
     ) -> Tuple[tf.Tensor]:
         self_outputs = self.self_attention(
             hidden_states=input_tensor, head_mask=head_mask, output_attentions=output_attentions, training=training
@@ -381,11 +373,7 @@ class TFViTLayer(tf.keras.layers.Layer):
         )
 
     def call(
-        self,
-        hidden_states: tf.Tensor,
-        head_mask: tf.Tensor,
-        output_attentions: bool,
-        training: bool = False,
+        self, hidden_states: tf.Tensor, head_mask: tf.Tensor, output_attentions: bool, training: bool = False,
     ) -> Tuple[tf.Tensor]:
         attention_outputs = self.attention(
             # in ViT, layernorm is applied before self-attention
@@ -497,9 +485,7 @@ class TFViTMainLayer(tf.keras.layers.Layer):
             raise ValueError("You have to specify pixel_values")
 
         embedding_output = self.embeddings(
-            pixel_values=pixel_values,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            training=training,
+            pixel_values=pixel_values, interpolate_pos_encoding=interpolate_pos_encoding, training=training,
         )
 
         # Prepare head mask if needed
@@ -560,11 +546,7 @@ class TFViTPreTrainedModel(TFPreTrainedModel):
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @tf.function(
-        input_signature=[
-            {
-                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
-            }
-        ]
+        input_signature=[{"pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),}]
     )
     def serving(self, inputs):
         """
@@ -742,9 +724,7 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
 
         # Classifier head
         self.classifier = tf.keras.layers.Dense(
-            units=config.num_labels,
-            kernel_initializer=get_initializer(config.initializer_range),
-            name="classifier",
+            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier",
         )
 
     @unpack_inputs
@@ -792,10 +772,7 @@ class TFViTForImageClassification(TFViTPreTrainedModel, TFSequenceClassification
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:

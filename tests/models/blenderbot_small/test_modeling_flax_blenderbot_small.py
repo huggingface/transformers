@@ -310,12 +310,7 @@ class BlenderbotHeadTests(unittest.TestCase):
 class FlaxBlenderbotSmallModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
     is_encoder_decoder = True
     all_model_classes = (
-        (
-            FlaxBlenderbotSmallModel,
-            FlaxBlenderbotSmallForConditionalGeneration,
-        )
-        if is_flax_available()
-        else ()
+        (FlaxBlenderbotSmallModel, FlaxBlenderbotSmallForConditionalGeneration,) if is_flax_available() else ()
     )
     all_generative_model_classes = (FlaxBlenderbotSmallForConditionalGeneration,) if is_flax_available() else ()
 

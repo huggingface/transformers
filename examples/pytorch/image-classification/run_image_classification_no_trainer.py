@@ -92,10 +92,7 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--train_val_split",
-        type=float,
-        default=0.15,
-        help="Percent to split off of train for validation",
+        "--train_val_split", type=float, default=0.15, help="Percent to split off of train for validation",
     )
     parser.add_argument(
         "--model_name_or_path",
@@ -165,9 +162,7 @@ def parse_args():
         help="If the training should continue from a checkpoint folder.",
     )
     parser.add_argument(
-        "--with_tracking",
-        action="store_true",
-        help="Whether to enable experiment trackers for logging.",
+        "--with_tracking", action="store_true", help="Whether to enable experiment trackers for logging.",
     )
     parser.add_argument(
         "--report_to",
@@ -223,9 +218,7 @@ def main():
     logger.info(accelerator.state)
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
     )
     logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
@@ -272,10 +265,7 @@ def main():
         if args.validation_dir is not None:
             data_files["validation"] = os.path.join(args.validation_dir, "**")
         dataset = load_dataset(
-            "imagefolder",
-            data_files=data_files,
-            cache_dir=args.cache_dir,
-            task="image-classification",
+            "imagefolder", data_files=data_files, cache_dir=args.cache_dir, task="image-classification",
         )
         # See more about loading custom images at
         # https://huggingface.co/docs/datasets/v2.0.0/en/image_process#imagefolder.
@@ -317,20 +307,10 @@ def main():
     # Define torchvision transforms to be applied to each image.
     normalize = Normalize(mean=feature_extractor.image_mean, std=feature_extractor.image_std)
     train_transforms = Compose(
-        [
-            RandomResizedCrop(feature_extractor.size),
-            RandomHorizontalFlip(),
-            ToTensor(),
-            normalize,
-        ]
+        [RandomResizedCrop(feature_extractor.size), RandomHorizontalFlip(), ToTensor(), normalize,]
     )
     val_transforms = Compose(
-        [
-            Resize(feature_extractor.size),
-            CenterCrop(feature_extractor.size),
-            ToTensor(),
-            normalize,
-        ]
+        [Resize(feature_extractor.size), CenterCrop(feature_extractor.size), ToTensor(), normalize,]
     )
 
     def preprocess_train(example_batch):
@@ -372,10 +352,7 @@ def main():
             "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
             "weight_decay": args.weight_decay,
         },
-        {
-            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
-            "weight_decay": 0.0,
-        },
+        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0,},
     ]
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
@@ -517,8 +494,7 @@ def main():
             predictions = outputs.logits.argmax(dim=-1)
             predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
             metric.add_batch(
-                predictions=predictions,
-                references=references,
+                predictions=predictions, references=references,
             )
 
         eval_metric = metric.compute()

@@ -472,12 +472,10 @@ class XCLIPModelTester:
         with torch.no_grad():
             result = model(input_ids, pixel_values, attention_mask)
         self.parent.assertEqual(
-            result.logits_per_video.shape,
-            (self.vision_model_tester.batch_size, self.text_model_tester.batch_size),
+            result.logits_per_video.shape, (self.vision_model_tester.batch_size, self.text_model_tester.batch_size),
         )
         self.parent.assertEqual(
-            result.logits_per_text.shape,
-            (self.text_model_tester.batch_size, self.vision_model_tester.batch_size),
+            result.logits_per_text.shape, (self.text_model_tester.batch_size, self.vision_model_tester.batch_size),
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -658,12 +656,10 @@ class XCLIPModelIntegrationTest(unittest.TestCase):
 
         # verify the logits
         self.assertEqual(
-            outputs.logits_per_video.shape,
-            torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
+            outputs.logits_per_video.shape, torch.Size((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
         )
         self.assertEqual(
-            outputs.logits_per_text.shape,
-            torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
+            outputs.logits_per_text.shape, torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
         expected_logits = torch.tensor([[14.3819, 20.6031, 15.0526]], device=torch_device)

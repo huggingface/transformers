@@ -71,16 +71,13 @@ class TFAdaptiveSoftmaxMask(tf.keras.layers.Layer):
                     name=f"out_layers_._{i}_._weight",
                 )
                 bias = self.add_weight(
-                    shape=(self.vocab_size,),
-                    initializer="zeros",
-                    trainable=True,
-                    name=f"out_layers_._{i}_._bias",
+                    shape=(self.vocab_size,), initializer="zeros", trainable=True, name=f"out_layers_._{i}_._bias",
                 )
                 self.out_layers.append((weight, bias))
         else:
             for i in range(len(self.cutoffs)):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
-                d_emb_i = self.d_embed // (self.div_val**i)
+                d_emb_i = self.d_embed // (self.div_val ** i)
 
                 weight = self.add_weight(
                     shape=(d_emb_i, self.d_proj), initializer="zeros", trainable=True, name=f"out_projs_._{i}"
@@ -93,10 +90,7 @@ class TFAdaptiveSoftmaxMask(tf.keras.layers.Layer):
                     name=f"out_layers_._{i}_._weight",
                 )
                 bias = self.add_weight(
-                    shape=(r_idx - l_idx,),
-                    initializer="zeros",
-                    trainable=True,
-                    name=f"out_layers_._{i}_._bias",
+                    shape=(r_idx - l_idx,), initializer="zeros", trainable=True, name=f"out_layers_._{i}_._bias",
                 )
                 self.out_layers.append((weight, bias))
         super().build(input_shape)

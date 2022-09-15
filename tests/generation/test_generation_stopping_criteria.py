@@ -47,12 +47,7 @@ class StoppingCriteriaTestCase(unittest.TestCase):
     def test_list_criteria(self):
         input_ids, scores = self._get_tensors(5)
 
-        criteria = StoppingCriteriaList(
-            [
-                MaxLengthCriteria(max_length=10),
-                MaxTimeCriteria(max_time=0.1),
-            ]
-        )
+        criteria = StoppingCriteriaList([MaxLengthCriteria(max_length=10), MaxTimeCriteria(max_time=0.1),])
 
         self.assertFalse(criteria(input_ids, scores))
 

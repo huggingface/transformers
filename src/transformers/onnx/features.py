@@ -206,14 +206,9 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.camembert.CamembertOnnxConfig",
         ),
-        "clip": supported_features_mapping(
-            "default",
-            onnx_config_cls="models.clip.CLIPOnnxConfig",
-        ),
+        "clip": supported_features_mapping("default", onnx_config_cls="models.clip.CLIPOnnxConfig",),
         "codegen": supported_features_mapping(
-            "default",
-            "causal-lm",
-            onnx_config_cls="models.codegen.CodeGenOnnxConfig",
+            "default", "causal-lm", onnx_config_cls="models.codegen.CodeGenOnnxConfig",
         ),
         "convbert": supported_features_mapping(
             "default",
@@ -225,9 +220,7 @@ class FeaturesManager:
             onnx_config_cls="models.convbert.ConvBertOnnxConfig",
         ),
         "convnext": supported_features_mapping(
-            "default",
-            "image-classification",
-            onnx_config_cls="models.convnext.ConvNextOnnxConfig",
+            "default", "image-classification", onnx_config_cls="models.convnext.ConvNextOnnxConfig",
         ),
         "data2vec-text": supported_features_mapping(
             "default",
@@ -266,10 +259,7 @@ class FeaturesManager:
             "default", "image-classification", "masked-im", onnx_config_cls="models.deit.DeiTOnnxConfig"
         ),
         "detr": supported_features_mapping(
-            "default",
-            "object-detection",
-            "image-segmentation",
-            onnx_config_cls="models.detr.DetrOnnxConfig",
+            "default", "object-detection", "image-segmentation", onnx_config_cls="models.detr.DetrOnnxConfig",
         ),
         "distilbert": supported_features_mapping(
             "default",
@@ -326,10 +316,7 @@ class FeaturesManager:
             "sequence-classification",
             onnx_config_cls="models.gpt_neo.GPTNeoOnnxConfig",
         ),
-        "groupvit": supported_features_mapping(
-            "default",
-            onnx_config_cls="models.groupvit.GroupViTOnnxConfig",
-        ),
+        "groupvit": supported_features_mapping("default", onnx_config_cls="models.groupvit.GroupViTOnnxConfig",),
         "ibert": supported_features_mapping(
             "default",
             "masked-lm",
@@ -402,9 +389,7 @@ class FeaturesManager:
             onnx_config_cls="models.mobilebert.MobileBertOnnxConfig",
         ),
         "mobilevit": supported_features_mapping(
-            "default",
-            "image-classification",
-            onnx_config_cls="models.mobilevit.MobileViTOnnxConfig",
+            "default", "image-classification", onnx_config_cls="models.mobilevit.MobileViTOnnxConfig",
         ),
         "mt5": supported_features_mapping(
             "default",
@@ -420,10 +405,7 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.m2m_100.M2M100OnnxConfig",
         ),
-        "owlvit": supported_features_mapping(
-            "default",
-            onnx_config_cls="models.owlvit.OwlViTOnnxConfig",
-        ),
+        "owlvit": supported_features_mapping("default", onnx_config_cls="models.owlvit.OwlViTOnnxConfig",),
         "perceiver": supported_features_mapping(
             "image-classification",
             "masked-lm",
@@ -431,9 +413,7 @@ class FeaturesManager:
             onnx_config_cls="models.perceiver.PerceiverOnnxConfig",
         ),
         "resnet": supported_features_mapping(
-            "default",
-            "image-classification",
-            onnx_config_cls="models.resnet.ResNetOnnxConfig",
+            "default", "image-classification", onnx_config_cls="models.resnet.ResNetOnnxConfig",
         ),
         "roberta": supported_features_mapping(
             "default",
@@ -502,9 +482,7 @@ class FeaturesManager:
             onnx_config_cls="models.xlm_roberta.XLMRobertaOnnxConfig",
         ),
         "yolos": supported_features_mapping(
-            "default",
-            "object-detection",
-            onnx_config_cls="models.yolos.YolosOnnxConfig",
+            "default", "object-detection", onnx_config_cls="models.yolos.YolosOnnxConfig",
         ),
     }
 

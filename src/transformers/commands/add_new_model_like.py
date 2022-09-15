@@ -293,11 +293,7 @@ def replace_model_patterns(
     if old_model_patterns.model_type != old_model_patterns.model_lower_cased:
         attributes_to_check.append("model_type")
     else:
-        text = re.sub(
-            rf'(\s*)model_type = "{old_model_patterns.model_type}"',
-            r'\1model_type = "[MODEL_TYPE]"',
-            text,
-        )
+        text = re.sub(rf'(\s*)model_type = "{old_model_patterns.model_type}"', r'\1model_type = "[MODEL_TYPE]"', text,)
 
     # Special case when the model camel cased and upper cased names are the same for the old model (like for GPT2) but
     # not the new one. We can't just do a replace in all the text and will need a special regex
@@ -1259,11 +1255,7 @@ def create_new_model_like(
         )
         dest_file = test_file.parent.parent / new_model_patterns.model_lower_cased / new_test_file_name
         duplicate_module(
-            test_file,
-            old_model_patterns,
-            new_model_patterns,
-            dest_file=dest_file,
-            add_copied_from=False,
+            test_file, old_model_patterns, new_model_patterns, dest_file=dest_file, add_copied_from=False,
         )
         disabled_fx_test = disabled_fx_test | disable_fx_test(dest_file)
 

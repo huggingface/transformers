@@ -59,10 +59,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.allclose(encoder_outputs[:, :3, :3], expected_encoder_outputs_slice, atol=1e-4))
 
         # decoder outputs
-        decoder_outputs = model.prophetnet.decoder(
-            decoder_prev_ids,
-            encoder_hidden_states=encoder_outputs,
-        )
+        decoder_outputs = model.prophetnet.decoder(decoder_prev_ids, encoder_hidden_states=encoder_outputs,)
         predicting_streams = decoder_outputs[1].view(1, model.config.ngram, 14, -1)
         predicting_streams_logits = model.lm_head(predicting_streams)
         next_first_stream_logits = predicting_streams_logits[:, 0]
@@ -131,8 +128,7 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
         EXPECTED_TITLE_RU = "Microsoft намерена прекратить бесплатную поддержку Windows 7 после 14 января 2020 года"
         EXPECTED_TITLE_ZH = "微软打算终止对Windows 7操作系统的免费支持"
         self.assertListEqual(
-            [EXPECTED_TITLE_EN, EXPECTED_TITLE_RU, EXPECTED_TITLE_ZH],
-            generated_titles,
+            [EXPECTED_TITLE_EN, EXPECTED_TITLE_RU, EXPECTED_TITLE_ZH], generated_titles,
         )
 
         summary_ids_beam1 = model.generate(
@@ -142,9 +138,8 @@ class XLMProphetNetModelIntegrationTest(unittest.TestCase):
             tokenizer.convert_ids_to_tokens(g, skip_special_tokens=True) for g in summary_ids_beam1
         ]
         EXPECTED_TITLE_EN_BEAM1_TOK = "▁Microsoft ▁to ▁end ▁free ▁support ▁for ▁Windows ▁7".split(" ")
-        EXPECTED_TITLE_RU_BEAM1_TOK = (
-            "▁Microsoft ▁намерен а ▁прекрати ть ▁бес плат ную ▁поддержку ▁Windows ▁7 ▁после ▁14 ▁января ▁2020 ▁года"
-            .split(" ")
+        EXPECTED_TITLE_RU_BEAM1_TOK = "▁Microsoft ▁намерен а ▁прекрати ть ▁бес плат ную ▁поддержку ▁Windows ▁7 ▁после ▁14 ▁января ▁2020 ▁года".split(
+            " "
         )
         EXPECTED_TITLE_ZH_BEAM1_TOK = "微软 公司 打算 终止 对 Windows ▁7 操作 系统的 免费 支持".split(" ")
         self.assertListEqual(

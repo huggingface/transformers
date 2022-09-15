@@ -78,7 +78,7 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
         self.n_head = config.n_head
         self.d_head = config.d_head
         self.d_model = config.d_model
-        self.scale = 1 / (config.d_head**0.5)
+        self.scale = 1 / (config.d_head ** 0.5)
         self.initializer_range = config.initializer_range
         self.output_attentions = config.output_attentions
 
@@ -701,8 +701,7 @@ class TFXLNetMainLayer(tf.keras.layers.Layer):
 
             # `1` indicates not in the same segment [qlen x klen x bsz]
             seg_mat = tf.cast(
-                tf.logical_not(tf.equal(token_type_ids[:, None], cat_ids[None, :])),
-                dtype=token_type_ids.dtype,
+                tf.logical_not(tf.equal(token_type_ids[:, None], cat_ids[None, :])), dtype=token_type_ids.dtype,
             )
             seg_mat = tf.one_hot(seg_mat, 2)
         else:

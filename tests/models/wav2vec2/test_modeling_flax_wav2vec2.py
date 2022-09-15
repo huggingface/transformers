@@ -483,16 +483,11 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
         )
 
         mask_time_indices = _compute_mask_indices(
-            features_shape,
-            model.config.mask_time_prob,
-            model.config.mask_time_length,
-            min_masks=2,
+            features_shape, model.config.mask_time_prob, model.config.mask_time_length, min_masks=2,
         )
 
         outputs = model(
-            inputs_dict.input_values,
-            attention_mask=inputs_dict.attention_mask,
-            mask_time_indices=mask_time_indices,
+            inputs_dict.input_values, attention_mask=inputs_dict.attention_mask, mask_time_indices=mask_time_indices,
         )
 
         # compute cosine similarity
@@ -509,9 +504,7 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
         model_rand = FlaxWav2Vec2ForPreTraining(config)
 
         outputs_rand = model_rand(
-            inputs_dict.input_values,
-            attention_mask=inputs_dict.attention_mask,
-            mask_time_indices=mask_time_indices,
+            inputs_dict.input_values, attention_mask=inputs_dict.attention_mask, mask_time_indices=mask_time_indices,
         )
 
         # compute cosine similarity

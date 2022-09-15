@@ -177,12 +177,10 @@ class DataTrainingArguments:
         default=None, metadata={"help": "The input training data file (a csv or JSON file)."}
     )
     validation_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."},
+        default=None, metadata={"help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."},
     )
     test_file: Optional[str] = field(
-        default=None,
-        metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
+        default=None, metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
     )
     text_column_name: Optional[str] = field(
         default=None, metadata={"help": "The column name of text to input in the file (a csv or JSON file)."}
@@ -194,8 +192,7 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None,
-        metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
         default=None,
@@ -386,9 +383,7 @@ def main():
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
-        datefmt="%m/%d/%Y %H:%M:%S",
-        level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
     )
     # Setup logging, we only want one process per machine to log things on the screen.
     logger.setLevel(logging.INFO if jax.process_index() == 0 else logging.ERROR)
@@ -746,8 +741,7 @@ def main():
                     labels[np.array(chain(*batch["attention_mask"])) == 0] = -100
                     preds, refs = get_labels(predictions, labels)
                     metric.add_batch(
-                        predictions=preds,
-                        references=refs,
+                        predictions=preds, references=refs,
                     )
 
                 eval_metrics = compute_metrics()
