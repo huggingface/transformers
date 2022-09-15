@@ -69,7 +69,6 @@ def get_html_strings():
 
 
 class MarkupLMFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
     # TODO add dependency check (see LayoutLMv2)
     feature_extraction_class = MarkupLMFeatureExtractor
 
