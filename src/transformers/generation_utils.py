@@ -489,7 +489,10 @@ class GenerationMixin:
         return torch.ones((1, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _prepare_attention_mask_for_generation(
-        self, inputs: torch.Tensor, pad_token_id: Optional[int], eos_token_id: Optional[int],
+        self,
+        inputs: torch.Tensor,
+        pad_token_id: Optional[int],
+        eos_token_id: Optional[int],
     ) -> torch.LongTensor:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in [torch.int, torch.long]
         is_pad_token_in_inputs = (pad_token_id is not None) and (pad_token_id in inputs)

@@ -384,7 +384,14 @@ class PerceiverAttention(nn.Module):
         inputs_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
-        self_outputs = self.self(hidden_states, attention_mask, head_mask, inputs, inputs_mask, output_attentions,)
+        self_outputs = self.self(
+            hidden_states,
+            attention_mask,
+            head_mask,
+            inputs,
+            inputs_mask,
+            output_attentions,
+        )
 
         # Output projection
         attention_output = self.output(self_outputs[0])
@@ -457,7 +464,12 @@ class PerceiverLayer(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         attention_outputs = self.attention(
-            hidden_states, attention_mask, head_mask, inputs, inputs_mask, output_attentions,
+            hidden_states,
+            attention_mask,
+            head_mask,
+            inputs,
+            inputs_mask,
+            output_attentions,
         )
         attention_output = attention_outputs[0]
 
@@ -699,7 +711,8 @@ PERCEIVER_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    """The Perceiver: a scalable, fully attentional architecture.""", PERCEIVER_MODEL_START_DOCSTRING,
+    """The Perceiver: a scalable, fully attentional architecture.""",
+    PERCEIVER_MODEL_START_DOCSTRING,
 )
 class PerceiverModel(PerceiverPreTrainedModel):
     def __init__(
@@ -1188,7 +1201,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        trainable_position_encoding_kwargs_preprocessor = dict(num_channels=256, index_dims=config.image_size ** 2)
+        trainable_position_encoding_kwargs_preprocessor = dict(num_channels=256, index_dims=config.image_size**2)
         trainable_position_encoding_kwargs_decoder = dict(num_channels=config.d_latents, index_dims=1)
 
         self.num_labels = config.num_labels
@@ -1601,7 +1614,10 @@ class PerceiverForOpticalFlow(PerceiverPreTrainedModel):
         super().__init__(config)
 
         fourier_position_encoding_kwargs_preprocessor = dict(
-            num_bands=64, max_resolution=config.train_size, sine_only=False, concat_pos=True,
+            num_bands=64,
+            max_resolution=config.train_size,
+            sine_only=False,
+            concat_pos=True,
         )
         fourier_position_encoding_kwargs_decoder = dict(
             concat_pos=True, max_resolution=config.train_size, num_bands=64, sine_only=False
@@ -1746,7 +1762,10 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     config,
                     position_encoding_type="fourier",
                     fourier_position_encoding_kwargs=dict(
-                        num_bands=192, max_resolution=(n_audio_samples,), sine_only=False, concat_pos=True,
+                        num_bands=192,
+                        max_resolution=(n_audio_samples,),
+                        sine_only=False,
+                        concat_pos=True,
                     ),
                     prep_type="patches",
                     samples_per_patch=config.samples_per_patch,
@@ -1803,7 +1822,10 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     position_encoding_only=True,
                     position_encoding_type="fourier",
                     fourier_position_encoding_kwargs=dict(
-                        num_bands=192, max_resolution=(n_audio_samples,), sine_only=False, concat_pos=True,
+                        num_bands=192,
+                        max_resolution=(n_audio_samples,),
+                        sine_only=False,
+                        concat_pos=True,
                     ),
                 ),
                 "image": image_decoder,
@@ -1814,7 +1836,10 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
                     use_query_residual=False,
                     position_encoding_only=True,
                     position_encoding_type="trainable",
-                    trainable_position_encoding_kwargs=dict(num_channels=1024, index_dims=1,),
+                    trainable_position_encoding_kwargs=dict(
+                        num_channels=1024,
+                        index_dims=1,
+                    ),
                 ),
             },
             num_outputs=None,
@@ -1831,7 +1856,10 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
         )
 
         self.perceiver = PerceiverModel(
-            config, input_preprocessor=input_preprocessor, decoder=decoder, output_postprocessor=output_postprocessor,
+            config,
+            input_preprocessor=input_preprocessor,
+            decoder=decoder,
+            output_postprocessor=output_postprocessor,
         )
 
         # Initialize weights and apply final processing
@@ -2482,7 +2510,7 @@ def space_to_depth(frames: torch.Tensor, temporal_block_size: int = 1, spatial_b
             batch_size,
             height // spatial_block_size,
             width // spatial_block_size,
-            (spatial_block_size ** 2) * num_channels,
+            (spatial_block_size**2) * num_channels,
         )
         return frames
     elif len(frames.shape) == 5:
@@ -2506,7 +2534,7 @@ def space_to_depth(frames: torch.Tensor, temporal_block_size: int = 1, spatial_b
             time // temporal_block_size,
             height // spatial_block_size,
             width // spatial_block_size,
-            temporal_block_size * (spatial_block_size ** 2) * num_channels,
+            temporal_block_size * (spatial_block_size**2) * num_channels,
         )
         return frames
     else:
@@ -2536,7 +2564,11 @@ class Conv2DDownsample(nn.Module):
     """Downsamples 4x by applying a 2D convolution and doing max pooling."""
 
     def __init__(
-        self, num_layers: int = 1, in_channels: int = 3, out_channels: int = 64, use_batchnorm: bool = True,
+        self,
+        num_layers: int = 1,
+        in_channels: int = 3,
+        out_channels: int = 64,
+        use_batchnorm: bool = True,
     ):
         """
         Constructs a Conv2DDownsample model.
@@ -3056,7 +3088,7 @@ class PerceiverImagePreprocessor(AbstractPreprocessor):
             if self.conv_after_patching:
                 inp_dim = self.out_channels
             else:
-                inp_dim = self.in_channels * self.spatial_downsample ** 2
+                inp_dim = self.in_channels * self.spatial_downsample**2
                 if is_temporal:
                     inp_dim *= self.temporal_downsample
 
@@ -3329,7 +3361,10 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
             batch_size, num_samples, num_channels = output.shape
             pos_enc = self.padding[modality].expand(batch_size, -1, -1)
 
-            padding = torch.broadcast_to(pos_enc, [batch_size, num_samples, self.num_channels - num_channels],)
+            padding = torch.broadcast_to(
+                pos_enc,
+                [batch_size, num_samples, self.num_channels - num_channels],
+            )
             output_padded = torch.cat([output, padding], dim=2)
 
             # mask if required

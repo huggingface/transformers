@@ -717,7 +717,8 @@ class LEDEncoderSelfAttention(nn.Module):
         global_attn_scores = global_attn_scores.transpose(1, 2)
 
         global_attn_scores = global_attn_scores.masked_fill(
-            is_index_masked[:, None, None, :], torch.finfo(global_attn_scores.dtype).min,
+            is_index_masked[:, None, None, :],
+            torch.finfo(global_attn_scores.dtype).min,
         )
 
         global_attn_scores = global_attn_scores.view(batch_size * self.num_heads, max_num_global_attn_indices, seq_len)
@@ -801,7 +802,12 @@ class LEDDecoderAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
-        self, embed_dim: int, num_heads: int, dropout: float = 0.0, is_decoder: bool = False, bias: bool = True,
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
+        bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -813,7 +819,7 @@ class LEDDecoderAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -1014,7 +1020,10 @@ class LEDDecoderLayer(nn.Module):
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.encoder_attn = LEDDecoderAttention(
-            self.embed_dim, config.decoder_attention_heads, dropout=config.attention_dropout, is_decoder=True,
+            self.embed_dim,
+            config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+            is_decoder=True,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
@@ -1114,7 +1123,11 @@ class LEDClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(
-        self, input_dim: int, inner_dim: int, num_classes: int, pooler_dropout: float,
+        self,
+        input_dim: int,
+        inner_dim: int,
+        num_classes: int,
+        pooler_dropout: float,
     ):
         super().__init__()
         self.dense = nn.Linear(input_dim, inner_dim)
@@ -1670,7 +1683,10 @@ class LEDEncoder(LEDPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
-        self.embed_positions = LEDLearnedPositionalEmbedding(self.max_source_positions, embed_dim,)
+        self.embed_positions = LEDLearnedPositionalEmbedding(
+            self.max_source_positions,
+            embed_dim,
+        )
         self.layers = nn.ModuleList([LEDEncoderLayer(config, i) for i in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
@@ -1691,7 +1707,11 @@ class LEDEncoder(LEDPreTrainedModel):
         return attention_mask
 
     def _pad_to_window_size(
-        self, input_ids: torch.Tensor, attention_mask: torch.Tensor, inputs_embeds: torch.Tensor, pad_token_id: int,
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        inputs_embeds: torch.Tensor,
+        pad_token_id: int,
     ):
         """A helper function to pad tokens and mask to work with implementation of Longformer self-attention."""
         # padding
@@ -1716,7 +1736,9 @@ class LEDEncoder(LEDPreTrainedModel):
                 input_ids = nn.functional.pad(input_ids, (0, padding_len), value=pad_token_id)
             if inputs_embeds is not None:
                 input_ids_padding = inputs_embeds.new_full(
-                    (batch_size, padding_len), self.config.pad_token_id, dtype=torch.long,
+                    (batch_size, padding_len),
+                    self.config.pad_token_id,
+                    dtype=torch.long,
                 )
                 inputs_embeds_padding = self.embed_tokens(input_ids_padding)
                 inputs_embeds = torch.cat([inputs_embeds, inputs_embeds_padding], dim=-2)
@@ -1939,7 +1961,10 @@ class LEDDecoder(LEDPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
-        self.embed_positions = LEDLearnedPositionalEmbedding(self.max_target_positions, config.d_model,)
+        self.embed_positions = LEDLearnedPositionalEmbedding(
+            self.max_target_positions,
+            config.d_model,
+        )
         self.layers = nn.ModuleList([LEDDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
@@ -2181,7 +2206,8 @@ class LEDDecoder(LEDPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare LED Model outputting raw hidden-states without any specific head on top.", LED_START_DOCSTRING,
+    "The bare LED Model outputting raw hidden-states without any specific head on top.",
+    LED_START_DOCSTRING,
 )
 class LEDModel(LEDPreTrainedModel):
     def __init__(self, config: LEDConfig):
@@ -2504,7 +2530,10 @@ class LEDForSequenceClassification(LEDPreTrainedModel):
         super().__init__(config, **kwargs)
         self.led = LEDModel(config)
         self.classification_head = LEDClassificationHead(
-            config.d_model, config.d_model, config.num_labels, config.classifier_dropout,
+            config.d_model,
+            config.d_model,
+            config.num_labels,
+            config.classifier_dropout,
         )
         self.led._init_weights(self.classification_head.dense)
         self.led._init_weights(self.classification_head.out_proj)
@@ -2720,7 +2749,10 @@ class LEDForQuestionAnswering(LEDPreTrainedModel):
             total_loss = (start_loss + end_loss) / 2
 
         if not return_dict:
-            output = (start_logits, end_logits,) + outputs[1:]
+            output = (
+                start_logits,
+                end_logits,
+            ) + outputs[1:]
             return ((total_loss,) + output) if total_loss is not None else output
 
         return LEDSeq2SeqQuestionAnsweringModelOutput(

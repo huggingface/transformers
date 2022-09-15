@@ -74,7 +74,8 @@ class ModelArguments:
         default=None, metadata={"help": "feature extractor name or path if not the same as model_name"}
     )
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where to store the pretrained models downloaded from huggingface.co"},
+        default=None,
+        metadata={"help": "Where to store the pretrained models downloaded from huggingface.co"},
     )
     use_fast_tokenizer: bool = field(
         default=True,
@@ -118,7 +119,8 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_train_samples: Optional[int] = field(
         default=None,
@@ -182,7 +184,8 @@ class DataTrainingArguments:
         },
     )
     do_lower_case: bool = field(
-        default=True, metadata={"help": "Whether the target text should be lower cased."},
+        default=True,
+        metadata={"help": "Whether the target text should be lower cased."},
     )
 
 
@@ -407,7 +410,9 @@ def main():
         return length > min_input_length and length < max_input_length
 
     vectorized_datasets = vectorized_datasets.filter(
-        is_audio_in_length_range, num_proc=num_workers, input_columns=["input_length"],
+        is_audio_in_length_range,
+        num_proc=num_workers,
+        input_columns=["input_length"],
     )
 
     # for large datasets it is advised to run the preprocessing on a

@@ -816,12 +816,15 @@ class FlaxBeitForMaskedImageModelingModule(nn.Module):
             return output
 
         return FlaxMaskedLMOutput(
-            logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
 @add_start_docstrings(
-    "Beit Model transformer with a 'language' modeling head on top (to predict visual tokens).", BEIT_START_DOCSTRING,
+    "Beit Model transformer with a 'language' modeling head on top (to predict visual tokens).",
+    BEIT_START_DOCSTRING,
 )
 class FlaxBeitForMaskedImageModeling(FlaxBeitPreTrainedModel):
     module_class = FlaxBeitForMaskedImageModelingModule
@@ -897,7 +900,9 @@ class FlaxBeitForImageClassificationModule(nn.Module):
             return output
 
         return FlaxSequenceClassifierOutput(
-            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

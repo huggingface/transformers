@@ -154,7 +154,12 @@ class PegasusXAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
-        self, embed_dim: int, num_heads: int, dropout: float = 0.0, is_decoder: bool = False, bias: bool = True,
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
+        bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -167,7 +172,7 @@ class PegasusXAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -296,7 +301,12 @@ class PegasusXGlobalLocalAttention(nn.Module):
     """Global + Local attention. For use with Encoder only."""
 
     def __init__(
-        self, embed_dim: int, num_heads: int, block_size: int, dropout: float = 0.0, is_decoder: bool = False,
+        self,
+        embed_dim: int,
+        num_heads: int,
+        block_size: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -310,7 +320,7 @@ class PegasusXGlobalLocalAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False)
@@ -343,17 +353,37 @@ class PegasusXGlobalLocalAttention(nn.Module):
 
         # [batch_size, num_heads, padded_seq_len, dim_per_head]
         local_q = self._shape(
-            self.q_proj(token_hidden_states) * self.scaling, seq_len=dim.padded_seq_len, bsz=dim.batch_size,
+            self.q_proj(token_hidden_states) * self.scaling,
+            seq_len=dim.padded_seq_len,
+            bsz=dim.batch_size,
         )
-        local_k = self._shape(self.k_proj(token_hidden_states), seq_len=dim.padded_seq_len, bsz=dim.batch_size,)
-        local_v = self._shape(self.v_proj(token_hidden_states), seq_len=dim.padded_seq_len, bsz=dim.batch_size,)
+        local_k = self._shape(
+            self.k_proj(token_hidden_states),
+            seq_len=dim.padded_seq_len,
+            bsz=dim.batch_size,
+        )
+        local_v = self._shape(
+            self.v_proj(token_hidden_states),
+            seq_len=dim.padded_seq_len,
+            bsz=dim.batch_size,
+        )
 
         # [batch_size, num_heads, global_len, dim_per_head]
         global_q = self._shape(
-            self.q_proj(global_hidden_states) * self.scaling, seq_len=dim.global_len, bsz=dim.batch_size,
+            self.q_proj(global_hidden_states) * self.scaling,
+            seq_len=dim.global_len,
+            bsz=dim.batch_size,
         )
-        global_k = self._shape(self.k_proj(global_hidden_states), seq_len=dim.global_len, bsz=dim.batch_size,)
-        global_v = self._shape(self.v_proj(global_hidden_states), seq_len=dim.global_len, bsz=dim.batch_size,)
+        global_k = self._shape(
+            self.k_proj(global_hidden_states),
+            seq_len=dim.global_len,
+            bsz=dim.batch_size,
+        )
+        global_v = self._shape(
+            self.v_proj(global_hidden_states),
+            seq_len=dim.global_len,
+            bsz=dim.batch_size,
+        )
 
         global_attn_output, global_attn_probs = self.compute_global_attention_representations(
             global_q=global_q,
@@ -471,7 +501,9 @@ class PegasusXGlobalLocalAttention(nn.Module):
 
         # [batch_size, num_blocks, global_len+block_size]
         extended_mask = nn.functional.pad(
-            mask.view(dim.batch_size, dim.num_blocks, dim.block_size), pad=(dim.global_len, 0), value=0,
+            mask.view(dim.batch_size, dim.num_blocks, dim.block_size),
+            pad=(dim.global_len, 0),
+            value=0,
         )
 
         # [batch_size, num_heads, num_blocks, block_size, global_len]
@@ -596,8 +628,15 @@ class PegasusXEncoderLayer(nn.Module):
         # hidden_states: [batch_size, seq_len, hidden_dim]
         pad_size = block_size // 2
         mask_min_value = torch.finfo(hidden_states.dtype).min
-        padded_hidden_states = torch.nn.functional.pad(hidden_states, pad=(0, 0, pad_size, pad_size),)
-        padded_mask = torch.nn.functional.pad(attention_mask, pad=(pad_size, pad_size), value=mask_min_value,)
+        padded_hidden_states = torch.nn.functional.pad(
+            hidden_states,
+            pad=(0, 0, pad_size, pad_size),
+        )
+        padded_mask = torch.nn.functional.pad(
+            attention_mask,
+            pad=(pad_size, pad_size),
+            value=mask_min_value,
+        )
         return padded_hidden_states, padded_mask
 
     @classmethod
@@ -990,7 +1029,10 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
         attention_mask = attention_mask.to(dtype=hidden_states.dtype)
         mask_min_value = torch.finfo(hidden_states.dtype).min
         inverted_mask = 1.0 - attention_mask
-        attention_mask = inverted_mask.masked_fill(inverted_mask.to(torch.bool), mask_min_value,)
+        attention_mask = inverted_mask.masked_fill(
+            inverted_mask.to(torch.bool),
+            mask_min_value,
+        )
 
         # padding to block_size
         if seq_len % self.config.block_size != 0:
@@ -1023,11 +1065,17 @@ class PegasusXEncoder(PegasusXPreTrainedModel):
                         return custom_forward
 
                     layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(encoder_layer), hidden_states, global_hidden_states, attention_mask,
+                        create_custom_forward(encoder_layer),
+                        hidden_states,
+                        global_hidden_states,
+                        attention_mask,
                     )
                 else:
                     layer_outputs = encoder_layer(
-                        hidden_states, global_hidden_states, attention_mask, output_attentions=output_attentions,
+                        hidden_states,
+                        global_hidden_states,
+                        attention_mask,
+                        output_attentions=output_attentions,
                     )
 
                 hidden_states = layer_outputs[0]

@@ -96,7 +96,11 @@ class GLPNOverlapPatchEmbeddings(nn.Module):
     def __init__(self, patch_size, stride, num_channels, hidden_size):
         super().__init__()
         self.proj = nn.Conv2d(
-            num_channels, hidden_size, kernel_size=patch_size, stride=stride, padding=patch_size // 2,
+            num_channels,
+            hidden_size,
+            kernel_size=patch_size,
+            stride=stride,
+            padding=patch_size // 2,
         )
 
         self.layer_norm = nn.LayerNorm(hidden_size)
@@ -149,7 +153,11 @@ class GLPNEfficientSelfAttention(nn.Module):
         return hidden_states.permute(0, 2, 1, 3)
 
     def forward(
-        self, hidden_states, height, width, output_attentions=False,
+        self,
+        hidden_states,
+        height,
+        width,
+        output_attentions=False,
     ):
         query_layer = self.transpose_for_scores(self.query(hidden_states))
 
@@ -374,7 +382,11 @@ class GLPNEncoder(nn.Module):
         )
 
     def forward(
-        self, pixel_values, output_attentions=False, output_hidden_states=False, return_dict=True,
+        self,
+        pixel_values,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -402,7 +414,9 @@ class GLPNEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
 
 
@@ -683,7 +697,12 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
     @add_start_docstrings_to_model_forward(GLPN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self, pixel_values, labels=None, output_attentions=None, output_hidden_states=None, return_dict=None,
+        self,
+        pixel_values,
+        labels=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, height, width)`, *optional*):

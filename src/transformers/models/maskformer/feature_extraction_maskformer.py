@@ -319,7 +319,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         return maxes
 
     def convert_segmentation_map_to_binary_masks(
-        self, segmentation_map: "np.ndarray", instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
+        self,
+        segmentation_map: "np.ndarray",
+        instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ):
         # Get unique ids (class or instance ids based on input)
         all_labels = np.unique(segmentation_map)
@@ -492,7 +494,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         masks_queries_logits = outputs.masks_queries_logits
         if target_size is not None:
             masks_queries_logits = interpolate(
-                masks_queries_logits, size=target_size, mode="bilinear", align_corners=False,
+                masks_queries_logits,
+                size=target_size,
+                mode="bilinear",
+                align_corners=False,
             )
         # remove the null class `[..., :-1]`
         masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
@@ -649,7 +654,11 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                             # then we update out mask with the current segment
                             segmentation[mask_k] = current_segment_id
                             segments.append(
-                                {"id": current_segment_id, "label_id": pred_class, "was_fused": should_fuse,}
+                                {
+                                    "id": current_segment_id,
+                                    "label_id": pred_class,
+                                    "was_fused": should_fuse,
+                                }
                             )
                             if should_fuse:
                                 stuff_memory_list[pred_class] = current_segment_id

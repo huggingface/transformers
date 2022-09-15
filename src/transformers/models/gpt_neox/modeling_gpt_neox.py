@@ -99,7 +99,13 @@ class GPTNeoXAttention(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
 
     def forward(
-        self, hidden_states, attention_mask, head_mask=None, layer_past=None, use_cache=False, output_attentions=False,
+        self,
+        hidden_states,
+        attention_mask,
+        head_mask=None,
+        layer_past=None,
+        use_cache=False,
+        output_attentions=False,
     ):
         has_layer_past = layer_past is not None
 
@@ -192,7 +198,11 @@ class GPTNeoXAttention(nn.Module):
         query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
         key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
         attn_scores = torch.zeros(
-            batch_size * num_attention_heads, query_length, key_length, dtype=query.dtype, device=key.device,
+            batch_size * num_attention_heads,
+            query_length,
+            key_length,
+            dtype=query.dtype,
+            device=key.device,
         )
         attn_scores = torch.baddbmm(
             attn_scores,

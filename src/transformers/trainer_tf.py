@@ -669,7 +669,8 @@ class TFTrainer:
 
                 features = {
                     k: tf.concat(
-                        [ft[self.args.train_batch_size // self.args.n_replicas :], reduced_features[k]], axis=0,
+                        [ft[self.args.train_batch_size // self.args.n_replicas :], reduced_features[k]],
+                        axis=0,
                     )
                     for k, ft in features.items()
                 }
@@ -681,7 +682,8 @@ class TFTrainer:
                 elif isinstance(labels, dict):
                     labels = {
                         k: tf.concat(
-                            [lbl[self.args.train_batch_size // self.args.n_replicas :], reduced_labels[k]], axis=0,
+                            [lbl[self.args.train_batch_size // self.args.n_replicas :], reduced_labels[k]],
+                            axis=0,
                         )
                         for k, lbl in labels.items()
                     }

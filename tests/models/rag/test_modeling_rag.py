@@ -217,7 +217,9 @@ class RagTestMixin:
         with patch("transformers.models.rag.retrieval_rag.load_dataset") as mock_load_dataset:
             mock_load_dataset.return_value = dataset
             retriever = RagRetriever(
-                config, question_encoder_tokenizer=self.dpr_tokenizer, generator_tokenizer=tokenizer,
+                config,
+                question_encoder_tokenizer=self.dpr_tokenizer,
+                generator_tokenizer=tokenizer,
             )
         return retriever
 
@@ -755,7 +757,10 @@ class RagModelIntegrationTests(unittest.TestCase):
         decoder_input_ids = decoder_input_ids.to(torch_device)
 
         with torch.no_grad():
-            output = rag_sequence(input_ids, labels=decoder_input_ids,)
+            output = rag_sequence(
+                input_ids,
+                labels=decoder_input_ids,
+            )
 
         expected_shape = torch.Size([5, 5, 50264])
         self.assertEqual(output.logits.shape, expected_shape)
@@ -791,7 +796,10 @@ class RagModelIntegrationTests(unittest.TestCase):
         decoder_input_ids = decoder_input_ids.to(torch_device)
 
         with torch.no_grad():
-            output = rag_token(input_ids, labels=decoder_input_ids,)
+            output = rag_token(
+                input_ids,
+                labels=decoder_input_ids,
+            )
 
         expected_shape = torch.Size([5, 5, 50264])
         self.assertEqual(output.logits.shape, expected_shape)
@@ -903,12 +911,20 @@ class RagModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        input_dict = tokenizer(self.test_data_questions, return_tensors="pt", padding=True, truncation=True,)
+        input_dict = tokenizer(
+            self.test_data_questions,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+        )
 
         input_ids = input_dict.input_ids.to(torch_device)
         attention_mask = input_dict.attention_mask.to(torch_device)
 
-        output_ids = rag_sequence.generate(input_ids, attention_mask=attention_mask,)
+        output_ids = rag_sequence.generate(
+            input_ids,
+            attention_mask=attention_mask,
+        )
 
         outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
@@ -934,7 +950,12 @@ class RagModelIntegrationTests(unittest.TestCase):
             torch_device
         )
 
-        input_dict = tokenizer(self.test_data_questions, return_tensors="pt", padding=True, truncation=True,)
+        input_dict = tokenizer(
+            self.test_data_questions,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+        )
 
         input_ids = input_dict.input_ids.to(torch_device)
         attention_mask = input_dict.attention_mask.to(torch_device)
@@ -980,12 +1001,20 @@ class RagModelIntegrationTests(unittest.TestCase):
         if torch_device == "cuda":
             rag_token.half()
 
-        input_dict = tokenizer(self.test_data_questions, return_tensors="pt", padding=True, truncation=True,)
+        input_dict = tokenizer(
+            self.test_data_questions,
+            return_tensors="pt",
+            padding=True,
+            truncation=True,
+        )
 
         input_ids = input_dict.input_ids.to(torch_device)
         attention_mask = input_dict.attention_mask.to(torch_device)
 
-        output_ids = rag_token.generate(input_ids, attention_mask=attention_mask,)
+        output_ids = rag_token.generate(
+            input_ids,
+            attention_mask=attention_mask,
+        )
 
         outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
@@ -1070,7 +1099,10 @@ class RagModelSaveLoadTests(unittest.TestCase):
             rag_sequence.to(torch_device)
 
             with torch.no_grad():
-                output = rag_sequence(input_ids, labels=decoder_input_ids,)
+                output = rag_sequence(
+                    input_ids,
+                    labels=decoder_input_ids,
+                )
 
             loss_pretrained = output.loss
             del rag_sequence
@@ -1083,7 +1115,10 @@ class RagModelSaveLoadTests(unittest.TestCase):
         rag_sequence.to(torch_device)
 
         with torch.no_grad():
-            output = rag_sequence(input_ids, labels=decoder_input_ids,)
+            output = rag_sequence(
+                input_ids,
+                labels=decoder_input_ids,
+            )
 
         loss_init = output.loss
 
@@ -1128,7 +1163,10 @@ class RagModelSaveLoadTests(unittest.TestCase):
             self.assertTrue(rag_token.generator.config.max_length == 200)
 
             with torch.no_grad():
-                output = rag_token(input_ids, labels=decoder_input_ids,)
+                output = rag_token(
+                    input_ids,
+                    labels=decoder_input_ids,
+                )
 
             loss_pretrained = output.loss
             del rag_token
@@ -1141,7 +1179,10 @@ class RagModelSaveLoadTests(unittest.TestCase):
         rag_token.to(torch_device)
 
         with torch.no_grad():
-            output = rag_token(input_ids, labels=decoder_input_ids,)
+            output = rag_token(
+                input_ids,
+                labels=decoder_input_ids,
+            )
 
         loss_init = output.loss
 

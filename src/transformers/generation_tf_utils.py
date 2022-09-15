@@ -793,7 +793,13 @@ class TFGenerationMixin:
 
         if self.config.is_encoder_decoder:
             # create empty decoder_input_ids
-            input_ids = tf.ones((effective_batch_size * num_beams, 1), dtype=tf.int32,) * decoder_start_token_id
+            input_ids = (
+                tf.ones(
+                    (effective_batch_size * num_beams, 1),
+                    dtype=tf.int32,
+                )
+                * decoder_start_token_id
+            )
             cur_len = 1
 
             assert (
@@ -1750,7 +1756,10 @@ class TFGenerationMixin:
         return tf.broadcast_to(tensor[:, None], (shape[0], num_beams) + tuple(shape[1:]))
 
     def _prepare_attention_mask_for_generation(
-        self, inputs: tf.Tensor, pad_token_id: Optional[int], eos_token_id: Optional[int],
+        self,
+        inputs: tf.Tensor,
+        pad_token_id: Optional[int],
+        eos_token_id: Optional[int],
     ) -> tf.Tensor:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in (tf.int32, tf.int64)
         is_pad_token_in_inputs = (pad_token_id is not None) and tf.math.reduce_any(inputs == pad_token_id)
@@ -2024,7 +2033,10 @@ class TFGenerationMixin:
         return model_kwargs
 
     def _get_logits_warper(
-        self, top_k: Optional[int] = None, top_p: Optional[float] = None, temperature: Optional[float] = None,
+        self,
+        top_k: Optional[int] = None,
+        top_p: Optional[float] = None,
+        temperature: Optional[float] = None,
     ) -> TFLogitsProcessorList:
         """
         This class returns a [`TFLogitsProcessorList`] list object that contains all relevant [`TFLogitsWarper`]
@@ -2716,7 +2728,8 @@ class TFGenerationMixin:
             """Flattens the first two dimensions of a non-scalar array."""
             shape = shape_list(tensor)
             return tf.reshape(
-                tensor, shape[:batch_axis] + [shape[batch_axis] * shape[batch_axis + 1]] + shape[batch_axis + 2 :],
+                tensor,
+                shape[:batch_axis] + [shape[batch_axis] * shape[batch_axis + 1]] + shape[batch_axis + 2 :],
             )
 
         def unflatten_beam_dim(tensor, batch_size, num_beams, batch_axis=0):
@@ -2810,7 +2823,13 @@ class TFGenerationMixin:
         # 4. define "xla-compile-able" stop-condition and auto-regressive function
         # define stop-condition and auto-regressive function
         def beam_search_cond_fn(
-            cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs,
+            cur_len,
+            running_sequences,
+            running_scores,
+            sequences,
+            scores,
+            is_sent_finished,
+            model_kwargs,
         ):
             """
             Beam Search termination condition function -- halts the generation loop if any of these conditions becomes
@@ -2820,7 +2839,7 @@ class TFGenerationMixin:
             not_max_length_yet = cur_len < max_length
 
             # 2. can the new beams still improve?
-            best_running_score = running_scores[:, :1] / (max_length ** length_penalty)
+            best_running_score = running_scores[:, :1] / (max_length**length_penalty)
             worst_finished_score = tf.where(
                 is_sent_finished, tf.math.reduce_min(scores, axis=1, keepdims=True), -1.0e9
             )
@@ -2832,7 +2851,13 @@ class TFGenerationMixin:
             return not_max_length_yet & (still_open_beam | improvement_still_possible)
 
         def beam_search_body_fn(
-            cur_len, running_sequences, running_scores, sequences, scores, is_sent_finished, model_kwargs,
+            cur_len,
+            running_sequences,
+            running_scores,
+            sequences,
+            scores,
+            is_sent_finished,
+            model_kwargs,
         ):
             """
             Beam Search iterative update function -- each iteration adds a new token and updates the best sequences
@@ -3190,7 +3215,8 @@ def tf_top_k_top_p_filtering(logits, top_k=0, top_p=1.0, filter_value=-float("In
 
         # Shift the indices to the right to keep also the first token above the threshold
         sorted_indices_to_remove = tf.concat(
-            [tf.zeros_like(sorted_indices_to_remove[:, :1]), sorted_indices_to_remove[:, :-1]], -1,
+            [tf.zeros_like(sorted_indices_to_remove[:, :1]), sorted_indices_to_remove[:, :-1]],
+            -1,
         )
         # scatter sorted tensors to original indexing
         indices_to_remove = scatter_values_on_batch_indices(sorted_indices_to_remove, sorted_indices)
@@ -3260,6 +3286,6 @@ class BeamHypotheses(object):
         elif self.early_stopping:
             return True
         else:
-            cur_score = best_sum_logprobs / cur_len ** self.length_penalty
+            cur_score = best_sum_logprobs / cur_len**self.length_penalty
             ret = self.worst_score >= cur_score
             return ret

@@ -197,7 +197,10 @@ class LfsUploadCommand:
                     r = requests.put(presigned_url, data=data)
                     r.raise_for_status()
                     parts.append(
-                        {"etag": r.headers.get("etag"), "partNumber": i + 1,}
+                        {
+                            "etag": r.headers.get("etag"),
+                            "partNumber": i + 1,
+                        }
                     )
                     # In order to support progress reporting while data is uploading / downloading,
                     # the transfer process should post messages to stdout
@@ -211,7 +214,13 @@ class LfsUploadCommand:
                     )
                     # Not precise but that's ok.
 
-            r = requests.post(completion_url, json={"oid": oid, "parts": parts,},)
+            r = requests.post(
+                completion_url,
+                json={
+                    "oid": oid,
+                    "parts": parts,
+                },
+            )
             r.raise_for_status()
 
             write_msg({"event": "complete", "oid": oid})

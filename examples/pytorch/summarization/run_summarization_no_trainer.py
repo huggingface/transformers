@@ -93,7 +93,10 @@ summarization_name_mapping = {
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a summarization task")
     parser.add_argument(
-        "--dataset_name", type=str, default=None, help="The name of the dataset to use (via the datasets library).",
+        "--dataset_name",
+        type=str,
+        default=None,
+        help="The name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
         "--dataset_config_name",
@@ -188,7 +191,10 @@ def parse_args():
         required=False,
     )
     parser.add_argument(
-        "--config_name", type=str, default=None, help="Pretrained config name or path if not the same as model_name",
+        "--config_name",
+        type=str,
+        default=None,
+        help="Pretrained config name or path if not the same as model_name",
     )
     parser.add_argument(
         "--tokenizer_name",
@@ -282,7 +288,9 @@ def parse_args():
         help="If the training should continue from a checkpoint folder.",
     )
     parser.add_argument(
-        "--with_tracking", action="store_true", help="Whether to enable experiment trackers for logging.",
+        "--with_tracking",
+        action="store_true",
+        help="Whether to enable experiment trackers for logging.",
     )
     parser.add_argument(
         "--report_to",
@@ -342,7 +350,9 @@ def main():
         )
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
     )
     logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
@@ -421,7 +431,9 @@ def main():
 
     if args.model_name_or_path:
         model = AutoModelForSeq2SeqLM.from_pretrained(
-            args.model_name_or_path, from_tf=bool(".ckpt" in args.model_name_or_path), config=config,
+            args.model_name_or_path,
+            from_tf=bool(".ckpt" in args.model_name_or_path),
+            config=config,
         )
     else:
         logger.info("Training new model from scratch")
@@ -527,7 +539,10 @@ def main():
             "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
             "weight_decay": args.weight_decay,
         },
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0,},
+        {
+            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
     ]
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
@@ -658,7 +673,9 @@ def main():
         for step, batch in enumerate(eval_dataloader):
             with torch.no_grad():
                 generated_tokens = accelerator.unwrap_model(model).generate(
-                    batch["input_ids"], attention_mask=batch["attention_mask"], **gen_kwargs,
+                    batch["input_ids"],
+                    attention_mask=batch["attention_mask"],
+                    **gen_kwargs,
                 )
 
                 generated_tokens = accelerator.pad_across_processes(
@@ -691,7 +708,8 @@ def main():
                         samples_seen += len(decoded_labels)
 
                 metric.add_batch(
-                    predictions=decoded_preds, references=decoded_labels,
+                    predictions=decoded_preds,
+                    references=decoded_labels,
                 )
         result = metric.compute(use_stemmer=True)
         result = {k: round(v * 100, 4) for k, v in result.items()}

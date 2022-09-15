@@ -227,7 +227,9 @@ class TFMinLengthLogitsProcessor(TFLogitsProcessor):
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         # applies eos token masking if the first argument is true
         scores = tf.cond(
-            tf.less(cur_len, self.min_length), lambda: self._apply_eos_token_mask(scores), lambda: tf.identity(scores),
+            tf.less(cur_len, self.min_length),
+            lambda: self._apply_eos_token_mask(scores),
+            lambda: tf.identity(scores),
         )
         return scores
 

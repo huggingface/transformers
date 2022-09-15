@@ -355,7 +355,11 @@ class ConvProjection(nn.Module):
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, inputs: torch.Tensor, final_seq_char_positions: Optional[torch.Tensor] = None,) -> torch.Tensor:
+    def forward(
+        self,
+        inputs: torch.Tensor,
+        final_seq_char_positions: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
         # inputs has shape [batch, mol_seq, molecule_hidden_size+char_hidden_final]
         # we transpose it to be [batch, molecule_hidden_size+char_hidden_final, mol_seq]
         inputs = torch.transpose(inputs, 1, 2)
@@ -712,7 +716,10 @@ class CanineLayer(nn.Module):
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
         self_attention_outputs = self.attention(
-            hidden_states, attention_mask, head_mask, output_attentions=output_attentions,
+            hidden_states,
+            attention_mask,
+            head_mask,
+            output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
 
@@ -789,7 +796,10 @@ class CanineEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module), hidden_states, attention_mask, layer_head_mask,
+                    create_custom_forward(layer_module),
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
@@ -804,7 +814,9 @@ class CanineEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
 
 
@@ -865,7 +877,10 @@ class CanineOnlyMLMHead(nn.Module):
         super().__init__()
         self.predictions = CanineLMPredictionHead(config)
 
-    def forward(self, sequence_output: Tuple[torch.Tensor],) -> Tuple[torch.Tensor]:
+    def forward(
+        self,
+        sequence_output: Tuple[torch.Tensor],
+    ) -> Tuple[torch.Tensor]:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
@@ -1139,7 +1154,10 @@ class CanineModel(CaninePreTrainedModel):
 
         # `input_char_embeddings`: shape (batch_size, char_seq, char_dim)
         input_char_embeddings = self.char_embeddings(
-            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds,
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
         )
 
         # Contextualize character embeddings using shallow Transformer.
@@ -1327,7 +1345,10 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1416,7 +1437,10 @@ class CanineForMultipleChoice(CaninePreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1492,7 +1516,10 @@ class CanineForTokenClassification(CaninePreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

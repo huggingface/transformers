@@ -132,7 +132,8 @@ class DataTrainingArguments:
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
     train_ref_file: Optional[str] = field(
-        default=None, metadata={"help": "An optional input train ref data file for whole word masking in Chinese."},
+        default=None,
+        metadata={"help": "An optional input train ref data file for whole word masking in Chinese."},
     )
     validation_ref_file: Optional[str] = field(
         default=None,
@@ -157,7 +158,8 @@ class DataTrainingArguments:
         },
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
     mlm_probability: float = field(
         default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}

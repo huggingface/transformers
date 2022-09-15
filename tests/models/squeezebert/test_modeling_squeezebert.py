@@ -199,7 +199,11 @@ class SqueezeBertModelTester(object):
         model.eval()
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_input_mask = input_mask.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
-        result = model(multiple_choice_inputs_ids, attention_mask=multiple_choice_input_mask, labels=choice_labels,)
+        result = model(
+            multiple_choice_inputs_ids,
+            attention_mask=multiple_choice_input_mask,
+            labels=choice_labels,
+        )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):

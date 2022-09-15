@@ -196,7 +196,11 @@ class FlaxPegasusModelTester:
 
 
 def prepare_pegasus_inputs_dict(
-    config, input_ids, decoder_input_ids, attention_mask=None, decoder_attention_mask=None,
+    config,
+    input_ids,
+    decoder_input_ids,
+    attention_mask=None,
+    decoder_attention_mask=None,
 ):
     if attention_mask is None:
         attention_mask = np.not_equal(input_ids, config.pad_token_id).astype(np.int8)
@@ -218,7 +222,14 @@ def prepare_pegasus_inputs_dict(
 
 @require_flax
 class FlaxPegasusModelTest(FlaxModelTesterMixin, unittest.TestCase):
-    all_model_classes = (FlaxPegasusForConditionalGeneration, FlaxPegasusModel,) if is_flax_available() else ()
+    all_model_classes = (
+        (
+            FlaxPegasusForConditionalGeneration,
+            FlaxPegasusModel,
+        )
+        if is_flax_available()
+        else ()
+    )
     all_generative_model_classes = (FlaxPegasusForConditionalGeneration,) if is_flax_available() else ()
     is_encoder_decoder = True
     test_pruning = False

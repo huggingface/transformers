@@ -334,7 +334,9 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
     # Model for Causal Image Modeling mapping
-    [("imagegpt", "ImageGPTForCausalImageModeling"),]
+    [
+        ("imagegpt", "ImageGPTForCausalImageModeling"),
+    ]
 )
 
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
@@ -393,9 +395,17 @@ MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict([("videomae", "VideoMAEForVideoClassification"),])
+MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
+    [
+        ("videomae", "VideoMAEForVideoClassification"),
+    ]
+)
 
-MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict([("vision-encoder-decoder", "VisionEncoderDecoderModel"),])
+MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
+    [
+        ("vision-encoder-decoder", "VisionEncoderDecoderModel"),
+    ]
+)
 
 MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
     [
@@ -600,7 +610,11 @@ MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict([("vilt", "ViltForQuestionAnswering"),])
+MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
+    [
+        ("vilt", "ViltForQuestionAnswering"),
+    ]
+)
 
 MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
     [

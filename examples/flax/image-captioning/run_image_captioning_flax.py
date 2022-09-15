@@ -163,7 +163,9 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
     """
 
-    model_name_or_path: str = field(metadata={"help": "The model checkpoint for weights initialization."},)
+    model_name_or_path: str = field(
+        metadata={"help": "The model checkpoint for weights initialization."},
+    )
     cache_dir: Optional[str] = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from s3"}
     )
@@ -211,7 +213,8 @@ class DataTrainingArguments:
         metadata={"help": "The name of the column in the datasets containing the full image file paths."},
     )
     caption_column: Optional[str] = field(
-        default=None, metadata={"help": "The name of the column in the datasets containing the image captions."},
+        default=None,
+        metadata={"help": "The name of the column in the datasets containing the image captions."},
     )
     train_file: Optional[str] = field(default=None, metadata={"help": "The input training data file (a text file)."})
     validation_file: Optional[str] = field(
@@ -219,7 +222,8 @@ class DataTrainingArguments:
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
     test_file: Optional[str] = field(
-        default=None, metadata={"help": "An optional input predict data file to do prediction on (a text file)."},
+        default=None,
+        metadata={"help": "An optional input predict data file to do prediction on (a text file)."},
     )
     max_target_length: Optional[int] = field(
         default=128,
@@ -269,7 +273,8 @@ class DataTrainingArguments:
         },
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
     predict_with_generate: bool = field(
         default=False, metadata={"help": "Whether to use generate to calculate generative metrics (ROUGE, BLEU)."}
@@ -399,7 +404,9 @@ def main():
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
     )
     # Setup logging, we only want one process per machine to log things on the screen.
     logger.setLevel(logging.INFO if jax.process_index() == 0 else logging.ERROR)

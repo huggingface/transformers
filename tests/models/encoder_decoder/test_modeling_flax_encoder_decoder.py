@@ -426,7 +426,11 @@ class FlaxEncoderDecoderMixin:
         decoder_input_ids = ids_tensor([13, 1], model_2.config.encoder.vocab_size)
         attention_mask = ids_tensor([13, 5], vocab_size=2)
 
-        outputs = model_2(input_ids=input_ids, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,)
+        outputs = model_2(
+            input_ids=input_ids,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+        )
         out_2 = np.array(outputs[0])
         out_2[np.isnan(out_2)] = 0
 
@@ -435,7 +439,9 @@ class FlaxEncoderDecoderMixin:
             model_1 = FlaxEncoderDecoderModel.from_pretrained(tmp_dirname)
 
             after_outputs = model_1(
-                input_ids=input_ids, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,
+                input_ids=input_ids,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
             )
             out_1 = np.array(after_outputs[0])
             out_1[np.isnan(out_1)] = 0

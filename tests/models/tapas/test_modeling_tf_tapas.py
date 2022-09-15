@@ -420,7 +420,12 @@ class TFTapasModelTester:
 @require_tf
 class TFTapasModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (TFTapasModel, TFTapasForMaskedLM, TFTapasForSequenceClassification, TFTapasForQuestionAnswering,)
+        (
+            TFTapasModel,
+            TFTapasForMaskedLM,
+            TFTapasForSequenceClassification,
+            TFTapasForQuestionAnswering,
+        )
         if is_tf_available()
         else ()
     )
@@ -869,15 +874,24 @@ class TFTapasUtilsTest(unittest.TestCase):
         SegmentedTensors with the tables.
         """
         values = tf.constant(
-            [[[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]], [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]],]
+            [
+                [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]],
+                [[1.0, 2.0, 3.0], [2.0, 0.0, 1.0], [1.0, 3.0, 4.0]],
+            ]
         )
         row_index = IndexMap(
-            indices=[[[0, 0, 0], [1, 1, 1], [2, 2, 2]], [[0, 0, 0], [1, 1, 1], [2, 2, 2]],],
+            indices=[
+                [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
+                [[0, 0, 0], [1, 1, 1], [2, 2, 2]],
+            ],
             num_segments=3,
             batch_dims=1,
         )
         col_index = IndexMap(
-            indices=[[[0, 0, 1], [0, 0, 1], [0, 0, 1]], [[0, 1, 2], [0, 1, 2], [0, 1, 2]],],
+            indices=[
+                [[0, 0, 1], [0, 0, 1], [0, 0, 1]],
+                [[0, 1, 2], [0, 1, 2], [0, 1, 2]],
+            ],
             num_segments=3,
             batch_dims=1,
         )

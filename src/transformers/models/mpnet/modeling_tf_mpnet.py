@@ -441,7 +441,10 @@ class TFMPNetEncoder(tf.keras.layers.Layer):
 
         relative_position = memory_position - context_position  # shape (qlen, klen)
 
-        rp_bucket = self._relative_position_bucket(relative_position, num_buckets=self.relative_attention_num_buckets,)
+        rp_bucket = self._relative_position_bucket(
+            relative_position,
+            num_buckets=self.relative_attention_num_buckets,
+        )
         values = tf.gather(self.relative_attention_bias, rp_bucket)  # shape (qlen, klen, num_heads)
         values = tf.expand_dims(tf.transpose(values, [2, 0, 1]), axis=0)  # shape (1, num_heads, qlen, klen)
         return values
@@ -507,7 +510,12 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         if attention_mask is None:
             attention_mask = tf.fill(input_shape, 1)
 
-        embedding_output = self.embeddings(input_ids, position_ids, inputs_embeds, training=training,)
+        embedding_output = self.embeddings(
+            input_ids,
+            position_ids,
+            inputs_embeds,
+            training=training,
+        )
 
         # We create a 3D attention mask from a 2D tensor mask.
         # Sizes are [batch_size, 1, 1, to_seq_length]
@@ -550,7 +558,10 @@ class TFMPNetMainLayer(tf.keras.layers.Layer):
         pooled_output = self.pooler(sequence_output)
 
         if not return_dict:
-            return (sequence_output, pooled_output,) + encoder_outputs[1:]
+            return (
+                sequence_output,
+                pooled_output,
+            ) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -821,7 +832,10 @@ class TFMPNetForMaskedLM(TFMPNetPreTrainedModel, TFMaskedLanguageModelingLoss):
             return ((loss,) + output) if loss is not None else output
 
         return TFMaskedLMOutput(
-            loss=loss, logits=prediction_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=prediction_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForMaskedLM.serving_output
@@ -923,7 +937,10 @@ class TFMPNetForSequenceClassification(TFMPNetPreTrainedModel, TFSequenceClassif
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
@@ -1024,7 +1041,10 @@ class TFMPNetForMultipleChoice(TFMPNetPreTrainedModel, TFMultipleChoiceLoss):
             return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     @tf.function(
@@ -1116,7 +1136,10 @@ class TFMPNetForTokenClassification(TFMPNetPreTrainedModel, TFTokenClassificatio
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output

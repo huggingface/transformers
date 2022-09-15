@@ -87,7 +87,8 @@ class ModelArguments:
         },
     )
     cache_dir: Optional[str] = field(
-        default=None, metadata={"help": "Where to store the pretrained models downloaded from huggingface.co"},
+        default=None,
+        metadata={"help": "Where to store the pretrained models downloaded from huggingface.co"},
     )
     use_fast_tokenizer: bool = field(
         default=True,
@@ -141,7 +142,8 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_source_length: Optional[int] = field(
         default=1024,

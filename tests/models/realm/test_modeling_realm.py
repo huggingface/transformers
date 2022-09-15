@@ -484,12 +484,20 @@ class RealmModelIntegrationTest(unittest.TestCase):
         tokenizer = RealmTokenizer.from_pretrained("google/realm-orqa-nq-openqa")
         retriever = RealmRetriever.from_pretrained("google/realm-orqa-nq-openqa")
 
-        model = RealmForOpenQA.from_pretrained("google/realm-orqa-nq-openqa", retriever=retriever, config=config,)
+        model = RealmForOpenQA.from_pretrained(
+            "google/realm-orqa-nq-openqa",
+            retriever=retriever,
+            config=config,
+        )
 
         question = "Who is the pioneer in modern computer science?"
 
         question = tokenizer(
-            [question], padding=True, truncation=True, max_length=model.config.searcher_seq_len, return_tensors="pt",
+            [question],
+            padding=True,
+            truncation=True,
+            max_length=model.config.searcher_seq_len,
+            return_tensors="pt",
         ).to(model.device)
 
         predicted_answer_ids = model(**question).predicted_answer_ids

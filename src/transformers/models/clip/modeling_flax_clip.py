@@ -265,7 +265,7 @@ class FlaxCLIPAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {self.num_heads})."
             )
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
         self.dropout = self.config.attention_dropout
 
         self.k_proj = nn.Dense(self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
@@ -284,7 +284,11 @@ class FlaxCLIPAttention(nn.Module):
         return hidden_states.reshape(hidden_states.shape[:2] + (self.embed_dim,))
 
     def __call__(
-        self, hidden_states, attention_mask=None, deterministic: bool = True, output_attentions: bool = False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        deterministic: bool = True,
+        output_attentions: bool = False,
     ):
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
@@ -346,7 +350,9 @@ class FlaxCLIPMLP(nn.Module):
     def setup(self):
         self.activation_fn = ACT2FN[self.config.hidden_act]
         self.fc1 = nn.Dense(
-            self.config.intermediate_size, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01),
+            self.config.intermediate_size,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(0.01),
         )
         self.fc2 = nn.Dense(self.config.hidden_size, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.01))
 
@@ -368,7 +374,11 @@ class FlaxCLIPEncoderLayer(nn.Module):
         self.layer_norm2 = nn.LayerNorm(epsilon=self.config.layer_norm_eps, dtype=self.dtype)
 
     def __call__(
-        self, hidden_states, attention_mask, deterministic: bool = True, output_attentions: bool = False,
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
     ):
         residual = hidden_states
 
@@ -1059,10 +1069,16 @@ class FlaxCLIPModule(nn.Module):
         self.vision_model = FlaxCLIPVisionTransformer(vision_config, dtype=self.dtype)
 
         self.visual_projection = nn.Dense(
-            self.projection_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.02), use_bias=False,
+            self.projection_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(0.02),
+            use_bias=False,
         )
         self.text_projection = nn.Dense(
-            self.projection_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.02), use_bias=False,
+            self.projection_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(0.02),
+            use_bias=False,
         )
 
         self.logit_scale = self.param(

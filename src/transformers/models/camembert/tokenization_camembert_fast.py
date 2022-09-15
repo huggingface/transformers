@@ -35,8 +35,12 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.bpe.model", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"camembert-base": "https://huggingface.co/camembert-base/resolve/main/sentencepiece.bpe.model",},
-    "tokenizer_file": {"camembert-base": "https://huggingface.co/camembert-base/resolve/main/tokenizer.json",},
+    "vocab_file": {
+        "camembert-base": "https://huggingface.co/camembert-base/resolve/main/sentencepiece.bpe.model",
+    },
+    "tokenizer_file": {
+        "camembert-base": "https://huggingface.co/camembert-base/resolve/main/tokenizer.json",
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {

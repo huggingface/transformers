@@ -70,7 +70,10 @@ def parse_args():
         description="Finetune a transformers model on a text classification task (NER) with accelerate library"
     )
     parser.add_argument(
-        "--dataset_name", type=str, default=None, help="The name of the dataset to use (via the datasets library).",
+        "--dataset_name",
+        type=str,
+        default=None,
+        help="The name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
         "--dataset_config_name",
@@ -117,7 +120,10 @@ def parse_args():
         required=False,
     )
     parser.add_argument(
-        "--config_name", type=str, default=None, help="Pretrained config name or path if not the same as model_name",
+        "--config_name",
+        type=str,
+        default=None,
+        help="Pretrained config name or path if not the same as model_name",
     )
     parser.add_argument(
         "--tokenizer_name",
@@ -187,10 +193,16 @@ def parse_args():
         help="Indication whether entity level metrics are to be returner.",
     )
     parser.add_argument(
-        "--task_name", type=str, default="ner", choices=["ner", "pos", "chunk"], help="The name of the task.",
+        "--task_name",
+        type=str,
+        default="ner",
+        choices=["ner", "pos", "chunk"],
+        help="The name of the task.",
     )
     parser.add_argument(
-        "--debug", action="store_true", help="Activate debug mode and run training only with a subset of data.",
+        "--debug",
+        action="store_true",
+        help="Activate debug mode and run training only with a subset of data.",
     )
     parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument(
@@ -210,7 +222,9 @@ def parse_args():
         help="If the training should continue from a checkpoint folder.",
     )
     parser.add_argument(
-        "--with_tracking", action="store_true", help="Whether to enable experiment trackers for logging.",
+        "--with_tracking",
+        action="store_true",
+        help="Whether to enable experiment trackers for logging.",
     )
     parser.add_argument(
         "--report_to",
@@ -261,7 +275,9 @@ def main():
     )
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
     )
     logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
@@ -512,7 +528,10 @@ def main():
             "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
             "weight_decay": args.weight_decay,
         },
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0,},
+        {
+            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
     ]
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
@@ -692,7 +711,8 @@ def main():
                     samples_seen += labels_gathered.shape[0]
             preds, refs = get_labels(predictions_gathered, labels_gathered)
             metric.add_batch(
-                predictions=preds, references=refs,
+                predictions=preds,
+                references=refs,
             )  # predictions and preferences are expected to be a nested list of labels, not label_ids
 
         eval_metric = compute_metrics()

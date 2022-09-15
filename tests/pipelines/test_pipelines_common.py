@@ -451,24 +451,42 @@ class PipelinePadTest(unittest.TestCase):
         import torch
 
         items = [
-            {"label": "label1", "pixel_values": torch.zeros((1, 3, 10, 10)),},
-            {"label": "label2", "pixel_values": torch.zeros((1, 3, 10, 10)),},
+            {
+                "label": "label1",
+                "pixel_values": torch.zeros((1, 3, 10, 10)),
+            },
+            {
+                "label": "label2",
+                "pixel_values": torch.zeros((1, 3, 10, 10)),
+            },
         ]
 
         self.assertEqual(_pad(items, "label", 0, "right"), ["label1", "label2"])
-        self.assertTrue(torch.allclose(_pad(items, "pixel_values", 10, "right"), torch.zeros((2, 3, 10, 10)),))
+        self.assertTrue(
+            torch.allclose(
+                _pad(items, "pixel_values", 10, "right"),
+                torch.zeros((2, 3, 10, 10)),
+            )
+        )
 
     @require_torch
     def test_pipeline_offset_mapping(self):
         import torch
 
         items = [
-            {"offset_mappings": torch.zeros([1, 11, 2], dtype=torch.long),},
-            {"offset_mappings": torch.zeros([1, 4, 2], dtype=torch.long),},
+            {
+                "offset_mappings": torch.zeros([1, 11, 2], dtype=torch.long),
+            },
+            {
+                "offset_mappings": torch.zeros([1, 4, 2], dtype=torch.long),
+            },
         ]
 
         self.assertTrue(
-            torch.allclose(_pad(items, "offset_mappings", 0, "right"), torch.zeros((2, 11, 2), dtype=torch.long),),
+            torch.allclose(
+                _pad(items, "offset_mappings", 0, "right"),
+                torch.zeros((2, 11, 2), dtype=torch.long),
+            ),
         )
 
 
@@ -588,7 +606,18 @@ class PipelineUtilsTest(unittest.TestCase):
 
         outputs = [item for item in dataset]
         self.assertEqual(
-            outputs, [[{"id": 1}, {"id": 2},], [{"id": 1}, {"id": 2}, {"id": 3},],],
+            outputs,
+            [
+                [
+                    {"id": 1},
+                    {"id": 2},
+                ],
+                [
+                    {"id": 1},
+                    {"id": 2},
+                    {"id": 3},
+                ],
+            ],
         )
 
     @require_torch
@@ -837,14 +866,16 @@ class CustomPipelineTest(unittest.TestCase):
         self.assertEqual(new_classifier.task, "pair-classification")
         results = new_classifier("I hate you", second_text="I love you")
         self.assertDictEqual(
-            nested_simplify(results), {"label": "LABEL_0", "score": 0.505, "logits": [-0.003, -0.024]},
+            nested_simplify(results),
+            {"label": "LABEL_0", "score": 0.505, "logits": [-0.003, -0.024]},
         )
 
         self.assertEqual(old_classifier.__class__.__name__, "TextClassificationPipeline")
         self.assertEqual(old_classifier.task, "text-classification")
         results = old_classifier("I hate you", text_pair="I love you")
         self.assertListEqual(
-            nested_simplify(results), [{"label": "LABEL_0", "score": 0.505}],
+            nested_simplify(results),
+            [{"label": "LABEL_0", "score": 0.505}],
         )
 
     def test_cached_pipeline_has_minimum_calls_to_head(self):

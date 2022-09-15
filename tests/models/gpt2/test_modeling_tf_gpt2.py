@@ -39,7 +39,8 @@ if is_tf_available():
 
 class TFGPT2ModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13
@@ -617,14 +618,18 @@ class TFGPT2ModelLanguageGenerationTest(unittest.TestCase):
 
             sentence = ["The dog", "The flying machine"]
             expected_output_string = [
-                "The dog owner asked why did our vet decide there needed to be extra ventilation inside because"
-                " most puppies",
+                (
+                    "The dog owner asked why did our vet decide there needed to be extra ventilation inside because"
+                    " most puppies"
+                ),
                 "The flying machine was made by an artist who found it difficult to control it as it did not use",
             ]
             expected_output_string_xla = [
                 "The dog has been named in connection with the murder of a 20-year-old man in",
-                "The flying machine is a new and improved system to operate and operate a new system and system "
-                "system system",
+                (
+                    "The flying machine is a new and improved system to operate and operate a new system and system "
+                    "system system"
+                ),
             ]
             input_ids = tokenizer(sentence, return_tensors="tf", padding=True)
 

@@ -37,7 +37,11 @@ class EncoderForONNX(torch.nn.Module):
         self.encoder = encoder
 
     def forward(self, input_ids, attention_mask):
-        return self.encoder(input_ids=input_ids, attention_mask=attention_mask, return_dict=False,)
+        return self.encoder(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            return_dict=False,
+        )
 
 
 class DecoderForONNX(torch.nn.Module):
@@ -206,7 +210,11 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
             device=model.device,
             dtype=torch.long,
         )
-        attention_mask = torch.tensor([[True] * input_ids.shape[-1]], device=model.device, dtype=torch.bool,)
+        attention_mask = torch.tensor(
+            [[True] * input_ids.shape[-1]],
+            device=model.device,
+            dtype=torch.bool,
+        )
         self.encoder = _create_traced_encoder(model.get_encoder(), input_ids, attention_mask)
         encoder_outputs = model.get_encoder()(input_ids, attention_mask=attention_mask, return_dict=True)
         decoder = model.model.decoder
@@ -289,7 +297,10 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
         return input_ids
 
     def _prepare_decoder_input_ids_for_generation(
-        self, input_ids: torch.LongTensor, decoder_start_token_id, bos_token_id: Optional[int] = None,
+        self,
+        input_ids: torch.LongTensor,
+        decoder_start_token_id,
+        bos_token_id: Optional[int] = None,
     ) -> torch.LongTensor:
         decoder_input_ids = (
             torch.ones((input_ids.shape[0], 1), dtype=input_ids.dtype, device=input_ids.device)
@@ -310,7 +321,9 @@ class BARTGenerator(torch.nn.Module, GenerationMixin):
         encoder_output = self._encoder_forward(input_ids, attention_mask)
 
         input_ids = self._prepare_decoder_input_ids_for_generation(
-            input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id,
+            input_ids,
+            decoder_start_token_id=decoder_start_token_id,
+            bos_token_id=bos_token_id,
         )
 
         return self.greedy_search(
@@ -428,7 +441,7 @@ class BeamSearchScorerTS(torch.nn.Module):
         elif self.do_early_stopping:
             return True
         else:
-            cur_score = best_sum_logprobs / cur_len ** self.length_penalty
+            cur_score = best_sum_logprobs / cur_len**self.length_penalty
             ret = self._beam_hyps_worst_scores[hypo_idx].item() >= cur_score
             return ret
 
@@ -477,7 +490,9 @@ class BeamSearchScorerTS(torch.nn.Module):
                     if is_beam_token_worse_than_top_num_beams:
                         continue
                     self.hypo_add(
-                        input_ids[batch_beam_idx].clone(), next_score.item(), batch_idx,
+                        input_ids[batch_beam_idx].clone(),
+                        next_score.item(),
+                        batch_idx,
                     )
                 else:
                     # add next predicted token since it is not eos_token
@@ -498,7 +513,9 @@ class BeamSearchScorerTS(torch.nn.Module):
 
             # Check if we are done so that we can save a pad step if all(done)
             self._done[batch_idx] = self._done[batch_idx] or self.hypo_is_done(
-                batch_idx, next_scores[batch_idx].max().item(), cur_len,
+                batch_idx,
+                next_scores[batch_idx].max().item(),
+                cur_len,
             )
 
         return next_beam_scores.view(-1), next_beam_tokens.view(-1), next_beam_indices.view(-1)
@@ -574,7 +591,10 @@ class BARTBeamSearchGenerator(BARTGenerator):
 
     @staticmethod
     def _expand_inputs_for_generation(
-        input_ids: torch.Tensor, attention_mask: torch.Tensor, last_hidden_state: torch.Tensor, expand_size: int = 1,
+        input_ids: torch.Tensor,
+        attention_mask: torch.Tensor,
+        last_hidden_state: torch.Tensor,
+        expand_size: int = 1,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         expanded_return_idx = (
             torch.arange(input_ids.shape[0]).view(-1, 1).repeat(1, expand_size).view(-1).to(input_ids.device)
@@ -673,7 +693,12 @@ class BARTBeamSearchGenerator(BARTGenerator):
                 break
 
         sequences, sequence_scores = self.beam_scorer.finalize(
-            input_ids, beam_scores, next_tokens, next_indices, pad_token_id=pad_token_id, eos_token_id=eos_token_id,
+            input_ids,
+            beam_scores,
+            next_tokens,
+            next_indices,
+            pad_token_id=pad_token_id,
+            eos_token_id=eos_token_id,
         )
 
         return sequences
@@ -691,7 +716,9 @@ class BARTBeamSearchGenerator(BARTGenerator):
         encoder_output = self._encoder_forward(input_ids, attention_mask)
 
         input_ids = self._prepare_decoder_input_ids_for_generation(
-            input_ids, decoder_start_token_id=decoder_start_token_id, bos_token_id=bos_token_id,
+            input_ids,
+            decoder_start_token_id=decoder_start_token_id,
+            bos_token_id=bos_token_id,
         )
 
         batch_size = input_ids.shape[0]
@@ -711,7 +738,10 @@ class BARTBeamSearchGenerator(BARTGenerator):
         )
 
         input_ids, attention_mask, encoder_output = self._expand_inputs_for_generation(
-            input_ids, attention_mask, encoder_output, expand_size=num_beams,
+            input_ids,
+            attention_mask,
+            encoder_output,
+            expand_size=num_beams,
         )
 
         return self.beam_search(

@@ -67,7 +67,10 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a multiple choice task")
     parser.add_argument(
-        "--dataset_name", type=str, default=None, help="The name of the dataset to use (via the datasets library).",
+        "--dataset_name",
+        type=str,
+        default=None,
+        help="The name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
         "--dataset_config_name",
@@ -102,7 +105,10 @@ def parse_args():
         required=False,
     )
     parser.add_argument(
-        "--config_name", type=str, default=None, help="Pretrained config name or path if not the same as model_name",
+        "--config_name",
+        type=str,
+        default=None,
+        help="Pretrained config name or path if not the same as model_name",
     )
     parser.add_argument(
         "--tokenizer_name",
@@ -167,7 +173,9 @@ def parse_args():
         choices=MODEL_TYPES,
     )
     parser.add_argument(
-        "--debug", action="store_true", help="Activate debug mode and run training only with a subset of data.",
+        "--debug",
+        action="store_true",
+        help="Activate debug mode and run training only with a subset of data.",
     )
     parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument(
@@ -187,7 +195,9 @@ def parse_args():
         help="If the training should continue from a checkpoint folder.",
     )
     parser.add_argument(
-        "--with_tracking", action="store_true", help="Whether to enable experiment trackers for logging.",
+        "--with_tracking",
+        action="store_true",
+        help="Whether to enable experiment trackers for logging.",
     )
     parser.add_argument(
         "--report_to",
@@ -284,7 +294,9 @@ def main():
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
     )
     logger.info(accelerator.state, main_process_only=False)
     if accelerator.is_local_main_process:
@@ -378,7 +390,9 @@ def main():
 
     if args.model_name_or_path:
         model = AutoModelForMultipleChoice.from_pretrained(
-            args.model_name_or_path, from_tf=bool(".ckpt" in args.model_name_or_path), config=config,
+            args.model_name_or_path,
+            from_tf=bool(".ckpt" in args.model_name_or_path),
+            config=config,
         )
     else:
         logger.info("Training new model from scratch")
@@ -404,7 +418,11 @@ def main():
 
         # Tokenize
         tokenized_examples = tokenizer(
-            first_sentences, second_sentences, max_length=args.max_length, padding=padding, truncation=True,
+            first_sentences,
+            second_sentences,
+            max_length=args.max_length,
+            padding=padding,
+            truncation=True,
         )
         # Un-flatten
         tokenized_inputs = {k: [v[i : i + 4] for i in range(0, len(v), 4)] for k, v in tokenized_examples.items()}
@@ -449,7 +467,10 @@ def main():
             "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
             "weight_decay": args.weight_decay,
         },
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0,},
+        {
+            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
     ]
     optimizer = torch.optim.AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
@@ -580,7 +601,8 @@ def main():
             predictions = outputs.logits.argmax(dim=-1)
             predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
             metric.add_batch(
-                predictions=predictions, references=references,
+                predictions=predictions,
+                references=references,
             )
 
         eval_metric = metric.compute()

@@ -261,7 +261,8 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
-                list(self_attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, seq_len, seq_len],
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_len, seq_len],
             )
 
     def test_hidden_states_output(self):
@@ -287,7 +288,8 @@ class FlavaImageModelTest(ModelTesterMixin, unittest.TestCase):
             seq_length = num_patches + 1
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -1050,7 +1052,8 @@ class FlavaForPreTrainingTester(FlavaModelTester):
             )
             if not test_text:
                 self.parent.assertEqual(
-                    result.loss_info.mim.dim(), 0,
+                    result.loss_info.mim.dim(),
+                    0,
                 )
                 self.parent.assertEqual(
                     result.mim_logits.shape,
@@ -1091,7 +1094,8 @@ class FlavaForPreTrainingTester(FlavaModelTester):
                 ),
             )
             self.parent.assertEqual(
-                result.itm_logits.shape, (self.text_model_tester.batch_size, 2),
+                result.itm_logits.shape,
+                (self.text_model_tester.batch_size, 2),
             )
             self.parent.assertEqual(
                 result.mmm_text_logits.shape,

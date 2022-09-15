@@ -90,7 +90,8 @@ class FTDataArguments:
         default=None, metadata={"help": "A csv or a json file containing the data to predict on."}
     )
     task_name: Optional[str] = dataclasses.field(
-        default=None, metadata={"help": "The name of the task to train on."},
+        default=None,
+        metadata={"help": "The name of the task to train on."},
     )
     label_list: Optional[List[str]] = dataclasses.field(
         default=None, metadata={"help": "The list of labels for the task."}
@@ -124,22 +125,28 @@ class FTTrainingArguments:
         metadata={"help": "The output directory where the model predictions and checkpoints will be written."}
     )
     do_train: Optional[bool] = dataclasses.field(
-        default=False, metadata={"help": "Whether to run training or not."},
+        default=False,
+        metadata={"help": "Whether to run training or not."},
     )
     do_eval: Optional[bool] = dataclasses.field(
-        default=False, metadata={"help": "Whether to run evaluation on the validation set or not."},
+        default=False,
+        metadata={"help": "Whether to run evaluation on the validation set or not."},
     )
     do_predict: Optional[bool] = dataclasses.field(
-        default=False, metadata={"help": "Whether to run inference on the inference set or not."},
+        default=False,
+        metadata={"help": "Whether to run inference on the inference set or not."},
     )
     seed: Optional[int] = dataclasses.field(
-        default=42, metadata={"help": "Random seed that will be set at the beginning of training."},
+        default=42,
+        metadata={"help": "Random seed that will be set at the beginning of training."},
     )
     per_device_train_batch_size: Optional[int] = dataclasses.field(
-        default=8, metadata={"help": "The batch size per GPU/TPU core/CPU for training."},
+        default=8,
+        metadata={"help": "The batch size per GPU/TPU core/CPU for training."},
     )
     per_device_eval_batch_size: Optional[int] = dataclasses.field(
-        default=8, metadata={"help": "The batch size per GPU/TPU core/CPU for evaluation."},
+        default=8,
+        metadata={"help": "The batch size per GPU/TPU core/CPU for evaluation."},
     )
     weight_decay: Optional[float] = dataclasses.field(
         default=0.0,
@@ -151,7 +158,8 @@ class FTTrainingArguments:
         },
     )
     learning_rate: Optional[float] = dataclasses.field(
-        default=5e-5, metadata={"help": "The initial learning rate for [`AdamW`] optimizer."},
+        default=5e-5,
+        metadata={"help": "The initial learning rate for [`AdamW`] optimizer."},
     )
     gradient_accumulation_steps: Optional[int] = dataclasses.field(
         default=1,
@@ -196,7 +204,8 @@ class FTTrainingArguments:
         default="accuracy", metadata={"help": "The evaluation metric used for the task."}
     )
     keep_checkpoint_max: Optional[int] = dataclasses.field(
-        default=1, metadata={"help": "The maximum number of best checkpoint files to keep."},
+        default=1,
+        metadata={"help": "The maximum number of best checkpoint files to keep."},
     )
     early_stopping_patience: Optional[int] = dataclasses.field(
         default=10,
@@ -456,7 +465,8 @@ def evaluate(args, accelerator, dataloader, eval_set, model, checkpoint, has_lab
                 all_references = np.append(all_references, references.detach().cpu().numpy(), axis=0)
 
             eval_metric.add_batch(
-                predictions=predictions, references=references,
+                predictions=predictions,
+                references=references,
             )
         completed_steps += 1
 
@@ -528,7 +538,9 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
     """
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
     )
     logger.info(accelerator.state)
 
@@ -695,7 +707,10 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
         data_collator = DataCollatorWithPadding(tokenizer, pad_to_multiple_of=(8 if accelerator.use_fp16 else None))
 
     train_dataloader = DataLoader(
-        train_dataset, batch_size=args.per_device_train_batch_size, shuffle=True, collate_fn=data_collator,
+        train_dataset,
+        batch_size=args.per_device_train_batch_size,
+        shuffle=True,
+        collate_fn=data_collator,
     )
     eval_dataloader, test_dataloader, infer_dataloader = None, None, None
 
@@ -722,7 +737,10 @@ def finetune(accelerator, model_name_or_path, train_file, output_dir, **kwargs):
             "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
             "weight_decay": args.weight_decay,
         },
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0,},
+        {
+            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 

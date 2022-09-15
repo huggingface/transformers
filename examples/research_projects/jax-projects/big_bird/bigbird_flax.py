@@ -147,7 +147,14 @@ def train_step(state, drp_rng, **model_inputs):
         outputs = state.apply_fn(**model_inputs, params=params, dropout_rng=drp_rng, train=True)
         start_logits, end_logits, pooled_logits = outputs
 
-        return state.loss_fn(start_logits, start_labels, end_logits, end_labels, pooled_logits, pooled_labels,)
+        return state.loss_fn(
+            start_logits,
+            start_labels,
+            end_logits,
+            end_labels,
+            pooled_logits,
+            pooled_labels,
+        )
 
     drp_rng, new_drp_rng = jax.random.split(drp_rng)
     grad_fn = jax.value_and_grad(loss_fn)
@@ -189,7 +196,12 @@ class Trainer:
 
     def create_state(self, model, tx, num_train_steps, ckpt_dir=None):
         params = model.params
-        state = TrainState.create(apply_fn=model.__call__, params=params, tx=tx, loss_fn=calculate_loss_for_nq,)
+        state = TrainState.create(
+            apply_fn=model.__call__,
+            params=params,
+            tx=tx,
+            loss_fn=calculate_loss_for_nq,
+        )
         if ckpt_dir is not None:
             params, opt_state, step, args, data_collator = restore_checkpoint(ckpt_dir, state)
             tx_args = {
@@ -201,7 +213,11 @@ class Trainer:
             }
             tx, lr = build_tx(**tx_args)
             state = train_state.TrainState(
-                step=step, apply_fn=model.__call__, params=params, tx=tx, opt_state=opt_state,
+                step=step,
+                apply_fn=model.__call__,
+                params=params,
+                tx=tx,
+                opt_state=opt_state,
             )
             self.args = args
             self.data_collator = data_collator

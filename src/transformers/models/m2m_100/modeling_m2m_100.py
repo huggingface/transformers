@@ -198,7 +198,12 @@ class M2M100Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
-        self, embed_dim: int, num_heads: int, dropout: float = 0.0, is_decoder: bool = False, bias: bool = True,
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
+        bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -211,7 +216,7 @@ class M2M100Attention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -342,7 +347,9 @@ class M2M100EncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = M2M100Attention(
-            embed_dim=self.embed_dim, num_heads=config.encoder_attention_heads, dropout=config.attention_dropout,
+            embed_dim=self.embed_dim,
+            num_heads=config.encoder_attention_heads,
+            dropout=config.attention_dropout,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -421,7 +428,10 @@ class M2M100DecoderLayer(nn.Module):
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.encoder_attn = M2M100Attention(
-            self.embed_dim, config.decoder_attention_heads, dropout=config.attention_dropout, is_decoder=True,
+            self.embed_dim,
+            config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+            is_decoder=True,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
@@ -689,7 +699,9 @@ class M2M100Encoder(M2M100PreTrainedModel):
             self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
         self.embed_positions = M2M100SinusoidalPositionalEmbedding(
-            config.max_position_embeddings, embed_dim, self.padding_idx,
+            config.max_position_embeddings,
+            embed_dim,
+            self.padding_idx,
         )
         self.layers = nn.ModuleList([M2M100EncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
@@ -862,7 +874,9 @@ class M2M100Decoder(M2M100PreTrainedModel):
             self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = M2M100SinusoidalPositionalEmbedding(
-            config.max_position_embeddings, config.d_model, self.padding_idx,
+            config.max_position_embeddings,
+            config.d_model,
+            self.padding_idx,
         )
         self.layers = nn.ModuleList([M2M100DecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layer_norm = nn.LayerNorm(config.d_model)
@@ -1105,7 +1119,8 @@ class M2M100Decoder(M2M100PreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare M2M100 Model outputting raw hidden-states without any specific head on top.", M2M_100_START_DOCSTRING,
+    "The bare M2M100 Model outputting raw hidden-states without any specific head on top.",
+    M2M_100_START_DOCSTRING,
 )
 class M2M100Model(M2M100PreTrainedModel):
     def __init__(self, config: M2M100Config):

@@ -150,7 +150,12 @@ class Speech2Text2Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
-        self, embed_dim: int, num_heads: int, dropout: float = 0.0, is_decoder: bool = False, bias: bool = True,
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
+        bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -163,7 +168,7 @@ class Speech2Text2Attention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -307,7 +312,10 @@ class Speech2Text2DecoderLayer(nn.Module):
 
         if config.is_decoder:
             self.encoder_attn = Speech2Text2Attention(
-                self.embed_dim, config.decoder_attention_heads, dropout=config.attention_dropout, is_decoder=True,
+                self.embed_dim,
+                config.decoder_attention_heads,
+                dropout=config.attention_dropout,
+                is_decoder=True,
             )
             self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
 
@@ -463,7 +471,9 @@ class Speech2Text2Decoder(Speech2Text2PreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = Speech2Text2SinusoidalPositionalEmbedding(
-            self.max_target_positions, config.d_model, self.padding_idx,
+            self.max_target_positions,
+            config.d_model,
+            self.padding_idx,
         )
 
         self.layers = nn.ModuleList([Speech2Text2DecoderLayer(config) for _ in range(config.decoder_layers)])

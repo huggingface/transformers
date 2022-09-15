@@ -210,5 +210,11 @@ class LayoutLMv2FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         encoding = feature_extractor(image, return_tensors="pt")
 
         self.assertEqual(
-            encoding.pixel_values.shape, (1, 3, 224, 224,),
+            encoding.pixel_values.shape,
+            (
+                1,
+                3,
+                224,
+                224,
+            ),
         )

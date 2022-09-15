@@ -121,7 +121,12 @@ class ViltEmbeddings(nn.Module):
         pos_embed = torch.cat(
             [
                 nn.functional.pad(
-                    nn.functional.interpolate(spatial_pos, size=(h, w), mode="bilinear", align_corners=True,),
+                    nn.functional.interpolate(
+                        spatial_pos,
+                        size=(h, w),
+                        mode="bilinear",
+                        align_corners=True,
+                    ),
                     (0, width - w, 0, height - h),
                 )
                 for h, w in zip(x_h, x_w)
@@ -532,7 +537,10 @@ class ViltEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module), hidden_states, attention_mask, layer_head_mask,
+                    create_custom_forward(layer_module),
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
@@ -548,7 +556,9 @@ class ViltEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
 
 
@@ -996,7 +1006,10 @@ class ViltForMaskedLM(ViltPreTrainedModel):
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
         return MaskedLMOutput(
-            loss=masked_lm_loss, logits=mlm_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=masked_lm_loss,
+            logits=mlm_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1140,7 +1153,10 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1237,7 +1253,10 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1373,7 +1392,10 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return ViltForImagesAndTextClassificationOutput(
-            loss=loss, logits=logits, hidden_states=hidden_states, attentions=attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )
 
 
@@ -1456,5 +1478,8 @@ class ViltForTokenClassification(ViltPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )

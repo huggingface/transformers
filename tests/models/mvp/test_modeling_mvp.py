@@ -116,7 +116,9 @@ class MvpModelTester:
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3,)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
+            3,
+        )
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -278,7 +280,11 @@ class MvpHeadTests(unittest.TestCase):
         sequence_labels = ids_tensor([batch_size], 2).to(torch_device)
         model = MvpForQuestionAnswering(config)
         model.to(torch_device)
-        outputs = model(input_ids=input_ids, start_positions=sequence_labels, end_positions=sequence_labels,)
+        outputs = model(
+            input_ids=input_ids,
+            start_positions=sequence_labels,
+            end_positions=sequence_labels,
+        )
 
         self.assertEqual(outputs["start_logits"].shape, input_ids.shape)
         self.assertEqual(outputs["end_logits"].shape, input_ids.shape)
@@ -531,7 +537,10 @@ class MvpModelIntegrationTests(unittest.TestCase):
         PGE_ARTICLE = """ Listen to local radio broadcasts for advertisements that reference casinos in your area.\nIf none are in your area, listen to national radio broadcasts for advertisements of casinos in other areas.\nNote the location that is mentioned in each advertisement that involves a casino.\nIf no locations are mentioned, note any additional contact information, such as a website or phone number. Use that information to find out where the casinos are.;\n,\n\nIf you learn about more than 1 casino on the radio, use the Internet to search the distance between your location and each casino. Sites such as maps.google.com or mapquest.com will help you in this search.'"""
         # fmt: on
         EXPECTED_SUMMARY = "Listen to the radio.\nUse the Internet."
-        dct = tok.batch_encode_plus([PGE_ARTICLE], return_tensors="pt",).to(torch_device)
+        dct = tok.batch_encode_plus(
+            [PGE_ARTICLE],
+            return_tensors="pt",
+        ).to(torch_device)
 
         hypotheses_batch = model.generate(**dct)
 
@@ -631,7 +640,12 @@ class MvpStandaloneDecoderModelTester:
         )
 
     def prepare_config_and_inputs_for_decoder(self):
-        (config, input_ids, attention_mask, lm_labels,) = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            attention_mask,
+            lm_labels,
+        ) = self.prepare_config_and_inputs()
 
         encoder_hidden_states = floats_tensor([self.batch_size, self.decoder_seq_length, self.hidden_size])
         encoder_attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
@@ -646,7 +660,11 @@ class MvpStandaloneDecoderModelTester:
         )
 
     def create_and_check_decoder_model_past(
-        self, config, input_ids, attention_mask, lm_labels,
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        lm_labels,
     ):
         config.use_cache = True
         model = MvpDecoder(config=config).to(torch_device).eval()
@@ -678,7 +696,11 @@ class MvpStandaloneDecoderModelTester:
         assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
 
     def create_and_check_decoder_model_attention_mask_past(
-        self, config, input_ids, attention_mask, lm_labels,
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        lm_labels,
     ):
         model = MvpDecoder(config=config).to(torch_device).eval()
 
@@ -702,7 +724,8 @@ class MvpStandaloneDecoderModelTester:
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)], dim=1,
+            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            dim=1,
         )
 
         # get two different outputs
@@ -721,7 +744,12 @@ class MvpStandaloneDecoderModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (config, input_ids, attention_mask, lm_labels,) = config_and_inputs
+        (
+            config,
+            input_ids,
+            attention_mask,
+            lm_labels,
+        ) = config_and_inputs
 
         inputs_dict = {
             "input_ids": input_ids,
@@ -738,7 +766,9 @@ class MvpStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, uni
     test_pruning = False
     is_encoder_decoder = False
 
-    def setUp(self,):
+    def setUp(
+        self,
+    ):
         self.model_tester = MvpStandaloneDecoderModelTester(self, is_training=False)
         self.config_tester = ConfigTester(self, config_class=MvpConfig)
 

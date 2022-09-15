@@ -33,8 +33,12 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "sentencepiece.model", "tokenizer_file": "tokenizer.json"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"google/rembert": "https://huggingface.co/google/rembert/resolve/main/sentencepiece.model",},
-    "tokenizer_file": {"google/rembert": "https://huggingface.co/google/rembert/resolve/main/tokenizer.json",},
+    "vocab_file": {
+        "google/rembert": "https://huggingface.co/google/rembert/resolve/main/sentencepiece.model",
+    },
+    "tokenizer_file": {
+        "google/rembert": "https://huggingface.co/google/rembert/resolve/main/tokenizer.json",
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {

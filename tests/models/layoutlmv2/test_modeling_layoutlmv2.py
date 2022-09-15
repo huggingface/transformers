@@ -445,7 +445,8 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
             )
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]), [expected_seq_len, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]),
+                [expected_seq_len, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -504,7 +505,13 @@ class LayoutLMv2ModelIntegrationTest(unittest.TestCase):
     def test_inference_no_head(self):
         model = LayoutLMv2Model.from_pretrained("microsoft/layoutlmv2-base-uncased").to(torch_device)
 
-        (input_ids, bbox, image, attention_mask, token_type_ids,) = prepare_layoutlmv2_batch_inputs()
+        (
+            input_ids,
+            bbox,
+            image,
+            attention_mask,
+            token_type_ids,
+        ) = prepare_layoutlmv2_batch_inputs()
 
         # forward pass
         outputs = model(

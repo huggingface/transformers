@@ -367,7 +367,11 @@ def main():
     logger.info("Training/evaluation parameters %s", args)
 
     # Prepare dataset
-    numpy_data = np.concatenate([np.loadtxt(args.data_dir, dtype=np.int64),])
+    numpy_data = np.concatenate(
+        [
+            np.loadtxt(args.data_dir, dtype=np.int64),
+        ]
+    )
     train_tensor_dataset = (torch.from_numpy(numpy_data),)
     train_data = TensorDataset(*train_tensor_dataset)
     train_sampler = RandomSampler(train_data)

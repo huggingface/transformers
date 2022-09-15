@@ -118,7 +118,12 @@ class XGLMModelTester:
         )
 
     def prepare_config_and_inputs_for_decoder(self):
-        (config, input_ids, input_mask, head_mask,) = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            input_mask,
+            head_mask,
+        ) = self.prepare_config_and_inputs()
 
         encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
         encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
@@ -192,7 +197,8 @@ class XGLMModelTester:
         # append to next input_ids and attn_mask
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
         attn_mask = torch.cat(
-            [attn_mask, torch.zeros((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)], dim=1,
+            [attn_mask, torch.zeros((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
+            dim=1,
         )
 
         # get two different outputs
@@ -272,7 +278,12 @@ class XGLMModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
 
-        (config, input_ids, input_mask, head_mask,) = config_and_inputs
+        (
+            config,
+            input_ids,
+            input_mask,
+            head_mask,
+        ) = config_and_inputs
 
         inputs_dict = {
             "input_ids": input_ids,
@@ -342,7 +353,10 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
         input_ids = inputs["input_ids"].to(torch_device)
 
-        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"].to(torch_device),)
+        outputs = model.generate(
+            input_ids=input_ids,
+            attention_mask=inputs["attention_mask"].to(torch_device),
+        )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
         output_non_padded = model.generate(input_ids=inputs_non_padded)
@@ -372,7 +386,9 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 @require_torch
 class XGLMModelLanguageGenerationTest(unittest.TestCase):
     def _test_lm_generate_xglm_helper(
-        self, gradient_checkpointing=False, verify_outputs=True,
+        self,
+        gradient_checkpointing=False,
+        verify_outputs=True,
     ):
         model = XGLMForCausalLM.from_pretrained("facebook/xglm-564M")
         if gradient_checkpointing:

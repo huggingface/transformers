@@ -210,10 +210,18 @@ def load_beit_model(args, is_finetuned, is_large):
 
     if is_finetuned:
         model_kwargs.update(
-            {"num_classes": 1000, "use_mean_pooling": True, "init_scale": 0.001, "use_rel_pos_bias": True,}
+            {
+                "num_classes": 1000,
+                "use_mean_pooling": True,
+                "init_scale": 0.001,
+                "use_rel_pos_bias": True,
+            }
         )
 
-    model = create_model("beit_large_patch16_224" if is_large else "beit_base_patch16_224", **model_kwargs,)
+    model = create_model(
+        "beit_large_patch16_224" if is_large else "beit_base_patch16_224",
+        **model_kwargs,
+    )
     patch_size = model.patch_embed.patch_size
     args.window_size = (args.input_size // patch_size[0], args.input_size // patch_size[1])
     checkpoint = torch.load(args.beit_checkpoint, map_location="cpu")

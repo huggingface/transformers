@@ -234,14 +234,21 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         token_min_logp = -4.0
 
         decoded_processor_out = processor.batch_decode(
-            logits, beam_width=beam_width, beam_prune_logp=beam_prune_logp, token_min_logp=token_min_logp,
+            logits,
+            beam_width=beam_width,
+            beam_prune_logp=beam_prune_logp,
+            token_min_logp=token_min_logp,
         )
         decoded_processor = decoded_processor_out.text
 
         logits_list = [array for array in logits]
         pool = get_context("fork").Pool()
         decoded_decoder_out = decoder.decode_beams_batch(
-            pool, logits_list, beam_width=beam_width, beam_prune_logp=beam_prune_logp, token_min_logp=token_min_logp,
+            pool,
+            logits_list,
+            beam_width=beam_width,
+            beam_prune_logp=beam_prune_logp,
+            token_min_logp=token_min_logp,
         )
         pool.close()
 
@@ -265,16 +272,26 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         lm_score_boundary = True
 
         decoded_processor_out = processor.batch_decode(
-            logits, alpha=alpha, beta=beta, unk_score_offset=unk_score_offset, lm_score_boundary=lm_score_boundary,
+            logits,
+            alpha=alpha,
+            beta=beta,
+            unk_score_offset=unk_score_offset,
+            lm_score_boundary=lm_score_boundary,
         )
         decoded_processor = decoded_processor_out.text
 
         logits_list = [array for array in logits]
         decoder.reset_params(
-            alpha=alpha, beta=beta, unk_score_offset=unk_score_offset, lm_score_boundary=lm_score_boundary,
+            alpha=alpha,
+            beta=beta,
+            unk_score_offset=unk_score_offset,
+            lm_score_boundary=lm_score_boundary,
         )
         pool = get_context("fork").Pool()
-        decoded_decoder_out = decoder.decode_beams_batch(pool, logits_list,)
+        decoded_decoder_out = decoder.decode_beams_batch(
+            pool,
+            logits_list,
+        )
         pool.close()
 
         decoded_decoder = [d[0][0] for d in decoded_decoder_out]

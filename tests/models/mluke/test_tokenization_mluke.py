@@ -112,7 +112,9 @@ class MLukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
 
                 # attention_mask should put 1 everywhere, so sum over length should be 1
-                self.assertEqual(sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),)
+                self.assertEqual(
+                    sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),
+                )
 
                 tokens_p_str = tokenizer_p.convert_ids_to_tokens(tokens_p["input_ids"])
 
@@ -564,7 +566,8 @@ class MLukeTokenizerIntegrationTests(unittest.TestCase):
             " in<ent2>Japan<ent2>.</s>",
         )
         self.assertEqual(
-            tokenizer.decode(encoding["input_ids"][1:4], spaces_between_special_tokens=False), "<ent>Japanese<ent>",
+            tokenizer.decode(encoding["input_ids"][1:4], spaces_between_special_tokens=False),
+            "<ent>Japanese<ent>",
         )
         self.assertEqual(
             tokenizer.decode(encoding["input_ids"][20:23], spaces_between_special_tokens=False), "<ent2>Japan<ent2>"

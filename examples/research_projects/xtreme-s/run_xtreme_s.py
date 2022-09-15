@@ -109,7 +109,8 @@ class ModelArguments:
         },
     )
     final_dropout: float = field(
-        default=0.0, metadata={"help": "The dropout probability for the final projection layer."},
+        default=0.0,
+        metadata={"help": "The dropout probability for the final projection layer."},
     )
     mask_time_prob: float = field(
         default=0.05,
@@ -122,7 +123,8 @@ class ModelArguments:
         },
     )
     mask_time_length: int = field(
-        default=10, metadata={"help": "Length of vector span to mask along the time axis."},
+        default=10,
+        metadata={"help": "Length of vector span to mask along the time axis."},
     )
     mask_feature_prob: float = field(
         default=0.0,
@@ -135,7 +137,8 @@ class ModelArguments:
         },
     )
     mask_feature_length: int = field(
-        default=10, metadata={"help": "Length of vector span to mask along the feature axis."},
+        default=10,
+        metadata={"help": "Length of vector span to mask along the feature axis."},
     )
     layerdrop: float = field(default=0.0, metadata={"help": "The LayerDrop probability."})
     ctc_zero_infinity: bool = field(
@@ -222,7 +225,8 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_train_samples: Optional[int] = field(
         default=None,
@@ -288,13 +292,16 @@ class DataTrainingArguments:
         },
     )
     unk_token: str = field(
-        default="[UNK]", metadata={"help": "The unk token for the tokenizer"},
+        default="[UNK]",
+        metadata={"help": "The unk token for the tokenizer"},
     )
     pad_token: str = field(
-        default="[PAD]", metadata={"help": "The padding token for the tokenizer"},
+        default="[PAD]",
+        metadata={"help": "The padding token for the tokenizer"},
     )
     word_delimiter_token: str = field(
-        default="|", metadata={"help": "The word delimiter token for the tokenizer"},
+        default="|",
+        metadata={"help": "The word delimiter token for the tokenizer"},
     )
     phoneme_language: Optional[str] = field(
         default=None,
@@ -333,7 +340,10 @@ class SpeechDataCollatorWithPadding:
         input_features = [{"input_values": feature["input_values"]} for feature in features]
 
         batch = self.processor.pad(
-            input_features, padding=self.padding, pad_to_multiple_of=self.pad_to_multiple_of, return_tensors="pt",
+            input_features,
+            padding=self.padding,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            return_tensors="pt",
         )
 
         if self.pad_labels:
@@ -549,7 +559,9 @@ def main():
         with training_args.main_process_first(desc="language group filter"):
             lang_group_id = next(iter(raw_datasets.values())).features["lang_group_id"].str2int(lang_group)
             raw_datasets = raw_datasets.filter(
-                lambda lang_group: lang_group == lang_group_id, num_proc=num_workers, input_columns=["lang_group_id"],
+                lambda lang_group: lang_group == lang_group_id,
+                num_proc=num_workers,
+                input_columns=["lang_group_id"],
             )
 
     # 2. We remove some special characters from the datasets
@@ -638,7 +650,9 @@ def main():
     # load feature_extractor and tokenizer
     if is_text_target:
         tokenizer = AutoTokenizer.from_pretrained(
-            tokenizer_name_or_path, use_auth_token=data_args.use_auth_token, **tokenizer_kwargs,
+            tokenizer_name_or_path,
+            use_auth_token=data_args.use_auth_token,
+            **tokenizer_kwargs,
         )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
@@ -762,7 +776,9 @@ def main():
 
             # filter data that is shorter than min_input_length
             vectorized_datasets["train"] = vectorized_datasets["train"].filter(
-                is_audio_in_length_range, num_proc=num_workers, input_columns=["length"],
+                is_audio_in_length_range,
+                num_proc=num_workers,
+                input_columns=["length"],
             )
 
     # 7. Next, we can prepare for the training step.
@@ -881,7 +897,9 @@ def main():
                 lang_name = lang_list[lang_id]
                 with training_args.main_process_first(desc="per-language dataset filter"):
                     lang_dataset = vectorized_datasets["predict"].filter(
-                        lambda lang: lang == lang_id, num_proc=num_workers, input_columns=["lang"],
+                        lambda lang: lang == lang_id,
+                        num_proc=num_workers,
+                        input_columns=["lang"],
                     )
                 lang_metrics = trainer.evaluate(lang_dataset)
                 redundant_metrics = ["eval_runtime", "eval_samples_per_second", "eval_steps_per_second", "eval_epoch"]

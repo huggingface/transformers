@@ -71,7 +71,12 @@ class LayoutLMEmbeddings(nn.Module):
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
 
     def forward(
-        self, input_ids=None, bbox=None, token_type_ids=None, position_ids=None, inputs_embeds=None,
+        self,
+        input_ids=None,
+        bbox=None,
+        token_type_ids=None,
+        position_ids=None,
+        inputs_embeds=None,
     ):
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -947,7 +952,10 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         masked_lm_loss = None
         if labels is not None:
             loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1),)
+            masked_lm_loss = loss_fct(
+                prediction_scores.view(-1, self.config.vocab_size),
+                labels.view(-1),
+            )
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
@@ -1090,7 +1098,10 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1205,7 +1216,10 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

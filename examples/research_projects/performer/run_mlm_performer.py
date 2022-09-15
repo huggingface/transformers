@@ -80,10 +80,12 @@ class WandbArguments:
     """
 
     wandb_user_name: Optional[str] = field(
-        default=None, metadata={"help": "The WandB user name for potential logging. If left None, no logging"},
+        default=None,
+        metadata={"help": "The WandB user name for potential logging. If left None, no logging"},
     )
     wandb_project_name: Optional[str] = field(
-        default="performer-experiments", metadata={"help": "The WandB project name for potential logging"},
+        default="performer-experiments",
+        metadata={"help": "The WandB project name for potential logging"},
     )
 
 
@@ -102,10 +104,12 @@ class ModelArguments:
         },
     )
     performer: bool = field(
-        default=False, metadata={"help": "Whether to use FAVOR+ attention"},
+        default=False,
+        metadata={"help": "Whether to use FAVOR+ attention"},
     )
     reinitialize: bool = field(
-        default=False, metadata={"help": "Whether to use a blank model without pretraining"},
+        default=False,
+        metadata={"help": "Whether to use a blank model without pretraining"},
     )
     tokenizer_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
@@ -137,7 +141,8 @@ class DataTrainingArguments:
         metadata={"help": "An optional input evaluation data file to evaluate the perplexity on (a text file)."},
     )
     train_ref_file: Optional[str] = field(
-        default=None, metadata={"help": "An optional input train ref data file for whole word masking in Chinese."},
+        default=None,
+        metadata={"help": "An optional input train ref data file for whole word masking in Chinese."},
     )
     validation_ref_file: Optional[str] = field(
         default=None,
@@ -162,7 +167,8 @@ class DataTrainingArguments:
         },
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
     mlm_probability: float = field(
         default=0.15, metadata={"help": "Ratio of tokens to mask for masked language modeling loss"}
@@ -466,7 +472,9 @@ if __name__ == "__main__":
 
     # Setup logging
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", level="NOTSET", datefmt="[%X]",
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        level="NOTSET",
+        datefmt="[%X]",
     )
 
     # Log on each process the small summary:

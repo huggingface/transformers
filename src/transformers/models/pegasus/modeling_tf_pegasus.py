@@ -139,7 +139,10 @@ class TFPegasusSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
 
         weight = self._init_weight(self.num_positions, self.embedding_dim)
 
-        self.weight = self.add_weight(name="embeddings", shape=[self.num_positions, self.embedding_dim],)
+        self.weight = self.add_weight(
+            name="embeddings",
+            shape=[self.num_positions, self.embedding_dim],
+        )
         weight = tf.cast(weight, dtype=self.weight.dtype)
 
         self.weight.assign(weight)
@@ -198,7 +201,7 @@ class TFPegasusAttention(tf.keras.layers.Layer):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
@@ -694,7 +697,9 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
 
         self.embed_tokens = embed_tokens
         self.embed_positions = TFPegasusSinusoidalPositionalEmbedding(
-            config.max_position_embeddings, config.d_model, name="embed_positions",
+            config.max_position_embeddings,
+            config.d_model,
+            name="embed_positions",
         )
         self.layers = [TFPegasusEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
@@ -807,7 +812,9 @@ class TFPegasusEncoder(tf.keras.layers.Layer):
                 continue
 
             hidden_states, attn = encoder_layer(
-                hidden_states, attention_mask, head_mask[idx] if head_mask is not None else None,
+                hidden_states,
+                attention_mask,
+                head_mask[idx] if head_mask is not None else None,
             )
 
             if output_attentions:
@@ -843,7 +850,9 @@ class TFPegasusDecoder(tf.keras.layers.Layer):
         self.embed_tokens = embed_tokens
         self.layerdrop = config.decoder_layerdrop
         self.embed_positions = TFPegasusSinusoidalPositionalEmbedding(
-            config.max_position_embeddings, config.d_model, name="embed_positions",
+            config.max_position_embeddings,
+            config.d_model,
+            name="embed_positions",
         )
         self.embed_scale = tf.math.sqrt(float(config.d_model)) if config.scale_embedding else 1.0
         self.layers = [TFPegasusDecoderLayer(config, name=f"layers.{i}") for i in range(config.decoder_layers)]
@@ -1168,7 +1177,8 @@ class TFPegasusMainLayer(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    "The bare PEGASUS Model outputting raw hidden-states without any specific head on top.", PEGASUS_START_DOCSTRING,
+    "The bare PEGASUS Model outputting raw hidden-states without any specific head on top.",
+    PEGASUS_START_DOCSTRING,
 )
 class TFPegasusModel(TFPegasusPreTrainedModel):
     def __init__(self, config: PegasusConfig, *inputs, **kwargs):
@@ -1273,7 +1283,8 @@ class BiasLayer(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    "The PEGASUS Model with a language modeling head. Can be used for summarization.", PEGASUS_START_DOCSTRING,
+    "The PEGASUS Model with a language modeling head. Can be used for summarization.",
+    PEGASUS_START_DOCSTRING,
 )
 class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLanguageModelingLoss):
     _keys_to_ignore_on_load_unexpected = [
@@ -1346,7 +1357,9 @@ class TFPegasusForConditionalGeneration(TFPegasusPreTrainedModel, TFCausalLangua
 
         if labels is not None:
             labels = tf.where(
-                labels == self.config.pad_token_id, tf.cast(tf.fill(shape_list(labels), -100), labels.dtype), labels,
+                labels == self.config.pad_token_id,
+                tf.cast(tf.fill(shape_list(labels), -100), labels.dtype),
+                labels,
             )
             use_cache = False
             if decoder_input_ids is None:

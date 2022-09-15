@@ -147,7 +147,12 @@ class PLBartAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
-        self, embed_dim: int, num_heads: int, dropout: float = 0.0, is_decoder: bool = False, bias: bool = True,
+        self,
+        embed_dim: int,
+        num_heads: int,
+        dropout: float = 0.0,
+        is_decoder: bool = False,
+        bias: bool = True,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -160,7 +165,7 @@ class PLBartAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -291,7 +296,9 @@ class PLBartEncoderLayer(nn.Module):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = PLBartAttention(
-            embed_dim=self.embed_dim, num_heads=config.encoder_attention_heads, dropout=config.attention_dropout,
+            embed_dim=self.embed_dim,
+            num_heads=config.encoder_attention_heads,
+            dropout=config.attention_dropout,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
@@ -370,7 +377,10 @@ class PLBartDecoderLayer(nn.Module):
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.encoder_attn = PLBartAttention(
-            self.embed_dim, config.decoder_attention_heads, dropout=config.attention_dropout, is_decoder=True,
+            self.embed_dim,
+            config.decoder_attention_heads,
+            dropout=config.attention_dropout,
+            is_decoder=True,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
@@ -472,7 +482,11 @@ class PLBartClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(
-        self, input_dim: int, inner_dim: int, num_classes: int, pooler_dropout: float,
+        self,
+        input_dim: int,
+        inner_dim: int,
+        num_classes: int,
+        pooler_dropout: float,
     ):
         super().__init__()
         self.dense = nn.Linear(input_dim, inner_dim)
@@ -674,7 +688,10 @@ class PLBartEncoder(PLBartPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
-        self.embed_positions = PLBartLearnedPositionalEmbedding(config.max_position_embeddings, embed_dim,)
+        self.embed_positions = PLBartLearnedPositionalEmbedding(
+            config.max_position_embeddings,
+            embed_dim,
+        )
         self.layers = nn.ModuleList([PLBartEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(embed_dim)
 
@@ -844,7 +861,10 @@ class PLBartDecoder(PLBartPreTrainedModel):
         else:
             self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
-        self.embed_positions = PLBartLearnedPositionalEmbedding(config.max_position_embeddings, config.d_model,)
+        self.embed_positions = PLBartLearnedPositionalEmbedding(
+            config.max_position_embeddings,
+            config.d_model,
+        )
         self.layers = nn.ModuleList([PLBartDecoderLayer(config) for _ in range(config.decoder_layers)])
         self.layernorm_embedding = nn.LayerNorm(config.d_model)
 
@@ -1096,7 +1116,8 @@ class PLBartDecoder(PLBartPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare PLBART Model outputting raw hidden-states without any specific head on top.", PLBART_START_DOCSTRING,
+    "The bare PLBART Model outputting raw hidden-states without any specific head on top.",
+    PLBART_START_DOCSTRING,
 )
 class PLBartModel(PLBartPreTrainedModel):
     def __init__(self, config: PLBartConfig):
@@ -1388,7 +1409,10 @@ class PLBartForSequenceClassification(PLBartPreTrainedModel):
         super().__init__(config, **kwargs)
         self.model = PLBartModel(config)
         self.classification_head = PLBartClassificationHead(
-            config.d_model, config.d_model, config.num_labels, config.classifier_dropout,
+            config.d_model,
+            config.d_model,
+            config.num_labels,
+            config.classifier_dropout,
         )
         self.model._init_weights(self.classification_head.dense)
         self.model._init_weights(self.classification_head.out_proj)

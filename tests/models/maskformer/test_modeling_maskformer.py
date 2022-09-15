@@ -82,7 +82,9 @@ class MaskFormerModelTester:
 
     def get_config(self):
         return MaskFormerConfig.from_backbone_and_decoder_configs(
-            backbone_config=SwinConfig(depths=[1, 1, 1, 1],),
+            backbone_config=SwinConfig(
+                depths=[1, 1, 1, 1],
+            ),
             decoder_config=DetrConfig(
                 decoder_ffn_dim=128,
                 num_queries=self.num_queries,

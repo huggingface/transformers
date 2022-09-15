@@ -102,7 +102,9 @@ class OPTModelTester:
         self.is_encoder_decoder = False
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(3,)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
+            3,
+        )
         input_ids[:, -1] = self.eos_token_id  # Eos Token
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -411,7 +413,10 @@ class OPTGenerationTest(unittest.TestCase):
         inputs = tokenizer(sentences, return_tensors="pt", padding=True)
         input_ids = inputs["input_ids"].to(torch_device)
 
-        outputs = model.generate(input_ids=input_ids, attention_mask=inputs["attention_mask"].to(torch_device),)
+        outputs = model.generate(
+            input_ids=input_ids,
+            attention_mask=inputs["attention_mask"].to(torch_device),
+        )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
         output_non_padded = model.generate(input_ids=inputs_non_padded)

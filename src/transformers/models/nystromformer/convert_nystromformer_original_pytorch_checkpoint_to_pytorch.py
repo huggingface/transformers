@@ -98,7 +98,11 @@ if __name__ == "__main__":
         "--pytorch_model_path", default=None, type=str, required=True, help="Path to Nystromformer pytorch checkpoint."
     )
     parser.add_argument(
-        "--config_file", default=None, type=str, required=True, help="The json file for Nystromformer model config.",
+        "--config_file",
+        default=None,
+        type=str,
+        required=True,
+        help="The json file for Nystromformer model config.",
     )
     parser.add_argument(
         "--pytorch_dump_path", default=None, type=str, required=True, help="Path to the output PyTorch model."

@@ -95,10 +95,22 @@ past_versions_testing = {
         },
     },
     "tensorflow": {
-        "2.8": {"tensorflow": "2.8.2", "install": "python3 -m pip install --no-cache-dir -U tensorflow==2.8.2",},
-        "2.7": {"tensorflow": "2.7.3", "install": "python3 -m pip install --no-cache-dir -U tensorflow==2.7.3",},
-        "2.6": {"tensorflow": "2.6.5", "install": "python3 -m pip install --no-cache-dir -U tensorflow==2.6.5",},
-        "2.5": {"tensorflow": "2.5.3", "install": "python3 -m pip install --no-cache-dir -U tensorflow==2.5.3",},
+        "2.8": {
+            "tensorflow": "2.8.2",
+            "install": "python3 -m pip install --no-cache-dir -U tensorflow==2.8.2",
+        },
+        "2.7": {
+            "tensorflow": "2.7.3",
+            "install": "python3 -m pip install --no-cache-dir -U tensorflow==2.7.3",
+        },
+        "2.6": {
+            "tensorflow": "2.6.5",
+            "install": "python3 -m pip install --no-cache-dir -U tensorflow==2.6.5",
+        },
+        "2.5": {
+            "tensorflow": "2.5.3",
+            "install": "python3 -m pip install --no-cache-dir -U tensorflow==2.5.3",
+        },
         # need another `nvidia:cuda` docker image, otherwise GPU not working
         "2.4": {
             "tensorflow": "2.4.4",

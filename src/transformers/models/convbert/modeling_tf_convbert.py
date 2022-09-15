@@ -231,7 +231,14 @@ class TFConvBertSelfAttention(tf.keras.layers.Layer):
         conv_kernel_layer = stable_softmax(conv_kernel_layer, axis=1)
 
         paddings = tf.constant(
-            [[0, 0,], [int((self.conv_kernel_size - 1) / 2), int((self.conv_kernel_size - 1) / 2)], [0, 0],]
+            [
+                [
+                    0,
+                    0,
+                ],
+                [int((self.conv_kernel_size - 1) / 2), int((self.conv_kernel_size - 1) / 2)],
+                [0, 0],
+            ]
         )
 
         conv_out_layer = self.conv_out_layer(hidden_states)
@@ -1001,7 +1008,10 @@ class TFConvBertForSequenceClassification(TFConvBertPreTrainedModel, TFSequenceC
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     def serving_output(self, output):
@@ -1108,7 +1118,10 @@ class TFConvBertForMultipleChoice(TFConvBertPreTrainedModel, TFMultipleChoiceLos
             return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     @tf.function(
@@ -1201,7 +1214,10 @@ class TFConvBertForTokenClassification(TFConvBertPreTrainedModel, TFTokenClassif
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     def serving_output(self, output):

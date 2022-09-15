@@ -178,7 +178,10 @@ if __name__ == "__main__":
         help="The config json file corresponding to the BERT model. This specifies the model architecture.",
     )
     parser.add_argument(
-        "--pytorch_dump_path", type=str, required=True, help="Path to the output PyTorch model.",
+        "--pytorch_dump_path",
+        type=str,
+        required=True,
+        help="Path to the output PyTorch model.",
     )
     args = parser.parse_args()
     convert_checkpoint_to_pytorch(args.tf_checkpoint_path, args.bert_config_file, args.pytorch_dump_path)

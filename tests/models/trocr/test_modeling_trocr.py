@@ -111,7 +111,11 @@ class TrOCRStandaloneDecoderModelTester:
         return (config, input_ids, attention_mask, lm_labels)
 
     def create_and_check_decoder_model_past(
-        self, config, input_ids, attention_mask, lm_labels,
+        self,
+        config,
+        input_ids,
+        attention_mask,
+        lm_labels,
     ):
         config.use_cache = True
         model = TrOCRDecoder(config=config).to(torch_device).eval()

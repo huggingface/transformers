@@ -354,7 +354,11 @@ class TFWav2Vec2RobustModelTest(TFModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = TFWav2Vec2ModelTester(
-            self, conv_stride=(3, 3, 3), feat_extract_norm="layer", do_stable_layer_norm=True, scope="robust",
+            self,
+            conv_stride=(3, 3, 3),
+            feat_extract_norm="layer",
+            do_stable_layer_norm=True,
+            scope="robust",
         )
         self.config_tester = ConfigTester(self, config_class=Wav2Vec2Config, hidden_size=37)
 
@@ -561,8 +565,10 @@ class TFWav2Vec2ModelIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe sir i exist",
             "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
-            "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena"
-            " around him with the thousands of spectators were trivialities not worth thinking about",
+            (
+                "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena"
+                " around him with the thousands of spectators were trivialities not worth thinking about"
+            ),
             "his instant panic was followed by a small sharp blow high on his chest",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)

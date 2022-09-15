@@ -86,7 +86,13 @@ else:
                 ),
             ),
             ("canine", ("CanineTokenizer", None)),
-            ("clip", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None,),),
+            (
+                "clip",
+                (
+                    "CLIPTokenizer",
+                    "CLIPTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("codegen", ("CodeGenTokenizer", "CodeGenTokenizerFast" if is_tokenizers_available() else None)),
             ("convbert", ("ConvBertTokenizer", "ConvBertTokenizerFast" if is_tokenizers_available() else None)),
             (
@@ -197,7 +203,13 @@ else:
                     "PegasusTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            ("perceiver", ("PerceiverTokenizer", None,),),
+            (
+                "perceiver",
+                (
+                    "PerceiverTokenizer",
+                    None,
+                ),
+            ),
             ("phobert", ("PhobertTokenizer", None)),
             ("plbart", ("PLBartTokenizer" if is_sentencepiece_available() else None, None)),
             ("prophetnet", ("ProphetNetTokenizer", None)),

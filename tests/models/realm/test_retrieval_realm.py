@@ -82,7 +82,11 @@ class RealmRetrieverTest(TestCase):
 
     def get_dummy_dataset(self):
         dataset = Dataset.from_dict(
-            {"id": ["0", "1"], "question": ["foo", "bar"], "answers": [["Foo", "Bar"], ["Bar"]],}
+            {
+                "id": ["0", "1"],
+                "question": ["foo", "bar"],
+                "answers": [["Foo", "Bar"], ["Bar"]],
+            }
         )
         return dataset
 
@@ -101,7 +105,10 @@ class RealmRetrieverTest(TestCase):
         return block_records
 
     def get_dummy_retriever(self):
-        retriever = RealmRetriever(block_records=self.get_dummy_block_records(), tokenizer=self.get_tokenizer(),)
+        retriever = RealmRetriever(
+            block_records=self.get_dummy_block_records(),
+            tokenizer=self.get_tokenizer(),
+        )
         return retriever
 
     def test_retrieve(self):
@@ -112,7 +119,10 @@ class RealmRetrieverTest(TestCase):
         retrieved_block_ids = np.array([0, 3], dtype=np.long)
         question_input_ids = tokenizer(["Test question"]).input_ids
         answer_ids = tokenizer(
-            ["the fourth"], add_special_tokens=False, return_token_type_ids=False, return_attention_mask=False,
+            ["the fourth"],
+            add_special_tokens=False,
+            return_token_type_ids=False,
+            return_attention_mask=False,
         ).input_ids
         max_length = config.reader_seq_len
 

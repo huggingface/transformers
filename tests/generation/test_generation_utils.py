@@ -113,16 +113,26 @@ class GenerationTesterMixin:
         }
         logits_processor = LogitsProcessorList(
             (
-                [HammingDiversityLogitsProcessor(diversity_penalty, num_beams=2, num_beam_groups=2),]
+                [
+                    HammingDiversityLogitsProcessor(diversity_penalty, num_beams=2, num_beam_groups=2),
+                ]
                 if diversity_penalty is not None
                 else []
             )
             + (
-                [MinLengthLogitsProcessor(process_kwargs["min_length"], eos_token_id),]
+                [
+                    MinLengthLogitsProcessor(process_kwargs["min_length"], eos_token_id),
+                ]
                 if eos_token_id is not None
                 else []
             )
-            + ([ForcedBOSTokenLogitsProcessor(forced_bos_token_id),] if forced_bos_token_id is not None else [])
+            + (
+                [
+                    ForcedBOSTokenLogitsProcessor(forced_bos_token_id),
+                ]
+                if forced_bos_token_id is not None
+                else []
+            )
             + (
                 [ForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id)]
                 if forced_eos_token_id is not None
@@ -1460,7 +1470,8 @@ class GenerationTesterMixin:
         encoder_expected_shape = (batch_size, config.num_attention_heads, seq_length, seq_length)
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
-            [layer_attentions.shape for layer_attentions in attentions], [encoder_expected_shape] * len(attentions),
+            [layer_attentions.shape for layer_attentions in attentions],
+            [encoder_expected_shape] * len(attentions),
         )
 
     def _check_hidden_states_for_generate(
@@ -1620,12 +1631,24 @@ class UtilsFunctionsTest(unittest.TestCase):
     # tests whether the function uses filter_value instead of default -inf
     def test_top_k_top_p_filtering_with_filter_value(self):
         logits = torch.tensor(
-            [[1, 1, 1, 0.99, 0.98,]],  # get filtered by top-p filtering  # get filtered by top-k filtering
+            [
+                [
+                    1,
+                    1,
+                    1,
+                    0.99,
+                    0.98,
+                ]
+            ],  # get filtered by top-p filtering  # get filtered by top-k filtering
             dtype=torch.float,
             device=torch_device,
         )
 
-        expected_output = torch.tensor([[1, 1, 1, 0, 0]], dtype=torch.float, device=torch_device,)
+        expected_output = torch.tensor(
+            [[1, 1, 1, 0, 0]],
+            dtype=torch.float,
+            device=torch_device,
+        )
 
         output = top_k_top_p_filtering(logits, top_k=4, top_p=0.5, filter_value=0.0)
 
@@ -1659,12 +1682,16 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                "The couple announced the birth of their son, Silas Randall Timberlake, in a statement. Silas was"
-                " the middle name of Timberlake's maternal grandfather Bill Bomar. Randall is the musician's own"
-                " middle name, as well as his father's first. It is the first baby for both of them.",
-                "Justin Timberlake and Jessica Biel have a son. The baby is named Silas Randall Timberlake. It is"
-                " the first child for both. The couple announced the pregnancy in January. The name Silas is the"
-                " middle name of Timberlake's maternal grandfather. It's also his own middle name.",
+                (
+                    "The couple announced the birth of their son, Silas Randall Timberlake, in a statement. Silas was"
+                    " the middle name of Timberlake's maternal grandfather Bill Bomar. Randall is the musician's own"
+                    " middle name, as well as his father's first. It is the first baby for both of them."
+                ),
+                (
+                    "Justin Timberlake and Jessica Biel have a son. The baby is named Silas Randall Timberlake. It is"
+                    " the first child for both. The couple announced the pregnancy in January. The name Silas is the"
+                    " middle name of Timberlake's maternal grandfather. It's also his own middle name."
+                ),
             ],
         )
 
@@ -1740,7 +1767,11 @@ class GenerationIntegrationTests(unittest.TestCase):
             bos_token_id=bart_model.config.bos_token_id,
         )
 
-        beam_scorer = BeamSearchScorer(batch_size=batch_size, num_beams=num_beams, device=torch_device,)
+        beam_scorer = BeamSearchScorer(
+            batch_size=batch_size,
+            num_beams=num_beams,
+            device=torch_device,
+        )
         with self.assertWarns(UserWarning):
             _ = bart_model.beam_search(
                 input_ids, num_beams=num_beams, max_length=max_length, beam_scorer=beam_scorer, **model_kwargs
@@ -1829,7 +1860,11 @@ class GenerationIntegrationTests(unittest.TestCase):
                 )
 
         # Beam
-        beam_scorer = BeamSearchScorer(batch_size=batch_size, num_beams=num_beams, device=torch_device,)
+        beam_scorer = BeamSearchScorer(
+            batch_size=batch_size,
+            num_beams=num_beams,
+            device=torch_device,
+        )
         with self.assertWarns(UserWarning):
             with torch.no_grad():
                 bart_model.beam_search(
@@ -1881,7 +1916,10 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         with self.assertWarns(UserWarning):
             beam_scorer = BeamSearchScorer(
-                batch_size=batch_size, num_beams=num_beams, device=torch_device, max_length=10,
+                batch_size=batch_size,
+                num_beams=num_beams,
+                device=torch_device,
+                max_length=10,
             )
 
         generated_ids = bart_model.beam_search(
@@ -1892,7 +1930,11 @@ class GenerationIntegrationTests(unittest.TestCase):
             **model_kwargs,
         )
 
-        beam_scorer_no_max_len = BeamSearchScorer(batch_size=batch_size, num_beams=num_beams, device=torch_device,)
+        beam_scorer_no_max_len = BeamSearchScorer(
+            batch_size=batch_size,
+            num_beams=num_beams,
+            device=torch_device,
+        )
 
         generated_ids_no_max_len = bart_model.beam_search(
             decoder_input_ids,
@@ -1932,10 +1974,12 @@ class GenerationIntegrationTests(unittest.TestCase):
         stopping_criteria.append(DummyCriteria())
 
         self.assertEqual(
-            list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=22).shape), [1, 20],
+            list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=22).shape),
+            [1, 20],
         )
         self.assertEqual(
-            list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=18).shape), [1, 18],
+            list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=18).shape),
+            [1, 18],
         )
 
     def test_custom_logits_processor(self):
@@ -2353,7 +2397,11 @@ class GenerationIntegrationTests(unittest.TestCase):
         inputs = tokenizer(articles, return_tensors="pt", padding=True).to(torch_device)
 
         result = model.generate(
-            **inputs, max_length=15, return_dict_in_generate=True, do_sample=False, output_scores=True,
+            **inputs,
+            max_length=15,
+            return_dict_in_generate=True,
+            do_sample=False,
+            output_scores=True,
         )
 
         # decoder-only starts generating from `input_ids`
@@ -2375,7 +2423,12 @@ class GenerationIntegrationTests(unittest.TestCase):
         inputs = tokenizer(articles, return_tensors="pt", padding=True).to(torch_device)
 
         result = model.generate(
-            **inputs, max_length=3, return_dict_in_generate=True, do_sample=False, num_beams=1, output_scores=True,
+            **inputs,
+            max_length=3,
+            return_dict_in_generate=True,
+            do_sample=False,
+            num_beams=1,
+            output_scores=True,
         )
 
         # encoder-decoder has one decoder_start_token_id by default
@@ -2413,10 +2466,18 @@ class GenerationIntegrationTests(unittest.TestCase):
         }
 
         # instantiate beam scorer
-        beam_scorer = BeamSearchScorer(batch_size=1, num_beams=num_beams, device=model.device,)
+        beam_scorer = BeamSearchScorer(
+            batch_size=1,
+            num_beams=num_beams,
+            device=model.device,
+        )
 
         # instantiate logits processors
-        logits_processor = LogitsProcessorList([MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),])
+        logits_processor = LogitsProcessorList(
+            [
+                MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
+            ]
+        )
 
         outputs = model.beam_search(input_ids, beam_scorer, logits_processor=logits_processor, **model_kwargs)
         outputs = tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -2494,8 +2555,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                "The soldiers, who had been stationed at the base for more than a year before being evacuated"
-                " screaming scared",
+                (
+                    "The soldiers, who had been stationed at the base for more than a year before being evacuated"
+                    " screaming scared"
+                ),
                 "The child was taken to a local hospital where he died.\n 'I don't think screaming scared",
             ],
         )
@@ -2531,8 +2594,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                "The soldiers, who had been stationed at the base for more than a year before being evacuated"
-                " screaming scared",
+                (
+                    "The soldiers, who had been stationed at the base for more than a year before being evacuated"
+                    " screaming scared"
+                ),
                 "The child was taken to a local hospital where he died.\n 'I don't think screaming scared",
             ],
         )
@@ -2592,7 +2657,11 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
 
         # instantiate logits processors
-        logits_processor = LogitsProcessorList([MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),])
+        logits_processor = LogitsProcessorList(
+            [
+                MinLengthLogitsProcessor(5, eos_token_id=model.config.eos_token_id),
+            ]
+        )
 
         outputs = model.constrained_beam_search(
             input_ids, beam_scorer, constraints=constraints, logits_processor=logits_processor, **model_kwargs

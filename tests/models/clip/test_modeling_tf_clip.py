@@ -210,7 +210,8 @@ class TFCLIPVisionModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
 
             self.assertListEqual(
-                list(self_attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, seq_len, seq_len],
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, seq_len, seq_len],
             )
 
     def test_hidden_states_output(self):
@@ -233,7 +234,8 @@ class TFCLIPVisionModelTest(TFModelTesterMixin, unittest.TestCase):
             seq_length = num_patches + 1
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -300,12 +302,14 @@ class TFCLIPVisionModelTest(TFModelTesterMixin, unittest.TestCase):
                 seq_len = num_patches + 1
 
                 self.assertListEqual(
-                    list(output_attentions[0].shape[-3:]), [self.model_tester.num_attention_heads, seq_len, seq_len],
+                    list(output_attentions[0].shape[-3:]),
+                    [self.model_tester.num_attention_heads, seq_len, seq_len],
                 )
 
                 # Check hidden states
                 self.assertListEqual(
-                    list(output_hidden_states[0].shape[-2:]), [seq_len, self.model_tester.hidden_size],
+                    list(output_hidden_states[0].shape[-2:]),
+                    [seq_len, self.model_tester.hidden_size],
                 )
 
 
@@ -642,10 +646,12 @@ class TFCLIPModelIntegrationTest(unittest.TestCase):
 
         # verify the logits
         self.assertEqual(
-            outputs.logits_per_image.shape, tf.TensorShape((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
+            outputs.logits_per_image.shape,
+            tf.TensorShape((inputs.pixel_values.shape[0], inputs.input_ids.shape[0])),
         )
         self.assertEqual(
-            outputs.logits_per_text.shape, tf.TensorShape((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
+            outputs.logits_per_text.shape,
+            tf.TensorShape((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
         expected_logits = tf.constant([[24.5701, 19.3049]])

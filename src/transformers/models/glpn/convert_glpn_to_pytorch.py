@@ -198,7 +198,10 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "--checkpoint_path", default=None, type=str, help="Path to the original PyTorch checkpoint (.pth file).",
+        "--checkpoint_path",
+        default=None,
+        type=str,
+        help="Path to the original PyTorch checkpoint (.pth file).",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
@@ -207,7 +210,10 @@ if __name__ == "__main__":
         "--push_to_hub", action="store_true", help="Whether to upload the model to the HuggingFace hub."
     )
     parser.add_argument(
-        "--model_name", default="glpn-kitti", type=str, help="Name of the model in case you're pushing to the hub.",
+        "--model_name",
+        default="glpn-kitti",
+        type=str,
+        help="Name of the model in case you're pushing to the hub.",
     )
     args = parser.parse_args()
     convert_glpn_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.push_to_hub, args.model_name)

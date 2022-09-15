@@ -419,7 +419,13 @@ class TFSegformerEncoder(tf.keras.layers.Layer):
             # second, send embeddings through blocks
             # (each block consists of multiple layers i.e., list of layers)
             for i, blk in enumerate(block_layer):
-                layer_outputs = blk(hidden_states, height, width, output_attentions, training=training,)
+                layer_outputs = blk(
+                    hidden_states,
+                    height,
+                    width,
+                    output_attentions,
+                    training=training,
+                )
                 hidden_states = layer_outputs[0]
                 if output_attentions:
                     all_self_attentions = all_self_attentions + (layer_outputs[1],)
@@ -524,7 +530,11 @@ class TFSegformerPreTrainedModel(TFPreTrainedModel):
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @tf.function(
-        input_signature=[{"pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),}]
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
     )
     def serving(self, inputs):
         """

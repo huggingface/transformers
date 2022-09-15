@@ -632,7 +632,9 @@ class ProphetNetAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(
-        self, config: ProphetNetConfig, num_attn_heads: int,
+        self,
+        config: ProphetNetConfig,
+        num_attn_heads: int,
     ):
         super().__init__()
         hidden_size = config.hidden_size
@@ -677,7 +679,7 @@ class ProphetNetAttention(nn.Module):
         ], f"Size of hidden states should be {batch_size, tgt_len, hidden_size}, but is {hidden_states.size()}"
 
         # previous time steps are cached - no need to recompute key and value if they are static
-        query_states = self.query_proj(hidden_states) / (self.head_dim ** 0.5)
+        query_states = self.query_proj(hidden_states) / (self.head_dim**0.5)
 
         if is_cross_attention and past_key_value is not None:
             # reuse k,v, cross_attentions
@@ -707,7 +709,11 @@ class ProphetNetAttention(nn.Module):
 
         src_len = key_states.size(1)
         attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-        assert attn_weights.size() == (batch_size * self.num_attn_heads, tgt_len, src_len,), (
+        assert attn_weights.size() == (
+            batch_size * self.num_attn_heads,
+            tgt_len,
+            src_len,
+        ), (
             f"`attn_weights` should be of size {batch_size * self.num_attn_heads, tgt_len, src_len}, but is of size"
             f" {attn_weights.shape}"
         )
@@ -715,7 +721,11 @@ class ProphetNetAttention(nn.Module):
         # This is part of a workaround to get around fork/join parallelism not supporting Optional types.
         if attention_mask is not None and attention_mask.dim() == 0:
             attention_mask = None
-        assert attention_mask is None or attention_mask.size() == (self.num_attn_heads * batch_size, 1, src_len,), (
+        assert attention_mask is None or attention_mask.size() == (
+            self.num_attn_heads * batch_size,
+            1,
+            src_len,
+        ), (
             "`attention_mask` should be `None` or of shape attention_mask.size() =="
             f" {batch_size * self.num_attn_heads, 1, src_len}, but is {attention_mask.shape}"
         )
@@ -748,10 +758,18 @@ class ProphetNetAttention(nn.Module):
             # apply head_mask also on attn_weights_reshaped which is used for n-gram attention inside the model
             attn_weights_reshaped = layer_head_mask.view(1, -1, 1, 1) * attn_weights_reshaped
 
-        attn_probs = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training,)
+        attn_probs = nn.functional.dropout(
+            attn_weights,
+            p=self.attention_dropout,
+            training=self.training,
+        )
 
         attn_output = torch.bmm(attn_probs, value_states)
-        assert attn_output.size() == (batch_size * self.num_attn_heads, tgt_len, self.head_dim,), (
+        assert attn_output.size() == (
+            batch_size * self.num_attn_heads,
+            tgt_len,
+            self.head_dim,
+        ), (
             f"`attn_output` should be of shape {batch_size * self.num_attn_heads, tgt_len, self.head_dim}, but is of"
             f" shape {attn_output.size()}"
         )
@@ -840,7 +858,11 @@ class ProphetNetNgramSelfAttention(nn.Module):
     ):
         batch_size, ngram_sequence_length, hidden_size = hidden_states.size()
 
-        assert list(hidden_states.size()) == [batch_size, ngram_sequence_length, hidden_size,], (
+        assert list(hidden_states.size()) == [
+            batch_size,
+            ngram_sequence_length,
+            hidden_size,
+        ], (
             f"`hidden_states` should be of shape {batch_size, ngram_sequence_length, hidden_size}, but is of shape"
             f" {hidden_states.shape}"
         )
@@ -851,7 +873,7 @@ class ProphetNetNgramSelfAttention(nn.Module):
         value_states = self.value_proj(hidden_states)
 
         # normalize
-        query_states = query_states / (self.head_dim ** 0.5)
+        query_states = query_states / (self.head_dim**0.5)
 
         # reshape
         query_states = self._shape(query_states, ngram_sequence_length, batch_size)
@@ -905,7 +927,11 @@ class ProphetNetNgramSelfAttention(nn.Module):
         if attention_mask is not None:
             main_attn_weights = main_attn_weights + attention_mask
 
-        main_attn_probs = softmax(main_attn_weights, dim=-1, onnx_trace=self.onnx_trace,).type_as(main_attn_weights)
+        main_attn_probs = softmax(
+            main_attn_weights,
+            dim=-1,
+            onnx_trace=self.onnx_trace,
+        ).type_as(main_attn_weights)
 
         if layer_head_mask is not None:
             assert layer_head_mask.size() == (self.num_attn_heads,), (
@@ -965,9 +991,11 @@ class ProphetNetNgramSelfAttention(nn.Module):
                 predict_attn_weights.dtype
             )
 
-        predict_attn_probs = softmax(predict_attn_weights, dim=-1, onnx_trace=self.onnx_trace,).type_as(
-            predict_attn_weights
-        )
+        predict_attn_probs = softmax(
+            predict_attn_weights,
+            dim=-1,
+            onnx_trace=self.onnx_trace,
+        ).type_as(predict_attn_weights)
 
         if layer_head_mask is not None:
             assert layer_head_mask.size() == (self.num_attn_heads,), (
@@ -1118,7 +1146,11 @@ class ProphetNetEncoderLayer(nn.Module):
         self.feed_forward_layer_norm = LayerNorm(config.hidden_size)
 
     def forward(
-        self, hidden_states, attention_mask, layer_head_mask, output_attentions: bool = False,
+        self,
+        hidden_states,
+        attention_mask,
+        layer_head_mask,
+        output_attentions: bool = False,
     ):
         # 1st residual block
         attention_output, attn_weights, _ = self.self_attn(
@@ -1226,7 +1258,8 @@ class ProphetNetDecoderLayer(nn.Module):
 
 
 @add_start_docstrings(
-    "The standalone encoder part of the ProphetNetModel.", PROPHETNET_START_DOCSTRING,
+    "The standalone encoder part of the ProphetNetModel.",
+    PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetEncoder(ProphetNetPreTrainedModel):
     r"""
@@ -1365,7 +1398,8 @@ class ProphetNetEncoder(ProphetNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The standalone decoder part of the ProphetNetModel.", PROPHETNET_START_DOCSTRING,
+    "The standalone decoder part of the ProphetNetModel.",
+    PROPHETNET_START_DOCSTRING,
 )
 class ProphetNetDecoder(ProphetNetPreTrainedModel):
     r"""
@@ -1479,7 +1513,9 @@ class ProphetNetDecoder(ProphetNetPreTrainedModel):
         batch_size, sequence_length = inputs_embeds.shape[:2]
 
         main_stream_pos_embed, position_ids = self.position_embeddings(
-            (batch_size, sequence_length), device=inputs_embeds.device, past_key_values=past_key_values,
+            (batch_size, sequence_length),
+            device=inputs_embeds.device,
+            past_key_values=past_key_values,
         )
 
         if past_key_values is not None:
@@ -1998,7 +2034,11 @@ class ProphetNetForConditionalGeneration(ProphetNetPreTrainedModel):
             expend_targets[i, :, :] = labels
 
         logits = logits.transpose(0, 1).contiguous()
-        lprobs = nn.functional.log_softmax(logits.view(-1, logits.size(-1)), dim=-1, dtype=torch.float32,)
+        lprobs = nn.functional.log_softmax(
+            logits.view(-1, logits.size(-1)),
+            dim=-1,
+            dtype=torch.float32,
+        )
 
         loss = nn.functional.nll_loss(lprobs, expend_targets.view(-1), reduction="mean")
 
@@ -2246,7 +2286,11 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
             expend_targets[i, :, :] = labels
 
         logits = logits.transpose(0, 1).contiguous()
-        lprobs = nn.functional.log_softmax(logits.view(-1, logits.size(-1)), dim=-1, dtype=torch.float32,)
+        lprobs = nn.functional.log_softmax(
+            logits.view(-1, logits.size(-1)),
+            dim=-1,
+            dtype=torch.float32,
+        )
 
         loss = nn.functional.nll_loss(lprobs, expend_targets.view(-1), reduction="mean")
 
@@ -2262,7 +2306,13 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel):
         return loss
 
     def prepare_inputs_for_generation(
-        self, input_ids, past=None, attention_mask=None, head_mask=None, use_cache=None, **kwargs,
+        self,
+        input_ids,
+        past=None,
+        attention_mask=None,
+        head_mask=None,
+        use_cache=None,
+        **kwargs,
     ):
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:

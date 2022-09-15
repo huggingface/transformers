@@ -152,7 +152,11 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Simple input
                 self.assertRaises(
-                    ValueError, tokenizer_r.batch_encode_plus, s2, max_length=max_length, padding="max_length",
+                    ValueError,
+                    tokenizer_r.batch_encode_plus,
+                    s2,
+                    max_length=max_length,
+                    padding="max_length",
                 )
 
                 # Pair input
@@ -163,7 +167,11 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Pair input
                 self.assertRaises(
-                    ValueError, tokenizer_r.batch_encode_plus, p2, max_length=max_length, padding="max_length",
+                    ValueError,
+                    tokenizer_r.batch_encode_plus,
+                    p2,
+                    max_length=max_length,
+                    padding="max_length",
                 )
 
     def test_padding_if_pad_token_set_slow(self):
@@ -252,7 +260,10 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 encoded_sequence = tokenizer.encode(sequence_0, add_special_tokens=False)
                 encoded_sequence += tokenizer.encode(sequence_1, add_special_tokens=False)
                 encoded_sequence_dict = tokenizer.encode_plus(
-                    sequence_0, sequence_1, add_special_tokens=True, return_special_tokens_mask=True,
+                    sequence_0,
+                    sequence_1,
+                    add_special_tokens=True,
+                    return_special_tokens_mask=True,
                 )
                 encoded_sequence_w_special = encoded_sequence_dict["input_ids"]
                 special_tokens_mask = encoded_sequence_dict["special_tokens_mask"]
@@ -276,19 +287,25 @@ class OPTTokenizationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m", from_slow=True)
         text = "A photo of a cat"
 
-        tokens_ids = tokenizer.encode(text,)
+        tokens_ids = tokenizer.encode(
+            text,
+        )
         self.assertEqual(tokens_ids, [2, 250, 1345, 9, 10, 4758])
         tokenizer.save_pretrained("test_opt")
 
         tokenizer = AutoTokenizer.from_pretrained("./test_opt")
-        tokens_ids = tokenizer.encode(text,)
+        tokens_ids = tokenizer.encode(
+            text,
+        )
         self.assertEqual(tokens_ids, [2, 250, 1345, 9, 10, 4758])
 
     def test_fast_slow_equivalence(self):
         tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m", use_slow=True)
         text = "A photo of a cat"
 
-        tokens_ids = tokenizer.encode(text,)
+        tokens_ids = tokenizer.encode(
+            text,
+        )
         # Same as above
         self.assertEqual(tokens_ids, [2, 250, 1345, 9, 10, 4758])
 
@@ -299,11 +316,15 @@ class OPTTokenizationTest(unittest.TestCase):
         tokenizer.bos_token_id = tokenizer.get_vocab()["bos"]
 
         text = "A photo of a cat"
-        tokens_ids = tokenizer.encode(text,)
+        tokens_ids = tokenizer.encode(
+            text,
+        )
         # We changed the bos token
         self.assertEqual(tokens_ids, [31957, 250, 1345, 9, 10, 4758])
         tokenizer.save_pretrained("./tok")
         tokenizer = AutoTokenizer.from_pretrained("./tok")
         self.assertTrue(tokenizer.is_fast)
-        tokens_ids = tokenizer.encode(text,)
+        tokens_ids = tokenizer.encode(
+            text,
+        )
         self.assertEqual(tokens_ids, [31957, 250, 1345, 9, 10, 4758])

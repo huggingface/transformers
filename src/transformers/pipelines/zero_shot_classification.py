@@ -137,7 +137,10 @@ class ZeroShotClassificationPipeline(ChunkPipeline):
         return preprocess_params, {}, postprocess_params
 
     def __call__(
-        self, sequences: Union[str, List[str]], *args, **kwargs,
+        self,
+        sequences: Union[str, List[str]],
+        *args,
+        **kwargs,
     ):
         """
         Classify the sequence(s) given as inputs. See the [`ZeroShotClassificationPipeline`] documentation for more

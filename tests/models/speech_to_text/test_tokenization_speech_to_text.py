@@ -85,7 +85,8 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
 
         self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(tokens), [289, 50, 14, 174, 386],
+            tokenizer.convert_tokens_to_ids(tokens),
+            [289, 50, 14, 174, 386],
         )
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")

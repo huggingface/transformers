@@ -51,7 +51,8 @@ class ModelArguments:
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
     verbose_logging: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to log verbose messages or not."},
+        default=False,
+        metadata={"help": "Whether to log verbose messages or not."},
     )
     max_gumbel_temperature: Optional[float] = field(
         default=2.0, metadata={"help": "Maximum temperature for gumbel softmax."}
@@ -109,7 +110,8 @@ class DataTrainingArguments:
         },
     )
     speech_file_column: Optional[str] = field(
-        default="file", metadata={"help": "Column in the dataset that contains speech file path. Defaults to 'file'"},
+        default="file",
+        metadata={"help": "Column in the dataset that contains speech file path. Defaults to 'file'"},
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
@@ -121,7 +123,8 @@ class DataTrainingArguments:
         },
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_duration_in_seconds: Optional[float] = field(
         default=20.0, metadata={"help": "Filter audio files that are longer than `max_duration_in_seconds` seconds"}
@@ -271,11 +274,11 @@ class Wav2Vec2PreTrainer(Trainer):
         # make sure gumbel softmax temperature is decayed
         if self.args.n_gpu > 1 or self.deepspeed:
             model.module.set_gumbel_temperature(
-                max(self.max_gumbel_temp * self.gumbel_temp_decay ** self.num_update_step, self.min_gumbel_temp)
+                max(self.max_gumbel_temp * self.gumbel_temp_decay**self.num_update_step, self.min_gumbel_temp)
             )
         else:
             model.set_gumbel_temperature(
-                max(self.max_gumbel_temp * self.gumbel_temp_decay ** self.num_update_step, self.min_gumbel_temp)
+                max(self.max_gumbel_temp * self.gumbel_temp_decay**self.num_update_step, self.min_gumbel_temp)
             )
 
         return loss.detach()
@@ -313,7 +316,10 @@ def main():
         # make sure only "validation" and "train" keys remain"
         datasets = DatasetDict()
         datasets["validation"] = load_dataset(
-            data_args.dataset_name, data_args.dataset_config_name, split="validation", cache_dir=model_args.cache_dir,
+            data_args.dataset_name,
+            data_args.dataset_config_name,
+            split="validation",
+            cache_dir=model_args.cache_dir,
         )
         datasets["train"] = load_dataset(
             data_args.dataset_name,

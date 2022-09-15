@@ -219,7 +219,11 @@ class VisualBertSelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(
-        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=False,
     ):
         mixed_query_layer = self.query(hidden_states)
 
@@ -299,9 +303,18 @@ class VisualBertAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
-        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=False,
     ):
-        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions,)
+        self_outputs = self.self(
+            hidden_states,
+            attention_mask,
+            head_mask,
+            output_attentions,
+        )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -348,10 +361,17 @@ class VisualBertLayer(nn.Module):
         self.output = VisualBertOutput(config)
 
     def forward(
-        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=False,
     ):
         self_attention_outputs = self.attention(
-            hidden_states, attention_mask, head_mask, output_attentions=output_attentions,
+            hidden_states,
+            attention_mask,
+            head_mask,
+            output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
 
@@ -404,7 +424,10 @@ class VisualBertEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module), hidden_states, attention_mask, layer_head_mask,
+                    create_custom_forward(layer_module),
+                    hidden_states,
+                    attention_mask,
+                    layer_head_mask,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, attention_mask, layer_head_mask, output_attentions)
@@ -417,7 +440,15 @@ class VisualBertEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions,] if v is not None)
+            return tuple(
+                v
+                for v in [
+                    hidden_states,
+                    all_hidden_states,
+                    all_self_attentions,
+                ]
+                if v is not None
+            )
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions
         )
@@ -1127,7 +1158,10 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1250,7 +1284,10 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1363,7 +1400,10 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1557,5 +1597,8 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )

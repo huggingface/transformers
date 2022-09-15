@@ -666,7 +666,8 @@ class TFElectraMainLayer(tf.keras.layers.Layer):
         if self.is_decoder:
             seq_ids = tf.range(mask_seq_length)
             causal_mask = tf.less_equal(
-                tf.tile(seq_ids[None, None, :], (batch_size, mask_seq_length, 1)), seq_ids[None, :, None],
+                tf.tile(seq_ids[None, None, :], (batch_size, mask_seq_length, 1)),
+                seq_ids[None, :, None],
             )
             causal_mask = tf.cast(causal_mask, dtype=attention_mask.dtype)
             extended_attention_mask = causal_mask * attention_mask[:, None, :]
@@ -1323,7 +1324,10 @@ class TFElectraForSequenceClassification(TFElectraPreTrainedModel, TFSequenceCla
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
@@ -1430,7 +1434,10 @@ class TFElectraForMultipleChoice(TFElectraPreTrainedModel, TFMultipleChoiceLoss)
             return ((loss,) + output) if loss is not None else output
 
         return TFMultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     @tf.function(
@@ -1621,7 +1628,10 @@ class TFElectraForQuestionAnswering(TFElectraPreTrainedModel, TFQuestionAnswerin
             loss = self.hf_compute_loss(labels, (start_logits, end_logits))
 
         if not return_dict:
-            output = (start_logits, end_logits,) + discriminator_hidden_states[1:]
+            output = (
+                start_logits,
+                end_logits,
+            ) + discriminator_hidden_states[1:]
 
             return ((loss,) + output) if loss is not None else output
 

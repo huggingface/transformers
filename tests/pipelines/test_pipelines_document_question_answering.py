@@ -70,10 +70,24 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         word_boxes = list(zip(*apply_tesseract(load_image(image), None, "")))
         question = "What is the placebo?"
         examples = [
-            {"image": load_image(image), "question": question,},
-            {"image": image, "question": question,},
-            {"image": image, "question": question, "word_boxes": word_boxes,},
-            {"image": None, "question": question, "word_boxes": word_boxes,},
+            {
+                "image": load_image(image),
+                "question": question,
+            },
+            {
+                "image": image,
+                "question": question,
+            },
+            {
+                "image": image,
+                "question": question,
+                "word_boxes": word_boxes,
+            },
+            {
+                "image": None,
+                "question": question,
+                "word_boxes": word_boxes,
+            },
         ]
         return dqa_pipeline, examples
 

@@ -75,7 +75,9 @@ LOCALIZED_READMES = {
 
 # This is to make sure the transformers module imported is the one in the repo.
 spec = importlib.util.spec_from_file_location(
-    "transformers", os.path.join(TRANSFORMERS_PATH, "__init__.py"), submodule_search_locations=[TRANSFORMERS_PATH],
+    "transformers",
+    os.path.join(TRANSFORMERS_PATH, "__init__.py"),
+    submodule_search_locations=[TRANSFORMERS_PATH],
 )
 transformers_module = spec.loader.load_module()
 
@@ -502,7 +504,9 @@ README_TEMPLATE = (
 def check_readme(overwrite=False):
     info = LOCALIZED_READMES["README.md"]
     models, start_index, end_index, lines = _find_text_in_file(
-        os.path.join(REPO_PATH, "README.md"), info["start_prompt"], info["end_prompt"],
+        os.path.join(REPO_PATH, "README.md"),
+        info["start_prompt"],
+        info["end_prompt"],
     )
     models_in_readme = [re.search(r"\*\*\[([^\]]*)", line).groups()[0] for line in models.strip().split("\n")]
 

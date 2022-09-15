@@ -612,7 +612,8 @@ class Trainer:
             self.label_smoother = None
 
         self.state = TrainerState(
-            is_local_process_zero=self.is_local_process_zero(), is_world_process_zero=self.is_world_process_zero(),
+            is_local_process_zero=self.is_local_process_zero(),
+            is_world_process_zero=self.is_world_process_zero(),
         )
 
         self.control = TrainerControl()
@@ -820,7 +821,10 @@ class Trainer:
                 )
             else:
                 return DistributedSampler(
-                    self.train_dataset, num_replicas=self.args.world_size, rank=self.args.process_index, seed=seed,
+                    self.train_dataset,
+                    num_replicas=self.args.world_size,
+                    rank=self.args.process_index,
+                    seed=seed,
                 )
 
     def get_train_dataloader(self) -> DataLoader:
@@ -1042,7 +1046,11 @@ class Trainer:
             optimizer_cls, optimizer_kwargs = Trainer.get_optimizer_cls_and_kwargs(self.args)
 
             if self.sharded_ddp == ShardedDDPOption.SIMPLE:
-                self.optimizer = OSS(params=optimizer_grouped_parameters, optim=optimizer_cls, **optimizer_kwargs,)
+                self.optimizer = OSS(
+                    params=optimizer_grouped_parameters,
+                    optim=optimizer_cls,
+                    **optimizer_kwargs,
+                )
             else:
                 self.optimizer = optimizer_cls(optimizer_grouped_parameters, **optimizer_kwargs)
                 if optimizer_cls.__name__ == "Adam8bit":
@@ -1329,7 +1337,10 @@ class Trainer:
                 if ShardedDDPOption.AUTO_WRAP in self.args.sharded_ddp:
                     model = auto_wrap(model)
                 self.model = model = FullyShardedDDP(
-                    model, mixed_precision=mixed_precision, reshard_after_forward=zero_3, cpu_offload=cpu_offload,
+                    model,
+                    mixed_precision=mixed_precision,
+                    reshard_after_forward=zero_3,
+                    cpu_offload=cpu_offload,
                 ).to(self.args.device)
         # Distributed training using PyTorch FSDP
         elif self.fsdp is not None:
@@ -2401,7 +2412,12 @@ class Trainer:
         """
         A helper wrapper to group together context managers.
         """
-        return ContextManagers([self.torchdynamo_smart_context_manager(), self.autocast_smart_context_manager(),])
+        return ContextManagers(
+            [
+                self.torchdynamo_smart_context_manager(),
+                self.autocast_smart_context_manager(),
+            ]
+        )
 
     def torchdynamo_smart_context_manager(self):
         """
@@ -3238,7 +3254,11 @@ class Trainer:
             if self.args.overwrite_output_dir and at_init:
                 # Try again after wiping output_dir
                 shutil.rmtree(self.args.output_dir)
-                self.repo = Repository(self.args.output_dir, clone_from=repo_name, use_auth_token=use_auth_token,)
+                self.repo = Repository(
+                    self.args.output_dir,
+                    clone_from=repo_name,
+                    use_auth_token=use_auth_token,
+                )
             else:
                 raise
 

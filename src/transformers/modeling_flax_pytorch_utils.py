@@ -67,7 +67,10 @@ def load_pytorch_checkpoint_in_flax_state_dict(
 
 
 def rename_key_and_reshape_tensor(
-    pt_tuple_key: Tuple[str], pt_tensor: np.ndarray, random_flax_state_dict: Dict[str, jnp.ndarray], model_prefix: str,
+    pt_tuple_key: Tuple[str],
+    pt_tensor: np.ndarray,
+    random_flax_state_dict: Dict[str, jnp.ndarray],
+    model_prefix: str,
 ) -> (Tuple[str], np.ndarray):
     """Rename PT weight names to corresponding Flax weight names and reshape tensor if necessary"""
 

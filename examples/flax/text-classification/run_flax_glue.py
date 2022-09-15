@@ -128,10 +128,12 @@ class DataTrainingArguments:
         default=None, metadata={"help": "The input training data file (a csv or JSON file)."}
     )
     validation_file: Optional[str] = field(
-        default=None, metadata={"help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."},
+        default=None,
+        metadata={"help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."},
     )
     test_file: Optional[str] = field(
-        default=None, metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
+        default=None,
+        metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
     )
     text_column_name: Optional[str] = field(
         default=None, metadata={"help": "The column name of text to input in the file (a csv or JSON file)."}
@@ -143,7 +145,8 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
         default=None,
@@ -327,7 +330,9 @@ def main():
 
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
     )
     # Setup logging, we only want one process per machine to log things on the screen.
     logger.setLevel(logging.INFO if jax.process_index() == 0 else logging.ERROR)
@@ -363,7 +368,9 @@ def main():
     if data_args.task_name is not None:
         # Downloading and loading a dataset from the hub.
         raw_datasets = load_dataset(
-            "glue", data_args.task_name, use_auth_token=True if model_args.use_auth_token else None,
+            "glue",
+            data_args.task_name,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     else:
         # Loading the dataset from local csv or json file.
@@ -374,7 +381,9 @@ def main():
             data_files["validation"] = data_args.validation_file
         extension = (data_args.train_file if data_args.train_file is not None else data_args.valid_file).split(".")[-1]
         raw_datasets = load_dataset(
-            extension, data_files=data_files, use_auth_token=True if model_args.use_auth_token else None,
+            extension,
+            data_files=data_files,
+            use_auth_token=True if model_args.use_auth_token else None,
         )
     # See more about loading any type of standard or custom dataset at
     # https://huggingface.co/docs/datasets/loading_datasets.html.
@@ -412,7 +421,9 @@ def main():
         use_auth_token=True if model_args.use_auth_token else None,
     )
     model = FlaxAutoModelForSequenceClassification.from_pretrained(
-        model_args.model_name_or_path, config=config, use_auth_token=True if model_args.use_auth_token else None,
+        model_args.model_name_or_path,
+        config=config,
+        use_auth_token=True if model_args.use_auth_token else None,
     )
 
     # Preprocessing the datasets
@@ -583,7 +594,14 @@ def main():
 
         # train
         train_loader = glue_train_data_collator(input_rng, train_dataset, train_batch_size)
-        for step, batch in enumerate(tqdm(train_loader, total=steps_per_epoch, desc="Training...", position=1,),):
+        for step, batch in enumerate(
+            tqdm(
+                train_loader,
+                total=steps_per_epoch,
+                desc="Training...",
+                position=1,
+            ),
+        ):
             state, train_metric, dropout_rngs = p_train_step(state, batch, dropout_rngs)
             train_metrics.append(train_metric)
 

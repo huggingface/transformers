@@ -122,7 +122,11 @@ class MobileViTConvLayer(nn.Module):
 
         if use_normalization:
             self.normalization = nn.BatchNorm2d(
-                num_features=out_channels, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True,
+                num_features=out_channels,
+                eps=1e-5,
+                momentum=0.1,
+                affine=True,
+                track_running_stats=True,
             )
         else:
             self.normalization = None
@@ -177,7 +181,11 @@ class MobileViTInvertedResidual(nn.Module):
         )
 
         self.reduce_1x1 = MobileViTConvLayer(
-            config, in_channels=expanded_channels, out_channels=out_channels, kernel_size=1, use_activation=False,
+            config,
+            in_channels=expanded_channels,
+            out_channels=out_channels,
+            kernel_size=1,
+            use_activation=False,
         )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
@@ -199,7 +207,10 @@ class MobileViTMobileNetLayer(nn.Module):
         self.layer = nn.ModuleList()
         for i in range(num_stages):
             layer = MobileViTInvertedResidual(
-                config, in_channels=in_channels, out_channels=out_channels, stride=stride if i == 0 else 1,
+                config,
+                in_channels=in_channels,
+                out_channels=out_channels,
+                stride=stride if i == 0 else 1,
             )
             self.layer.append(layer)
             in_channels = out_channels
@@ -358,7 +369,9 @@ class MobileViTTransformer(nn.Module):
         self.layer = nn.ModuleList()
         for _ in range(num_stages):
             transformer_layer = MobileViTTransformerLayer(
-                config, hidden_size=hidden_size, intermediate_size=int(hidden_size * config.mlp_ratio),
+                config,
+                hidden_size=hidden_size,
+                intermediate_size=int(hidden_size * config.mlp_ratio),
             )
             self.layer.append(transformer_layer)
 
@@ -400,7 +413,10 @@ class MobileViTLayer(nn.Module):
             self.downsampling_layer = None
 
         self.conv_kxk = MobileViTConvLayer(
-            config, in_channels=in_channels, out_channels=in_channels, kernel_size=config.conv_kernel_size,
+            config,
+            in_channels=in_channels,
+            out_channels=in_channels,
+            kernel_size=config.conv_kernel_size,
         )
 
         self.conv_1x1 = MobileViTConvLayer(
@@ -412,7 +428,11 @@ class MobileViTLayer(nn.Module):
             use_activation=False,
         )
 
-        self.transformer = MobileViTTransformer(config, hidden_size=hidden_size, num_stages=num_stages,)
+        self.transformer = MobileViTTransformer(
+            config,
+            hidden_size=hidden_size,
+            num_stages=num_stages,
+        )
 
         self.layernorm = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
@@ -598,7 +618,10 @@ class MobileViTEncoder(nn.Module):
         self.layer.append(layer_5)
 
     def forward(
-        self, hidden_states: torch.Tensor, output_hidden_states: bool = False, return_dict: bool = True,
+        self,
+        hidden_states: torch.Tensor,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ) -> Union[tuple, BaseModelOutputWithNoAttention]:
         all_hidden_states = () if output_hidden_states else None
 
@@ -611,7 +634,10 @@ class MobileViTEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch.utils.checkpoint.checkpoint(create_custom_forward(layer_module), hidden_states,)
+                hidden_states = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(layer_module),
+                    hidden_states,
+                )
             else:
                 hidden_states = layer_module(hidden_states)
 
@@ -687,7 +713,11 @@ class MobileViTModel(MobileViTPreTrainedModel):
         self.expand_output = expand_output
 
         self.conv_stem = MobileViTConvLayer(
-            config, in_channels=config.num_channels, out_channels=config.neck_hidden_sizes[0], kernel_size=3, stride=2,
+            config,
+            in_channels=config.num_channels,
+            out_channels=config.neck_hidden_sizes[0],
+            kernel_size=3,
+            stride=2,
         )
 
         self.encoder = MobileViTEncoder(config)
@@ -739,7 +769,9 @@ class MobileViTModel(MobileViTPreTrainedModel):
         embedding_output = self.conv_stem(pixel_values)
 
         encoder_outputs = self.encoder(
-            embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict,
+            embedding_output,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         if self.expand_output:
@@ -841,7 +873,11 @@ class MobileViTForImageClassification(MobileViTPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states,)
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+        )
 
 
 class MobileViTASPPPooling(nn.Module):
@@ -885,7 +921,11 @@ class MobileViTASPP(nn.Module):
         self.convs = nn.ModuleList()
 
         in_projection = MobileViTConvLayer(
-            config, in_channels=in_channels, out_channels=out_channels, kernel_size=1, use_activation="relu",
+            config,
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=1,
+            use_activation="relu",
         )
         self.convs.append(in_projection)
 
@@ -1011,7 +1051,9 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.mobilevit(
-            pixel_values, output_hidden_states=True, return_dict=return_dict,  # we need the intermediate hidden states
+            pixel_values,
+            output_hidden_states=True,
+            return_dict=return_dict,  # we need the intermediate hidden states
         )
 
         encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]

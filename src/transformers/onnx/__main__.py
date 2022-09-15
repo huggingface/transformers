@@ -94,7 +94,13 @@ def main():
             f"At least  {onnx_config.default_onnx_opset} is required."
         )
 
-    onnx_inputs, onnx_outputs = export(preprocessor, model, onnx_config, args.opset, args.output,)
+    onnx_inputs, onnx_outputs = export(
+        preprocessor,
+        model,
+        onnx_config,
+        args.opset,
+        args.output,
+    )
 
     if args.atol is None:
         args.atol = onnx_config.atol_for_validation

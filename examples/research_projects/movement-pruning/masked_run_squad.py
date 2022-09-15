@@ -88,7 +88,7 @@ def schedule_threshold(
         spars_warmup_steps = initial_warmup * warmup_steps
         spars_schedu_steps = (final_warmup + initial_warmup) * warmup_steps
         mul_coeff = 1 - (step - spars_warmup_steps) / (total_step - spars_schedu_steps)
-        threshold = final_threshold + (initial_threshold - final_threshold) * (mul_coeff ** 3)
+        threshold = final_threshold + (initial_threshold - final_threshold) * (mul_coeff**3)
     regu_lambda = final_lambda * threshold / final_threshold
     return threshold, regu_lambda
 
@@ -180,7 +180,10 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
     # Distributed training (should be after apex fp16 initialization)
     if args.local_rank != -1:
         model = nn.parallel.DistributedDataParallel(
-            model, device_ids=[args.local_rank], output_device=args.local_rank, find_unused_parameters=True,
+            model,
+            device_ids=[args.local_rank],
+            output_device=args.local_rank,
+            find_unused_parameters=True,
         )
 
     # Train!
@@ -306,12 +309,12 @@ def train(args, train_dataset, model, tokenizer, teacher=None):
                     input=nn.functional.log_softmax(start_logits_stu / args.temperature, dim=-1),
                     target=nn.functional.softmax(start_logits_tea / args.temperature, dim=-1),
                     reduction="batchmean",
-                ) * (args.temperature ** 2)
+                ) * (args.temperature**2)
                 loss_end = nn.functional.kl_div(
                     input=nn.functional.log_softmax(end_logits_stu / args.temperature, dim=-1),
                     target=nn.functional.softmax(end_logits_tea / args.temperature, dim=-1),
                     reduction="batchmean",
-                ) * (args.temperature ** 2)
+                ) * (args.temperature**2)
                 loss_logits = (loss_start + loss_end) / 2.0
 
                 loss = args.alpha_distil * loss_logits + args.alpha_ce * loss
@@ -871,7 +874,10 @@ def main():
     parser.add_argument("--adam_epsilon", default=1e-8, type=float, help="Epsilon for Adam optimizer.")
     parser.add_argument("--max_grad_norm", default=1.0, type=float, help="Max gradient norm.")
     parser.add_argument(
-        "--num_train_epochs", default=3.0, type=float, help="Total number of training epochs to perform.",
+        "--num_train_epochs",
+        default=3.0,
+        type=float,
+        help="Total number of training epochs to perform.",
     )
     parser.add_argument(
         "--max_steps",

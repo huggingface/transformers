@@ -591,7 +591,11 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
 
     def _batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[List[TextInput], List[TextInputPair], List[PreTokenizedInput],],
+        batch_text_or_text_pairs: Union[
+            List[TextInput],
+            List[TextInputPair],
+            List[PreTokenizedInput],
+        ],
         is_pair: bool = None,
         boxes: Optional[List[List[List[int]]]] = None,
         word_labels: Optional[List[List[int]]] = None,

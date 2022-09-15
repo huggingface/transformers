@@ -1340,7 +1340,8 @@ class ErnieForMaskedLM(ErniePreTrainedModel):
 
 
 @add_start_docstrings(
-    """Ernie Model with a `next sentence prediction (classification)` head on top.""", ERNIE_START_DOCSTRING,
+    """Ernie Model with a `next sentence prediction (classification)` head on top.""",
+    ERNIE_START_DOCSTRING,
 )
 class ErnieForNextSentencePrediction(ErniePreTrainedModel):
     # Copied from transformers.models.bert.modeling_bert.BertForNextSentencePrediction.__init__ with Bert->Ernie,bert->ernie
@@ -1535,7 +1536,10 @@ class ErnieForSequenceClassification(ErniePreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1630,7 +1634,10 @@ class ErnieForMultipleChoice(ErniePreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1708,7 +1715,10 @@ class ErnieForTokenClassification(ErniePreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

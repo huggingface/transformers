@@ -25,7 +25,9 @@ from .tokenization_led import LEDTokenizer
 logger = logging.get_logger(__name__)
 
 PRETRAINED_VOCAB_FILES_MAP = {
-    "vocab_file": {"allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/vocab.json",},
+    "vocab_file": {
+        "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/vocab.json",
+    },
     "merges_file": {
         "allenai/led-base-16384": "https://huggingface.co/allenai/led-base-16384/resolve/main/merges.txt",
     },

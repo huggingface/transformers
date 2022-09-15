@@ -176,7 +176,12 @@ class ResNetStage(nn.Module):
     """
 
     def __init__(
-        self, config: ResNetConfig, in_channels: int, out_channels: int, stride: int = 2, depth: int = 2,
+        self,
+        config: ResNetConfig,
+        in_channels: int,
+        out_channels: int,
+        stride: int = 2,
+        depth: int = 2,
     ):
         super().__init__()
 
@@ -230,7 +235,10 @@ class ResNetEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_state, hidden_states] if v is not None)
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states,)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_state,
+            hidden_states=hidden_states,
+        )
 
 
 class ResNetPreTrainedModel(PreTrainedModel):
@@ -282,7 +290,8 @@ RESNET_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare ResNet model outputting raw features without any specific head on top.", RESNET_START_DOCSTRING,
+    "The bare ResNet model outputting raw features without any specific head on top.",
+    RESNET_START_DOCSTRING,
 )
 class ResNetModel(ResNetPreTrainedModel):
     def __init__(self, config):

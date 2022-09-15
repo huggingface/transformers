@@ -41,7 +41,9 @@ def ffmpeg_read(bpayload: bytes, sampling_rate: int) -> np.array:
 
 
 def ffmpeg_microphone(
-    sampling_rate: int, chunk_length_s: float, format_for_conversion: str = "f32le",
+    sampling_rate: int,
+    chunk_length_s: float,
+    format_for_conversion: str = "f32le",
 ):
     """
     Helper function ro read raw microphone data.
@@ -202,7 +204,7 @@ def _ffmpeg_stream(ffmpeg_command, buflen: int):
     """
     Internal function to create the generator of data through ffmpeg
     """
-    bufsize = 2 ** 24  # 16Mo
+    bufsize = 2**24  # 16Mo
     try:
         with subprocess.Popen(ffmpeg_command, stdout=subprocess.PIPE, bufsize=bufsize) as ffmpeg_process:
             while True:

@@ -251,7 +251,10 @@ class Block(nn.Module):
 
     def forward(self, x, attention_mask=None, head_mask=None, output_attentions=False):
         attn_outputs = self.attn(
-            x, attention_mask=attention_mask, head_mask=head_mask, output_attentions=output_attentions,
+            x,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
         )
         a = attn_outputs[0]
 
@@ -514,7 +517,9 @@ class OpenAIGPTModel(OpenAIGPTPreTrainedModel):
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
 
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
 

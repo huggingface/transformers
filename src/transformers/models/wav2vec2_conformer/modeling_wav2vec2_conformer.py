@@ -535,7 +535,10 @@ class Wav2Vec2ConformerFeatureEncoder(nn.Module):
 
                     return custom_forward
 
-                hidden_states = torch.utils.checkpoint.checkpoint(create_custom_forward(conv_layer), hidden_states,)
+                hidden_states = torch.utils.checkpoint.checkpoint(
+                    create_custom_forward(conv_layer),
+                    hidden_states,
+                )
             else:
                 hidden_states = conv_layer(hidden_states)
 
@@ -592,7 +595,12 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
             raise ValueError("`config.conv_depthwise_kernel_size` should be a odd number for 'SAME' padding")
         self.layer_norm = nn.LayerNorm(config.hidden_size)
         self.pointwise_conv1 = torch.nn.Conv1d(
-            config.hidden_size, 2 * config.hidden_size, kernel_size=1, stride=1, padding=0, bias=False,
+            config.hidden_size,
+            2 * config.hidden_size,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            bias=False,
         )
         self.glu = torch.nn.GLU(dim=1)
         self.depthwise_conv = torch.nn.Conv1d(
@@ -607,7 +615,12 @@ class Wav2Vec2ConformerConvolutionModule(nn.Module):
         self.batch_norm = torch.nn.BatchNorm1d(config.hidden_size)
         self.activation = ACT2FN[config.hidden_act]
         self.pointwise_conv2 = torch.nn.Conv1d(
-            config.hidden_size, config.hidden_size, kernel_size=1, stride=1, padding=0, bias=False,
+            config.hidden_size,
+            config.hidden_size,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            bias=False,
         )
         self.dropout = torch.nn.Dropout(config.conformer_conv_dropout)
 
@@ -916,7 +929,10 @@ class Wav2Vec2ConformerEncoder(nn.Module):
                         return custom_forward
 
                     layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer), hidden_states, attention_mask, relative_position_embeddings,
+                        create_custom_forward(layer),
+                        hidden_states,
+                        attention_mask,
+                        relative_position_embeddings,
                     )
                 else:
                     layer_outputs = layer(
@@ -940,7 +956,9 @@ class Wav2Vec2ConformerEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
 
 
@@ -1812,7 +1830,10 @@ class Wav2Vec2ConformerForSequenceClassification(Wav2Vec2ConformerPreTrainedMode
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1915,7 +1936,10 @@ class Wav2Vec2ConformerForAudioFrameClassification(Wav2Vec2ConformerPreTrainedMo
             return output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

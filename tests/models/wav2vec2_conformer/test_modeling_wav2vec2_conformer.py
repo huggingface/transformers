@@ -892,7 +892,10 @@ class Wav2Vec2ConformerModelIntegrationTest(unittest.TestCase):
 
         torch.manual_seed(0)
         mask_time_indices = _compute_mask_indices(
-            features_shape, model.config.mask_time_prob, model.config.mask_time_length, min_masks=2,
+            features_shape,
+            model.config.mask_time_prob,
+            model.config.mask_time_length,
+            min_masks=2,
         )
         mask_time_indices = torch.from_numpy(mask_time_indices).to(torch_device)
 

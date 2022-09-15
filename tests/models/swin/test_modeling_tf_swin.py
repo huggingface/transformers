@@ -178,7 +178,13 @@ class TFSwinModelTester:
 @require_tf
 class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (TFSwinModel, TFSwinForImageClassification, TFSwinForMaskedImageModeling,) if is_tf_available() else ()
+        (
+            TFSwinModel,
+            TFSwinForImageClassification,
+            TFSwinForMaskedImageModeling,
+        )
+        if is_tf_available()
+        else ()
     )
 
     test_pruning = False
@@ -260,7 +266,7 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            window_size_squared = config.window_size ** 2
+            window_size_squared = config.window_size**2
             model = model_class(config)
             outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
@@ -310,7 +316,8 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
         self.assertListEqual(
-            list(hidden_states[0].shape[-2:]), [num_patches, self.model_tester.embed_dim],
+            list(hidden_states[0].shape[-2:]),
+            [num_patches, self.model_tester.embed_dim],
         )
 
         reshaped_hidden_states = outputs.reshaped_hidden_states
@@ -322,7 +329,8 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
         reshaped_hidden_states = tf.transpose(reshaped_hidden_states, (0, 2, 1))
 
         self.assertListEqual(
-            list(reshaped_hidden_states.shape[-2:]), [num_patches, self.model_tester.embed_dim],
+            list(reshaped_hidden_states.shape[-2:]),
+            [num_patches, self.model_tester.embed_dim],
         )
 
     def test_hidden_states_output(self):

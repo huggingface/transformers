@@ -135,7 +135,7 @@ class TFViTMAEModelTester:
         result = model(pixel_values, training=False)
         # expected sequence length = num_patches
         num_patches = (self.image_size // self.patch_size) ** 2
-        expected_num_channels = self.patch_size ** 2 * self.num_channels
+        expected_num_channels = self.patch_size**2 * self.num_channels
         self.parent.assertEqual(result.logits.shape, (self.batch_size, num_patches, expected_num_channels))
 
         # test greyscale images
@@ -144,7 +144,7 @@ class TFViTMAEModelTester:
 
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values, training=False)
-        expected_num_channels = self.patch_size ** 2
+        expected_num_channels = self.patch_size**2
         self.parent.assertEqual(result.logits.shape, (self.batch_size, num_patches, expected_num_channels))
 
     def prepare_config_and_inputs_for_common(self):

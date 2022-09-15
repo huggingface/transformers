@@ -235,7 +235,10 @@ def _scatter_values_on_batch_indices(values, batch_indices, output_shape):
 
 
 def _compute_mask_indices(
-    shape: Tuple[int, int], mask_prob: float, mask_length: int, min_masks: int = 0,
+    shape: Tuple[int, int],
+    mask_prob: float,
+    mask_length: int,
+    min_masks: int = 0,
 ) -> tf.Tensor:
     """
     Computes random mask spans for a given shape
@@ -423,7 +426,12 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
 
         gamma, beta = self._get_reshaped_weights(input_shape)
         normalized_inputs = tf.nn.batch_normalization(
-            reshaped_inputs, mean=mean, variance=variance, scale=gamma, offset=beta, variance_epsilon=self.epsilon,
+            reshaped_inputs,
+            mean=mean,
+            variance=variance,
+            scale=gamma,
+            offset=beta,
+            variance_epsilon=self.epsilon,
         )
         return normalized_inputs
 
@@ -768,7 +776,7 @@ class TFWav2Vec2Attention(tf.keras.layers.Layer):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
@@ -1073,7 +1081,9 @@ class TFWav2Vec2Encoder(tf.keras.layers.Layer):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
 
 
@@ -1138,7 +1148,9 @@ class TFWav2Vec2EncoderStableLayerNorm(tf.keras.layers.Layer):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
 
 
@@ -1698,7 +1710,10 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TFCausalLMOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFCausalLMOutput) -> TFCausalLMOutput:

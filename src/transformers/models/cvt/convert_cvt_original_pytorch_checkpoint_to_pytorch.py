@@ -337,13 +337,22 @@ def convert_cvt_checkpoint(cvt_model, image_size, cvt_file_name, pytorch_dump_fo
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "--cvt_model", default="cvt-w24", type=str, help="Name of the cvt model you'd like to convert.",
+        "--cvt_model",
+        default="cvt-w24",
+        type=str,
+        help="Name of the cvt model you'd like to convert.",
     )
     parser.add_argument(
-        "--image_size", default=384, type=int, help="Input Image Size",
+        "--image_size",
+        default=384,
+        type=int,
+        help="Input Image Size",
     )
     parser.add_argument(
-        "--cvt_file_name", default="cvtmodels\CvT-w24-384x384-IN-22k.pth", type=str, help="Input Image Size",
+        "--cvt_file_name",
+        default="cvtmodels\CvT-w24-384x384-IN-22k.pth",
+        type=str,
+        help="Input Image Size",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."

@@ -35,7 +35,9 @@ def get_tokens(code: str) -> Set[str]:
 
 class DuplicationIndex:
     def __init__(
-        self, *, duplication_jaccard_threshold: float = 0.85,
+        self,
+        *,
+        duplication_jaccard_threshold: float = 0.85,
     ):
         self._duplication_jaccard_threshold = duplication_jaccard_threshold
         self._num_perm = NUM_PERM
@@ -101,7 +103,9 @@ def _compute_min_hash(element):
 def minhash_iter(dataset_iterator: Type[Dataset]):
     with mp.Pool() as pool:
         for data in pool.imap_unordered(
-            _compute_min_hash, ThreadedIterator(dataset_iterator, max_queue_size=10000), chunksize=100,
+            _compute_min_hash,
+            ThreadedIterator(dataset_iterator, max_queue_size=10000),
+            chunksize=100,
         ):
             if data is not None:
                 yield data
@@ -192,7 +196,13 @@ def find_extremes(cluster_list, dataset, jaccard_threshold):
     extremes_list = []
     f = partial(_find_cluster_extremes_shared, jaccard_threshold=jaccard_threshold)
     with mp.Pool() as pool:
-        for extremes in tqdm(pool.imap_unordered(f, cluster_list,), total=len(cluster_list),):
+        for extremes in tqdm(
+            pool.imap_unordered(
+                f,
+                cluster_list,
+            ),
+            total=len(cluster_list),
+        ):
             extremes_list.append(extremes)
     return extremes_list
 

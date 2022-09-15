@@ -608,7 +608,8 @@ class TFDistilBertLMHead(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    """DistilBert Model with a `masked language modeling` head on top.""", DISTILBERT_START_DOCSTRING,
+    """DistilBert Model with a `masked language modeling` head on top.""",
+    DISTILBERT_START_DOCSTRING,
 )
 class TFDistilBertForMaskedLM(TFDistilBertPreTrainedModel, TFMaskedLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
@@ -842,7 +843,10 @@ class TFDistilBertForTokenClassification(TFDistilBertPreTrainedModel, TFTokenCla
             return ((loss,) + output) if loss is not None else output
 
         return TFTokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output

@@ -73,7 +73,11 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
 
         outputs = text_generator("This is a test", do_sample=True, num_return_sequences=2, return_tensors=True)
         self.assertEqual(
-            outputs, [{"generated_token_ids": ANY(list)}, {"generated_token_ids": ANY(list)},],
+            outputs,
+            [
+                {"generated_token_ids": ANY(list)},
+                {"generated_token_ids": ANY(list)},
+            ],
         )
         text_generator.tokenizer.pad_token_id = text_generator.model.config.eos_token_id
         text_generator.tokenizer.pad_token = "<pad>"
@@ -87,8 +91,14 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         self.assertEqual(
             outputs,
             [
-                [{"generated_token_ids": ANY(list)}, {"generated_token_ids": ANY(list)},],
-                [{"generated_token_ids": ANY(list)}, {"generated_token_ids": ANY(list)},],
+                [
+                    {"generated_token_ids": ANY(list)},
+                    {"generated_token_ids": ANY(list)},
+                ],
+                [
+                    {"generated_token_ids": ANY(list)},
+                    {"generated_token_ids": ANY(list)},
+                ],
             ],
         )
 

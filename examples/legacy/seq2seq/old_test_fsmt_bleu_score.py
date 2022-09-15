@@ -40,7 +40,12 @@ class ModelEvalTester(unittest.TestCase):
         return model
 
     @parameterized.expand(
-        [["en-ru", 26.0], ["ru-en", 22.0], ["en-de", 22.0], ["de-en", 29.0],]
+        [
+            ["en-ru", 26.0],
+            ["ru-en", 22.0],
+            ["en-de", 22.0],
+            ["de-en", 29.0],
+        ]
     )
     @slow
     def test_bleu_scores(self, pair, min_bleu_score):
@@ -54,7 +59,10 @@ class ModelEvalTester(unittest.TestCase):
         tgt_sentences = bleu_data[pair]["tgt"]
 
         batch = tokenizer(src_sentences, return_tensors="pt", truncation=True, padding="longest").to(torch_device)
-        outputs = model.generate(input_ids=batch.input_ids, num_beams=8,)
+        outputs = model.generate(
+            input_ids=batch.input_ids,
+            num_beams=8,
+        )
         decoded_sentences = tokenizer.batch_decode(
             outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False
         )

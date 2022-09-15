@@ -37,7 +37,9 @@ class ModelArguments:
     Arguments pertaining to which model/config/tokenizer we are going to fine-tune, or train from scratch.
     """
 
-    output_dir: str = field(metadata={"help": "The output directory where the model will be written."},)
+    output_dir: str = field(
+        metadata={"help": "The output directory where the model will be written."},
+    )
     encoder_model_name_or_path: str = field(
         metadata={
             "help": (

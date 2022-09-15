@@ -340,7 +340,9 @@ class PushToHubCallback(Callback):
         self.output_dir = output_dir
         self.hub_model_id = hub_model_id
         self.repo = Repository(
-            str(self.output_dir), clone_from=self.hub_model_id, use_auth_token=hub_token if hub_token else True,
+            str(self.output_dir),
+            clone_from=self.hub_model_id,
+            use_auth_token=hub_token if hub_token else True,
         )
         self.tokenizer = tokenizer
         self.last_job = None

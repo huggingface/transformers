@@ -298,7 +298,8 @@ class MarianTokenizer(PreTrainedTokenizer):
 
         if self.separate_vocabs:
             out_src_vocab_file = os.path.join(
-                save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab"],
+                save_directory,
+                (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab"],
             )
             out_tgt_vocab_file = os.path.join(
                 save_directory,

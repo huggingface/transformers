@@ -347,7 +347,11 @@ class FlaxEncoderDecoderMixin:
 
         # define a dummy loss function for computing the loss over a forward pass
         def compute_loss(
-            params, inputs, attention_mask, decoder_input_ids, freeze_feature_encoder: bool = False,
+            params,
+            inputs,
+            attention_mask,
+            decoder_input_ids,
+            freeze_feature_encoder: bool = False,
         ):
             outputs_enc_dec = enc_dec_model(
                 inputs=inputs,
@@ -546,7 +550,11 @@ class FlaxEncoderDecoderMixin:
         decoder_input_ids = ids_tensor([13, 1], model_2.config.decoder.vocab_size)
         attention_mask = ids_tensor([13, 5], vocab_size=2)
 
-        outputs = model_2(inputs=inputs, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,)
+        outputs = model_2(
+            inputs=inputs,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
+        )
         out_2 = np.array(outputs[0])
         out_2[np.isnan(out_2)] = 0
 
@@ -554,7 +562,11 @@ class FlaxEncoderDecoderMixin:
             model_2.save_pretrained(tmp_dirname)
             model_1 = FlaxSpeechEncoderDecoderModel.from_pretrained(tmp_dirname)
 
-            after_outputs = model_1(inputs=inputs, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,)
+            after_outputs = model_1(
+                inputs=inputs,
+                decoder_input_ids=decoder_input_ids,
+                attention_mask=attention_mask,
+            )
             out_1 = np.array(after_outputs[0])
             out_1[np.isnan(out_1)] = 0
             max_diff = np.amax(np.abs(out_1 - out_2))

@@ -117,7 +117,11 @@ FLAX_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict([("vision-encoder-decoder", "FlaxVisionEncoderDecoderModel"),])
+FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES = OrderedDict(
+    [
+        ("vision-encoder-decoder", "FlaxVisionEncoderDecoderModel"),
+    ]
+)
 
 FLAX_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
@@ -195,10 +199,16 @@ FLAX_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
     ]
 )
 
-FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict([("bert", "FlaxBertForNextSentencePrediction"),])
+FLAX_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
+    [
+        ("bert", "FlaxBertForNextSentencePrediction"),
+    ]
+)
 
 FLAX_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
-    [("speech-encoder-decoder", "FlaxSpeechEncoderDecoderModel"),]
+    [
+        ("speech-encoder-decoder", "FlaxSpeechEncoderDecoderModel"),
+    ]
 )
 
 

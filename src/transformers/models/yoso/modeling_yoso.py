@@ -169,7 +169,7 @@ class YosoLSHCumulation(torch.autograd.Function):
         use_cuda = query_mask.is_cuda
         num_hash = config["num_hash"]
         hash_code_len = config["hash_code_len"]
-        hashtable_capacity = int(2 ** hash_code_len)
+        hashtable_capacity = int(2**hash_code_len)
 
         if config["use_fast_hash"]:
             query_hash_code, key_hash_code = lsh_cumulation.fast_hash(
@@ -196,7 +196,7 @@ class YosoLSHCumulation(torch.autograd.Function):
 
         use_cuda = grad.is_cuda
         hash_code_len = config["hash_code_len"]
-        hashtable_capacity = int(2 ** hash_code_len)
+        hashtable_capacity = int(2**hash_code_len)
 
         if config["lsh_backward"]:
             grad_value = lsh_cumulation.lsh_cumulation(
@@ -376,9 +376,27 @@ class YosoSelfAttention(nn.Module):
         if (not self.use_expectation) and head_dim < gpu_warp_size:
             pad_size = batch_size * num_heads, seq_len, gpu_warp_size - head_dim
 
-            query_layer = torch.cat([query_layer, torch.zeros(pad_size, device=query_layer.device),], dim=-1,)
-            key_layer = torch.cat([key_layer, torch.zeros(pad_size, device=key_layer.device),], dim=-1,)
-            value_layer = torch.cat([value_layer, torch.zeros(pad_size, device=value_layer.device),], dim=-1,)
+            query_layer = torch.cat(
+                [
+                    query_layer,
+                    torch.zeros(pad_size, device=query_layer.device),
+                ],
+                dim=-1,
+            )
+            key_layer = torch.cat(
+                [
+                    key_layer,
+                    torch.zeros(pad_size, device=key_layer.device),
+                ],
+                dim=-1,
+            )
+            value_layer = torch.cat(
+                [
+                    value_layer,
+                    torch.zeros(pad_size, device=value_layer.device),
+                ],
+                dim=-1,
+            )
 
         if self.use_expectation or self.training:
             query_layer, key_layer = normalize([query_layer, key_layer])
@@ -550,7 +568,9 @@ class YosoEncoder(nn.Module):
                     return custom_forward
 
                 layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module), hidden_states, attention_mask,
+                    create_custom_forward(layer_module),
+                    hidden_states,
+                    attention_mask,
                 )
             else:
                 layer_outputs = layer_module(hidden_states, attention_mask, output_attentions)
@@ -565,7 +585,9 @@ class YosoEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
         return BaseModelOutputWithCrossAttentions(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
 
 
@@ -801,7 +823,10 @@ class YosoModel(YosoPreTrainedModel):
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
         embedding_output = self.embeddings(
-            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds,
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
         )
         encoder_outputs = self.encoder(
             embedding_output,
@@ -1007,7 +1032,10 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1096,7 +1124,10 @@ class YosoForMultipleChoice(YosoPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1179,7 +1210,10 @@ class YosoForTokenClassification(YosoPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

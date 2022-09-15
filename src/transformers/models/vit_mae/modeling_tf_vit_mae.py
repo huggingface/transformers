@@ -182,7 +182,7 @@ def get_1d_sincos_pos_embed_from_grid(embed_dim, pos):
 
     omega = tf.range(embed_dim // 2, dtype="float32")
     omega /= embed_dim / 2.0
-    omega = 1.0 / 10000 ** omega  # (D/2,)
+    omega = 1.0 / 10000**omega  # (D/2,)
 
     pos = tf.reshape(pos, [-1])  # (M,)
     out = tf.einsum("m,d->md", pos, omega)  # (M, D/2), outer product
@@ -224,7 +224,9 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
             name="position_embeddings",
         )
         pos_embed = get_2d_sincos_pos_embed(
-            self.position_embeddings.shape[-1], int(self.patch_embeddings.num_patches ** 0.5), add_cls_token=True,
+            self.position_embeddings.shape[-1],
+            int(self.patch_embeddings.num_patches**0.5),
+            add_cls_token=True,
         )[None, ...]
         self.position_embeddings.assign(pos_embed)
 
@@ -252,7 +254,12 @@ class TFViTMAEEmbeddings(tf.keras.layers.Layer):
 
         # keep the first subset
         ids_keep = ids_shuffle[:, :len_keep]
-        sequence_masked = tf.gather(sequence, axis=1, batch_dims=1, indices=ids_keep,)
+        sequence_masked = tf.gather(
+            sequence,
+            axis=1,
+            batch_dims=1,
+            indices=ids_keep,
+        )
 
         # generate the binary mask: 0 is keep, 1 is remove
         # this hack is needed because TF's EagerTensors don't support
@@ -378,7 +385,11 @@ class TFViTMAESelfAttention(tf.keras.layers.Layer):
         return tf.transpose(tensor, perm=[0, 2, 1, 3])
 
     def call(
-        self, hidden_states: tf.Tensor, head_mask: tf.Tensor, output_attentions: bool, training: bool = False,
+        self,
+        hidden_states: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        training: bool = False,
     ) -> Tuple[tf.Tensor]:
         batch_size = shape_list(hidden_states)[0]
         mixed_query_layer = self.query(inputs=hidden_states)
@@ -449,7 +460,11 @@ class TFViTMAEAttention(tf.keras.layers.Layer):
         raise NotImplementedError
 
     def call(
-        self, input_tensor: tf.Tensor, head_mask: tf.Tensor, output_attentions: bool, training: bool = False,
+        self,
+        input_tensor: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        training: bool = False,
     ) -> Tuple[tf.Tensor]:
         self_outputs = self.self_attention(
             hidden_states=input_tensor, head_mask=head_mask, output_attentions=output_attentions, training=training
@@ -520,7 +535,11 @@ class TFViTMAELayer(tf.keras.layers.Layer):
         )
 
     def call(
-        self, hidden_states: tf.Tensor, head_mask: tf.Tensor, output_attentions: bool, training: bool = False,
+        self,
+        hidden_states: tf.Tensor,
+        head_mask: tf.Tensor,
+        output_attentions: bool,
+        training: bool = False,
     ) -> Tuple[tf.Tensor]:
         attention_outputs = self.attention(
             # in ViTMAE, layernorm is applied before self-attention
@@ -683,12 +702,17 @@ class TFViTMAEPreTrainedModel(TFPreTrainedModel):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32,
+            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
+            dtype=tf.float32,
         )
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @tf.function(
-        input_signature=[{"pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),}]
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
     )
     def serving(self, inputs):
         """
@@ -861,7 +885,7 @@ class TFViTMAEDecoder(tf.keras.layers.Layer):
 
         self.decoder_norm = tf.keras.layers.LayerNormalization(epsilon=config.layer_norm_eps, name="decoder_norm")
         self.decoder_pred = tf.keras.layers.Dense(
-            config.patch_size ** 2 * config.num_channels,
+            config.patch_size**2 * config.num_channels,
             kernel_initializer=get_initializer(config.initializer_range),
             name="decoder_pred",
         )  # encoder to decoder
@@ -882,21 +906,29 @@ class TFViTMAEDecoder(tf.keras.layers.Layer):
             name="decoder_pos_embed",
         )
         decoder_pos_embed = get_2d_sincos_pos_embed(
-            self.decoder_pos_embed.shape[-1], int(self.num_patches ** 0.5), add_cls_token=True,
+            self.decoder_pos_embed.shape[-1],
+            int(self.num_patches**0.5),
+            add_cls_token=True,
         )[None, ...]
         self.decoder_pos_embed.assign(decoder_pos_embed)
 
         super().build(input_shape)
 
     def call(
-        self, hidden_states, ids_restore, output_attentions=False, output_hidden_states=False, return_dict=True,
+        self,
+        hidden_states,
+        ids_restore,
+        output_attentions=False,
+        output_hidden_states=False,
+        return_dict=True,
     ):
         # embed tokens
         x = self.decoder_embed(hidden_states)
 
         # append mask tokens to sequence
         mask_tokens = tf.tile(
-            self.mask_token, (shape_list(x)[0], shape_list(ids_restore)[1] + 1 - shape_list(x)[1], 1),
+            self.mask_token,
+            (shape_list(x)[0], shape_list(ids_restore)[1] + 1 - shape_list(x)[1], 1),
         )
         x_ = tf.concat([x[:, 1:, :], mask_tokens], axis=1)  # no cls token
         x_ = tf.gather(x_, axis=1, batch_dims=1, indices=ids_restore)  # unshuffle
@@ -912,7 +944,11 @@ class TFViTMAEDecoder(tf.keras.layers.Layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
-            layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions,)
+            layer_outputs = layer_module(
+                hidden_states,
+                head_mask=None,
+                output_attentions=output_attentions,
+            )
 
             hidden_states = layer_outputs[0]
 
@@ -936,7 +972,8 @@ class TFViTMAEDecoder(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    "The ViTMAE Model transformer with the decoder on top for self-supervised pre-training.", VIT_MAE_START_DOCSTRING,
+    "The ViTMAE Model transformer with the decoder on top for self-supervised pre-training.",
+    VIT_MAE_START_DOCSTRING,
 )
 class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
     def __init__(self, config):
@@ -944,7 +981,11 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         self.config = config
 
         self.vit = TFViTMAEMainLayer(config, name="vit")
-        self.decoder = TFViTMAEDecoder(config, num_patches=self.vit.embeddings.num_patches, name="decoder",)
+        self.decoder = TFViTMAEDecoder(
+            config,
+            num_patches=self.vit.embeddings.num_patches,
+            name="decoder",
+        )
 
     def get_input_embeddings(self):
         return self.vit.get_input_embeddings()
@@ -999,7 +1040,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         patchified_pixel_values = tf.einsum("nhpwqc->nhwpqc", patchified_pixel_values)
         patchified_pixel_values = tf.reshape(
             patchified_pixel_values,
-            (batch_size, num_patches_one_direction * num_patches_one_direction, patch_size ** 2 * num_channels),
+            (batch_size, num_patches_one_direction * num_patches_one_direction, patch_size**2 * num_channels),
         )
         return patchified_pixel_values
 

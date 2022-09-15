@@ -55,7 +55,8 @@ class ModelArguments:
         default=True, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
     )
     verbose_logging: Optional[bool] = field(
-        default=False, metadata={"help": "Whether to log verbose messages or not."},
+        default=False,
+        metadata={"help": "Whether to log verbose messages or not."},
     )
 
 
@@ -108,13 +109,16 @@ class DataTrainingArguments:
         metadata={"help": "Column in the dataset that contains label (target text). Defaults to 'text'"},
     )
     speech_file_column: Optional[str] = field(
-        default="file", metadata={"help": "Column in the dataset that contains speech file path. Defaults to 'file'"},
+        default="file",
+        metadata={"help": "Column in the dataset that contains speech file path. Defaults to 'file'"},
     )
     target_feature_extractor_sampling_rate: Optional[bool] = field(
-        default=False, metadata={"help": "Resample loaded audio to target feature extractor's sampling rate or not."},
+        default=False,
+        metadata={"help": "Resample loaded audio to target feature extractor's sampling rate or not."},
     )
     max_duration_in_seconds: Optional[float] = field(
-        default=None, metadata={"help": "Filters out examples longer than specified. Defaults to no filtering."},
+        default=None,
+        metadata={"help": "Filters out examples longer than specified. Defaults to no filtering."},
     )
     orthography: Optional[str] = field(
         default="librispeech",
@@ -129,7 +133,8 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
 
 

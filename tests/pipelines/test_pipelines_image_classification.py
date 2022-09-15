@@ -61,7 +61,11 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         outputs = image_classifier("./tests/fixtures/tests_samples/COCO/000000039769.png")
 
         self.assertEqual(
-            outputs, [{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)},],
+            outputs,
+            [
+                {"score": ANY(float), "label": ANY(str)},
+                {"score": ANY(float), "label": ANY(str)},
+            ],
         )
 
         import datasets
@@ -84,11 +88,26 @@ class ImageClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTest
         self.assertEqual(
             outputs,
             [
-                [{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)},],
-                [{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)},],
-                [{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)},],
-                [{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)},],
-                [{"score": ANY(float), "label": ANY(str)}, {"score": ANY(float), "label": ANY(str)},],
+                [
+                    {"score": ANY(float), "label": ANY(str)},
+                    {"score": ANY(float), "label": ANY(str)},
+                ],
+                [
+                    {"score": ANY(float), "label": ANY(str)},
+                    {"score": ANY(float), "label": ANY(str)},
+                ],
+                [
+                    {"score": ANY(float), "label": ANY(str)},
+                    {"score": ANY(float), "label": ANY(str)},
+                ],
+                [
+                    {"score": ANY(float), "label": ANY(str)},
+                    {"score": ANY(float), "label": ANY(str)},
+                ],
+                [
+                    {"score": ANY(float), "label": ANY(str)},
+                    {"score": ANY(float), "label": ANY(str)},
+                ],
             ],
         )
 

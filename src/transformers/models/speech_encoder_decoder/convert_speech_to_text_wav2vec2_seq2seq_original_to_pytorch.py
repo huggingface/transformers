@@ -109,7 +109,11 @@ def recursively_load_weights_wav2vec2(fairseq_model, hf_model):
         is_used = False
         if "conv_layers" in name:
             load_conv_layer(
-                name, value, feature_extractor, unused_weights, hf_model.config.feat_extract_norm == "group",
+                name,
+                value,
+                feature_extractor,
+                unused_weights,
+                hf_model.config.feat_extract_norm == "group",
             )
             is_used = True
         elif name.split(".")[0] == "proj":
@@ -226,7 +230,11 @@ def convert_wav2vec2_checkpoint(
     )
 
     feature_extractor = Wav2Vec2FeatureExtractor(
-        feature_size=1, sampling_rate=16000, padding_value=0, do_normalize=True, return_attention_mask=True,
+        feature_size=1,
+        sampling_rate=16000,
+        padding_value=0,
+        do_normalize=True,
+        return_attention_mask=True,
     )
 
     model, _, _ = fairseq.checkpoint_utils.load_model_ensemble_and_task(

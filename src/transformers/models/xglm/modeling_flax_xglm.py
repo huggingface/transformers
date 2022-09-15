@@ -337,7 +337,9 @@ class FlaxXGLMDecoderLayer(nn.Module):
             self.encoder_attn_layer_norm = nn.LayerNorm(dtype=self.dtype, epsilon=1e-05)
 
         self.fc1 = nn.Dense(
-            self.config.ffn_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std),
+            self.config.ffn_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(self.config.init_std),
         )
         self.fc2 = nn.Dense(
             self.embed_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(self.config.init_std)
@@ -478,7 +480,9 @@ class FlaxXGLMModule(nn.Module):
         self.embed_scale = math.sqrt(self.config.d_model) if self.config.scale_embedding else 1.0
 
         self.embed_tokens = nn.Embed(
-            self.config.vocab_size, embed_dim, embedding_init=jax.nn.initializers.normal(self.config.init_std),
+            self.config.vocab_size,
+            embed_dim,
+            embedding_init=jax.nn.initializers.normal(self.config.init_std),
         )
 
         # XGLM is set up so that if padding_idx is specified then offset the embedding ids by 2

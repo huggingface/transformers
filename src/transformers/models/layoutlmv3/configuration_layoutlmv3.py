@@ -281,6 +281,13 @@ class LayoutLMv3OnnxConfig(OnnxConfig):
         # batch_size = compute_effective_axis_dimension(batch_size, fixed_dimension=OnnxConfig.default_fixed_batch)
         dummy_image = self._generate_dummy_images(batch_size, num_channels, image_height, image_width)
 
-        inputs = dict(processor(dummy_image, text=dummy_text, boxes=dummy_bboxes, return_tensors=framework,))
+        inputs = dict(
+            processor(
+                dummy_image,
+                text=dummy_text,
+                boxes=dummy_bboxes,
+                return_tensors=framework,
+            )
+        )
 
         return inputs

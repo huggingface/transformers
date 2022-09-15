@@ -501,7 +501,12 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         return {"start": start, "end": end, "example": example, **inputs}
 
     def postprocess(
-        self, model_outputs, top_k=1, handle_impossible_answer=False, max_answer_len=15, align_to_words=True,
+        self,
+        model_outputs,
+        top_k=1,
+        handle_impossible_answer=False,
+        max_answer_len=15,
+        align_to_words=True,
     ):
         min_null_score = 1000000  # large and positive
         answers = []

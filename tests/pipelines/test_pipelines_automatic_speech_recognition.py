@@ -141,7 +141,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
     @require_torch
     def test_small_model_pt_seq2seq(self):
-        speech_recognizer = pipeline(model="hf-internal-testing/tiny-random-speech-encoder-decoder", framework="pt",)
+        speech_recognizer = pipeline(
+            model="hf-internal-testing/tiny-random-speech-encoder-decoder",
+            framework="pt",
+        )
 
         waveform = np.tile(np.arange(1000, dtype=np.float32), 34)
         output = speech_recognizer(waveform)
@@ -358,7 +361,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @require_torch
     def test_chunking_fast(self):
         speech_recognizer = pipeline(
-            task="automatic-speech-recognition", model="hf-internal-testing/tiny-random-wav2vec2", chunk_length_s=10.0,
+            task="automatic-speech-recognition",
+            model="hf-internal-testing/tiny-random-wav2vec2",
+            chunk_length_s=10.0,
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -373,7 +378,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @require_torch
     def test_return_timestamps_ctc_fast(self):
         speech_recognizer = pipeline(
-            task="automatic-speech-recognition", model="hf-internal-testing/tiny-random-wav2vec2",
+            task="automatic-speech-recognition",
+            model="hf-internal-testing/tiny-random-wav2vec2",
         )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -415,7 +421,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @require_torch
     @require_pyctcdecode
     def test_chunking_fast_with_lm(self):
-        speech_recognizer = pipeline(model="hf-internal-testing/processor_with_lm", chunk_length_s=10.0,)
+        speech_recognizer = pipeline(
+            model="hf-internal-testing/processor_with_lm",
+            chunk_length_s=10.0,
+        )
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         audio = ds[40]["audio"]["array"]
@@ -440,7 +449,9 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @require_torch
     @require_pyctcdecode
     def test_with_lm_fast(self):
-        speech_recognizer = pipeline(model="hf-internal-testing/processor_with_lm",)
+        speech_recognizer = pipeline(
+            model="hf-internal-testing/processor_with_lm",
+        )
         self.assertEqual(speech_recognizer.type, "ctc_with_lm")
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -465,7 +476,10 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @require_pyctcdecode
     def test_with_local_lm_fast(self):
         local_dir = snapshot_download("hf-internal-testing/processor_with_lm")
-        speech_recognizer = pipeline(task="automatic-speech-recognition", model=local_dir,)
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model=local_dir,
+        )
         self.assertEqual(speech_recognizer.type, "ctc_with_lm")
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
@@ -693,7 +707,8 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @require_torch
     def test_stride(self):
         speech_recognizer = pipeline(
-            task="automatic-speech-recognition", model="hf-internal-testing/tiny-random-wav2vec2",
+            task="automatic-speech-recognition",
+            model="hf-internal-testing/tiny-random-wav2vec2",
         )
         waveform = np.tile(np.arange(1000, dtype=np.float32), 10)
         output = speech_recognizer({"raw": waveform, "stride": (0, 0), "sampling_rate": 16_000})

@@ -212,14 +212,18 @@ SUPPORTED_TASKS = {
         "impl": VisualQuestionAnsweringPipeline,
         "pt": (AutoModelForVisualQuestionAnswering,) if is_torch_available() else (),
         "tf": (),
-        "default": {"model": {"pt": ("dandelin/vilt-b32-finetuned-vqa", "4355f59")},},
+        "default": {
+            "model": {"pt": ("dandelin/vilt-b32-finetuned-vqa", "4355f59")},
+        },
         "type": "multimodal",
     },
     "document-question-answering": {
         "impl": DocumentQuestionAnsweringPipeline,
         "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
         "tf": (),
-        "default": {"model": {"pt": ("impira/layoutlm-document-qa", "52e01b3")},},
+        "default": {
+            "model": {"pt": ("impira/layoutlm-document-qa", "52e01b3")},
+        },
         "type": "multimodal",
     },
     "fill-mask": {
@@ -317,7 +321,10 @@ SUPPORTED_TASKS = {
         "tf": (TFAutoModelForVision2Seq,) if is_tf_available() else (),
         "pt": (AutoModelForVision2Seq,) if is_torch_available() else (),
         "default": {
-            "model": {"pt": ("ydshieh/vit-gpt2-coco-en", "65636df"), "tf": ("ydshieh/vit-gpt2-coco-en", "65636df"),}
+            "model": {
+                "pt": ("ydshieh/vit-gpt2-coco-en", "65636df"),
+                "tf": ("ydshieh/vit-gpt2-coco-en", "65636df"),
+            }
         },
         "type": "multimodal",
     },

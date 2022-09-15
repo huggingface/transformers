@@ -759,7 +759,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 trainer = Trainer(
                     model_init=lambda: DummyModel(num_params),
                     args=TrainingArguments(
-                        output_dir=tmpdir, **kwargs, seed=seed, data_seed=data_seed, local_rank=-1,
+                        output_dir=tmpdir,
+                        **kwargs,
+                        seed=seed,
+                        data_seed=data_seed,
+                        local_rank=-1,
                     ),
                     train_dataset=DummyDataset(),
                 )
@@ -1391,7 +1395,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         with tempfile.TemporaryDirectory() as tmpdir:
             trainer = get_regression_trainer(
-                output_dir=tmpdir, train_len=128, per_device_train_batch_size=4, save_steps=5, learning_rate=0.1,
+                output_dir=tmpdir,
+                train_len=128,
+                per_device_train_batch_size=4,
+                save_steps=5,
+                learning_rate=0.1,
             )
             trainer.model.a.requires_grad_(False)
             trainer.train()
@@ -1402,7 +1410,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # Reinitialize trainer
             trainer = get_regression_trainer(
-                output_dir=tmpdir, train_len=128, per_device_train_batch_size=4, save_steps=5, learning_rate=0.1,
+                output_dir=tmpdir,
+                train_len=128,
+                per_device_train_batch_size=4,
+                save_steps=5,
+                learning_rate=0.1,
             )
             trainer.model.a.requires_grad_(False)
 
@@ -1506,7 +1518,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         MODEL_ID = "distilroberta-base"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         dataset = LineByLineTextDataset(
-            tokenizer=tokenizer, file_path=PATH_SAMPLE_TEXT, block_size=tokenizer.max_len_single_sentence,
+            tokenizer=tokenizer,
+            file_path=PATH_SAMPLE_TEXT,
+            block_size=tokenizer.max_len_single_sentence,
         )
         self.assertEqual(len(dataset), 31)
 
@@ -1997,7 +2011,9 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
     def test_push_to_hub(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
-                output_dir=os.path.join(tmp_dir, "test-trainer"), push_to_hub=True, hub_token=self._token,
+                output_dir=os.path.join(tmp_dir, "test-trainer"),
+                push_to_hub=True,
+                hub_token=self._token,
             )
             url = trainer.push_to_hub()
 
@@ -2036,7 +2052,12 @@ class TrainerIntegrationWithHubTester(unittest.TestCase):
 
     def get_commit_history(self, repo):
         commit_logs = subprocess.run(
-            "git log".split(), stderr=subprocess.PIPE, stdout=subprocess.PIPE, check=True, encoding="utf-8", cwd=repo,
+            "git log".split(),
+            stderr=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            check=True,
+            encoding="utf-8",
+            cwd=repo,
         ).stdout
         commits = commit_logs.split("\n\n")[1::2]
         return [commit.strip() for commit in commits]
@@ -2262,25 +2283,53 @@ if is_torch_available():
     }
 
     optim_test_params = [
-        (OptimizerNames.ADAMW_HF, transformers.optimization.AdamW, default_adam_kwargs,),
-        (OptimizerNames.ADAMW_HF.value, transformers.optimization.AdamW, default_adam_kwargs,),
-        (OptimizerNames.ADAMW_TORCH, torch.optim.AdamW, default_adam_kwargs,),
+        (
+            OptimizerNames.ADAMW_HF,
+            transformers.optimization.AdamW,
+            default_adam_kwargs,
+        ),
+        (
+            OptimizerNames.ADAMW_HF.value,
+            transformers.optimization.AdamW,
+            default_adam_kwargs,
+        ),
+        (
+            OptimizerNames.ADAMW_TORCH,
+            torch.optim.AdamW,
+            default_adam_kwargs,
+        ),
         (
             OptimizerNames.ADAFACTOR,
             transformers.optimization.Adafactor,
-            {"scale_parameter": False, "relative_step": False, "lr": TrainingArguments.learning_rate,},
+            {
+                "scale_parameter": False,
+                "relative_step": False,
+                "lr": TrainingArguments.learning_rate,
+            },
         ),
     ]
 
     if is_apex_available():
         import apex
 
-        optim_test_params.append((OptimizerNames.ADAMW_APEX_FUSED, apex.optimizers.FusedAdam, default_adam_kwargs,))
+        optim_test_params.append(
+            (
+                OptimizerNames.ADAMW_APEX_FUSED,
+                apex.optimizers.FusedAdam,
+                default_adam_kwargs,
+            )
+        )
 
     if is_bitsandbytes_available():
         import bitsandbytes as bnb
 
-        optim_test_params.append((OptimizerNames.ADAMW_BNB, bnb.optim.Adam8bit, default_adam_kwargs,))
+        optim_test_params.append(
+            (
+                OptimizerNames.ADAMW_BNB,
+                bnb.optim.Adam8bit,
+                default_adam_kwargs,
+            )
+        )
 
 
 @require_torch
@@ -2317,7 +2366,9 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         }
         with patch.dict("sys.modules", modules):
             self.check_optim_and_kwargs(
-                OptimizerNames.ADAMW_APEX_FUSED, default_adam_kwargs, mock.optimizers.FusedAdam,
+                OptimizerNames.ADAMW_APEX_FUSED,
+                default_adam_kwargs,
+                mock.optimizers.FusedAdam,
             )
 
     def test_fused_adam_no_apex(self):
@@ -2342,7 +2393,9 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
         }
         with patch.dict("sys.modules", modules):
             self.check_optim_and_kwargs(
-                OptimizerNames.ADAMW_BNB, default_adam_kwargs, mock.optim.Adam8bit,
+                OptimizerNames.ADAMW_BNB,
+                default_adam_kwargs,
+                mock.optim.Adam8bit,
             )
 
     def test_bnb_adam8bit_no_bnb(self):

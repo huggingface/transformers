@@ -105,7 +105,8 @@ class M2M100TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
 
         self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(tokens), [2, 3, 4, 5, 6],
+            tokenizer.convert_tokens_to_ids(tokens),
+            [2, 3, 4, 5, 6],
         )
 
         back_tokens = tokenizer.convert_ids_to_tokens([2, 3, 4, 5, 6])

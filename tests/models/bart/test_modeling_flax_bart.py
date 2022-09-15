@@ -642,26 +642,36 @@ class FlaxBartModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationT
 
         self.assertEqual(1024, dct["input_ids"].shape[1])
         hypotheses_batch = model.generate(
-            input_ids=dct["input_ids"], attention_mask=dct["attention_mask"], num_beams=2,
+            input_ids=dct["input_ids"],
+            attention_mask=dct["attention_mask"],
+            num_beams=2,
         ).sequences
         assert (hypotheses_batch[:, 1] == 0).all().item()
 
         EXPECTED = [
-            "A French prosecutor says he is not aware of any video footage from on board the plane. Two German"
-            " magazines claim to have found a cell phone video showing the crash. The publications say they"
-            " watched the video, which was found by a source close to the investigation. All 150 on board the"
-            " Germanwings flight were killed.",
-            "Palestinian Authority becomes 123rd member of the International Criminal Court. The move gives the"
-            " court jurisdiction over alleged crimes in Palestinian territories. Israel and the United States"
-            " opposed the Palestinians' efforts to join the body. But Palestinian Foreign Minister Riad al-Malki"
-            " said it was a move toward greater justice.",
-            "U.S. and its negotiating partners reached a strong framework agreement with Iran. Peter Bergen: The"
-            " debate that has already begun will likely result in more heat than light. Bergen: The most"
-            " misleading assertion is that the negotiations' objective at the outset was the total elimination of"
-            " any nuclear program.",
-            "Liana Barrientos, 39, has been married 10 times, sometimes within two weeks of each other."
-            " Prosecutors say the marriages were part of an immigration scam. She pleaded not guilty at State"
-            " Supreme Court in the Bronx on Friday. If convicted, Barrientos faces up to four years in prison.",
+            (
+                "A French prosecutor says he is not aware of any video footage from on board the plane. Two German"
+                " magazines claim to have found a cell phone video showing the crash. The publications say they"
+                " watched the video, which was found by a source close to the investigation. All 150 on board the"
+                " Germanwings flight were killed."
+            ),
+            (
+                "Palestinian Authority becomes 123rd member of the International Criminal Court. The move gives the"
+                " court jurisdiction over alleged crimes in Palestinian territories. Israel and the United States"
+                " opposed the Palestinians' efforts to join the body. But Palestinian Foreign Minister Riad al-Malki"
+                " said it was a move toward greater justice."
+            ),
+            (
+                "U.S. and its negotiating partners reached a strong framework agreement with Iran. Peter Bergen: The"
+                " debate that has already begun will likely result in more heat than light. Bergen: The most"
+                " misleading assertion is that the negotiations' objective at the outset was the total elimination of"
+                " any nuclear program."
+            ),
+            (
+                "Liana Barrientos, 39, has been married 10 times, sometimes within two weeks of each other."
+                " Prosecutors say the marriages were part of an immigration scam. She pleaded not guilty at State"
+                " Supreme Court in the Bronx on Friday. If convicted, Barrientos faces up to four years in prison."
+            ),
         ]
 
         generated_summaries = tokenizer.batch_decode(

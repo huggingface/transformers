@@ -123,7 +123,14 @@ class SplinterModelTester:
         return (config, input_ids, token_type_ids, input_mask, start_positions, end_positions, question_positions)
 
     def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, start_positions, end_positions, question_positions,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        start_positions,
+        end_positions,
+        question_positions,
     ):
         model = SplinterModel(config=config)
         model.to(torch_device)
@@ -134,7 +141,14 @@ class SplinterModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_question_answering(
-        self, config, input_ids, token_type_ids, input_mask, start_positions, end_positions, question_positions,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        start_positions,
+        end_positions,
+        question_positions,
     ):
         model = SplinterForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -150,7 +164,14 @@ class SplinterModelTester:
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def create_and_check_for_pretraining(
-        self, config, input_ids, token_type_ids, input_mask, start_positions, end_positions, question_positions,
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        start_positions,
+        end_positions,
+        question_positions,
     ):
         model = SplinterForPreTraining(config=config)
         model.to(torch_device)
@@ -188,7 +209,13 @@ class SplinterModelTester:
 @require_torch
 class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (SplinterModel, SplinterForQuestionAnswering, SplinterForPreTraining,) if is_torch_available() else ()
+        (
+            SplinterModel,
+            SplinterForQuestionAnswering,
+            SplinterForPreTraining,
+        )
+        if is_torch_available()
+        else ()
     )
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
@@ -378,7 +405,9 @@ class SplinterModelIntegrationTest(unittest.TestCase):
         end_positions = torch.tensor([7, 12], dtype=torch.long)
         with self.assertRaises(TypeError):
             model(
-                input_ids, start_positions=start_positions, end_positions=end_positions,
+                input_ids,
+                start_positions=start_positions,
+                end_positions=end_positions,
             )
 
     @slow
@@ -411,7 +440,9 @@ class SplinterModelIntegrationTest(unittest.TestCase):
         # Input: "[CLS] [QUESTION] was born in [QUESTION] . Brad returned to the United Kingdom later . [SEP]"
         # Output should be the spans "Brad" and "the United Kingdom"
         input_ids = torch.tensor(
-            [[101, 104, 1108, 1255, 1107, 104, 119, 7796, 1608, 1106, 1103, 1244, 2325, 1224, 119, 102],]
+            [
+                [101, 104, 1108, 1255, 1107, 104, 119, 7796, 1608, 1106, 1103, 1244, 2325, 1224, 119, 102],
+            ]
         )
         start_positions = torch.tensor([[7, 10]], dtype=torch.long)
         end_positions = torch.tensor([7, 12], dtype=torch.long)

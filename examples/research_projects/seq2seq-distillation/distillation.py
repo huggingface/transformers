@@ -177,7 +177,9 @@ class SummarizationDistiller(SummarizationModule):
         hid_loss_enc, hid_loss_dec = zero_tensor(), zero_tensor()
         if self.different_encoder:  # compute encoder hidden state loss
             all_teacher_encoder_outputs = self.teacher.get_encoder()(
-                input_ids, attention_mask=src_mask, output_hidden_states=self.do_calc_hidden_loss,
+                input_ids,
+                attention_mask=src_mask,
+                output_hidden_states=self.do_calc_hidden_loss,
             )
             if self.different_base_models:
                 teacher_enc_outputs = all_teacher_encoder_outputs["last_hidden_state"]

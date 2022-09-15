@@ -88,10 +88,16 @@ class OnnxConfig(ABC):
         "masked-lm": OrderedDict({"logits": {0: "batch", 1: "sequence"}}),
         "multiple-choice": OrderedDict({"logits": {0: "batch"}}),
         "object-detection": OrderedDict(
-            {"logits": {0: "batch", 1: "sequence"}, "pred_boxes": {0: "batch", 1: "sequence"},}
+            {
+                "logits": {0: "batch", 1: "sequence"},
+                "pred_boxes": {0: "batch", 1: "sequence"},
+            }
         ),
         "question-answering": OrderedDict(
-            {"start_logits": {0: "batch", 1: "sequence"}, "end_logits": {0: "batch", 1: "sequence"},}
+            {
+                "start_logits": {0: "batch", 1: "sequence"},
+                "end_logits": {0: "batch", 1: "sequence"},
+            }
         ),
         "semantic-segmentation": OrderedDict({"logits": {0: "batch", 1: "num_labels", 2: "height", 3: "width"}}),
         "seq2seq-lm": OrderedDict({"logits": {0: "batch", 1: "decoder_sequence"}}),

@@ -405,11 +405,17 @@ class Message:
 
         error_block_1 = {
             "type": "header",
-            "text": {"type": "plain_text", "text": text,},
+            "text": {
+                "type": "plain_text",
+                "text": text,
+            },
         }
         error_block_2 = {
             "type": "section",
-            "text": {"type": "plain_text", "text": "🙏 Let's fix it ASAP! 🙏",},
+            "text": {
+                "type": "plain_text",
+                "text": "🙏 Let's fix it ASAP! 🙏",
+            },
             "accessory": {
                 "type": "button",
                 "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
@@ -424,7 +430,9 @@ class Message:
         print(json.dumps({"blocks": blocks}))
 
         client.chat_postMessage(
-            channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"], text=text, blocks=payload,
+            channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
+            text=text,
+            blocks=payload,
         )
 
     def post(self):
@@ -434,7 +442,9 @@ class Message:
         text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
 
         self.thread_ts = client.chat_postMessage(
-            channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"], blocks=self.payload, text=text,
+            channel=os.environ["CI_SLACK_REPORT_CHANNEL_ID"],
+            blocks=self.payload,
+            text=text,
         )
 
     def get_reply_blocks(self, job_name, job_result, failures, device, text):

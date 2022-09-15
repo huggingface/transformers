@@ -36,7 +36,9 @@ PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "facebook/xglm-564M": "https://huggingface.co/facebook/xglm-564M/resolve/main/sentencepiece.bpe.model",
     },
-    "tokenizer_file": {"facebook/xglm-564M": "https://huggingface.co/facebook/xglm-564M/resolve/main/tokenizer.json",},
+    "tokenizer_file": {
+        "facebook/xglm-564M": "https://huggingface.co/facebook/xglm-564M/resolve/main/tokenizer.json",
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {

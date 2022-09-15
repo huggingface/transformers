@@ -172,20 +172,34 @@ class FlaxMultiHeadSelfAttention(nn.Module):
             raise ValueError(f"Hidden size {self.dim} not dividable by number of heads {self.n_heads}")
 
         self.q_lin = nn.Dense(
-            self.dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            self.dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
         self.k_lin = nn.Dense(
-            self.dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            self.dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
         self.v_lin = nn.Dense(
-            self.dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            self.dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
         self.out_lin = nn.Dense(
-            self.dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
+            self.dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
 
     def __call__(
-        self, query, key, value, mask, deterministic: bool = True, output_attentions: bool = False,
+        self,
+        query,
+        key,
+        value,
+        mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
     ):
         bs, q_len, dim = query.shape
         k_len = key.shape[1]
@@ -273,7 +287,11 @@ class FlaxTransformerBlock(nn.Module):
         self.output_layer_norm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
 
     def __call__(
-        self, hidden_states, attn_mask, output_attentions: bool = False, deterministic: bool = True,
+        self,
+        hidden_states,
+        attn_mask,
+        output_attentions: bool = False,
+        deterministic: bool = True,
     ):
         # Self-Attention
         sa_output = self.attention(
@@ -533,7 +551,10 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
         )
         self.vocab_layer_norm = nn.LayerNorm(epsilon=1e-12, dtype=self.dtype)
         if self.config.tie_word_embeddings:
-            self.vocab_projector = FlaxDistilBertLMDecoder(self.config, dtype=self.dtype,)
+            self.vocab_projector = FlaxDistilBertLMDecoder(
+                self.config,
+                dtype=self.dtype,
+            )
         else:
             self.vocab_projector = nn.Dense(
                 self.config.vocab_size,
@@ -576,7 +597,9 @@ class FlaxDistilBertForMaskedLMModule(nn.Module):
             return output
 
         return FlaxMaskedLMOutput(
-            logits=prediction_logits, hidden_states=dlbrt_output.hidden_states, attentions=dlbrt_output.attentions,
+            logits=prediction_logits,
+            hidden_states=dlbrt_output.hidden_states,
+            attentions=dlbrt_output.attentions,
         )
 
 
@@ -602,7 +625,10 @@ class FlaxDistilBertForSequenceClassificationModule(nn.Module):
             kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
         self.dropout = nn.Dropout(rate=self.config.seq_classif_dropout)
-        self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype,)
+        self.classifier = nn.Dense(
+            self.config.num_labels,
+            dtype=self.dtype,
+        )
 
     def __call__(
         self,
@@ -634,7 +660,9 @@ class FlaxDistilBertForSequenceClassificationModule(nn.Module):
             return (logits,) + distilbert_output[1:]
 
         return FlaxSequenceClassifierOutput(
-            logits=logits, hidden_states=distilbert_output.hidden_states, attentions=distilbert_output.attentions,
+            logits=logits,
+            hidden_states=distilbert_output.hidden_states,
+            attentions=distilbert_output.attentions,
         )
 
 
@@ -670,7 +698,10 @@ class FlaxDistilBertForMultipleChoiceModule(nn.Module):
             kernel_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
         )
         self.dropout = nn.Dropout(rate=self.config.seq_classif_dropout)
-        self.classifier = nn.Dense(1, dtype=self.dtype,)
+        self.classifier = nn.Dense(
+            1,
+            dtype=self.dtype,
+        )
 
     def __call__(
         self,
@@ -709,7 +740,9 @@ class FlaxDistilBertForMultipleChoiceModule(nn.Module):
             return (reshaped_logits,) + outputs[2:]
 
         return FlaxMultipleChoiceModelOutput(
-            logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -773,7 +806,9 @@ class FlaxDistilBertForTokenClassificationModule(nn.Module):
             return (logits,) + outputs[1:]
 
         return FlaxTokenClassifierOutput(
-            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

@@ -154,7 +154,8 @@ class PreprocessingArguments:
         default=0.7, metadata={"help": "Probability for filtering config, test and uncommon files."}
     )
     tokenizer: Optional[str] = field(
-        default="codeparrot/codeparrot", metadata={"help": "Name or path to the tokenizer."},
+        default="codeparrot/codeparrot",
+        metadata={"help": "Name or path to the tokenizer."},
     )
     near_deduplication: Optional[bool] = field(
         default=False, metadata={"help": "If True, near-duplicate samples are removed."}

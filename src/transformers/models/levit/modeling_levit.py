@@ -174,7 +174,7 @@ class LevitAttention(nn.Module):
     def __init__(self, hidden_sizes, key_dim, num_attention_heads, attention_ratio, resolution):
         super().__init__()
         self.num_attention_heads = num_attention_heads
-        self.scale = key_dim ** -0.5
+        self.scale = key_dim**-0.5
         self.key_dim = key_dim
         self.attention_ratio = attention_ratio
         self.out_dim_keys_values = attention_ratio * key_dim * num_attention_heads + key_dim * num_attention_heads * 2
@@ -244,7 +244,7 @@ class LevitAttentionSubsample(nn.Module):
     ):
         super().__init__()
         self.num_attention_heads = num_attention_heads
-        self.scale = key_dim ** -0.5
+        self.scale = key_dim**-0.5
         self.key_dim = key_dim
         self.attention_ratio = attention_ratio
         self.out_dim_keys_values = attention_ratio * key_dim * num_attention_heads + key_dim * num_attention_heads
@@ -300,7 +300,7 @@ class LevitAttentionSubsample(nn.Module):
         value = value.permute(0, 2, 1, 3)
 
         query = self.queries(self.queries_subsample(hidden_state))
-        query = query.view(batch_size, self.resolution_out ** 2, self.num_attention_heads, self.key_dim).permute(
+        query = query.view(batch_size, self.resolution_out**2, self.num_attention_heads, self.key_dim).permute(
             0, 2, 1, 3
         )
 
@@ -535,7 +535,8 @@ LEVIT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Levit model outputting raw features without any specific head on top.", LEVIT_START_DOCSTRING,
+    "The bare Levit model outputting raw features without any specific head on top.",
+    LEVIT_START_DOCSTRING,
 )
 class LevitModel(LevitPreTrainedModel):
     def __init__(self, config):
@@ -570,7 +571,11 @@ class LevitModel(LevitPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         embeddings = self.patch_embeddings(pixel_values)
-        encoder_outputs = self.encoder(embeddings, output_hidden_states=output_hidden_states, return_dict=return_dict,)
+        encoder_outputs = self.encoder(
+            embeddings,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         last_hidden_state = encoder_outputs[0]
 
@@ -666,7 +671,11 @@ class LevitForImageClassification(LevitPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states,)
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+        )
 
 
 @add_start_docstrings(

@@ -48,7 +48,8 @@ ROBERTA_TINY = "sshleifer/tiny-distilroberta-base"
 
 class RobertaModelTester:
     def __init__(
-        self, parent,
+        self,
+        parent,
     ):
         self.parent = parent
         self.batch_size = 13

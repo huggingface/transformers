@@ -250,7 +250,11 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
     @add_start_docstrings_to_model_forward(VISION_TEXT_DUAL_ENCODER_VISION_INPUTS_DOCSTRING)
     def get_image_features(
-        self, pixel_values=None, output_attentions=None, output_hidden_states=None, return_dict=None,
+        self,
+        pixel_values=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
     ):
         r"""
         Returns:
@@ -409,7 +413,11 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
     @classmethod
     def from_vision_text_pretrained(
-        cls, vision_model_name_or_path: str = None, text_model_name_or_path: str = None, *model_args, **kwargs,
+        cls,
+        vision_model_name_or_path: str = None,
+        text_model_name_or_path: str = None,
+        *model_args,
+        **kwargs,
     ) -> PreTrainedModel:
         """
         Params:

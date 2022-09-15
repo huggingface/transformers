@@ -1275,7 +1275,8 @@ class QDQBertForMaskedLM(QDQBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Bert Model with a `next sentence prediction (classification)` head on top.""", QDQBERT_START_DOCSTRING,
+    """Bert Model with a `next sentence prediction (classification)` head on top.""",
+    QDQBERT_START_DOCSTRING,
 )
 class QDQBertForNextSentencePrediction(QDQBertPreTrainedModel):
     def __init__(self, config):
@@ -1465,7 +1466,10 @@ class QDQBertForSequenceClassification(QDQBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1554,7 +1558,10 @@ class QDQBertForMultipleChoice(QDQBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1632,7 +1639,10 @@ class QDQBertForTokenClassification(QDQBertPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

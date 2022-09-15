@@ -257,7 +257,10 @@ class ConvNextEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states] if v is not None)
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_states, hidden_states=all_hidden_states,)
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+        )
 
 
 class ConvNextPreTrainedModel(PreTrainedModel):
@@ -314,7 +317,8 @@ CONVNEXT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare ConvNext model outputting raw features without any specific head on top.", CONVNEXT_START_DOCSTRING,
+    "The bare ConvNext model outputting raw features without any specific head on top.",
+    CONVNEXT_START_DOCSTRING,
 )
 class ConvNextModel(ConvNextPreTrainedModel):
     def __init__(self, config):
@@ -356,7 +360,9 @@ class ConvNextModel(ConvNextPreTrainedModel):
         embedding_output = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
-            embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict,
+            embedding_output,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         last_hidden_state = encoder_outputs[0]
@@ -451,4 +457,8 @@ class ConvNextForImageClassification(ConvNextPreTrainedModel):
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(loss=loss, logits=logits, hidden_states=outputs.hidden_states,)
+        return ImageClassifierOutputWithNoAttention(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+        )

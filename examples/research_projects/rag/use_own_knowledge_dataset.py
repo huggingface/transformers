@@ -160,7 +160,8 @@ class RagExampleArguments:
         },
     )
     output_dir: Optional[str] = field(
-        default=None, metadata={"help": "Path to a directory where the dataset passages and the index will be saved"},
+        default=None,
+        metadata={"help": "Path to a directory where the dataset passages and the index will be saved"},
     )
 
 
@@ -183,7 +184,8 @@ class ProcessingArguments:
 @dataclass
 class IndexHnswArguments:
     d: int = field(
-        default=768, metadata={"help": "The dimension of the embeddings to pass to the HNSW Faiss index."},
+        default=768,
+        metadata={"help": "The dimension of the embeddings to pass to the HNSW Faiss index."},
     )
     m: int = field(
         default=128,

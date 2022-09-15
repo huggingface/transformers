@@ -154,11 +154,17 @@ class SingleImageViz:
         font_size *= 0.75 * self.font_size
 
         self.draw_text(
-            text=label, position=text_pos, color=lighter_color,
+            text=label,
+            position=text_pos,
+            color=lighter_color,
         )
 
     def draw_text(
-        self, text, position, color="g", ha="left",
+        self,
+        text,
+        position,
+        color="g",
+        ha="left",
     ):
         rotation = 0
         font_size = self.font_size
@@ -190,7 +196,8 @@ class SingleImageViz:
             saveas = self.saveas
         if saveas.lower().endswith(".jpg") or saveas.lower().endswith(".png"):
             cv2.imwrite(
-                saveas, self._get_buffer()[:, :, ::-1],
+                saveas,
+                self._get_buffer()[:, :, ::-1],
             )
         else:
             self.fig.savefig(saveas)

@@ -374,7 +374,11 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast.batch_encode_plus
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[List[TextInput], List[TextInputPair], List[PreTokenizedInput],],
+        batch_text_or_text_pairs: Union[
+            List[TextInput],
+            List[TextInputPair],
+            List[PreTokenizedInput],
+        ],
         is_pair: bool = None,
         boxes: Optional[List[List[List[int]]]] = None,
         word_labels: Optional[Union[List[int], List[List[int]]]] = None,
@@ -506,7 +510,11 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
     # Copied from transformers.models.layoutlmv2.tokenization_layoutlmv2_fast.LayoutLMv2TokenizerFast._batch_encode_plus with LayoutLMv2->LayoutLMv3
     def _batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[List[TextInput], List[TextInputPair], List[PreTokenizedInput],],
+        batch_text_or_text_pairs: Union[
+            List[TextInput],
+            List[TextInputPair],
+            List[PreTokenizedInput],
+        ],
         is_pair: bool = None,
         boxes: Optional[List[List[List[int]]]] = None,
         word_labels: Optional[List[List[int]]] = None,

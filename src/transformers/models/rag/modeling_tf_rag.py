@@ -1168,7 +1168,10 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
             return_dict=True,
         )
 
-        decoder_input_ids = tf.fill((batch_size * num_beams, 1), tf.cast(decoder_start_token_id, tf.int32),)
+        decoder_input_ids = tf.fill(
+            (batch_size * num_beams, 1),
+            tf.cast(decoder_start_token_id, tf.int32),
+        )
         last_hidden_state = encoder_outputs["last_hidden_state"]
 
         def extend_enc_output(tensor, num_beams=None):
@@ -1334,7 +1337,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         # Matt: As written, this loss is not XLA-compatible, but it's doing some very weird things
         #       and I don't feel comfortable converting it.
         loss_fn = tf.keras.losses.SparseCategoricalCrossentropy(
-            from_logits=True, reduction=tf.keras.losses.Reduction.SUM,
+            from_logits=True,
+            reduction=tf.keras.losses.Reduction.SUM,
         )
 
         if from_logits is False:  # convert to logits
@@ -1738,7 +1742,8 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
             generator_input_ids = context_input_ids[index * n_docs : (index + 1) * n_docs]  # (n_docs, max_len)
 
             output_sequences = self.generator.generate(
-                generator_input_ids, **model_kwargs,
+                generator_input_ids,
+                **model_kwargs,
             )  # n_docs * n_beam, tgt_len
             if do_deduplication:
                 # do_deduplication -- for TF, work on Eager mode only!

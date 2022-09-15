@@ -140,7 +140,12 @@ class FlaxT5ModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask,
+        self,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
     ):
         model = FlaxT5Model(config=config)
         result = model(
@@ -157,7 +162,13 @@ class FlaxT5ModelTester:
         self.parent.assertEqual(decoder_output.shape, (self.batch_size, self.decoder_seq_length, self.hidden_size))
 
     def check_use_cache_forward_with_attn_mask(
-        self, model_class_name, config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask,
+        self,
+        model_class_name,
+        config,
+        input_ids,
+        decoder_input_ids,
+        attention_mask,
+        decoder_attention_mask,
     ):
         max_decoder_length = 20
         model = model_class_name(config)
@@ -197,7 +208,13 @@ class FlaxT5ModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (config, input_ids, decoder_input_ids, attention_mask, decoder_attention_mask,) = config_and_inputs
+        (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+        ) = config_and_inputs
 
         inputs_dict = {
             "input_ids": input_ids,
@@ -524,10 +541,16 @@ class FlaxT5EncoderOnlyModelTester:
         )
 
     def create_and_check_model(
-        self, config, input_ids, attention_mask,
+        self,
+        config,
+        input_ids,
+        attention_mask,
     ):
         model = FlaxT5EncoderModel(config=config)
-        result = model(input_ids=input_ids, attention_mask=attention_mask,)
+        result = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
         result = model(input_ids=input_ids)
         encoder_output = result.last_hidden_state
 
@@ -535,7 +558,11 @@ class FlaxT5EncoderOnlyModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (config, input_ids, attention_mask,) = config_and_inputs
+        (
+            config,
+            input_ids,
+            attention_mask,
+        ) = config_and_inputs
 
         inputs_dict = {
             "input_ids": input_ids,
@@ -1028,20 +1055,28 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
         )
 
         expected_summaries = [
-            'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found'
-            " a cell phone video of the final seconds . \"one can hear cries of 'My God' in several languages,\""
-            " one magazine says . all 150 on board were killed when germanwings flight 9525 crashed .",
-            "the formal accession was marked by a ceremony at The Hague, in the Netherlands . the ICC opened a"
-            " preliminary examination into the situation in the occupied Palestinian territory . as members of the"
-            " court, Palestinians may be subject to counter-charges as well .",
-            "the u.s. and its negotiating partners reached a very strong framework agreement with Iran . aaron"
-            " miller: the debate that has already begun since the announcement of the new framework will likely"
-            " result in more heat than light . he says the new framework would reduce Iran's low-enriched uranium"
-            " stockpile and cut centrifuges . miller: if it had been, there would have been no Iranian team at the"
-            " table .",
-            "prosecutors say the marriages were part of an immigration scam . if convicted, barrientos faces two"
-            ' criminal counts of "offering a false instrument for filing in the first degree" she has been married'
-            " 10 times, with nine of her marriages occurring between 1999 and 2002 .",
+            (
+                'prosecutor: "so far no videos were used in the crash investigation" two magazines claim to have found'
+                " a cell phone video of the final seconds . \"one can hear cries of 'My God' in several languages,\""
+                " one magazine says . all 150 on board were killed when germanwings flight 9525 crashed ."
+            ),
+            (
+                "the formal accession was marked by a ceremony at The Hague, in the Netherlands . the ICC opened a"
+                " preliminary examination into the situation in the occupied Palestinian territory . as members of the"
+                " court, Palestinians may be subject to counter-charges as well ."
+            ),
+            (
+                "the u.s. and its negotiating partners reached a very strong framework agreement with Iran . aaron"
+                " miller: the debate that has already begun since the announcement of the new framework will likely"
+                " result in more heat than light . he says the new framework would reduce Iran's low-enriched uranium"
+                " stockpile and cut centrifuges . miller: if it had been, there would have been no Iranian team at the"
+                " table ."
+            ),
+            (
+                "prosecutors say the marriages were part of an immigration scam . if convicted, barrientos faces two"
+                ' criminal counts of "offering a false instrument for filing in the first degree" she has been married'
+                " 10 times, with nine of her marriages occurring between 1999 and 2002 ."
+            ),
         ]
 
         dct = tok(
@@ -1064,5 +1099,6 @@ class FlaxT5ModelIntegrationTests(unittest.TestCase):
 
         decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         self.assertListEqual(
-            expected_summaries, decoded,
+            expected_summaries,
+            decoded,
         )

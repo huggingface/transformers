@@ -139,7 +139,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
         self.check_model_type(dict(MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING.items() + MODEL_FOR_CTC_MAPPING.items()))
 
     def __call__(
-        self, inputs: Union[np.ndarray, bytes, str], **kwargs,
+        self,
+        inputs: Union[np.ndarray, bytes, str],
+        **kwargs,
     ):
         """
         Classify the sequence(s) given as inputs. See the [`AutomaticSpeechRecognitionPipeline`] documentation for more
@@ -304,7 +306,8 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
 
             attention_mask = model_inputs.pop("attention_mask", None)
             tokens = self.model.generate(
-                encoder_outputs=encoder(inputs, attention_mask=attention_mask), attention_mask=attention_mask,
+                encoder_outputs=encoder(inputs, attention_mask=attention_mask),
+                attention_mask=attention_mask,
             )
             out = {"tokens": tokens}
         else:

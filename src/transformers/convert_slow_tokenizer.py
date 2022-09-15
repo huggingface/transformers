@@ -99,7 +99,10 @@ class BertConverter(Converter):
         tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{cls}:0 $A:0 {sep}:0",
             pair=f"{cls}:0 $A:0 {sep}:0 $B:1 {sep}:1",
-            special_tokens=[(cls, cls_token_id), (sep, sep_token_id),],
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+            ],
         )
         tokenizer.decoder = decoders.WordPiece(prefix="##")
 
@@ -185,7 +188,10 @@ class FunnelConverter(Converter):
         tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{cls}:2 $A:0 {sep}:0",  # token_type_id is 2 for Funnel transformer
             pair=f"{cls}:2 $A:0 {sep}:0 $B:1 {sep}:1",
-            special_tokens=[(cls, cls_token_id), (sep, sep_token_id),],
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+            ],
         )
         tokenizer.decoder = decoders.WordPiece(prefix="##")
 
@@ -221,7 +227,10 @@ class MPNetConverter(Converter):
         tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{cls}:0 $A:0 {sep}:0",
             pair=f"{cls}:0 $A:0 {sep}:0 {sep}:0 $B:1 {sep}:1",  # MPNet uses two [SEP] tokens
-            special_tokens=[(cls, cls_token_id), (sep, sep_token_id),],
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+            ],
         )
         tokenizer.decoder = decoders.WordPiece(prefix="##")
 
@@ -279,7 +288,9 @@ class GPT2Converter(Converter):
             tokenizer.post_processor = processors.TemplateProcessing(
                 single=f"{bos}:0 $A:0",  # token_type_id is 2 for Funnel transformer
                 pair=f"{bos}:0 $A:0 $B:1",
-                special_tokens=[(bos, bos_token_id),],
+                special_tokens=[
+                    (bos, bos_token_id),
+                ],
             )
         else:
             # XXX trim_offsets=False actually means this post_processor doesn't
@@ -362,7 +373,10 @@ class RoFormerConverter(Converter):
             do_lower_case = self.original_tokenizer.basic_tokenizer.do_lower_case
 
         tokenizer.normalizer = normalizers.BertNormalizer(
-            clean_text=True, handle_chinese_chars=False, strip_accents=strip_accents, lowercase=do_lower_case,
+            clean_text=True,
+            handle_chinese_chars=False,
+            strip_accents=strip_accents,
+            lowercase=do_lower_case,
         )
         tokenizer.pre_tokenizer = pre_tokenizers.PreTokenizer.custom(JiebaPreTokenizer(vocab))
 
@@ -374,7 +388,10 @@ class RoFormerConverter(Converter):
         tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{cls}:0 $A:0 {sep}:0",
             pair=f"{cls}:0 $A:0 {sep}:0 $B:1 {sep}:1",
-            special_tokens=[(cls, cls_token_id), (sep, sep_token_id),],
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+            ],
         )
         tokenizer.decoder = decoders.WordPiece(prefix="##")
 
@@ -449,7 +466,14 @@ class SpmConverter(Converter):
         elif model_type == 2:
             _, merges = SentencePieceExtractor(self.original_tokenizer.vocab_file).extract()
             bpe_vocab = {word: i for i, (word, score) in enumerate(vocab)}
-            tokenizer = Tokenizer(BPE(bpe_vocab, merges, unk_token=proto.trainer_spec.unk_piece, fuse_unk=True,))
+            tokenizer = Tokenizer(
+                BPE(
+                    bpe_vocab,
+                    merges,
+                    unk_token=proto.trainer_spec.unk_piece,
+                    fuse_unk=True,
+                )
+            )
         else:
             raise Exception(
                 "You're trying to run a `Unigram` model but you're file was trained with a different algorithm"
@@ -861,7 +885,9 @@ class T5Converter(SpmConverter):
         return processors.TemplateProcessing(
             single=["$A", "</s>"],
             pair=["$A", "</s>", "$B", "</s>"],
-            special_tokens=[("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),],
+            special_tokens=[
+                ("</s>", self.original_tokenizer.convert_tokens_to_ids("</s>")),
+            ],
         )
 
 
@@ -949,7 +975,10 @@ class LayoutLMv2Converter(Converter):
         tokenizer.post_processor = processors.TemplateProcessing(
             single=f"{cls}:0 $A:0 {sep}:0",
             pair=f"{cls}:0 $A:0 {sep}:0 $B:1 {sep}:1",
-            special_tokens=[(cls, cls_token_id), (sep, sep_token_id),],
+            special_tokens=[
+                (cls, cls_token_id),
+                (sep, sep_token_id),
+            ],
         )
         tokenizer.decoder = decoders.WordPiece(prefix="##")
 
@@ -976,7 +1005,10 @@ class BlenderbotConverter(Converter):
         tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=ot.add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
         tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"$A:0 {ot.eos_token}:0", special_tokens=[(ot.eos_token, ot.eos_token_id),],
+            single=f"$A:0 {ot.eos_token}:0",
+            special_tokens=[
+                (ot.eos_token, ot.eos_token_id),
+            ],
         )
 
         return tokenizer

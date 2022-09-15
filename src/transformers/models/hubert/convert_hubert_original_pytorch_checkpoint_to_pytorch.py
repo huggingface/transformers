@@ -93,7 +93,11 @@ def recursively_load_weights(fairseq_model, hf_model, is_finetuned):
         is_used = False
         if "conv_layers" in name:
             load_conv_layer(
-                name, value, feature_extractor, unused_weights, hf_model.config.feat_extract_norm == "group",
+                name,
+                value,
+                feature_extractor,
+                unused_weights,
+                hf_model.config.feat_extract_norm == "group",
             )
             is_used = True
         else:

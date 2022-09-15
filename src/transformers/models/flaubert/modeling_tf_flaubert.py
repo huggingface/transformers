@@ -605,7 +605,13 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
             # self attention
             if not self.pre_norm:
                 attn_outputs = self.attentions[i](
-                    tensor, attn_mask, None, cache, head_mask[i], output_attentions, training=training,
+                    tensor,
+                    attn_mask,
+                    None,
+                    cache,
+                    head_mask[i],
+                    output_attentions,
+                    training=training,
                 )
                 attn = attn_outputs[0]
 
@@ -618,7 +624,13 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
             else:
                 tensor_normalized = self.layer_norm1[i](tensor)
                 attn_outputs = self.attentions[i](
-                    tensor_normalized, attn_mask, None, cache, head_mask[i], output_attentions, training=training,
+                    tensor_normalized,
+                    attn_mask,
+                    None,
+                    cache,
+                    head_mask[i],
+                    output_attentions,
+                    training=training,
                 )
                 attn = attn_outputs[0]
 

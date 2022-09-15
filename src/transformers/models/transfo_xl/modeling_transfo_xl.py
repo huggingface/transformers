@@ -260,7 +260,7 @@ class RelPartialLearnableMultiHeadAttn(nn.Module):
 
         self.layer_norm = nn.LayerNorm(d_model, eps=layer_norm_epsilon)
 
-        self.scale = 1 / (d_head ** 0.5)
+        self.scale = 1 / (d_head**0.5)
 
         self.pre_lnorm = pre_lnorm
 
@@ -383,7 +383,12 @@ class RelPartialLearnableDecoderLayer(nn.Module):
 
     def forward(self, dec_inp, r, dec_attn_mask=None, mems=None, head_mask=None, output_attentions=False):
         attn_outputs = self.dec_attn(
-            dec_inp, r, attn_mask=dec_attn_mask, mems=mems, head_mask=head_mask, output_attentions=output_attentions,
+            dec_inp,
+            r,
+            attn_mask=dec_attn_mask,
+            mems=mems,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
         )
         ff_output = self.pos_ff(attn_outputs[0])
 
@@ -403,7 +408,7 @@ class AdaptiveEmbedding(nn.Module):
         self.div_val = div_val
         self.d_proj = d_proj
 
-        self.emb_scale = d_proj ** 0.5
+        self.emb_scale = d_proj**0.5
 
         self.cutoff_ends = [0] + self.cutoffs
 
@@ -416,7 +421,7 @@ class AdaptiveEmbedding(nn.Module):
         else:
             for i in range(len(self.cutoffs)):
                 l_idx, r_idx = self.cutoff_ends[i], self.cutoff_ends[i + 1]
-                d_emb_i = d_embed // (div_val ** i)
+                d_emb_i = d_embed // (div_val**i)
                 self.emb_layers.append(nn.Embedding(r_idx - l_idx, d_emb_i))
                 self.emb_projs.append(nn.Parameter(torch.FloatTensor(d_proj, d_emb_i)))
 
@@ -984,7 +989,10 @@ class TransfoXLModel(TransfoXLPreTrainedModel):
             return tuple(v for v in [core_out, new_mems, hids, attentions] if v is not None)
 
         return TransfoXLModelOutput(
-            last_hidden_state=core_out, mems=new_mems, hidden_states=hids, attentions=attentions,
+            last_hidden_state=core_out,
+            mems=new_mems,
+            hidden_states=hids,
+            attentions=attentions,
         )
 
 

@@ -238,7 +238,11 @@ class MPNetAttention(nn.Module):
         **kwargs,
     ):
         self_outputs = self.attn(
-            hidden_states, attention_mask, head_mask, position_bias, output_attentions=output_attentions,
+            hidden_states,
+            attention_mask,
+            head_mask,
+            position_bias,
+            output_attentions=output_attentions,
         )
         attention_output = self.LayerNorm(self.dropout(self_outputs[0]) + hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -293,7 +297,11 @@ class MPNetLayer(nn.Module):
         **kwargs,
     ):
         self_attention_outputs = self.attention(
-            hidden_states, attention_mask, head_mask, position_bias=position_bias, output_attentions=output_attentions,
+            hidden_states,
+            attention_mask,
+            head_mask,
+            position_bias=position_bias,
+            output_attentions=output_attentions,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -349,7 +357,9 @@ class MPNetEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_attentions] if v is not None)
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_attentions,
         )
 
     def compute_position_bias(self, x, position_ids=None, num_buckets=32):
@@ -751,7 +761,10 @@ class MPNetForSequenceClassification(MPNetPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -839,7 +852,10 @@ class MPNetForMultipleChoice(MPNetPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
-            loss=loss, logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -917,7 +933,10 @@ class MPNetForTokenClassification(MPNetPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

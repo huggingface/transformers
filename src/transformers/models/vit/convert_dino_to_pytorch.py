@@ -61,7 +61,10 @@ def create_rename_keys(config, base_model=False):
     if base_model:
         # layernorm + pooler
         rename_keys.extend(
-            [("norm.weight", "layernorm.weight"), ("norm.bias", "layernorm.bias"),]
+            [
+                ("norm.weight", "layernorm.weight"),
+                ("norm.bias", "layernorm.bias"),
+            ]
         )
 
         # if just the base model, we should remove "vit" from all keys that start with "vit"

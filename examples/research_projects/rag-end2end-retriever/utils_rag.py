@@ -33,7 +33,9 @@ def encode_line(tokenizer, line, max_length, padding_side, pad_to_max_length=Tru
 
 
 def trim_batch(
-    input_ids, pad_token_id, attention_mask=None,
+    input_ids,
+    pad_token_id,
+    attention_mask=None,
 ):
     """Remove columns that are populated exclusively by pad_token_id"""
     keep_column_mask = input_ids.ne(pad_token_id).any(dim=0)

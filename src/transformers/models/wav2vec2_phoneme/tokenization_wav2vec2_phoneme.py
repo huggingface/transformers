@@ -263,7 +263,10 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
             phonemizer_lang = self.phonemizer_lang
 
         separator = Separator(phone=self.phone_delimiter_token, word=word_delimiter, syllable="")
-        phonemes = self.backend.phonemize([text], separator=separator,)
+        phonemes = self.backend.phonemize(
+            [text],
+            separator=separator,
+        )
         phonemes = phonemes[0].strip()
 
         return phonemes

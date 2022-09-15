@@ -80,7 +80,11 @@ def recursively_load_weights(fairseq_model, hf_model):
         is_used = False
         if "conv_layers" in name:
             load_conv_layer(
-                name, value, feature_extractor, unused_weights, hf_model.config.feat_extract_norm == "group",
+                name,
+                value,
+                feature_extractor,
+                unused_weights,
+                hf_model.config.feat_extract_norm == "group",
             )
             is_used = True
         else:
@@ -197,7 +201,11 @@ def convert_hubert_checkpoint(pytorch_dump_folder_path, config_path=None):
     model = model.eval()
 
     feature_extractor = Wav2Vec2FeatureExtractor(
-        feature_size=1, sampling_rate=16000, padding_value=0, do_normalize=False, return_attention_mask=False,
+        feature_size=1,
+        sampling_rate=16000,
+        padding_value=0,
+        do_normalize=False,
+        return_attention_mask=False,
     )
     hf_model = HubertModel(config)
 

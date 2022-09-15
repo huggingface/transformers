@@ -20,7 +20,13 @@ class FSNERTokenizerUtils(object):
         if isinstance(x, list) and all([isinstance(_x, list) for _x in x]):
             d = None
             for l in x:
-                t = self.tokenizer(l, padding="max_length", max_length=384, truncation=True, return_tensors="pt",)
+                t = self.tokenizer(
+                    l,
+                    padding="max_length",
+                    max_length=384,
+                    truncation=True,
+                    return_tensors="pt",
+                )
                 t["sizes"] = torch.tensor([len(l)])
                 if d is not None:
                     for k in d.keys():
@@ -32,7 +38,13 @@ class FSNERTokenizerUtils(object):
             d["end_token_id"] = torch.tensor(self.tokenizer.convert_tokens_to_ids("[/E]"))
 
         elif isinstance(x, list) and all([isinstance(_x, str) for _x in x]):
-            d = self.tokenizer(x, padding="max_length", max_length=384, truncation=True, return_tensors="pt",)
+            d = self.tokenizer(
+                x,
+                padding="max_length",
+                max_length=384,
+                truncation=True,
+                return_tensors="pt",
+            )
 
         else:
             raise Exception(
@@ -68,7 +80,14 @@ class FSNERTokenizerUtils(object):
             for start_id in start_indexes:
                 for end_id in end_indexes:
                     if start_id < end_id:
-                        output.append((start_id, end_id, p_start[idx][start_id].item(), p_end[idx][end_id].item(),))
+                        output.append(
+                            (
+                                start_id,
+                                end_id,
+                                p_start[idx][start_id].item(),
+                                p_end[idx][end_id].item(),
+                            )
+                        )
 
             output.sort(key=lambda tup: (tup[2] * tup[3]), reverse=True)
             temp = []

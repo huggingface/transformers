@@ -48,7 +48,11 @@ class ImageToTextPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta
     def run_pipeline_test(self, pipe, examples):
         outputs = pipe(examples)
         self.assertEqual(
-            outputs, [[{"generated_text": ANY(str)}], [{"generated_text": ANY(str)}],],
+            outputs,
+            [
+                [{"generated_text": ANY(str)}],
+                [{"generated_text": ANY(str)}],
+            ],
         )
 
     @require_tf

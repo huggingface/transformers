@@ -114,7 +114,11 @@ class FakeRegNetVisslWrapper(nn.Module):
         self._feature_blocks = nn.ModuleDict(feature_blocks)
 
     def forward(self, x: Tensor):
-        return get_trunk_forward_outputs(x, out_feat_keys=None, feature_blocks=self._feature_blocks,)
+        return get_trunk_forward_outputs(
+            x,
+            out_feat_keys=None,
+            feature_blocks=self._feature_blocks,
+        )
 
 
 class NameToFromModelFuncMap(dict):
@@ -198,14 +202,18 @@ def convert_weight_and_push(
 
     if push_to_hub:
         our_model.push_to_hub(
-            repo_path_or_name=save_directory / name, commit_message="Add model", use_temp_dir=True,
+            repo_path_or_name=save_directory / name,
+            commit_message="Add model",
+            use_temp_dir=True,
         )
 
         size = 224 if "seer" not in name else 384
         # we can use the convnext one
         feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
         feature_extractor.push_to_hub(
-            repo_path_or_name=save_directory / name, commit_message="Add feature extractor", use_temp_dir=True,
+            repo_path_or_name=save_directory / name,
+            commit_message="Add feature extractor",
+            use_temp_dir=True,
         )
 
         print(f"Pushed {name}")

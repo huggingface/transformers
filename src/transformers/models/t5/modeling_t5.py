@@ -799,8 +799,8 @@ class T5PreTrainedModel(PreTrainedModel):
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
             module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
+            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
             module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
@@ -1266,7 +1266,8 @@ num_heads)`.
 
 
 @add_start_docstrings(
-    "The bare T5 Model transformer outputting raw hidden-states without any specific head on top.", T5_START_DOCSTRING,
+    "The bare T5 Model transformer outputting raw hidden-states without any specific head on top.",
+    T5_START_DOCSTRING,
 )
 class T5Model(T5PreTrainedModel):
     _keys_to_ignore_on_load_missing = [
@@ -1668,7 +1669,7 @@ class T5ForConditionalGeneration(T5PreTrainedModel):
         if self.config.tie_word_embeddings:
             # Rescale output before projecting on vocab
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-            sequence_output = sequence_output * (self.model_dim ** -0.5)
+            sequence_output = sequence_output * (self.model_dim**-0.5)
 
         lm_logits = self.lm_head(sequence_output)
 

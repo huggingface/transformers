@@ -662,7 +662,12 @@ class LongT5LocalAttention(nn.Module):
         return values
 
     def forward(
-        self, hidden_states, mask=None, position_bias=None, layer_head_mask=None, output_attentions=False,
+        self,
+        hidden_states,
+        mask=None,
+        position_bias=None,
+        layer_head_mask=None,
+        output_attentions=False,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
 
@@ -873,7 +878,12 @@ class LongT5TransientGlobalAttention(nn.Module):
         return attention_side_bias
 
     def forward(
-        self, hidden_states, mask=None, position_bias=None, layer_head_mask=None, output_attentions=False,
+        self,
+        hidden_states,
+        mask=None,
+        position_bias=None,
+        layer_head_mask=None,
+        output_attentions=False,
     ):
         batch_size, seq_length = hidden_states.shape[:2]
 
@@ -890,7 +900,8 @@ class LongT5TransientGlobalAttention(nn.Module):
         # global_seq_len := seq_len // self.global_block_size
         # shapes: (batch_size, seq_len) & (batch_size, global_seq_len)
         block_ids, global_segment_ids = _make_global_fixed_block_ids(
-            mask if mask is not None else torch.ones(hidden_states.shape[:-1]), self.global_block_size,
+            mask if mask is not None else torch.ones(hidden_states.shape[:-1]),
+            self.global_block_size,
         )
         # Create global inputs
         _global_seq_len = global_segment_ids.shape[-1]
@@ -941,7 +952,9 @@ class LongT5TransientGlobalAttention(nn.Module):
             # position_bias shape: # (1, 1, n_heads, block_len, 3 * block_len)
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
-                    (1, 1, self.n_heads, self.block_len, 3 * self.block_len), device=scores.device, dtype=scores.dtype,
+                    (1, 1, self.n_heads, self.block_len, 3 * self.block_len),
+                    device=scores.device,
+                    dtype=scores.dtype,
                 )
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
@@ -1285,8 +1298,8 @@ class LongT5PreTrainedModel(PreTrainedModel):
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
             module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model ** -0.5))
+            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
             module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
                 module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
@@ -2021,7 +2034,7 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         if self.config.tie_word_embeddings:
             # Rescale output before projecting on vocab
             # See https://github.com/tensorflow/mesh/blob/fa19d69eafc9a482aff0b59ddd96b025c0cb207d/mesh_tensorflow/transformer/transformer.py#L586
-            sequence_output = sequence_output * (self.model_dim ** -0.5)
+            sequence_output = sequence_output * (self.model_dim**-0.5)
 
         lm_logits = self.lm_head(sequence_output)
 

@@ -173,7 +173,11 @@ class TFMobileViTInvertedResidual(tf.keras.layers.Layer):
         )
 
         self.reduce_1x1 = TFMobileViTConvLayer(
-            config, out_channels=out_channels, kernel_size=1, use_activation=False, name="reduce_1x1",
+            config,
+            out_channels=out_channels,
+            kernel_size=1,
+            use_activation=False,
+            name="reduce_1x1",
         )
 
     def call(self, features: tf.Tensor, training: bool = False) -> tf.Tensor:
@@ -634,7 +638,11 @@ class TFMobileViTMainLayer(tf.keras.layers.Layer):
         self.expand_output = expand_output
 
         self.conv_stem = TFMobileViTConvLayer(
-            config, out_channels=config.neck_hidden_sizes[0], kernel_size=3, stride=2, name="conv_stem",
+            config,
+            out_channels=config.neck_hidden_sizes[0],
+            kernel_size=3,
+            stride=2,
+            name="conv_stem",
         )
 
         self.encoder = TFMobileViTEncoder(config, name="encoder")
@@ -735,12 +743,17 @@ class TFMobileViTPreTrainedModel(TFPreTrainedModel):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32,
+            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
+            dtype=tf.float32,
         )
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @tf.function(
-        input_signature=[{"pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),}]
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
     )
     def serving(self, inputs):
         """
@@ -957,7 +970,11 @@ class TFMobileViTASPP(tf.keras.layers.Layer):
         self.convs = []
 
         in_projection = TFMobileViTConvLayer(
-            config, out_channels=out_channels, kernel_size=1, use_activation="relu", name="convs.0",
+            config,
+            out_channels=out_channels,
+            kernel_size=1,
+            use_activation="relu",
+            name="convs.0",
         )
         self.convs.append(in_projection)
 
@@ -979,7 +996,11 @@ class TFMobileViTASPP(tf.keras.layers.Layer):
         self.convs.append(pool_layer)
 
         self.project = TFMobileViTConvLayer(
-            config, out_channels=out_channels, kernel_size=1, use_activation="relu", name="project",
+            config,
+            out_channels=out_channels,
+            kernel_size=1,
+            use_activation="relu",
+            name="project",
         )
 
         self.dropout = tf.keras.layers.Dropout(config.aspp_dropout_prob)
@@ -1133,7 +1154,9 @@ class TFMobileViTForSemanticSegmentation(TFMobileViTPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TFSemanticSegmenterOutputWithNoAttention(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states if output_hidden_states else None,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
         )
 
     def serving_output(

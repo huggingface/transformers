@@ -242,10 +242,15 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--print-checkpoint-structure", action="store_true")
     parser.add_argument(
-        "path_to_checkpoint", type=str, help="Path to the checkpoint file (.zip archive or direct .pt file)",
+        "path_to_checkpoint",
+        type=str,
+        help="Path to the checkpoint file (.zip archive or direct .pt file)",
     )
     parser.add_argument(
-        "--config_file", default="", type=str, help="An optional config json file describing the pre-trained model.",
+        "--config_file",
+        default="",
+        type=str,
+        help="An optional config json file describing the pre-trained model.",
     )
     args = parser.parse_args()
 

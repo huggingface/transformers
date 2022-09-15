@@ -165,8 +165,16 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.004, "label": "LABEL_215", "mask": "34eecd16bbfb0f476083ef947d81bf66",},
-                {"score": 0.004, "label": "LABEL_215", "mask": "34eecd16bbfb0f476083ef947d81bf66",},
+                {
+                    "score": 0.004,
+                    "label": "LABEL_215",
+                    "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                },
+                {
+                    "score": 0.004,
+                    "label": "LABEL_215",
+                    "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                },
             ],
         )
 
@@ -185,12 +193,28 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             nested_simplify(outputs, decimals=4),
             [
                 [
-                    {"score": 0.004, "label": "LABEL_215", "mask": "34eecd16bbfb0f476083ef947d81bf66",},
-                    {"score": 0.004, "label": "LABEL_215", "mask": "34eecd16bbfb0f476083ef947d81bf66",},
+                    {
+                        "score": 0.004,
+                        "label": "LABEL_215",
+                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                    },
+                    {
+                        "score": 0.004,
+                        "label": "LABEL_215",
+                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                    },
                 ],
                 [
-                    {"score": 0.004, "label": "LABEL_215", "mask": "34eecd16bbfb0f476083ef947d81bf66",},
-                    {"score": 0.004, "label": "LABEL_215", "mask": "34eecd16bbfb0f476083ef947d81bf66",},
+                    {
+                        "score": 0.004,
+                        "label": "LABEL_215",
+                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                    },
+                    {
+                        "score": 0.004,
+                        "label": "LABEL_215",
+                        "mask": "34eecd16bbfb0f476083ef947d81bf66",
+                    },
                 ],
             ],
         )
@@ -207,8 +231,16 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": None, "label": "LABEL_0", "mask": "6225140faf502d272af076222776d7e4",},
-                {"score": None, "label": "LABEL_1", "mask": "8297c9f8eb43ddd3f32a6dae21e015a1",},
+                {
+                    "score": None,
+                    "label": "LABEL_0",
+                    "mask": "6225140faf502d272af076222776d7e4",
+                },
+                {
+                    "score": None,
+                    "label": "LABEL_1",
+                    "mask": "8297c9f8eb43ddd3f32a6dae21e015a1",
+                },
             ],
         )
 

@@ -561,7 +561,8 @@ class UniSpeechModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             torch.manual_seed(0)
             outputs = model(
-                inputs_dict.input_values.to(torch_device), attention_mask=inputs_dict.attention_mask.to(torch_device),
+                inputs_dict.input_values.to(torch_device),
+                attention_mask=inputs_dict.attention_mask.to(torch_device),
             )
 
         # compute cosine similarity

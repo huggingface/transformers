@@ -81,7 +81,8 @@ class DataTrainingArguments:
     )
     mask_patch_size: int = field(default=32, metadata={"help": "The size of the square patches to use for masking."})
     mask_ratio: float = field(
-        default=0.6, metadata={"help": "Percentage of patches to mask."},
+        default=0.6,
+        metadata={"help": "Percentage of patches to mask."},
     )
     max_train_samples: Optional[int] = field(
         default=None,
@@ -178,7 +179,8 @@ class ModelArguments:
         },
     )
     encoder_stride: Optional[int] = field(
-        default=None, metadata={"help": "Stride to use for the encoder."},
+        default=None,
+        metadata={"help": "Stride to use for the encoder."},
     )
 
 
@@ -204,7 +206,7 @@ class MaskGenerator:
         self.rand_size = self.input_size // self.mask_patch_size
         self.scale = self.mask_patch_size // self.model_patch_size
 
-        self.token_count = self.rand_size ** 2
+        self.token_count = self.rand_size**2
         self.mask_count = int(np.ceil(self.token_count * self.mask_ratio))
 
     def __call__(self):

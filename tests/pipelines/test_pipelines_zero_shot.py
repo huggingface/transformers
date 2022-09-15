@@ -104,7 +104,9 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
 
         with self.assertRaises(AttributeError):
             classifier(
-                "Who are you voting for in 2020?", candidate_labels="politics", hypothesis_template=None,
+                "Who are you voting for in 2020?",
+                candidate_labels="politics",
+                hypothesis_template=None,
             )
 
         self.run_entailment_id(classifier)
@@ -132,7 +134,9 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
     @require_torch
     def test_truncation(self):
         zero_shot_classifier = pipeline(
-            "zero-shot-classification", model="sshleifer/tiny-distilbert-base-cased-distilled-squad", framework="pt",
+            "zero-shot-classification",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            framework="pt",
         )
         # There was a regression in 4.10 for this
         # Adding a test so we don't make the mistake again.
@@ -144,7 +148,9 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
     @require_torch
     def test_small_model_pt(self):
         zero_shot_classifier = pipeline(
-            "zero-shot-classification", model="sshleifer/tiny-distilbert-base-cased-distilled-squad", framework="pt",
+            "zero-shot-classification",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            framework="pt",
         )
         outputs = zero_shot_classifier(
             "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]
@@ -162,7 +168,9 @@ class ZeroShotClassificationPipelineTests(unittest.TestCase, metaclass=PipelineT
     @require_tf
     def test_small_model_tf(self):
         zero_shot_classifier = pipeline(
-            "zero-shot-classification", model="sshleifer/tiny-distilbert-base-cased-distilled-squad", framework="tf",
+            "zero-shot-classification",
+            model="sshleifer/tiny-distilbert-base-cased-distilled-squad",
+            framework="tf",
         )
         outputs = zero_shot_classifier(
             "Who are you voting for in 2020?", candidate_labels=["politics", "public health", "science"]

@@ -85,7 +85,11 @@ class TFResNetEmbeddings(tf.keras.layers.Layer):
     def __init__(self, config: ResNetConfig, **kwargs) -> None:
         super().__init__(**kwargs)
         self.embedder = TFResNetConvLayer(
-            config.embedding_size, kernel_size=7, stride=2, activation=config.hidden_act, name="embedder",
+            config.embedding_size,
+            kernel_size=7,
+            stride=2,
+            activation=config.hidden_act,
+            name="embedder",
         )
         self.pooler = tf.keras.layers.MaxPool2D(pool_size=3, strides=2, padding="valid", name="pooler")
         self.num_channels = config.num_channels
@@ -282,7 +286,11 @@ class TFResNetPreTrainedModel(TFPreTrainedModel):
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @tf.function(
-        input_signature=[{"pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),}]
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
     )
     def serving(self, inputs):
         output = self.call(inputs)
@@ -368,12 +376,15 @@ class TFResNetMainLayer(tf.keras.layers.Layer):
         hidden_states = hidden_states if output_hidden_states else None
 
         return TFBaseModelOutputWithPoolingAndNoAttention(
-            last_hidden_state=last_hidden_state, pooler_output=pooled_output, hidden_states=hidden_states,
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+            hidden_states=hidden_states,
         )
 
 
 @add_start_docstrings(
-    "The bare ResNet model outputting raw features without any specific head on top.", RESNET_START_DOCSTRING,
+    "The bare ResNet model outputting raw features without any specific head on top.",
+    RESNET_START_DOCSTRING,
 )
 class TFResNetModel(TFResNetPreTrainedModel):
     def __init__(self, config: ResNetConfig, **kwargs) -> None:

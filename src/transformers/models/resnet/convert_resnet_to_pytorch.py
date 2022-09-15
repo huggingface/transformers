@@ -107,7 +107,9 @@ def convert_weight_and_push(name: str, config: ResNetConfig, save_directory: Pat
 
     if push_to_hub:
         our_model.push_to_hub(
-            repo_path_or_name=save_directory / checkpoint_name, commit_message="Add model", use_temp_dir=True,
+            repo_path_or_name=save_directory / checkpoint_name,
+            commit_message="Add model",
+            use_temp_dir=True,
         )
 
         # we can use the convnext one

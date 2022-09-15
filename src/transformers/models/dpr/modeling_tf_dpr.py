@@ -704,7 +704,8 @@ class TFDPRQuestionEncoder(TFDPRPretrainedQuestionEncoder):
 
 
 @add_start_docstrings(
-    "The bare DPRReader transformer outputting span predictions.", TF_DPR_START_DOCSTRING,
+    "The bare DPRReader transformer outputting span predictions.",
+    TF_DPR_START_DOCSTRING,
 )
 class TFDPRReader(TFDPRPretrainedReader):
     def __init__(self, config: DPRConfig, *args, **kwargs):

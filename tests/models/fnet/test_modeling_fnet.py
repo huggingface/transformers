@@ -169,7 +169,10 @@ class FNetModelTester:
         model.to(torch_device)
         model.eval()
         result = model(
-            input_ids, token_type_ids=token_type_ids, labels=token_labels, next_sentence_label=sequence_labels,
+            input_ids,
+            token_type_ids=token_type_ids,
+            labels=token_labels,
+            next_sentence_label=sequence_labels,
         )
         self.parent.assertEqual(result.prediction_logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
         self.parent.assertEqual(result.seq_relationship_logits.shape, (self.batch_size, 2))
@@ -189,7 +192,11 @@ class FNetModelTester:
         model = FNetForNextSentencePrediction(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, token_type_ids=token_type_ids, next_sentence_label=sequence_labels,)
+        result = model(
+            input_ids,
+            token_type_ids=token_type_ids,
+            next_sentence_label=sequence_labels,
+        )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_question_answering(
@@ -199,7 +206,10 @@ class FNetModelTester:
         model.to(torch_device)
         model.eval()
         result = model(
-            input_ids, token_type_ids=token_type_ids, start_positions=sequence_labels, end_positions=sequence_labels,
+            input_ids,
+            token_type_ids=token_type_ids,
+            start_positions=sequence_labels,
+            end_positions=sequence_labels,
         )
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
@@ -234,13 +244,22 @@ class FNetModelTester:
         multiple_choice_inputs_ids = input_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         multiple_choice_token_type_ids = token_type_ids.unsqueeze(1).expand(-1, self.num_choices, -1).contiguous()
         result = model(
-            multiple_choice_inputs_ids, token_type_ids=multiple_choice_token_type_ids, labels=choice_labels,
+            multiple_choice_inputs_ids,
+            token_type_ids=multiple_choice_token_type_ids,
+            labels=choice_labels,
         )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_choices))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (config, input_ids, token_type_ids, sequence_labels, token_labels, choice_labels,) = config_and_inputs
+        (
+            config,
+            input_ids,
+            token_type_ids,
+            sequence_labels,
+            token_labels,
+            choice_labels,
+        ) = config_and_inputs
         inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids}
         return config, inputs_dict
 

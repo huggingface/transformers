@@ -310,7 +310,14 @@ class BlenderbotHeadTests(unittest.TestCase):
 @require_flax
 class FlaxBlenderbotModelTest(FlaxModelTesterMixin, unittest.TestCase, FlaxGenerationTesterMixin):
     is_encoder_decoder = True
-    all_model_classes = (FlaxBlenderbotModel, FlaxBlenderbotForConditionalGeneration,) if is_flax_available() else ()
+    all_model_classes = (
+        (
+            FlaxBlenderbotModel,
+            FlaxBlenderbotForConditionalGeneration,
+        )
+        if is_flax_available()
+        else ()
+    )
     all_generative_model_classes = (FlaxBlenderbotForConditionalGeneration,) if is_flax_available() else ()
 
     def setUp(self):

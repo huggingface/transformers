@@ -165,7 +165,9 @@ class TFRagTestMixin:
         with patch("transformers.models.rag.retrieval_rag.load_dataset") as mock_load_dataset:
             mock_load_dataset.return_value = dataset
             retriever = RagRetriever(
-                config, question_encoder_tokenizer=self.dpr_tokenizer, generator_tokenizer=tokenizer,
+                config,
+                question_encoder_tokenizer=self.dpr_tokenizer,
+                generator_tokenizer=tokenizer,
             )
         return retriever
 
@@ -215,7 +217,10 @@ class TFRagTestMixin:
             question_hidden_states = model.question_encoder(input_ids, attention_mask=attention_mask)[0]
 
             out = retriever(
-                input_ids, question_hidden_states.numpy(), prefix=config.generator.prefix, return_tensors="tf",
+                input_ids,
+                question_hidden_states.numpy(),
+                prefix=config.generator.prefix,
+                return_tensors="tf",
             )
 
             context_input_ids, context_attention_mask, retrieved_doc_embeds = (
@@ -275,7 +280,10 @@ class TFRagTestMixin:
             question_hidden_states = model.question_encoder(input_ids, attention_mask=attention_mask)[0]
 
             out = retriever(
-                input_ids, question_hidden_states.numpy(), prefix=config.generator.prefix, return_tensors="tf",
+                input_ids,
+                question_hidden_states.numpy(),
+                prefix=config.generator.prefix,
+                return_tensors="tf",
             )
 
             context_input_ids, context_attention_mask, retrieved_doc_embeds = (
@@ -601,7 +609,10 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         ).input_ids
         decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
 
-        output = rag_sequence(input_ids, labels=decoder_input_ids,)
+        output = rag_sequence(
+            input_ids,
+            labels=decoder_input_ids,
+        )
 
         expected_shape = tf.TensorShape([5, 5, 50264])
         self.assertEqual(output.logits.shape, expected_shape)
@@ -633,7 +644,10 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         ).input_ids
         decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
 
-        output = rag_token(input_ids, labels=decoder_input_ids,)
+        output = rag_token(
+            input_ids,
+            labels=decoder_input_ids,
+        )
 
         expected_shape = tf.TensorShape([5, 5, 50264])
         self.assertEqual(output.logits.shape, expected_shape)
@@ -669,7 +683,10 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         ).input_ids
         decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
 
-        output = rag_token(input_ids, labels=decoder_input_ids,)
+        output = rag_token(
+            input_ids,
+            labels=decoder_input_ids,
+        )
 
         expected_shape = tf.TensorShape([5, 5, 50265])
         self.assertEqual(output.logits.shape, expected_shape)
@@ -703,7 +720,8 @@ class TFRagModelIntegrationTests(unittest.TestCase):
 
         # model must run once to be functional before loading/saving works
         rag_token(
-            input_ids, labels=decoder_input_ids,
+            input_ids,
+            labels=decoder_input_ids,
         )
 
         # check that outputs after saving and loading are equal
@@ -711,7 +729,10 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             rag_token.save_pretrained(tmpdirname)
             rag_token = TFRagTokenForGeneration.from_pretrained(tmpdirname, retriever=rag_retriever)
 
-        output = rag_token(input_ids, labels=decoder_input_ids,)
+        output = rag_token(
+            input_ids,
+            labels=decoder_input_ids,
+        )
 
         expected_shape = tf.TensorShape([5, 5, 50264])
         self.assertEqual(output.logits.shape, expected_shape)
@@ -744,7 +765,8 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         decoder_input_ids = rag_decoder_tokenizer("Linda Davis", return_tensors="tf").input_ids
 
         rag(
-            input_ids, decoder_input_ids=decoder_input_ids,
+            input_ids,
+            decoder_input_ids=decoder_input_ids,
         )
 
         # this should not give any warnings
@@ -772,7 +794,12 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         rag_token = TFRagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
 
         # check first two questions
-        input_dict = tokenizer(self.test_data_questions[:2], return_tensors="tf", padding=True, truncation=True,)
+        input_dict = tokenizer(
+            self.test_data_questions[:2],
+            return_tensors="tf",
+            padding=True,
+            truncation=True,
+        )
 
         input_ids = input_dict.input_ids
         attention_mask = input_dict.attention_mask
@@ -780,7 +807,10 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         # make sure only 1 beam is used
         rag_token.config.num_beams = 1
 
-        output_ids = rag_token.generate(input_ids, attention_mask=attention_mask,)
+        output_ids = rag_token.generate(
+            input_ids,
+            attention_mask=attention_mask,
+        )
 
         outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
@@ -797,7 +827,12 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         retriever = RagRetriever.from_pretrained("facebook/rag-token-nq", index_name="exact", use_dummy_dataset=True)
         rag_token = TFRagTokenForGeneration.from_pretrained("facebook/rag-token-nq", retriever=retriever)
 
-        input_dict = tokenizer(self.test_data_questions, return_tensors="tf", padding=True, truncation=True,)
+        input_dict = tokenizer(
+            self.test_data_questions,
+            return_tensors="tf",
+            padding=True,
+            truncation=True,
+        )
 
         input_ids = input_dict.input_ids
         attention_mask = input_dict.attention_mask
@@ -814,11 +849,17 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         ]
 
         # Split into 2 batches of 4 examples to avoid GPU OOM.
-        output_ids = rag_token.generate(input_ids[:4], attention_mask=attention_mask[:4],)
+        output_ids = rag_token.generate(
+            input_ids[:4],
+            attention_mask=attention_mask[:4],
+        )
         outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         self.assertListEqual(outputs, EXPECTED_OUTPUTS[:4])
 
-        output_ids = rag_token.generate(input_ids[4:], attention_mask=attention_mask[4:],)
+        output_ids = rag_token.generate(
+            input_ids[4:],
+            attention_mask=attention_mask[4:],
+        )
         outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
         self.assertListEqual(outputs, EXPECTED_OUTPUTS[4:])
 
@@ -830,12 +871,20 @@ class TFRagModelIntegrationTests(unittest.TestCase):
         )
         rag_sequence = TFRagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever)
 
-        input_dict = tokenizer(self.test_data_questions, return_tensors="tf", padding=True, truncation=True,)
+        input_dict = tokenizer(
+            self.test_data_questions,
+            return_tensors="tf",
+            padding=True,
+            truncation=True,
+        )
 
         input_ids = input_dict.input_ids
         attention_mask = input_dict.attention_mask
 
-        output_ids = rag_sequence.generate(input_ids, attention_mask=attention_mask,)
+        output_ids = rag_sequence.generate(
+            input_ids,
+            attention_mask=attention_mask,
+        )
 
         outputs = tokenizer.batch_decode(output_ids, skip_special_tokens=True)
 
@@ -858,7 +907,12 @@ class TFRagModelIntegrationTests(unittest.TestCase):
             "facebook/rag-sequence-nq", index_name="exact", use_dummy_dataset=True
         )
         rag_sequence = TFRagSequenceForGeneration.from_pretrained("facebook/rag-sequence-nq", retriever=retriever)
-        input_dict = tokenizer(self.test_data_questions, return_tensors="tf", padding=True, truncation=True,)
+        input_dict = tokenizer(
+            self.test_data_questions,
+            return_tensors="tf",
+            padding=True,
+            truncation=True,
+        )
 
         input_ids = input_dict.input_ids
 

@@ -429,7 +429,8 @@ class LoadImageTester(unittest.TestCase):
         img_arr = np.array(img)
 
         self.assertEqual(
-            img_arr.shape, (480, 640, 3),
+            img_arr.shape,
+            (480, 640, 3),
         )
 
     def test_load_img_rgba(self):
@@ -439,7 +440,8 @@ class LoadImageTester(unittest.TestCase):
         img_arr = np.array(img)
 
         self.assertEqual(
-            img_arr.shape, (512, 512, 3),
+            img_arr.shape,
+            (512, 512, 3),
         )
 
     def test_load_img_la(self):
@@ -449,7 +451,8 @@ class LoadImageTester(unittest.TestCase):
         img_arr = np.array(img)
 
         self.assertEqual(
-            img_arr.shape, (512, 768, 3),
+            img_arr.shape,
+            (512, 768, 3),
         )
 
     def test_load_img_l(self):
@@ -459,7 +462,8 @@ class LoadImageTester(unittest.TestCase):
         img_arr = np.array(img)
 
         self.assertEqual(
-            img_arr.shape, (381, 225, 3),
+            img_arr.shape,
+            (381, 225, 3),
         )
 
     def test_load_img_exif_transpose(self):
@@ -470,12 +474,14 @@ class LoadImageTester(unittest.TestCase):
         img_arr_without_exif_transpose = np.array(img_without_exif_transpose)
 
         self.assertEqual(
-            img_arr_without_exif_transpose.shape, (333, 500, 3),
+            img_arr_without_exif_transpose.shape,
+            (333, 500, 3),
         )
 
         img_with_exif_transpose = load_image(img_file)
         img_arr_with_exif_transpose = np.array(img_with_exif_transpose)
 
         self.assertEqual(
-            img_arr_with_exif_transpose.shape, (500, 333, 3),
+            img_arr_with_exif_transpose.shape,
+            (500, 333, 3),
         )

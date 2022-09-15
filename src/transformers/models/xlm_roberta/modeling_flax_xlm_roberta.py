@@ -75,7 +75,8 @@ class FlaxXLMRobertaModel(FlaxRobertaModel):
 
 
 @add_start_docstrings(
-    """XLM-RoBERTa Model with a `language modeling` head on top.""", XLM_ROBERTA_START_DOCSTRING,
+    """XLM-RoBERTa Model with a `language modeling` head on top.""",
+    XLM_ROBERTA_START_DOCSTRING,
 )
 class FlaxXLMRobertaForMaskedLM(FlaxRobertaForMaskedLM):
     """

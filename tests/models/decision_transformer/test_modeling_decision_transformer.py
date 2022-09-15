@@ -87,7 +87,14 @@ class DecisionTransformerModelTester:
         )
 
     def create_and_check_model(
-        self, config, states, actions, rewards, returns_to_go, timesteps, attention_mask,
+        self,
+        config,
+        states,
+        actions,
+        rewards,
+        returns_to_go,
+        timesteps,
+        attention_mask,
     ):
         model = DecisionTransformerModel(config=config)
         model.to(torch_device)
@@ -103,7 +110,15 @@ class DecisionTransformerModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (config, states, actions, rewards, returns_to_go, timesteps, attention_mask,) = config_and_inputs
+        (
+            config,
+            states,
+            actions,
+            rewards,
+            returns_to_go,
+            timesteps,
+            attention_mask,
+        ) = config_and_inputs
         inputs_dict = {
             "states": states,
             "actions": actions,

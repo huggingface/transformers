@@ -63,7 +63,8 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             query="how many movies has george clooney played in?",
         )
         self.assertEqual(
-            outputs, {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+            outputs,
+            {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
         )
         outputs = table_querier(
             table={
@@ -91,8 +92,10 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             },
             query=[
                 "What repository has the largest number of stars?",
-                "Given that the numbers of stars defines if a repository is active, what repository is the most"
-                " active?",
+                (
+                    "Given that the numbers of stars defines if a repository is active, what repository is the most"
+                    " active?"
+                ),
                 "What is the number of repositories?",
                 "What is the average number of stars?",
                 "What is the total amount of stars?",
@@ -165,7 +168,8 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             query="how many movies has george clooney played in?",
         )
         self.assertEqual(
-            outputs, {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
+            outputs,
+            {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
         )
         outputs = table_querier(
             table={
@@ -193,8 +197,10 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             },
             query=[
                 "What repository has the largest number of stars?",
-                "Given that the numbers of stars defines if a repository is active, what repository is the most"
-                " active?",
+                (
+                    "Given that the numbers of stars defines if a repository is active, what repository is the most"
+                    " active?"
+                ),
                 "What is the number of repositories?",
                 "What is the average number of stars?",
                 "What is the total amount of stars?",
@@ -284,7 +290,8 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             query="how many movies has george clooney played in?",
         )
         self.assertEqual(
-            outputs, {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
+            outputs,
+            {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
         )
         outputs = table_querier(
             table={
@@ -312,8 +319,10 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             },
             query=[
                 "What repository has the largest number of stars?",
-                "Given that the numbers of stars defines if a repository is active, what repository is the most"
-                " active?",
+                (
+                    "Given that the numbers of stars defines if a repository is active, what repository is the most"
+                    " active?"
+                ),
                 "What is the number of repositories?",
                 "What is the average number of stars?",
                 "What is the total amount of stars?",
@@ -405,7 +414,8 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             query="how many movies has george clooney played in?",
         )
         self.assertEqual(
-            outputs, {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
+            outputs,
+            {"answer": "7 february 1967", "coordinates": [(0, 3)], "cells": ["7 february 1967"]},
         )
         outputs = table_querier(
             table={
@@ -433,8 +443,10 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
             },
             query=[
                 "What repository has the largest number of stars?",
-                "Given that the numbers of stars defines if a repository is active, what repository is the most"
-                " active?",
+                (
+                    "Given that the numbers of stars defines if a repository is active, what repository is the most"
+                    " active?"
+                ),
                 "What is the number of repositories?",
                 "What is the average number of stars?",
                 "What is the total amount of stars?",
@@ -612,7 +624,11 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         model_id = "google/tapas-base-finetuned-sqa"
         model = TFAutoModelForTableQuestionAnswering.from_pretrained(model_id)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        table_querier = pipeline("table-question-answering", model=model, tokenizer=tokenizer,)
+        table_querier = pipeline(
+            "table-question-answering",
+            model=model,
+            tokenizer=tokenizer,
+        )
         data = {
             "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
             "Age": ["56", "45", "59"],
@@ -633,7 +649,10 @@ class TQAPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     @require_torch
     def test_large_model_pt_tapex(self):
         model_id = "microsoft/tapex-large-finetuned-wtq"
-        table_querier = pipeline("table-question-answering", model=model_id,)
+        table_querier = pipeline(
+            "table-question-answering",
+            model=model_id,
+        )
         data = {
             "Actors": ["Brad Pitt", "Leonardo Di Caprio", "George Clooney"],
             "Age": ["56", "45", "59"],

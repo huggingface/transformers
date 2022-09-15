@@ -139,7 +139,7 @@ class TFOPTAttention(tf.keras.layers.Layer):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
@@ -398,7 +398,8 @@ OPT_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare OPT Model outputting raw hidden-states without any specific head on top.", OPT_START_DOCSTRING,
+    "The bare OPT Model outputting raw hidden-states without any specific head on top.",
+    OPT_START_DOCSTRING,
 )
 class TFOPTPreTrainedModel(TFPreTrainedModel):
     """
@@ -496,7 +497,9 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             config.vocab_size, config.word_embed_proj_dim, config.pad_token_id, name="embed_tokens"
         )
         self.embed_positions = TFOPTLearnedPositionalEmbedding(
-            num_embeddings, config.hidden_size, name="embed_positions",
+            num_embeddings,
+            config.hidden_size,
+            name="embed_positions",
         )
 
         # Note that the only purpose of `config._remove_final_layer_norm` is to keep backward compatibility
@@ -764,7 +767,8 @@ class TFOPTMainLayer(tf.keras.layers.Layer):
 
 
 @add_start_docstrings(
-    "The bare TF OPT Model outputting raw hidden-states without any specific head on top.", OPT_START_DOCSTRING,
+    "The bare TF OPT Model outputting raw hidden-states without any specific head on top.",
+    OPT_START_DOCSTRING,
 )
 @keras_serializable
 class TFOPTModel(TFOPTPreTrainedModel):
@@ -840,7 +844,10 @@ class TFOPTModel(TFOPTPreTrainedModel):
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFBaseModelOutputWithPast(
-            last_hidden_state=output.last_hidden_state, past_key_values=pkv, hidden_states=hs, attentions=attns,
+            last_hidden_state=output.last_hidden_state,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -1003,5 +1010,9 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFCausalLMOutputWithPast(
-            past_key_values=pkv, hidden_states=hs, attentions=attns, loss=output.loss, logits=output.logits,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
+            loss=output.loss,
+            logits=output.logits,
         )

@@ -315,7 +315,10 @@ class BloomAttention(nn.Module):
         # [batch_size * num_heads, q_length, kv_length]
         # we use `torch.Tensor.baddbmm` instead of `torch.baddbmm` as the latter isn't supported by TorchScript v1.11
         matmul_result = alibi.baddbmm(
-            batch1=query_layer, batch2=key_layer, beta=self.beta, alpha=self.inv_norm_factor,
+            batch1=query_layer,
+            batch2=key_layer,
+            beta=self.beta,
+            alpha=self.inv_norm_factor,
         )
 
         # change view to [batch_size, num_heads, q_length, kv_length]
@@ -705,7 +708,9 @@ class BloomModel(BloomPreTrainedModel):
         alibi = build_alibi_tensor(attention_mask, self.num_heads, dtype=hidden_states.dtype)
 
         causal_mask = self._prepare_attn_mask(
-            attention_mask, input_shape=(batch_size, seq_length), past_key_values_length=past_key_values_length,
+            attention_mask,
+            input_shape=(batch_size, seq_length),
+            past_key_values_length=past_key_values_length,
         )
 
         for i, (block, layer_past) in enumerate(zip(self.h, past_key_values)):
@@ -727,7 +732,11 @@ class BloomModel(BloomPreTrainedModel):
                     return custom_forward
 
                 outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(block), hidden_states, alibi, causal_mask, head_mask[i],
+                    create_custom_forward(block),
+                    hidden_states,
+                    alibi,
+                    causal_mask,
+                    head_mask[i],
                 )
             else:
                 outputs = block(

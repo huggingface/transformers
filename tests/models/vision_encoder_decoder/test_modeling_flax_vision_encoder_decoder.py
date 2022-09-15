@@ -202,7 +202,8 @@ class FlaxEncoderDecoderMixin:
             1 + (decoder_config.ngram if hasattr(decoder_config, "ngram") else 0)
         )
         self.assertEqual(
-            cross_attentions[0].shape[-3:-1], (decoder_config.num_attention_heads, cross_attention_input_seq_len),
+            cross_attentions[0].shape[-3:-1],
+            (decoder_config.num_attention_heads, cross_attention_input_seq_len),
         )
 
     def check_encoder_decoder_model_generate(self, pixel_values, config, decoder_config, **kwargs):
@@ -370,7 +371,10 @@ class FlaxEncoderDecoderMixin:
         )
         decoder_input_ids = ids_tensor([13, 1], model_2.config.decoder.vocab_size)
 
-        outputs = model_2(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids,)
+        outputs = model_2(
+            pixel_values=pixel_values,
+            decoder_input_ids=decoder_input_ids,
+        )
         out_2 = np.array(outputs[0])
         out_2[np.isnan(out_2)] = 0
 
@@ -378,7 +382,10 @@ class FlaxEncoderDecoderMixin:
             model_2.save_pretrained(tmp_dirname)
             model_1 = FlaxVisionEncoderDecoderModel.from_pretrained(tmp_dirname)
 
-            after_outputs = model_1(pixel_values=pixel_values, decoder_input_ids=decoder_input_ids,)
+            after_outputs = model_1(
+                pixel_values=pixel_values,
+                decoder_input_ids=decoder_input_ids,
+            )
             out_1 = np.array(after_outputs[0])
             out_1[np.isnan(out_1)] = 0
             max_diff = np.amax(np.abs(out_1 - out_2))

@@ -340,7 +340,12 @@ class QDQBertModelTester:
         model = QDQBertForNextSentencePrediction(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=sequence_labels,)
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
+            labels=sequence_labels,
+        )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, 2))
 
     def create_and_check_for_question_answering(

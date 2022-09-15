@@ -329,7 +329,10 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
     def test_resize_tokens_embeddings(self):
-        (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
 
@@ -373,7 +376,10 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             self.assertTrue(models_equal)
 
     def test_resize_embeddings_untied(self):
-        (original_config, inputs_dict,) = self.model_tester.prepare_config_and_inputs_for_common()
+        (
+            original_config,
+            inputs_dict,
+        ) = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.test_resize_embeddings:
             return
 

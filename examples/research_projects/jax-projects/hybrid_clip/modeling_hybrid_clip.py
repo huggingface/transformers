@@ -48,10 +48,16 @@ class FlaxHybridCLIPModule(nn.Module):
         self.vision_model = vision_module(vision_config, dtype=self.dtype)
 
         self.visual_projection = nn.Dense(
-            self.projection_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.02), use_bias=False,
+            self.projection_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(0.02),
+            use_bias=False,
         )
         self.text_projection = nn.Dense(
-            self.projection_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.02), use_bias=False,
+            self.projection_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(0.02),
+            use_bias=False,
         )
         self.logit_scale = self.param("logit_scale", jax.nn.initializers.ones, [])
 
@@ -295,7 +301,11 @@ class FlaxHybridCLIP(FlaxPreTrainedModel):
 
     @classmethod
     def from_text_vision_pretrained(
-        cls, text_model_name_or_path: str = None, vision_model_name_or_path: str = None, *model_args, **kwargs,
+        cls,
+        text_model_name_or_path: str = None,
+        vision_model_name_or_path: str = None,
+        *model_args,
+        **kwargs,
     ) -> FlaxPreTrainedModel:
         """
         Params:

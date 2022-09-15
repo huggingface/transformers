@@ -466,10 +466,16 @@ class TFData2VecVisionLayer(tf.keras.layers.Layer):
     def build(self, input_shape: tf.TensorShape):
         if self.init_values > 0:
             self.lambda_1 = self.add_weight(
-                shape=(self.config.hidden_size), initializer="ones", trainable=True, name="lambda_1",
+                shape=(self.config.hidden_size),
+                initializer="ones",
+                trainable=True,
+                name="lambda_1",
             )
             self.lambda_2 = self.add_weight(
-                shape=(self.config.hidden_size), initializer="ones", trainable=True, name="lambda_2",
+                shape=(self.config.hidden_size),
+                initializer="ones",
+                trainable=True,
+                name="lambda_2",
             )
             self.lambda_1.assign(self.init_values * tf.ones((self.config.hidden_size)))
             self.lambda_2.assign(self.init_values * tf.ones((self.config.hidden_size)))
@@ -638,7 +644,9 @@ class TFData2VecVisionEncoder(tf.keras.layers.Layer):
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
 
         return TFBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
 
 
@@ -772,12 +780,17 @@ class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
             `Dict[str, tf.Tensor]`: The dummy inputs.
         """
         VISION_DUMMY_INPUTS = tf.random.uniform(
-            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32,
+            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size),
+            dtype=tf.float32,
         )
         return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
 
     @tf.function(
-        input_signature=[{"pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),}]
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
     )
     def serving(self, inputs):
         """
@@ -937,7 +950,9 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
 
         # Classifier head
         self.classifier = tf.keras.layers.Dense(
-            units=config.num_labels, kernel_initializer=get_initializer(config.initializer_range), name="classifier",
+            units=config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="classifier",
         )
 
     @unpack_inputs
@@ -985,7 +1000,10 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
             return ((loss,) + output) if loss is not None else output
 
         return TFSequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
@@ -1256,7 +1274,11 @@ class TFData2VecVisionFCNHead(tf.keras.layers.Layer):
         convs = []
         convs.append(
             TFData2VecVisionConvModule(
-                out_channels=self.channels, kernel_size=kernel_size, padding="same", dilation=dilation, name="convs.0",
+                out_channels=self.channels,
+                kernel_size=kernel_size,
+                padding="same",
+                dilation=dilation,
+                name="convs.0",
             )
         )
         for i in range(self.num_convs - 1):

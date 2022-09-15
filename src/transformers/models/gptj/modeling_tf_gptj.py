@@ -94,7 +94,7 @@ class TFGPTJAttention(tf.keras.layers.Layer):
                 f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and"
                 f" `num_attention_heads`: {self.num_attention_heads})."
             )
-        self.scale_attn = self.head_dim ** 0.5
+        self.scale_attn = self.head_dim**0.5
         self.rotary_dim = config.rotary_dim
 
         self.attn_dropout = tf.keras.layers.Dropout(config.attn_pdrop)
@@ -703,7 +703,10 @@ class TFGPTJModel(TFGPTJPreTrainedModel):
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFBaseModelOutputWithPast(
-            last_hidden_state=output.last_hidden_state, past_key_values=pkv, hidden_states=hs, attentions=attns,
+            last_hidden_state=output.last_hidden_state,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
         )
 
 
@@ -911,7 +914,10 @@ class TFGPTJForSequenceClassification(TFGPTJPreTrainedModel, TFSequenceClassific
             if input_ids is not None:
                 sequence_lengths = (
                     tf.reduce_sum(
-                        tf.cast(tf.math.not_equal(input_ids, self.config.pad_token_id), dtype=input_ids.dtype,),
+                        tf.cast(
+                            tf.math.not_equal(input_ids, self.config.pad_token_id),
+                            dtype=input_ids.dtype,
+                        ),
                         -1,
                         keepdims=False,
                     )

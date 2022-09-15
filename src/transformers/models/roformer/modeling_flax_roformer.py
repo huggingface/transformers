@@ -736,7 +736,9 @@ class FlaxRoFormerModule(nn.Module):
             return (hidden_states,) + outputs[1:]
 
         return FlaxBaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -796,7 +798,11 @@ class FlaxRoFormerForMaskedLMModule(nn.Module):
         if not return_dict:
             return (logits,) + outputs[1:]
 
-        return FlaxMaskedLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,)
+        return FlaxMaskedLMOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings("""RoFormer Model with a `language modeling` head on top.""", ROFORMER_START_DOCSTRING)
@@ -852,7 +858,9 @@ class FlaxRoFormerForSequenceClassificationModule(nn.Module):
             return (logits,) + outputs[1:]
 
         return FlaxSequenceClassifierOutput(
-            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -926,7 +934,9 @@ class FlaxRoFormerForMultipleChoiceModule(nn.Module):
             return (reshaped_logits,) + outputs[2:]
 
         return FlaxMultipleChoiceModelOutput(
-            logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -993,7 +1003,9 @@ class FlaxRoFormerForTokenClassificationModule(nn.Module):
             return (logits,) + outputs[1:]
 
         return FlaxTokenClassifierOutput(
-            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

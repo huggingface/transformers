@@ -228,7 +228,9 @@ class FillMaskPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
         tokenizer = fill_masker.tokenizer
         model = fill_masker.model
 
-        outputs = fill_masker(f"This is a {tokenizer.mask_token}",)
+        outputs = fill_masker(
+            f"This is a {tokenizer.mask_token}",
+        )
         self.assertEqual(
             outputs,
             [

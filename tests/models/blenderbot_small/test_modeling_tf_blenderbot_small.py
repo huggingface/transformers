@@ -324,7 +324,10 @@ class TFBlenderbot90MIntegrationTests(unittest.TestCase):
     def test_90_generation_from_long_input(self):
         model_inputs = self.tokenizer(self.src_text, return_tensors="tf")
         generated_ids = self.model.generate(
-            model_inputs.input_ids, attention_mask=model_inputs.attention_mask, num_beams=2, use_cache=True,
+            model_inputs.input_ids,
+            attention_mask=model_inputs.attention_mask,
+            num_beams=2,
+            use_cache=True,
         )
         generated_words = self.tokenizer.batch_decode(generated_ids.numpy(), skip_special_tokens=True)[0]
         assert generated_words in (

@@ -96,7 +96,13 @@ class TrainerCallbackTest(unittest.TestCase):
         model = RegressionPreTrainedModel(config)
 
         args = TrainingArguments(self.output_dir, disable_tqdm=disable_tqdm, report_to=[], **kwargs)
-        return Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset, callbacks=callbacks,)
+        return Trainer(
+            model,
+            args,
+            train_dataset=train_dataset,
+            eval_dataset=eval_dataset,
+            callbacks=callbacks,
+        )
 
     def check_callbacks_equality(self, cbs1, cbs2):
         self.assertEqual(len(cbs1), len(cbs2))
@@ -233,5 +239,7 @@ class TrainerCallbackTest(unittest.TestCase):
 
         # warning should be emitted for duplicated callbacks
         with patch("transformers.trainer_callback.logger.warning") as warn_mock:
-            trainer = self.get_trainer(callbacks=[MyTestTrainerCallback, MyTestTrainerCallback],)
+            trainer = self.get_trainer(
+                callbacks=[MyTestTrainerCallback, MyTestTrainerCallback],
+            )
             assert str(MyTestTrainerCallback) in warn_mock.call_args[0][0]

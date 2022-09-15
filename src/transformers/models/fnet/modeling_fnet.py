@@ -591,10 +591,15 @@ class FNetModel(FNetPreTrainedModel):
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
         embedding_output = self.embeddings(
-            input_ids=input_ids, position_ids=position_ids, token_type_ids=token_type_ids, inputs_embeds=inputs_embeds,
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
         )
         encoder_outputs = self.encoder(
-            embedding_output, output_hidden_states=output_hidden_states, return_dict=return_dict,
+            embedding_output,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
 
@@ -775,7 +780,8 @@ class FNetForMaskedLM(FNetPreTrainedModel):
 
 
 @add_start_docstrings(
-    """FNet Model with a `next sentence prediction (classification)` head on top.""", FNET_START_DOCSTRING,
+    """FNet Model with a `next sentence prediction (classification)` head on top.""",
+    FNET_START_DOCSTRING,
 )
 class FNetForNextSentencePrediction(FNetPreTrainedModel):
     def __init__(self, config):
@@ -859,7 +865,9 @@ class FNetForNextSentencePrediction(FNetPreTrainedModel):
             return ((next_sentence_loss,) + output) if next_sentence_loss is not None else output
 
         return NextSentencePredictorOutput(
-            loss=next_sentence_loss, logits=seq_relationship_scores, hidden_states=outputs.hidden_states,
+            loss=next_sentence_loss,
+            logits=seq_relationship_scores,
+            hidden_states=outputs.hidden_states,
         )
 
 

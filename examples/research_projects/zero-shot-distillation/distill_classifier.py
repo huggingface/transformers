@@ -186,7 +186,11 @@ def get_teacher_predictions(
         batch_hypotheses = hypotheses[i : i + batch_size]
 
         encodings = tokenizer(
-            batch_premises, batch_hypotheses, padding=True, truncation="only_first", return_tensors="pt",
+            batch_premises,
+            batch_hypotheses,
+            padding=True,
+            truncation="only_first",
+            return_tensors="pt",
         )
 
         with torch.cuda.amp.autocast(enabled=fp16):
@@ -286,7 +290,12 @@ def main():
         training_args.no_cuda,
         training_args.fp16,
     )
-    dataset = Dataset.from_dict({"text": examples, "labels": teacher_soft_preds,})
+    dataset = Dataset.from_dict(
+        {
+            "text": examples,
+            "labels": teacher_soft_preds,
+        }
+    )
 
     # 3. create student
     logger.info("Initializing student model")
@@ -307,7 +316,11 @@ def main():
         return {"agreement": (preds == proxy_labels).mean().item()}
 
     trainer = DistillationTrainer(
-        model=model, tokenizer=tokenizer, args=training_args, train_dataset=dataset, compute_metrics=compute_metrics,
+        model=model,
+        tokenizer=tokenizer,
+        args=training_args,
+        train_dataset=dataset,
+        compute_metrics=compute_metrics,
     )
 
     if training_args.do_train:

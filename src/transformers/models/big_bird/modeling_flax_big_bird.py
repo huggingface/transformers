@@ -226,7 +226,7 @@ class FlaxBigBirdEmbeddings(nn.Module):
         token_type_embeddings = self.token_type_embeddings(token_type_ids.astype("i4"))
 
         if self.config.rescale_embeddings:
-            inputs_embeds *= self.config.hidden_size ** 0.5
+            inputs_embeds *= self.config.hidden_size**0.5
 
         # Sum all embeddings
         hidden_states = inputs_embeds + token_type_embeddings + position_embeds
@@ -441,7 +441,11 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
         return jnp.transpose(x, axes=(0, 2, 1, 3))
 
     def __call__(
-        self, hidden_states, attention_mask, deterministic=True, output_attentions=False,
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic=True,
+        output_attentions=False,
     ):
         n_heads = self.config.num_attention_heads
         head_size = self.config.hidden_size // n_heads
@@ -660,7 +664,10 @@ class FlaxBigBirdBlockSparseAttention(nn.Module):
             axis=3,
         )
         second_rand_pad = jnp.concatenate(
-            [jnp.ones([bsz, n_heads, from_block_size, 4 * to_block_size], dtype=rand_mask.dtype), rand_mask[:, :, 0],],
+            [
+                jnp.ones([bsz, n_heads, from_block_size, 4 * to_block_size], dtype=rand_mask.dtype),
+                rand_mask[:, :, 0],
+            ],
             axis=3,
         )
         second_product = second_product * rsqrt_d
@@ -1243,7 +1250,10 @@ class FlaxBigBirdAttention(nn.Module):
             )
         else:
             attn_outputs = self.self(
-                hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions,
+                hidden_states,
+                attention_mask,
+                deterministic=deterministic,
+                output_attentions=output_attentions,
             )
         attn_output = attn_outputs[0]
         hidden_states = self.output(attn_output, hidden_states, deterministic=deterministic)
@@ -1448,7 +1458,9 @@ class FlaxBigBirdEncoder(nn.Module):
 
     def setup(self):
         self.layer = FlaxBigBirdLayerCollection(
-            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing,
+            self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
 
     def __call__(
@@ -1575,7 +1587,11 @@ class FlaxBigBirdPreTrainedModel(FlaxPreTrainedModel):
 
     # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel.enable_gradient_checkpointing
     def enable_gradient_checkpointing(self):
-        self._module = self.module_class(config=self.config, dtype=self.dtype, gradient_checkpointing=True,)
+        self._module = self.module_class(
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=True,
+        )
 
     # Copied from transformers.models.bert.modeling_flax_bert.FlaxBertPreTrainedModel.init_weights
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
@@ -1827,7 +1843,9 @@ class FlaxBigBirdForPreTrainingModule(nn.Module):
 
     def setup(self):
         self.bert = FlaxBigBirdModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing,
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
         self.cls = FlaxBigBirdPreTrainingHeads(config=self.config, dtype=self.dtype)
 
@@ -1971,7 +1989,11 @@ class FlaxBigBirdForMaskedLMModule(nn.Module):
         if not return_dict:
             return (logits,) + outputs[1:]
 
-        return FlaxMaskedLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,)
+        return FlaxMaskedLMOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings("""BigBird Model with a `language modeling` head on top.""", BIG_BIRD_START_DOCSTRING)
@@ -2054,7 +2076,9 @@ class FlaxBigBirdForSequenceClassificationModule(nn.Module):
             return (logits,) + outputs[2:]
 
         return FlaxSequenceClassifierOutput(
-            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -2087,7 +2111,9 @@ class FlaxBigBirdForMultipleChoiceModule(nn.Module):
 
     def setup(self):
         self.bert = FlaxBigBirdModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing,
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.classifier = nn.Dense(1, dtype=self.dtype)
@@ -2133,7 +2159,9 @@ class FlaxBigBirdForMultipleChoiceModule(nn.Module):
             return (reshaped_logits,) + outputs[2:]
 
         return FlaxMultipleChoiceModelOutput(
-            logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -2229,7 +2257,9 @@ class FlaxBigBirdForTokenClassificationModule(nn.Module):
             return (logits,) + outputs[1:]
 
         return FlaxTokenClassifierOutput(
-            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

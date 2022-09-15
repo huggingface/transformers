@@ -254,7 +254,11 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
                 )
             # verify the first hidden states (first block)
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]), [height * width, self.model_tester.hidden_sizes[0],],
+                list(hidden_states[0].shape[-2:]),
+                [
+                    height * width,
+                    self.model_tester.hidden_sizes[0],
+                ],
             )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -341,7 +345,10 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             if (
-                model_class not in [*get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),]
+                model_class
+                not in [
+                    *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                ]
                 or model_class.__name__ == "LevitForImageClassificationWithTeacher"
             ):
                 continue

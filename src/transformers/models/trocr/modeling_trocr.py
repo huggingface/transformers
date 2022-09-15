@@ -187,7 +187,7 @@ class TrOCRAttention(nn.Module):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
                 f" {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = nn.Linear(self.kdim, embed_dim, bias=bias)
@@ -497,7 +497,9 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
             self.embed_positions = TrOCRLearnedPositionalEmbedding(config.max_position_embeddings, config.hidden_size)
         else:
             self.embed_positions = TrOCRSinusoidalPositionalEmbedding(
-                config.max_position_embeddings + self.padding_idx + 1, config.hidden_size, self.padding_idx,
+                config.max_position_embeddings + self.padding_idx + 1,
+                config.hidden_size,
+                self.padding_idx,
             )
 
         if config.layernorm_embedding:
@@ -758,7 +760,8 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The TrOCR Model with a language modeling head. Can be used for summarization.", TROCR_START_DOCSTRING,
+    "The TrOCR Model with a language modeling head. Can be used for summarization.",
+    TROCR_START_DOCSTRING,
 )
 class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
     """

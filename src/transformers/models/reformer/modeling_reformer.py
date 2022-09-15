@@ -67,7 +67,8 @@ ReformerBackwardOutput = namedtuple(
     "ReformerBackwardOutput", ["attn_output", "hidden_states", "grad_attn_output", "grad_hidden_states"]
 )
 ReformerEncoderOutput = namedtuple(
-    "ReformerEncoderOutput", ["hidden_states", "all_hidden_states", "all_attentions", "past_buckets_states"],
+    "ReformerEncoderOutput",
+    ["hidden_states", "all_hidden_states", "all_attentions", "past_buckets_states"],
 )
 
 
@@ -408,10 +409,18 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
                 # split key & value vectors by num hashes to apply
                 # self attention on each separately
                 query_key_vectors = self._split_seq_length_dim_to(
-                    query_key_vectors, num_hashes, -1, self.num_attention_heads, self.attention_head_size,
+                    query_key_vectors,
+                    num_hashes,
+                    -1,
+                    self.num_attention_heads,
+                    self.attention_head_size,
                 )
                 value_vectors = self._split_seq_length_dim_to(
-                    value_vectors, num_hashes, -1, self.num_attention_heads, self.attention_head_size,
+                    value_vectors,
+                    num_hashes,
+                    -1,
+                    self.num_attention_heads,
+                    self.attention_head_size,
                 )
                 # repeat query vectors across hash dimension
                 query_vectors = query_vectors.unsqueeze(2).repeat(1, 1, num_hashes, 1, 1)
@@ -482,10 +491,18 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             query_key_vectors = self._gather_by_expansion(query_key_vectors, sorted_bucket_idx_per_hash, num_hashes)
             value_vectors = self._gather_by_expansion(value_vectors, sorted_bucket_idx_per_hash, num_hashes)
             query_key_vectors = self._split_seq_length_dim_to(
-                query_key_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
+                query_key_vectors,
+                -1,
+                self.chunk_length,
+                self.num_attention_heads,
+                self.attention_head_size,
             )
             value_vectors = self._split_seq_length_dim_to(
-                value_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
+                value_vectors,
+                -1,
+                self.chunk_length,
+                self.num_attention_heads,
+                self.attention_head_size,
             )
 
             if self.chunk_length is None:
@@ -535,10 +552,18 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
             # sum up all hash rounds
             if num_hashes > 1:
                 out_vectors = self._split_seq_length_dim_to(
-                    out_vectors, num_hashes, sequence_length, self.num_attention_heads, self.attention_head_size,
+                    out_vectors,
+                    num_hashes,
+                    sequence_length,
+                    self.num_attention_heads,
+                    self.attention_head_size,
                 )
                 logits = self._split_seq_length_dim_to(
-                    logits, num_hashes, sequence_length, self.num_attention_heads, self.attention_head_size,
+                    logits,
+                    num_hashes,
+                    sequence_length,
+                    self.num_attention_heads,
+                    self.attention_head_size,
                 ).unsqueeze(-1)
 
                 probs_vectors = torch.exp(logits - torch.logsumexp(logits, dim=2, keepdim=True))
@@ -682,11 +707,12 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         # `num_buckets` should be set to 2 * sequence_length // chunk_length as recommended in paper
         num_buckets_pow_2 = (2 * (sequence_length // self.chunk_length)).bit_length() - 1
         # make sure buckets are power of 2
-        num_buckets = 2 ** num_buckets_pow_2
+        num_buckets = 2**num_buckets_pow_2
 
         # factorize `num_buckets` if `num_buckets` becomes too large
         num_buckets_limit = 2 * max(
-            int((self.max_position_embeddings // self.chunk_length) ** (0.5)), self.chunk_length,
+            int((self.max_position_embeddings // self.chunk_length) ** (0.5)),
+            self.chunk_length,
         )
         if num_buckets > num_buckets_limit:
             num_buckets = [2 ** (num_buckets_pow_2 // 2), 2 ** (num_buckets_pow_2 - num_buckets_pow_2 // 2)]
@@ -865,7 +891,12 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         bucket_idx = _stable_argsort(concat_buckets, dim=-1)
 
         # bucket_idx has shape: BatchSize x NumAttnHeads x NumHashes x SequenceLength
-        assert bucket_idx.shape == (batch_size, self.num_attention_heads, num_hashes, sequence_length,), (
+        assert bucket_idx.shape == (
+            batch_size,
+            self.num_attention_heads,
+            num_hashes,
+            sequence_length,
+        ), (
             f"bucket_idx should have shape {(batch_size, self.num_attention_heads, num_hashes, sequence_length)}, but"
             f" has shape {bucket_idx.shape}."
         )
@@ -953,7 +984,7 @@ class LSHSelfAttention(nn.Module, EfficientAttentionMixin):
         """
         length normalization
         """
-        variance = torch.mean(x ** 2, -1, keepdim=True)
+        variance = torch.mean(x**2, -1, keepdim=True)
         norm_x = x * torch.rsqrt(variance + epsilon)
         return norm_x
 
@@ -1101,13 +1132,25 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
             # chunk vectors
             # B x Num_Attn_Head x Seq_Len // chunk_len x chunk_len  x  attn_head_size
             query_vectors = self._split_seq_length_dim_to(
-                query_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
+                query_vectors,
+                -1,
+                self.chunk_length,
+                self.num_attention_heads,
+                self.attention_head_size,
             )
             key_vectors = self._split_seq_length_dim_to(
-                key_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
+                key_vectors,
+                -1,
+                self.chunk_length,
+                self.num_attention_heads,
+                self.attention_head_size,
             )
             value_vectors = self._split_seq_length_dim_to(
-                value_vectors, -1, self.chunk_length, self.num_attention_heads, self.attention_head_size,
+                value_vectors,
+                -1,
+                self.chunk_length,
+                self.num_attention_heads,
+                self.attention_head_size,
             )
 
             # chunk indices
@@ -1167,7 +1210,12 @@ class LocalSelfAttention(nn.Module, EfficientAttentionMixin):
         if not do_standard_self_attention:
             out_vectors = out_vectors.flatten(start_dim=2, end_dim=3)
 
-        assert out_vectors.shape == (batch_size, self.num_attention_heads, sequence_length, self.attention_head_size,)
+        assert out_vectors.shape == (
+            batch_size,
+            self.num_attention_heads,
+            sequence_length,
+            self.attention_head_size,
+        )
 
         out_vectors = self._merge_hidden_size_dims(out_vectors, self.num_attention_heads, self.attention_head_size)
 
@@ -1307,7 +1355,9 @@ class ReformerAttention(nn.Module):
         attention_output = self.output(self_attention_outputs.hidden_states)
 
         return AttentionOutput(
-            hidden_states=attention_output, attention_probs=self_attention_outputs.attention_probs, buckets=buckets,
+            hidden_states=attention_output,
+            attention_probs=self_attention_outputs.attention_probs,
+            buckets=buckets,
         )
 
 
@@ -1355,7 +1405,10 @@ class ChunkReformerFeedForward(nn.Module):
 
     def forward(self, attention_output):
         return apply_chunking_to_forward(
-            self.forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output,
+            self.forward_chunk,
+            self.chunk_size_feed_forward,
+            self.seq_len_dim,
+            attention_output,
         )
 
     def forward_chunk(self, hidden_states):
@@ -1508,7 +1561,10 @@ class ReformerLayer(nn.Module):
             # f(X_2)
             # use cached buckets for backprob if buckets not None for LSHSelfAttention
             output = self.attention(
-                hidden_states=hidden_states, head_mask=head_mask, attention_mask=attention_mask, buckets=buckets,
+                hidden_states=hidden_states,
+                head_mask=head_mask,
+                attention_mask=attention_mask,
+                buckets=buckets,
             ).hidden_states
             output.backward(grad_attn_output, retain_graph=True)
 
@@ -2094,7 +2150,10 @@ class ReformerModel(ReformerPreTrainedModel):
         )
 
         padded_input_ids = torch.full(
-            (input_shape[0], padding_length), self.config.pad_token_id, device=device, dtype=torch.long,
+            (input_shape[0], padding_length),
+            self.config.pad_token_id,
+            device=device,
+            dtype=torch.long,
         )
 
         # Extend `attention_mask`
@@ -2527,7 +2586,10 @@ class ReformerForSequenceClassification(ReformerPreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

@@ -127,7 +127,8 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_seq_length: int = field(
         default=384,
@@ -433,7 +434,10 @@ def main():
     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
     def preprocess_squad_batch(
-        examples, question_column: str, context_column: str, answer_column: str,
+        examples,
+        question_column: str,
+        context_column: str,
+        answer_column: str,
     ) -> Tuple[List[str], List[str]]:
         questions = examples[question_column]
         contexts = examples[context_column]

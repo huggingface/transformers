@@ -153,7 +153,11 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Simple input
                 self.assertRaises(
-                    ValueError, tokenizer_r.batch_encode_plus, s2, max_length=max_length, padding="max_length",
+                    ValueError,
+                    tokenizer_r.batch_encode_plus,
+                    s2,
+                    max_length=max_length,
+                    padding="max_length",
                 )
 
                 # Pair input
@@ -164,7 +168,11 @@ class CodeGenTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Pair input
                 self.assertRaises(
-                    ValueError, tokenizer_r.batch_encode_plus, p2, max_length=max_length, padding="max_length",
+                    ValueError,
+                    tokenizer_r.batch_encode_plus,
+                    p2,
+                    max_length=max_length,
+                    padding="max_length",
                 )
 
     def test_padding_if_pad_token_set_slow(self):

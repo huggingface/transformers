@@ -241,7 +241,7 @@ class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
             config.output_attentions = True
-            window_size_squared = config.window_size ** 2
+            window_size_squared = config.window_size**2
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -306,7 +306,8 @@ class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
 
         self.assertListEqual(
-            list(hidden_states[0].shape[-2:]), [num_patches, self.model_tester.embed_dim],
+            list(hidden_states[0].shape[-2:]),
+            [num_patches, self.model_tester.embed_dim],
         )
 
         reshaped_hidden_states = outputs.reshaped_hidden_states
@@ -317,7 +318,8 @@ class Swinv2ModelTest(ModelTesterMixin, unittest.TestCase):
             reshaped_hidden_states[0].view(batch_size, num_channels, height * width).permute(0, 2, 1)
         )
         self.assertListEqual(
-            list(reshaped_hidden_states.shape[-2:]), [num_patches, self.model_tester.embed_dim],
+            list(reshaped_hidden_states.shape[-2:]),
+            [num_patches, self.model_tester.embed_dim],
         )
 
     def test_hidden_states_output(self):

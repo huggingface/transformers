@@ -127,7 +127,10 @@ class TFSpeech2TextModelTester:
 
         config = self.get_config()
         inputs_dict = prepare_speech_to_text_inputs_dict(
-            config, input_features=input_features, decoder_input_ids=decoder_input_ids, attention_mask=attention_mask,
+            config,
+            input_features=input_features,
+            decoder_input_ids=decoder_input_ids,
+            attention_mask=attention_mask,
         )
         return config, inputs_dict
 
@@ -262,7 +265,8 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
             subsampled_seq_length = model._get_feat_extract_output_lengths(seq_length)
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]), [subsampled_seq_length, self.model_tester.hidden_size],
+                list(hidden_states[0].shape[-2:]),
+                [subsampled_seq_length, self.model_tester.hidden_size],
             )
 
             if config.is_encoder_decoder:
@@ -274,7 +278,8 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
                 decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
 
                 self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]), [decoder_seq_length, self.model_tester.hidden_size],
+                    list(hidden_states[0].shape[-2:]),
+                    [decoder_seq_length, self.model_tester.hidden_size],
                 )
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -352,7 +357,11 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(cross_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, subsampled_encoder_key_length,],
+                [
+                    self.model_tester.num_attention_heads,
+                    decoder_seq_length,
+                    subsampled_encoder_key_length,
+                ],
             )
 
             # Check attention is always last and order is fine
@@ -505,7 +514,12 @@ class TFSpeech2TextModelTest(TFModelTesterMixin, unittest.TestCase):
 
             # num_return_sequences > 1, sample
             self._check_generated_ids(
-                model.generate(input_features, do_sample=True, num_beams=2, num_return_sequences=2,)
+                model.generate(
+                    input_features,
+                    do_sample=True,
+                    num_beams=2,
+                    num_return_sequences=2,
+                )
             )
             # num_return_sequences > 1, greedy
             self._check_generated_ids(
@@ -588,9 +602,13 @@ class TFSpeech2TextModelIntegrationTests(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = [
             "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
             "nor is mister cultar's manner less interesting than his matter",
-            "he tells us that at this festive season of the year with christmas and roast beef looming before us"
-            " similes drawn from eating and its results occur most readily to the mind",
-            "he has grave doubts whether sir frederick leyton's work is really greek after all and can discover in"
-            " it but little of rocky ithaca",
+            (
+                "he tells us that at this festive season of the year with christmas and roast beef looming before us"
+                " similes drawn from eating and its results occur most readily to the mind"
+            ),
+            (
+                "he has grave doubts whether sir frederick leyton's work is really greek after all and can discover in"
+                " it but little of rocky ithaca"
+            ),
         ]
         self.assertListEqual(generated_transcripts, EXPECTED_TRANSCRIPTIONS)

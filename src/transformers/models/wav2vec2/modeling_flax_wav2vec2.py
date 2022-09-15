@@ -725,7 +725,9 @@ class FlaxWav2Vec2GumbelVectorQuantizer(nn.Module):
             (1, self.num_groups * self.num_vars, self.config.codevector_dim // self.num_groups),
         )
         self.weight_proj = nn.Dense(
-            self.num_groups * self.num_vars, kernel_init=jax.nn.initializers.normal(1.0), dtype=self.dtype,
+            self.num_groups * self.num_vars,
+            kernel_init=jax.nn.initializers.normal(1.0),
+            dtype=self.dtype,
         )
 
     @staticmethod
@@ -1086,7 +1088,8 @@ FLAX_WAV2VEC2_MODEL_DOCSTRING = """
 """
 
 overwrite_call_docstring(
-    FlaxWav2Vec2Model, WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_MODEL_DOCSTRING,
+    FlaxWav2Vec2Model,
+    WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_MODEL_DOCSTRING,
 )
 append_replace_return_docstrings(
     FlaxWav2Vec2Model, output_type=FlaxWav2Vec2BaseModelOutput, config_class=Wav2Vec2Config
@@ -1139,7 +1142,9 @@ class FlaxWav2Vec2ForCTCModule(nn.Module):
         return FlaxCausalLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
 
     def _get_feat_extract_output_lengths(
-        self, input_lengths: Union[jnp.ndarray, int], add_adapter: Optional[bool] = None,
+        self,
+        input_lengths: Union[jnp.ndarray, int],
+        add_adapter: Optional[bool] = None,
     ):
         """
         Computes the output length of the convolutional layers
@@ -1206,7 +1211,8 @@ FLAX_WAV2VEC2_FOR_CTC_DOCSTRING = """
 """
 
 overwrite_call_docstring(
-    FlaxWav2Vec2ForCTC, WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_FOR_CTC_DOCSTRING,
+    FlaxWav2Vec2ForCTC,
+    WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_FOR_CTC_DOCSTRING,
 )
 append_replace_return_docstrings(FlaxWav2Vec2ForCTC, output_type=FlaxCausalLMOutput, config_class=Wav2Vec2Config)
 
@@ -1412,7 +1418,8 @@ FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING = """
 """
 
 overwrite_call_docstring(
-    FlaxWav2Vec2ForPreTraining, WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING,
+    FlaxWav2Vec2ForPreTraining,
+    WAV_2_VEC_2_INPUTS_DOCSTRING + FLAX_WAV2VEC2_FOR_PRETRAINING_DOCSTRING,
 )
 append_replace_return_docstrings(
     FlaxWav2Vec2ForPreTraining, output_type=FlaxWav2Vec2ForPreTrainingOutput, config_class=Wav2Vec2Config

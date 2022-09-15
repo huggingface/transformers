@@ -297,7 +297,11 @@ class FlaxAlbertLayer(nn.Module):
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
     def __call__(
-        self, hidden_states, attention_mask, deterministic: bool = True, output_attentions: bool = False,
+        self,
+        hidden_states,
+        attention_mask,
+        deterministic: bool = True,
+        output_attentions: bool = False,
     ):
         attention_outputs = self.attention(
             hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions
@@ -338,7 +342,10 @@ class FlaxAlbertLayerCollection(nn.Module):
 
         for layer_index, albert_layer in enumerate(self.layers):
             layer_output = albert_layer(
-                hidden_states, attention_mask, deterministic=deterministic, output_attentions=output_attentions,
+                hidden_states,
+                attention_mask,
+                deterministic=deterministic,
+                output_attentions=output_attentions,
             )
             hidden_states = layer_output[0]
 
@@ -814,7 +821,11 @@ class FlaxAlbertForMaskedLMModule(nn.Module):
         if not return_dict:
             return (logits,) + outputs[1:]
 
-        return FlaxMaskedLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,)
+        return FlaxMaskedLMOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings("""Albert Model with a `language modeling` head on top.""", ALBERT_START_DOCSTRING)
@@ -839,7 +850,10 @@ class FlaxAlbertForSequenceClassificationModule(nn.Module):
             else self.config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(rate=classifier_dropout)
-        self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype,)
+        self.classifier = nn.Dense(
+            self.config.num_labels,
+            dtype=self.dtype,
+        )
 
     def __call__(
         self,
@@ -872,7 +886,9 @@ class FlaxAlbertForSequenceClassificationModule(nn.Module):
             return (logits,) + outputs[2:]
 
         return FlaxSequenceClassifierOutput(
-            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -944,7 +960,9 @@ class FlaxAlbertForMultipleChoiceModule(nn.Module):
             return (reshaped_logits,) + outputs[2:]
 
         return FlaxMultipleChoiceModelOutput(
-            logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1016,7 +1034,9 @@ class FlaxAlbertForTokenClassificationModule(nn.Module):
             return (logits,) + outputs[1:]
 
         return FlaxTokenClassifierOutput(
-            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

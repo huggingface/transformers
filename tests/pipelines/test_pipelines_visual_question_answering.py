@@ -51,14 +51,21 @@ class VisualQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeline
                 "image": Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
                 "question": "How many cats are there?",
             },
-            {"image": "./tests/fixtures/tests_samples/COCO/000000039769.png", "question": "How many cats are there?",},
+            {
+                "image": "./tests/fixtures/tests_samples/COCO/000000039769.png",
+                "question": "How many cats are there?",
+            },
         ]
         return vqa_pipeline, examples
 
     def run_pipeline_test(self, vqa_pipeline, examples):
         outputs = vqa_pipeline(examples, top_k=1)
         self.assertEqual(
-            outputs, [[{"score": ANY(float), "answer": ANY(str)}], [{"score": ANY(float), "answer": ANY(str)}],],
+            outputs,
+            [
+                [{"score": ANY(float), "answer": ANY(str)}],
+                [{"score": ANY(float), "answer": ANY(str)}],
+            ],
         )
 
     @require_torch

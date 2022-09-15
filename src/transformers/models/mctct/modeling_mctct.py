@@ -251,7 +251,11 @@ class MCTCTSelfAttention(nn.Module):
         return scores.permute(0, 3, 1, 2)
 
     def forward(
-        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=False,
     ):
         mixed_query_layer = self.query(hidden_states)
         mixed_query_layer = mixed_query_layer / math.sqrt(self.attention_head_size)
@@ -346,9 +350,18 @@ class MCTCTAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
-        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=False,
     ):
-        self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions,)
+        self_outputs = self.self(
+            hidden_states,
+            attention_mask,
+            head_mask,
+            output_attentions,
+        )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
 
@@ -397,7 +410,11 @@ class MCTCTLayer(nn.Module):
         self.output = MCTCTOutput(config)
 
     def forward(
-        self, hidden_states, attention_mask=None, head_mask=None, output_attentions=False,
+        self,
+        hidden_states,
+        attention_mask=None,
+        head_mask=None,
+        output_attentions=False,
     ):
         self_attention_outputs = self.attention(
             hidden_states, attention_mask, head_mask, output_attentions=output_attentions

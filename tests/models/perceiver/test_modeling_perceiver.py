@@ -458,7 +458,8 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(cross_attentions), expected_num_cross_attentions)
 
             self.assertListEqual(
-                list(self_attentions[0].shape[-3:]), [self.model_tester.num_self_attention_heads, seq_len, seq_len],
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_self_attention_heads, seq_len, seq_len],
             )
             out_len = len(outputs)
 
@@ -477,7 +478,8 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertEqual(len(self_attentions), expected_num_self_attentions)
             self.assertListEqual(
-                list(self_attentions[0].shape[-3:]), [self.model_tester.num_self_attention_heads, seq_len, seq_len],
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_self_attention_heads, seq_len, seq_len],
             )
 
     def test_hidden_states_output(self):
@@ -497,7 +499,8 @@ class PerceiverModelTest(ModelTesterMixin, unittest.TestCase):
             seq_length = self.model_tester.num_latents
 
             self.assertListEqual(
-                list(hidden_states[0].shape[-2:]), [seq_length, self.model_tester.d_latents],
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.d_latents],
             )
 
         for model_class in self.all_model_classes:

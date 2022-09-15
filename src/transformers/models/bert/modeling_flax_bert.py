@@ -632,7 +632,9 @@ class FlaxBertEncoder(nn.Module):
 
     def setup(self):
         self.layer = FlaxBertLayerCollection(
-            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing,
+            self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
 
     def __call__(
@@ -774,12 +776,19 @@ class FlaxBertPreTrainedModel(FlaxPreTrainedModel):
         **kwargs
     ):
         module = self.module_class(
-            config=config, dtype=dtype, gradient_checkpointing=gradient_checkpointing, **kwargs,
+            config=config,
+            dtype=dtype,
+            gradient_checkpointing=gradient_checkpointing,
+            **kwargs,
         )
         super().__init__(config, module, input_shape=input_shape, seed=seed, dtype=dtype, _do_init=_do_init)
 
     def enable_gradient_checkpointing(self):
-        self._module = self.module_class(config=self.config, dtype=self.dtype, gradient_checkpointing=True,)
+        self._module = self.module_class(
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=True,
+        )
 
     def init_weights(self, rng: jax.random.PRNGKey, input_shape: Tuple, params: FrozenDict = None) -> FrozenDict:
         # init input tensors
@@ -950,7 +959,9 @@ class FlaxBertModule(nn.Module):
     def setup(self):
         self.embeddings = FlaxBertEmbeddings(self.config, dtype=self.dtype)
         self.encoder = FlaxBertEncoder(
-            self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing,
+            self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
         self.pooler = FlaxBertPooler(self.config, dtype=self.dtype)
 
@@ -1030,7 +1041,9 @@ class FlaxBertForPreTrainingModule(nn.Module):
 
     def setup(self):
         self.bert = FlaxBertModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing,
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
         self.cls = FlaxBertPreTrainingHeads(config=self.config, dtype=self.dtype)
 
@@ -1172,7 +1185,11 @@ class FlaxBertForMaskedLMModule(nn.Module):
         if not return_dict:
             return (logits,) + outputs[1:]
 
-        return FlaxMaskedLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,)
+        return FlaxMaskedLMOutput(
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
 
 
 @add_start_docstrings("""Bert Model with a `language modeling` head on top.""", BERT_START_DOCSTRING)
@@ -1192,7 +1209,9 @@ class FlaxBertForNextSentencePredictionModule(nn.Module):
 
     def setup(self):
         self.bert = FlaxBertModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing,
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
         self.cls = FlaxBertOnlyNSPHead(dtype=self.dtype)
 
@@ -1230,12 +1249,15 @@ class FlaxBertForNextSentencePredictionModule(nn.Module):
             return (seq_relationship_scores,) + outputs[2:]
 
         return FlaxNextSentencePredictorOutput(
-            logits=seq_relationship_scores, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=seq_relationship_scores,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
 @add_start_docstrings(
-    """Bert Model with a `next sentence prediction (classification)` head on top.""", BERT_START_DOCSTRING,
+    """Bert Model with a `next sentence prediction (classification)` head on top.""",
+    BERT_START_DOCSTRING,
 )
 class FlaxBertForNextSentencePrediction(FlaxBertPreTrainedModel):
     module_class = FlaxBertForNextSentencePredictionModule
@@ -1279,7 +1301,9 @@ class FlaxBertForSequenceClassificationModule(nn.Module):
 
     def setup(self):
         self.bert = FlaxBertModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing,
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
         classifier_dropout = (
             self.config.classifier_dropout
@@ -1287,7 +1311,10 @@ class FlaxBertForSequenceClassificationModule(nn.Module):
             else self.config.hidden_dropout_prob
         )
         self.dropout = nn.Dropout(rate=classifier_dropout)
-        self.classifier = nn.Dense(self.config.num_labels, dtype=self.dtype,)
+        self.classifier = nn.Dense(
+            self.config.num_labels,
+            dtype=self.dtype,
+        )
 
     def __call__(
         self,
@@ -1322,7 +1349,9 @@ class FlaxBertForSequenceClassificationModule(nn.Module):
             return (logits,) + outputs[2:]
 
         return FlaxSequenceClassifierOutput(
-            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1353,7 +1382,9 @@ class FlaxBertForMultipleChoiceModule(nn.Module):
 
     def setup(self):
         self.bert = FlaxBertModule(
-            config=self.config, dtype=self.dtype, gradient_checkpointing=self.gradient_checkpointing,
+            config=self.config,
+            dtype=self.dtype,
+            gradient_checkpointing=self.gradient_checkpointing,
         )
         self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
         self.classifier = nn.Dense(1, dtype=self.dtype)
@@ -1399,7 +1430,9 @@ class FlaxBertForMultipleChoiceModule(nn.Module):
             return (reshaped_logits,) + outputs[2:]
 
         return FlaxMultipleChoiceModelOutput(
-            logits=reshaped_logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=reshaped_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1475,7 +1508,9 @@ class FlaxBertForTokenClassificationModule(nn.Module):
             return (logits,) + outputs[1:]
 
         return FlaxTokenClassifierOutput(
-            logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

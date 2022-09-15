@@ -51,7 +51,15 @@ def make_test_data_dir(tmp_dir):
 
 
 class TestAll(TestCasePlus):
-    @parameterized.expand([MBART_TINY, MARIAN_TINY, T5_TINY, BART_TINY, PEGASUS_XSUM,],)
+    @parameterized.expand(
+        [
+            MBART_TINY,
+            MARIAN_TINY,
+            T5_TINY,
+            BART_TINY,
+            PEGASUS_XSUM,
+        ],
+    )
     @slow
     def test_seq2seq_dataset_truncation(self, tok_name):
         tokenizer = AutoTokenizer.from_pretrained(tok_name)
@@ -99,7 +107,11 @@ class TestAll(TestCasePlus):
         max_len_target = max(len(tokenizer.encode(a)) for a in SUMMARIES)
         trunc_target = 4
         train_dataset = LegacySeq2SeqDataset(
-            tokenizer, data_dir=tmp_dir, type_path="train", max_source_length=20, max_target_length=trunc_target,
+            tokenizer,
+            data_dir=tmp_dir,
+            type_path="train",
+            max_source_length=20,
+            max_target_length=trunc_target,
         )
         dataloader = DataLoader(train_dataset, batch_size=2, collate_fn=train_dataset.collate_fn)
         for batch in dataloader:
@@ -199,7 +211,15 @@ class TestAll(TestCasePlus):
         ids2 = set(DistributedSortishSampler(ds, 256, num_replicas=2, rank=1, add_extra_examples=False))
         assert ids1.intersection(ids2) == set()
 
-    @parameterized.expand([MBART_TINY, MARIAN_TINY, T5_TINY, BART_TINY, PEGASUS_XSUM,],)
+    @parameterized.expand(
+        [
+            MBART_TINY,
+            MARIAN_TINY,
+            T5_TINY,
+            BART_TINY,
+            PEGASUS_XSUM,
+        ],
+    )
     def test_dataset_kwargs(self, tok_name):
         tokenizer = AutoTokenizer.from_pretrained(tok_name, use_fast=False)
         if tok_name == MBART_TINY:

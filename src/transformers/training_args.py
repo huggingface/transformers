@@ -517,10 +517,12 @@ class TrainingArguments:
     do_eval: bool = field(default=False, metadata={"help": "Whether to run eval on the dev set."})
     do_predict: bool = field(default=False, metadata={"help": "Whether to run predictions on the test set."})
     evaluation_strategy: Union[IntervalStrategy, str] = field(
-        default="no", metadata={"help": "The evaluation strategy to use."},
+        default="no",
+        metadata={"help": "The evaluation strategy to use."},
     )
     prediction_loss_only: bool = field(
-        default=False, metadata={"help": "When performing evaluation and predictions, only returns the loss."},
+        default=False,
+        metadata={"help": "When performing evaluation and predictions, only returns the loss."},
     )
 
     per_device_train_batch_size: int = field(
@@ -581,7 +583,8 @@ class TrainingArguments:
         metadata={"help": "If > 0: set total number of training steps to perform. Override num_train_epochs."},
     )
     lr_scheduler_type: Union[SchedulerType, str] = field(
-        default="linear", metadata={"help": "The scheduler type to use."},
+        default="linear",
+        metadata={"help": "The scheduler type to use."},
     )
     warmup_ratio: float = field(
         default=0.0, metadata={"help": "Linear warmup over warmup_ratio fraction of total steps."}
@@ -617,13 +620,15 @@ class TrainingArguments:
     )
     logging_dir: Optional[str] = field(default=None, metadata={"help": "Tensorboard log dir."})
     logging_strategy: Union[IntervalStrategy, str] = field(
-        default="steps", metadata={"help": "The logging strategy to use."},
+        default="steps",
+        metadata={"help": "The logging strategy to use."},
     )
     logging_first_step: bool = field(default=False, metadata={"help": "Log the first global_step"})
     logging_steps: int = field(default=500, metadata={"help": "Log every X updates steps."})
     logging_nan_inf_filter: bool = field(default=True, metadata={"help": "Filter nan and inf losses for logging."})
     save_strategy: Union[IntervalStrategy, str] = field(
-        default="steps", metadata={"help": "The checkpoint save strategy to use."},
+        default="steps",
+        metadata={"help": "The checkpoint save strategy to use."},
     )
     save_steps: int = field(default=500, metadata={"help": "Save checkpoint every X updates steps."})
     save_total_limit: Optional[int] = field(
@@ -672,7 +677,8 @@ class TrainingArguments:
         },
     )
     fp16: bool = field(
-        default=False, metadata={"help": "Whether to use fp16 (mixed) precision instead of 32-bit"},
+        default=False,
+        metadata={"help": "Whether to use fp16 (mixed) precision instead of 32-bit"},
     )
     fp16_opt_level: str = field(
         default="O1",
@@ -700,7 +706,8 @@ class TrainingArguments:
         },
     )
     fp16_full_eval: bool = field(
-        default=False, metadata={"help": "Whether to use full float16 evaluation instead of 32-bit"},
+        default=False,
+        metadata={"help": "Whether to use full float16 evaluation instead of 32-bit"},
     )
     tf32: Optional[bool] = field(
         default=None,
@@ -844,7 +851,8 @@ class TrainingArguments:
         default=0.0, metadata={"help": "The label smoothing epsilon to apply (zero means no label smoothing)."}
     )
     optim: Union[OptimizerNames, str] = field(
-        default="adamw_hf", metadata={"help": "The optimizer to use."},
+        default="adamw_hf",
+        metadata={"help": "The optimizer to use."},
     )
     adafactor: bool = field(default=False, metadata={"help": "Whether or not to replace AdamW by Adafactor."})
     group_by_length: bool = field(
@@ -852,7 +860,8 @@ class TrainingArguments:
         metadata={"help": "Whether or not to group samples of roughly the same length together when batching."},
     )
     length_column_name: Optional[str] = field(
-        default="length", metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
+        default="length",
+        metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
     )
     report_to: Optional[List[str]] = field(
         default=None, metadata={"help": "The list of integrations to report the results and logs to."}
@@ -888,13 +897,15 @@ class TrainingArguments:
         default=False, metadata={"help": "Whether or not to upload the trained model to the model hub after training."}
     )
     resume_from_checkpoint: Optional[str] = field(
-        default=None, metadata={"help": "The path to a folder with a valid checkpoint for your model."},
+        default=None,
+        metadata={"help": "The path to a folder with a valid checkpoint for your model."},
     )
     hub_model_id: Optional[str] = field(
         default=None, metadata={"help": "The name of the repository to keep in sync with the local `output_dir`."}
     )
     hub_strategy: Union[HubStrategy, str] = field(
-        default="every_save", metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
+        default="every_save",
+        metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
     )
     hub_token: Optional[str] = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
     hub_private_repo: bool = field(default=False, metadata={"help": "Whether the model repository is private or not."})
@@ -926,7 +937,8 @@ class TrainingArguments:
     )
     _n_gpu: int = field(init=False, repr=False, default=-1)
     mp_parameters: str = field(
-        default="", metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in Trainer"},
+        default="",
+        metadata={"help": "Used by the SageMaker launcher to send mp-specific args. Ignored in Trainer"},
     )
 
     auto_find_batch_size: bool = field(

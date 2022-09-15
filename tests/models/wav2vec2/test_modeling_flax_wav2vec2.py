@@ -462,8 +462,10 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
         EXPECTED_TRANSCRIPTIONS = [
             "a man said to the universe sir i exist",
             "sweat covered brion's body trickling into the tight loin cloth that was the only garment he wore",
-            "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena"
-            " around him with the thousands of spectators were trivialities not worth thinking about",
+            (
+                "the cut on his chest still dripping blood the ache of his overstrained eyes even the soaring arena"
+                " around him with the thousands of spectators were trivialities not worth thinking about"
+            ),
             "his instant panic was followed by a small sharp blow high on his chest",
         ]
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
@@ -483,11 +485,16 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
         )
 
         mask_time_indices = _compute_mask_indices(
-            features_shape, model.config.mask_time_prob, model.config.mask_time_length, min_masks=2,
+            features_shape,
+            model.config.mask_time_prob,
+            model.config.mask_time_length,
+            min_masks=2,
         )
 
         outputs = model(
-            inputs_dict.input_values, attention_mask=inputs_dict.attention_mask, mask_time_indices=mask_time_indices,
+            inputs_dict.input_values,
+            attention_mask=inputs_dict.attention_mask,
+            mask_time_indices=mask_time_indices,
         )
 
         # compute cosine similarity
@@ -504,7 +511,9 @@ class FlaxWav2Vec2ModelIntegrationTest(unittest.TestCase):
         model_rand = FlaxWav2Vec2ForPreTraining(config)
 
         outputs_rand = model_rand(
-            inputs_dict.input_values, attention_mask=inputs_dict.attention_mask, mask_time_indices=mask_time_indices,
+            inputs_dict.input_values,
+            attention_mask=inputs_dict.attention_mask,
+            mask_time_indices=mask_time_indices,
         )
 
         # compute cosine similarity

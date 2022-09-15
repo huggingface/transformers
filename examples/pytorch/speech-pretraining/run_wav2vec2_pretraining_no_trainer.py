@@ -52,7 +52,10 @@ logger = get_logger(__name__)
 def parse_args():
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
     parser.add_argument(
-        "--dataset_name", type=str, default=None, help="The name of the dataset to use (via the datasets library).",
+        "--dataset_name",
+        type=str,
+        default=None,
+        help="The name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
         "--dataset_config_names",
@@ -95,10 +98,16 @@ def parse_args():
         help="Percentage of training data that should be used for validation if no validation is present in dataset.",
     )
     parser.add_argument(
-        "--logging_steps", type=int, default=500, help="Number of steps between each logging",
+        "--logging_steps",
+        type=int,
+        default=500,
+        help="Number of steps between each logging",
     )
     parser.add_argument(
-        "--saving_steps", type=int, default=500, help="Number of steps between each logging",
+        "--saving_steps",
+        type=int,
+        default=500,
+        help="Number of steps between each logging",
     )
     parser.add_argument(
         "--audio_column_name",
@@ -113,13 +122,22 @@ def parse_args():
         required=True,
     )
     parser.add_argument(
-        "--config_name", type=str, default=None, help="Pretrained config name or path if not the same as model_name",
+        "--config_name",
+        type=str,
+        default=None,
+        help="Pretrained config name or path if not the same as model_name",
     )
     parser.add_argument(
-        "--train_cache_file_name", type=str, default=None, help="Path to the train cached file name",
+        "--train_cache_file_name",
+        type=str,
+        default=None,
+        help="Path to the train cached file name",
     )
     parser.add_argument(
-        "--validation_cache_file_name", type=str, default=None, help="Path to the validation cached file name",
+        "--validation_cache_file_name",
+        type=str,
+        default=None,
+        help="Path to the validation cached file name",
     )
     parser.add_argument(
         "--per_device_train_batch_size",
@@ -171,10 +189,16 @@ def parse_args():
     parser.add_argument("--output_dir", type=str, default=None, help="Where to store the final model.")
     parser.add_argument("--seed", type=int, default=0, help="A seed for reproducible training.")
     parser.add_argument(
-        "--max_gumbel_temperature", type=float, default=2.0, help="Maximum temperature for gumbel softmax.",
+        "--max_gumbel_temperature",
+        type=float,
+        default=2.0,
+        help="Maximum temperature for gumbel softmax.",
     )
     parser.add_argument(
-        "--min_gumbel_temperature", type=float, default=0.5, help="Minimum temperature for gumbel softmax.",
+        "--min_gumbel_temperature",
+        type=float,
+        default=0.5,
+        help="Minimum temperature for gumbel softmax.",
     )
     parser.add_argument(
         "--gumbel_temperature_decay", type=float, default=0.999995, help="Decay of gumbel temperature during training."
@@ -201,13 +225,22 @@ def parse_args():
         ),
     )
     parser.add_argument(
-        "--adam_beta1", type=float, default=0.9, help="Beta1 for AdamW optimizer",
+        "--adam_beta1",
+        type=float,
+        default=0.9,
+        help="Beta1 for AdamW optimizer",
     )
     parser.add_argument(
-        "--adam_beta2", type=float, default=0.999, help="Beta2 for AdamW optimizer",
+        "--adam_beta2",
+        type=float,
+        default=0.999,
+        help="Beta2 for AdamW optimizer",
     )
     parser.add_argument(
-        "--adam_epsilon", type=float, default=1e-8, help="Epsilon for AdamW optimizer",
+        "--adam_epsilon",
+        type=float,
+        default=1e-8,
+        help="Epsilon for AdamW optimizer",
     )
     parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument(
@@ -262,7 +295,10 @@ class DataCollatorForWav2Vec2Pretraining:
     def __call__(self, features: List[Dict[str, Union[List[int], torch.Tensor]]]) -> Dict[str, torch.Tensor]:
         # reformat list to dict and set to pytorch format
         batch = self.feature_extractor.pad(
-            features, padding=self.padding, pad_to_multiple_of=self.pad_to_multiple_of, return_tensors="pt",
+            features,
+            padding=self.padding,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            return_tensors="pt",
         )
 
         device = batch["input_values"].device
@@ -291,7 +327,9 @@ class DataCollatorForWav2Vec2Pretraining:
 
         # sample negative indices
         sampled_negative_indices = _sample_negative_indices(
-            features_shape, self.model.config.num_negatives, mask_time_indices=mask_time_indices,
+            features_shape,
+            self.model.config.num_negatives,
+            mask_time_indices=mask_time_indices,
         )
         batch["mask_time_indices"] = torch.tensor(mask_time_indices, dtype=torch.long, device=device)
         batch["sampled_negative_indices"] = torch.tensor(sampled_negative_indices, dtype=torch.long, device=device)
@@ -315,7 +353,7 @@ def get_grad_norm(params, scale=1):
         if p.grad is not None:
             param_norm = (p.grad.detach().data / scale).norm(2)
             total_norm += param_norm.item() ** 2
-    total_norm = total_norm ** 0.5
+    total_norm = total_norm**0.5
     return total_norm
 
 
@@ -368,7 +406,10 @@ def main():
     for dataset_config_name, train_split_name in zip(args.dataset_config_names, args.dataset_split_names):
         # load dataset
         dataset_split = load_dataset(
-            args.dataset_name, dataset_config_name, split=train_split_name, cache_dir=args.cache_dir,
+            args.dataset_name,
+            dataset_config_name,
+            split=train_split_name,
+            cache_dir=args.cache_dir,
         )
         datasets_splits.append(dataset_split)
 
@@ -440,7 +481,9 @@ def main():
 
         if min_length > 0.0:
             vectorized_datasets = vectorized_datasets.filter(
-                lambda x: x > min_length, num_proc=args.preprocessing_num_workers, input_columns=["input_length"],
+                lambda x: x > min_length,
+                num_proc=args.preprocessing_num_workers,
+                input_columns=["input_length"],
             )
 
         vectorized_datasets = vectorized_datasets.remove_columns("input_length")
@@ -585,7 +628,7 @@ def main():
 
                 # update gumbel temperature
                 gumbel_temperature = max(
-                    args.max_gumbel_temperature * args.gumbel_temperature_decay ** completed_steps,
+                    args.max_gumbel_temperature * args.gumbel_temperature_decay**completed_steps,
                     args.min_gumbel_temperature,
                 )
                 if hasattr(model, "module"):

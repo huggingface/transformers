@@ -59,7 +59,8 @@ _IS_IN_DEBUG_MODE = os.environ.get("FX_DEBUG_MODE", "").upper() in ENV_VARS_TRUE
 
 
 def _generate_supported_model_class_names(
-    model_name: Type[PretrainedConfig], supported_tasks: Optional[Union[str, List[str]]] = None,
+    model_name: Type[PretrainedConfig],
+    supported_tasks: Optional[Union[str, List[str]]] = None,
 ) -> List[str]:
     task_mapping = {
         "default": MODEL_MAPPING_NAMES,
@@ -757,11 +758,21 @@ class HFTracer(Tracer):
             )
         elif "visual_feats" in input_name:
             inputs_dict[input_name] = torch.zeros(
-                shape + [model.config.visual_feat_dim,], dtype=torch.float, device=device,
+                shape
+                + [
+                    model.config.visual_feat_dim,
+                ],
+                dtype=torch.float,
+                device=device,
             )
         elif "visual_pos" in input_name:
             inputs_dict[input_name] = torch.zeros(
-                shape + [model.config.visual_pos_dim,], dtype=torch.float, device=device,
+                shape
+                + [
+                    model.config.visual_pos_dim,
+                ],
+                dtype=torch.float,
+                device=device,
             )
         elif "inputs" in input_name:
             inputs_dict[input_name] = torch.zeros(*shape, dtype=torch.float, device=device)
@@ -1088,7 +1099,9 @@ def check_if_model_is_supported(model: PreTrainedModel):
 
 
 def symbolic_trace(
-    model: PreTrainedModel, input_names: Optional[List[str]] = None, disable_check: bool = False,
+    model: PreTrainedModel,
+    input_names: Optional[List[str]] = None,
+    disable_check: bool = False,
 ) -> GraphModule:
     """
     Performs symbolic tracing on the model.

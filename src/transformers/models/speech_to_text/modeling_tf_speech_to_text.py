@@ -200,7 +200,9 @@ class TFSpeech2TextSinusoidalPositionalEmbedding(tf.keras.layers.Layer):
         https://github.com/tensorflow/models/blob/a009f4fb9d2fc4949e32192a944688925ef78659/official/transformer/v2/embedding_layer.py#L24
         """
         self.embeddings = self.add_weight(
-            name="weights", shape=tf.shape(self.embedding_weights), trainable=False,  # name also used in PT
+            name="weights",
+            shape=tf.shape(self.embedding_weights),
+            trainable=False,  # name also used in PT
         )
         self.embeddings.assign(self.embedding_weights)
         super().build(input_shape)
@@ -258,7 +260,7 @@ class TFSpeech2TextAttention(tf.keras.layers.Layer):
                 f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim}"
                 f" and `num_heads`: {num_heads})."
             )
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
         self.k_proj = tf.keras.layers.Dense(embed_dim, use_bias=bias, name="k_proj")
@@ -871,7 +873,10 @@ class TFSpeech2TextEncoder(tf.keras.layers.Layer):
                 continue
 
             hidden_states, attn = encoder_layer(
-                hidden_states, attention_mask, head_mask[idx] if head_mask is not None else None, training=training,
+                hidden_states,
+                attention_mask,
+                head_mask[idx] if head_mask is not None else None,
+                training=training,
             )
 
             if output_attentions:

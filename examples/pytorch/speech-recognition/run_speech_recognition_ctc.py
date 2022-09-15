@@ -96,7 +96,8 @@ class ModelArguments:
         },
     )
     final_dropout: float = field(
-        default=0.0, metadata={"help": "The dropout probability for the final projection layer."},
+        default=0.0,
+        metadata={"help": "The dropout probability for the final projection layer."},
     )
     mask_time_prob: float = field(
         default=0.05,
@@ -109,7 +110,8 @@ class ModelArguments:
         },
     )
     mask_time_length: int = field(
-        default=10, metadata={"help": "Length of vector span to mask along the time axis."},
+        default=10,
+        metadata={"help": "Length of vector span to mask along the time axis."},
     )
     mask_feature_prob: float = field(
         default=0.0,
@@ -122,7 +124,8 @@ class ModelArguments:
         },
     )
     mask_feature_length: int = field(
-        default=10, metadata={"help": "Length of vector span to mask along the feature axis."},
+        default=10,
+        metadata={"help": "Length of vector span to mask along the feature axis."},
     )
     layerdrop: float = field(default=0.0, metadata={"help": "The LayerDrop probability."})
     ctc_loss_reduction: Optional[str] = field(
@@ -173,7 +176,8 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached preprocessed datasets or not."}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
     max_train_samples: Optional[int] = field(
         default=None,
@@ -194,10 +198,12 @@ class DataTrainingArguments:
         },
     )
     chars_to_ignore: Optional[List[str]] = list_field(
-        default=None, metadata={"help": "A list of characters to remove from the transcripts."},
+        default=None,
+        metadata={"help": "A list of characters to remove from the transcripts."},
     )
     eval_metrics: List[str] = list_field(
-        default=["wer"], metadata={"help": "A list of metrics the model should be evaluated on. E.g. `'wer cer'`"},
+        default=["wer"],
+        metadata={"help": "A list of metrics the model should be evaluated on. E.g. `'wer cer'`"},
     )
     max_duration_in_seconds: float = field(
         default=20.0,
@@ -232,13 +238,16 @@ class DataTrainingArguments:
         },
     )
     unk_token: str = field(
-        default="[UNK]", metadata={"help": "The unk token for the tokenizer"},
+        default="[UNK]",
+        metadata={"help": "The unk token for the tokenizer"},
     )
     pad_token: str = field(
-        default="[PAD]", metadata={"help": "The padding token for the tokenizer"},
+        default="[PAD]",
+        metadata={"help": "The padding token for the tokenizer"},
     )
     word_delimiter_token: str = field(
-        default="|", metadata={"help": "The word delimiter token for the tokenizer"},
+        default="|",
+        metadata={"help": "The word delimiter token for the tokenizer"},
     )
     phoneme_language: Optional[str] = field(
         default=None,
@@ -291,7 +300,10 @@ class DataCollatorCTCWithPadding:
         label_features = [{"input_ids": feature["labels"]} for feature in features]
 
         batch = self.processor.pad(
-            input_features, padding=self.padding, pad_to_multiple_of=self.pad_to_multiple_of, return_tensors="pt",
+            input_features,
+            padding=self.padding,
+            pad_to_multiple_of=self.pad_to_multiple_of,
+            return_tensors="pt",
         )
 
         labels_batch = self.processor.pad(
@@ -504,7 +516,10 @@ def main():
             if not os.path.isfile(vocab_file):
                 os.makedirs(tokenizer_name_or_path, exist_ok=True)
                 vocab_dict = create_vocabulary_from_data(
-                    raw_datasets, word_delimiter_token=word_delimiter_token, unk_token=unk_token, pad_token=pad_token,
+                    raw_datasets,
+                    word_delimiter_token=word_delimiter_token,
+                    unk_token=unk_token,
+                    pad_token=pad_token,
                 )
 
                 # save vocab dict to be loaded into tokenizer
@@ -527,7 +542,9 @@ def main():
 
     # load feature_extractor and tokenizer
     tokenizer = AutoTokenizer.from_pretrained(
-        tokenizer_name_or_path, use_auth_token=data_args.use_auth_token, **tokenizer_kwargs,
+        tokenizer_name_or_path,
+        use_auth_token=data_args.use_auth_token,
+        **tokenizer_kwargs,
     )
     feature_extractor = AutoFeatureExtractor.from_pretrained(
         model_args.model_name_or_path, cache_dir=model_args.cache_dir, use_auth_token=data_args.use_auth_token
@@ -617,7 +634,9 @@ def main():
 
         # filter data that is shorter than min_input_length
         vectorized_datasets = vectorized_datasets.filter(
-            is_audio_in_length_range, num_proc=num_workers, input_columns=["input_length"],
+            is_audio_in_length_range,
+            num_proc=num_workers,
+            input_columns=["input_length"],
         )
 
     # 7. Next, we can prepare the training.

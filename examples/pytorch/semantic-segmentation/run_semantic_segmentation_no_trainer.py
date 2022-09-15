@@ -181,7 +181,10 @@ def parse_args():
         default="nvidia/mit-b0",
     )
     parser.add_argument(
-        "--dataset_name", type=str, help="Name of the dataset on the hub.", default="segments/sidewalk-semantic",
+        "--dataset_name",
+        type=str,
+        help="Name of the dataset on the hub.",
+        default="segments/sidewalk-semantic",
     )
     parser.add_argument(
         "--reduce_labels",
@@ -189,10 +192,15 @@ def parse_args():
         help="Whether or not to reduce all labels by 1 and replace background by 255.",
     )
     parser.add_argument(
-        "--train_val_split", type=float, default=0.15, help="Fraction of the dataset to be used for validation.",
+        "--train_val_split",
+        type=float,
+        default=0.15,
+        help="Fraction of the dataset to be used for validation.",
     )
     parser.add_argument(
-        "--cache_dir", type=str, help="Path to a folder in which the model and dataset will be cached.",
+        "--cache_dir",
+        type=str,
+        help="Path to a folder in which the model and dataset will be cached.",
     )
     parser.add_argument(
         "--use_auth_token",
@@ -218,13 +226,22 @@ def parse_args():
         help="Initial learning rate (after the potential warmup period) to use.",
     )
     parser.add_argument(
-        "--adam_beta1", type=float, default=0.9, help="Beta1 for AdamW optimizer",
+        "--adam_beta1",
+        type=float,
+        default=0.9,
+        help="Beta1 for AdamW optimizer",
     )
     parser.add_argument(
-        "--adam_beta2", type=float, default=0.999, help="Beta2 for AdamW optimizer",
+        "--adam_beta2",
+        type=float,
+        default=0.999,
+        help="Beta2 for AdamW optimizer",
     )
     parser.add_argument(
-        "--adam_epsilon", type=float, default=1e-8, help="Epsilon for AdamW optimizer",
+        "--adam_epsilon",
+        type=float,
+        default=1e-8,
+        help="Epsilon for AdamW optimizer",
     )
     parser.add_argument("--num_train_epochs", type=int, default=3, help="Total number of training epochs to perform.")
     parser.add_argument(
@@ -603,11 +620,14 @@ def main():
             predictions, references = accelerator.gather_for_metrics((predictions, batch["labels"]))
 
             metric.add_batch(
-                predictions=predictions, references=references,
+                predictions=predictions,
+                references=references,
             )
 
         eval_metrics = metric.compute(
-            num_labels=len(id2label), ignore_index=255, reduce_labels=False,  # we've already reduced the labels before
+            num_labels=len(id2label),
+            ignore_index=255,
+            reduce_labels=False,  # we've already reduced the labels before
         )
         logger.info(f"epoch {epoch}: {eval_metrics}")
 

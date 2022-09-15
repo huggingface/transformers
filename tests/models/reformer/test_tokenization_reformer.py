@@ -102,7 +102,11 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Simple input
                 self.assertRaises(
-                    ValueError, tokenizer_r.batch_encode_plus, s2, max_length=max_length, padding="max_length",
+                    ValueError,
+                    tokenizer_r.batch_encode_plus,
+                    s2,
+                    max_length=max_length,
+                    padding="max_length",
                 )
 
                 # Pair input
@@ -113,7 +117,11 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Pair input
                 self.assertRaises(
-                    ValueError, tokenizer_r.batch_encode_plus, p2, max_length=max_length, padding="max_length",
+                    ValueError,
+                    tokenizer_r.batch_encode_plus,
+                    p2,
+                    max_length=max_length,
+                    padding="max_length",
                 )
 
     # tokenizer has no padding token
@@ -127,7 +135,8 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
 
         self.assertListEqual(
-            tokenizer.convert_tokens_to_ids(tokens), [285, 46, 10, 170, 382],
+            tokenizer.convert_tokens_to_ids(tokens),
+            [285, 46, 10, 170, 382],
         )
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
@@ -159,7 +168,8 @@ class ReformerTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         )
         ids = tokenizer.convert_tokens_to_ids(tokens)
         self.assertListEqual(
-            ids, [8, 21, 84, 55, 24, 19, 7, 0, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 0, 4],
+            ids,
+            [8, 21, 84, 55, 24, 19, 7, 0, 602, 347, 347, 347, 3, 12, 66, 46, 72, 80, 6, 0, 4],
         )
 
         back_tokens = tokenizer.convert_ids_to_tokens(ids)

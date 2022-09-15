@@ -138,10 +138,16 @@ class FlaxVisionTextDualEncoderModule(nn.Module):
         self.text_model = text_module(text_config, dtype=self.dtype)
 
         self.visual_projection = nn.Dense(
-            self.projection_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.02), use_bias=False,
+            self.projection_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(0.02),
+            use_bias=False,
         )
         self.text_projection = nn.Dense(
-            self.projection_dim, dtype=self.dtype, kernel_init=jax.nn.initializers.normal(0.02), use_bias=False,
+            self.projection_dim,
+            dtype=self.dtype,
+            kernel_init=jax.nn.initializers.normal(0.02),
+            use_bias=False,
         )
 
         self.logit_scale = self.param(
@@ -407,7 +413,11 @@ class FlaxVisionTextDualEncoderModel(FlaxPreTrainedModel):
 
     @classmethod
     def from_vision_text_pretrained(
-        cls, vision_model_name_or_path: str = None, text_model_name_or_path: str = None, *model_args, **kwargs,
+        cls,
+        vision_model_name_or_path: str = None,
+        text_model_name_or_path: str = None,
+        *model_args,
+        **kwargs,
     ) -> FlaxPreTrainedModel:
         """
         Params:

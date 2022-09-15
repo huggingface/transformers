@@ -151,7 +151,8 @@ class VisionTextDualEncoderMixin:
         self.assertEqual(len(text_attentions), text_config.num_hidden_layers)
 
         self.assertEqual(
-            text_attentions[0].shape[-3:], (text_config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1]),
+            text_attentions[0].shape[-3:],
+            (text_config.num_attention_heads, input_ids.shape[-1], input_ids.shape[-1]),
         )
 
     def check_pt_flax_equivalence(self, pt_model, fx_model, inputs_dict):
@@ -380,7 +381,8 @@ class FlaxVisionTextDualEncoderIntegrationTest(unittest.TestCase):
         # verify the logits
         self.assertEqual(outputs.logits_per_image.shape, (inputs.pixel_values.shape[0], inputs.input_ids.shape[0]))
         self.assertEqual(
-            outputs.logits_per_text.shape, (inputs.input_ids.shape[0], inputs.pixel_values.shape[0]),
+            outputs.logits_per_text.shape,
+            (inputs.input_ids.shape[0], inputs.pixel_values.shape[0]),
         )
 
         expected_logits = np.array([[1.2284727, 0.3104122]])

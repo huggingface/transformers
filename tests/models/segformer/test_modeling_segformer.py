@@ -151,7 +151,11 @@ class SegformerModelTester:
 @require_torch
 class SegformerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (SegformerModel, SegformerForSemanticSegmentation, SegformerForImageClassification,)
+        (
+            SegformerModel,
+            SegformerForSemanticSegmentation,
+            SegformerForImageClassification,
+        )
         if is_torch_available()
         else ()
     )

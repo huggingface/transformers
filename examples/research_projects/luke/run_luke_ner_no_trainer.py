@@ -58,7 +58,10 @@ def parse_args():
         description="Finetune (m)LUKE on a token classification task (such as NER) with the accelerate library"
     )
     parser.add_argument(
-        "--dataset_name", type=str, default=None, help="The name of the dataset to use (via the datasets library).",
+        "--dataset_name",
+        type=str,
+        default=None,
+        help="The name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
         "--dataset_config_name",
@@ -123,7 +126,10 @@ def parse_args():
         required=True,
     )
     parser.add_argument(
-        "--config_name", type=str, default=None, help="Pretrained config name or path if not the same as model_name",
+        "--config_name",
+        type=str,
+        default=None,
+        help="Pretrained config name or path if not the same as model_name",
     )
     parser.add_argument(
         "--tokenizer_name",
@@ -186,10 +192,16 @@ def parse_args():
         help="Indication whether entity level metrics are to be returner.",
     )
     parser.add_argument(
-        "--task_name", type=str, default="ner", choices=["ner", "pos", "chunk"], help="The name of the task.",
+        "--task_name",
+        type=str,
+        default="ner",
+        choices=["ner", "pos", "chunk"],
+        help="The name of the task.",
     )
     parser.add_argument(
-        "--debug", action="store_true", help="Activate debug mode and run training only with a subset of data.",
+        "--debug",
+        action="store_true",
+        help="Activate debug mode and run training only with a subset of data.",
     )
     parser.add_argument("--push_to_hub", action="store_true", help="Whether or not to push the model to the Hub.")
     parser.add_argument(
@@ -223,7 +235,9 @@ def main():
     accelerator = Accelerator(kwargs_handlers=[handler])
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
-        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s", datefmt="%m/%d/%Y %H:%M:%S", level=logging.INFO,
+        format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%m/%d/%Y %H:%M:%S",
+        level=logging.INFO,
     )
     logger.info(accelerator.state)
 
@@ -355,7 +369,9 @@ def main():
 
     if args.model_name_or_path:
         model = LukeForEntitySpanClassification.from_pretrained(
-            args.model_name_or_path, from_tf=bool(".ckpt" in args.model_name_or_path), config=config,
+            args.model_name_or_path,
+            from_tf=bool(".ckpt" in args.model_name_or_path),
+            config=config,
         )
     else:
         logger.info("Training new model from scratch")
@@ -460,7 +476,11 @@ def main():
             entity_spans.append(list(map(tuple, v)))
 
         tokenized_inputs = tokenizer(
-            examples["text"], entity_spans=entity_spans, max_length=args.max_length, padding=padding, truncation=True,
+            examples["text"],
+            entity_spans=entity_spans,
+            max_length=args.max_length,
+            padding=padding,
+            truncation=True,
         )
 
         if padding == "max_length":
@@ -486,9 +506,15 @@ def main():
 
     with accelerator.main_process_first():
         raw_datasets = raw_datasets.map(
-            compute_sentence_boundaries_for_luke, batched=True, desc="Adding sentence boundaries",
+            compute_sentence_boundaries_for_luke,
+            batched=True,
+            desc="Adding sentence boundaries",
         )
-        raw_datasets = raw_datasets.map(compute_entity_spans_for_luke, batched=True, desc="Adding sentence spans",)
+        raw_datasets = raw_datasets.map(
+            compute_entity_spans_for_luke,
+            batched=True,
+            desc="Adding sentence spans",
+        )
 
         processed_raw_datasets = raw_datasets.map(
             tokenize_and_align_labels,
@@ -530,7 +556,10 @@ def main():
             "params": [p for n, p in model.named_parameters() if not any(nd in n for nd in no_decay)],
             "weight_decay": args.weight_decay,
         },
-        {"params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)], "weight_decay": 0.0,},
+        {
+            "params": [p for n, p in model.named_parameters() if any(nd in n for nd in no_decay)],
+            "weight_decay": 0.0,
+        },
     ]
     optimizer = AdamW(optimizer_grouped_parameters, lr=args.learning_rate)
 
@@ -652,7 +681,8 @@ def main():
             preds, refs = get_luke_labels(outputs, batch[label_column_name], original_entity_spans)
 
             metric.add_batch(
-                predictions=preds, references=refs,
+                predictions=preds,
+                references=refs,
             )  # predictions and preferences are expected to be a nested list of labels, not label_ids
 
         eval_metric = compute_metrics()

@@ -171,7 +171,9 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         # test that zero.Init() works correctly under zero3/fp16
         ds_config = {
             "train_batch_size": 1,
-            "zero_optimization": {"stage": 3,},
+            "zero_optimization": {
+                "stage": 3,
+            },
         }
 
         dschf = HfDeepSpeedConfig(ds_config)
@@ -228,7 +230,10 @@ class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
             # It's in the file as a demo for users since we want everything to work out of the box even if slower.
             config_zero3["zero_optimization"]["stage3_gather_16bit_weights_on_model_save"] = False
 
-        self.ds_config_dict = dict(zero2=config_zero2, zero3=config_zero3,)
+        self.ds_config_dict = dict(
+            zero2=config_zero2,
+            zero3=config_zero3,
+        )
 
     def tearDown(self):
         super().tearDown()
@@ -312,7 +317,8 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
         for key in keys:
             self.assertTrue(
-                key in str(context.exception), f"{key} is not in the exception message:\n{context.exception}",
+                key in str(context.exception),
+                f"{key} is not in the exception message:\n{context.exception}",
             )
 
     # Test various combos
@@ -385,7 +391,10 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 return model
 
             trainer = get_regression_trainer(
-                local_rank=0, fp16=True, model_init=model_init, deepspeed=ds_config_zero3_dict,
+                local_rank=0,
+                fp16=True,
+                model_init=model_init,
+                deepspeed=ds_config_zero3_dict,
             )
 
             n_trials = 3
@@ -485,12 +494,20 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
         train_len = 64
         a = b = 0.0
 
-        kwargs = dict(a=a, b=b, local_rank=0, train_len=train_len, deepspeed=self.get_config_dict(stage),)
+        kwargs = dict(
+            a=a,
+            b=b,
+            local_rank=0,
+            train_len=train_len,
+            deepspeed=self.get_config_dict(stage),
+        )
         kwargs[dtype] = True
 
         with mockenv_context(**self.dist_env_1_gpu):
             no_grad_accum_trainer = get_regression_trainer(
-                **kwargs, per_device_train_batch_size=16, gradient_accumulation_steps=1,
+                **kwargs,
+                per_device_train_batch_size=16,
+                gradient_accumulation_steps=1,
             )
             no_grad_accum_result = no_grad_accum_trainer.train()
             no_grad_accum_loss = no_grad_accum_result.training_loss
@@ -501,7 +518,9 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
         with mockenv_context(**self.dist_env_1_gpu):
             yes_grad_accum_trainer = get_regression_trainer(
-                **kwargs, per_device_train_batch_size=4, gradient_accumulation_steps=4,
+                **kwargs,
+                per_device_train_batch_size=4,
+                gradient_accumulation_steps=4,
             )
             yes_grad_accum_result = yes_grad_accum_trainer.train()
             yes_grad_accum_loss = yes_grad_accum_result.training_loss
@@ -564,7 +583,11 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
 
         # save checkpoints
         with mockenv_context(**self.dist_env_1_gpu):
-            kwargs = dict(output_dir=output_dir, save_steps=freq, deepspeed=ds_config_dict,)
+            kwargs = dict(
+                output_dir=output_dir,
+                save_steps=freq,
+                deepspeed=ds_config_dict,
+            )
             kwargs[dtype] = True
             trainer = get_regression_trainer(**kwargs)
             trainer.train()
@@ -833,7 +856,12 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     def test_do_eval_no_train(self):
         # testing only zero3 since zero2 makes no sense with inference
         self.run_and_check(
-            stage=ZERO3, dtype=FP16, eval_steps=1, distributed=False, do_train=False, do_eval=True,
+            stage=ZERO3,
+            dtype=FP16,
+            eval_steps=1,
+            distributed=False,
+            do_train=False,
+            do_eval=True,
         )
 
     @parameterized.expand(params, name_func=parameterized_custom_name_func)

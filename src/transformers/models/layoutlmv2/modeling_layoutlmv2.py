@@ -215,7 +215,12 @@ class LayoutLMv2Attention(nn.Module):
         rel_2d_pos=None,
     ):
         self_outputs = self.self(
-            hidden_states, attention_mask, head_mask, output_attentions, rel_pos=rel_pos, rel_2d_pos=rel_2d_pos,
+            hidden_states,
+            attention_mask,
+            head_mask,
+            output_attentions,
+            rel_pos=rel_pos,
+            rel_2d_pos=rel_2d_pos,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -380,7 +385,11 @@ class LayoutLMv2Encoder(nn.Module):
 
     def _calculate_1d_position_embeddings(self, hidden_states, position_ids):
         rel_pos_mat = position_ids.unsqueeze(-2) - position_ids.unsqueeze(-1)
-        rel_pos = relative_position_bucket(rel_pos_mat, num_buckets=self.rel_pos_bins, max_distance=self.max_rel_pos,)
+        rel_pos = relative_position_bucket(
+            rel_pos_mat,
+            num_buckets=self.rel_pos_bins,
+            max_distance=self.max_rel_pos,
+        )
         rel_pos = nn.functional.one_hot(rel_pos, num_classes=self.rel_pos_onehot_size).type_as(hidden_states)
         rel_pos = self.rel_pos_bias(rel_pos).permute(0, 3, 1, 2)
         rel_pos = rel_pos.contiguous()
@@ -392,10 +401,14 @@ class LayoutLMv2Encoder(nn.Module):
         rel_pos_x_2d_mat = position_coord_x.unsqueeze(-2) - position_coord_x.unsqueeze(-1)
         rel_pos_y_2d_mat = position_coord_y.unsqueeze(-2) - position_coord_y.unsqueeze(-1)
         rel_pos_x = relative_position_bucket(
-            rel_pos_x_2d_mat, num_buckets=self.rel_2d_pos_bins, max_distance=self.max_rel_2d_pos,
+            rel_pos_x_2d_mat,
+            num_buckets=self.rel_2d_pos_bins,
+            max_distance=self.max_rel_2d_pos,
         )
         rel_pos_y = relative_position_bucket(
-            rel_pos_y_2d_mat, num_buckets=self.rel_2d_pos_bins, max_distance=self.max_rel_2d_pos,
+            rel_pos_y_2d_mat,
+            num_buckets=self.rel_2d_pos_bins,
+            max_distance=self.max_rel_2d_pos,
         )
         rel_pos_x = nn.functional.one_hot(rel_pos_x, num_classes=self.rel_2d_pos_onehot_size).type_as(hidden_states)
         rel_pos_y = nn.functional.one_hot(rel_pos_y, num_classes=self.rel_2d_pos_onehot_size).type_as(hidden_states)
@@ -469,9 +482,19 @@ class LayoutLMv2Encoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions,] if v is not None)
+            return tuple(
+                v
+                for v in [
+                    hidden_states,
+                    all_hidden_states,
+                    all_self_attentions,
+                ]
+                if v is not None
+            )
         return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=all_hidden_states, attentions=all_self_attentions,
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
         )
 
 
@@ -543,7 +566,8 @@ class LayoutLMv2VisualBackbone(nn.Module):
         assert len(self.cfg.MODEL.PIXEL_MEAN) == len(self.cfg.MODEL.PIXEL_STD)
         num_channels = len(self.cfg.MODEL.PIXEL_MEAN)
         self.register_buffer(
-            "pixel_mean", torch.Tensor(self.cfg.MODEL.PIXEL_MEAN).view(num_channels, 1, 1),
+            "pixel_mean",
+            torch.Tensor(self.cfg.MODEL.PIXEL_MEAN).view(num_channels, 1, 1),
         )
         self.register_buffer("pixel_std", torch.Tensor(self.cfg.MODEL.PIXEL_STD).view(num_channels, 1, 1))
         self.out_feature_key = "p2"
@@ -748,12 +772,22 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
 
     def _calc_visual_bbox(self, image_feature_pool_shape, bbox, device, final_shape):
         visual_bbox_x = torch_int_div(
-            torch.arange(0, 1000 * (image_feature_pool_shape[1] + 1), 1000, device=device, dtype=bbox.dtype,),
+            torch.arange(
+                0,
+                1000 * (image_feature_pool_shape[1] + 1),
+                1000,
+                device=device,
+                dtype=bbox.dtype,
+            ),
             self.config.image_feature_pool_shape[1],
         )
         visual_bbox_y = torch_int_div(
             torch.arange(
-                0, 1000 * (self.config.image_feature_pool_shape[0] + 1), 1000, device=device, dtype=bbox.dtype,
+                0,
+                1000 * (self.config.image_feature_pool_shape[0] + 1),
+                1000,
+                device=device,
+                dtype=bbox.dtype,
             ),
             self.config.image_feature_pool_shape[0],
         )
@@ -877,7 +911,11 @@ class LayoutLMv2Model(LayoutLMv2PreTrainedModel):
             inputs_embeds=inputs_embeds,
         )
 
-        visual_emb = self._calc_img_embeddings(image=image, bbox=visual_bbox, position_ids=visual_position_ids,)
+        visual_emb = self._calc_img_embeddings(
+            image=image,
+            bbox=visual_bbox,
+            position_ids=visual_position_ids,
+        )
         final_emb = torch.cat([text_layout_emb, visual_emb], dim=1)
 
         extended_attention_mask = final_attention_mask.unsqueeze(1).unsqueeze(2)
@@ -1028,7 +1066,9 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
         )
 
         initial_image_embeddings = self.layoutlmv2._calc_img_embeddings(
-            image=image, bbox=visual_bbox, position_ids=visual_position_ids,
+            image=image,
+            bbox=visual_bbox,
+            position_ids=visual_position_ids,
         )
 
         outputs = self.layoutlmv2(
@@ -1091,7 +1131,10 @@ class LayoutLMv2ForSequenceClassification(LayoutLMv2PreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return SequenceClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1220,7 +1263,10 @@ class LayoutLMv2ForTokenClassification(LayoutLMv2PreTrainedModel):
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions,
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 

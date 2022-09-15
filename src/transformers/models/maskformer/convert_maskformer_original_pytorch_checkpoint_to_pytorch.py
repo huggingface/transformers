@@ -335,8 +335,14 @@ class OriginalMaskFormerCheckpointToOursConverter:
             # hidden states norms
             renamed_keys.extend(
                 [
-                    (f"{src_prefix}.norm{layer_idx}.weight", f"{dst_prefix}.hidden_states_norms.{layer_idx}.weight",),
-                    (f"{src_prefix}.norm{layer_idx}.bias", f"{dst_prefix}.hidden_states_norms.{layer_idx}.bias",),
+                    (
+                        f"{src_prefix}.norm{layer_idx}.weight",
+                        f"{dst_prefix}.hidden_states_norms.{layer_idx}.weight",
+                    ),
+                    (
+                        f"{src_prefix}.norm{layer_idx}.bias",
+                        f"{dst_prefix}.hidden_states_norms.{layer_idx}.bias",
+                    ),
                 ]
             )
         self.pop_all(renamed_keys, dst_state_dict, src_state_dict)
@@ -647,7 +653,10 @@ if __name__ == "__main__":
         ),
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", required=True, type=Path, help="Path to the folder to output PyTorch models.",
+        "--pytorch_dump_folder_path",
+        required=True,
+        type=Path,
+        help="Path to the folder to output PyTorch models.",
     )
     parser.add_argument(
         "--maskformer_dir",
@@ -712,8 +721,12 @@ if __name__ == "__main__":
         mask_former_for_instance_segmentation.save_pretrained(save_directory / model_name)
 
         feature_extractor.push_to_hub(
-            repo_path_or_name=save_directory / model_name, commit_message="Add model", use_temp_dir=True,
+            repo_path_or_name=save_directory / model_name,
+            commit_message="Add model",
+            use_temp_dir=True,
         )
         mask_former_for_instance_segmentation.push_to_hub(
-            repo_path_or_name=save_directory / model_name, commit_message="Add model", use_temp_dir=True,
+            repo_path_or_name=save_directory / model_name,
+            commit_message="Add model",
+            use_temp_dir=True,
         )

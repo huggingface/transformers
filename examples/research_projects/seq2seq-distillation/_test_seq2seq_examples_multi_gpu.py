@@ -98,7 +98,13 @@ class TestSummarizationDistillerMultiGPU(TestCasePlus):
 
     @require_torch_multi_gpu
     def test_multi_gpu(self):
-        updates = dict(no_teacher=True, freeze_encoder=True, gpus=2, overwrite_output_dir=True, sortish_sampler=True,)
+        updates = dict(
+            no_teacher=True,
+            freeze_encoder=True,
+            gpus=2,
+            overwrite_output_dir=True,
+            sortish_sampler=True,
+        )
         self._test_distiller_cli_fork(updates, check_contents=False)
 
     def _test_distiller_cli_fork(self, updates, check_contents=True):

@@ -76,7 +76,11 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
 
         outputs = text_classifier(["This is great !", "Something else"], return_all_scores=False)
         self.assertEqual(
-            nested_simplify(outputs), [{"label": "LABEL_0", "score": 0.504}, {"label": "LABEL_0", "score": 0.504},],
+            nested_simplify(outputs),
+            [
+                {"label": "LABEL_0", "score": 0.504},
+                {"label": "LABEL_0", "score": 0.504},
+            ],
         )
 
     @require_torch
@@ -160,7 +164,8 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         valid_inputs = {"text": "HuggingFace is in ", "text_pair": "Paris is in France"}
         outputs = text_classifier(valid_inputs)
         self.assertEqual(
-            nested_simplify(outputs), {"label": ANY(str), "score": ANY(float)},
+            nested_simplify(outputs),
+            {"label": ANY(str), "score": ANY(float)},
         )
         self.assertTrue(outputs["label"] in model.config.id2label.values())
 
@@ -176,6 +181,7 @@ class TextClassificationPipelineTests(unittest.TestCase, metaclass=PipelineTestC
         # We're keeping it working because of backward compatibility
         outputs = text_classifier([[["HuggingFace is in ", "Paris is in France"]]])
         self.assertEqual(
-            nested_simplify(outputs), [{"label": ANY(str), "score": ANY(float)}],
+            nested_simplify(outputs),
+            [{"label": ANY(str), "score": ANY(float)}],
         )
         self.assertTrue(outputs[0]["label"] in model.config.id2label.values())

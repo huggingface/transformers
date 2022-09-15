@@ -194,7 +194,13 @@ def main():
     model, human_eval_loader = accelerator.prepare(model, human_eval_loader)
 
     generations = complete_code(
-        accelerator, model, tokenizer, human_eval_loader, n_tasks=n_tasks, batch_size=args.batch_size, **gen_kwargs,
+        accelerator,
+        model,
+        tokenizer,
+        human_eval_loader,
+        n_tasks=n_tasks,
+        batch_size=args.batch_size,
+        **gen_kwargs,
     )
 
     if accelerator.is_main_process:

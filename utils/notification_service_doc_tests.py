@@ -151,7 +151,10 @@ class Message:
 
         return {
             "type": "section",
-            "text": {"type": "mrkdwn", "text": f"The following examples had failures:\n\n\n{report}\n",},
+            "text": {
+                "type": "mrkdwn",
+                "text": f"The following examples had failures:\n\n\n{report}\n",
+            },
         }
 
     @property
@@ -174,7 +177,10 @@ class Message:
         payload = [
             {
                 "type": "section",
-                "text": {"type": "plain_text", "text": "There was an issue running the tests.",},
+                "text": {
+                    "type": "plain_text",
+                    "text": "There was an issue running the tests.",
+                },
                 "accessory": {
                     "type": "button",
                     "text": {"type": "plain_text", "text": "Check Action results", "emoji": True},
@@ -199,7 +205,9 @@ class Message:
         text = f"{self.n_failures} failures out of {self.n_tests} tests," if self.n_failures else "All tests passed."
 
         self.thread_ts = client.chat_postMessage(
-            channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"], blocks=self.payload, text=text,
+            channel=os.environ["CI_SLACK_CHANNEL_ID_DAILY"],
+            blocks=self.payload,
+            text=text,
         )
 
     def get_reply_blocks(self, job_name, job_link, failures, text):
@@ -318,12 +326,23 @@ if __name__ == "__main__":
     github_actions_job_links = get_job_links()
     available_artifacts = retrieve_available_artifacts()
 
-    docs = collections.OrderedDict([("*.py", "API Examples"), ("*.mdx", "MDX Examples"),])
+    docs = collections.OrderedDict(
+        [
+            ("*.py", "API Examples"),
+            ("*.mdx", "MDX Examples"),
+        ]
+    )
 
     # This dict will contain all the information relative to each doc test category:
     # - failed: list of failed tests
     # - failures: dict in the format 'test': 'error_message'
-    doc_test_results = {v: {"failed": [], "failures": {},} for v in docs.values()}
+    doc_test_results = {
+        v: {
+            "failed": [],
+            "failures": {},
+        }
+        for v in docs.values()
+    }
 
     # Link to the GitHub Action job
     doc_test_results["job_link"] = github_actions_job_links.get("run_doctests")

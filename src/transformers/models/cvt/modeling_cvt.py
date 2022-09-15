@@ -216,7 +216,7 @@ class CvtSelfAttention(nn.Module):
         **kwargs
     ):
         super().__init__()
-        self.scale = embed_dim ** -0.5
+        self.scale = embed_dim**-0.5
         self.with_cls_token = with_cls_token
         self.embed_dim = embed_dim
         self.num_heads = num_heads
@@ -425,7 +425,9 @@ class CvtLayer(nn.Module):
 
     def forward(self, hidden_state, height, width):
         self_attention_output = self.attention(
-            self.layernorm_before(hidden_state), height, width,  # in Cvt, layernorm is applied before self-attention
+            self.layernorm_before(hidden_state),
+            height,
+            width,  # in Cvt, layernorm is applied before self-attention
         )
         attention_output = self_attention_output
         attention_output = self.drop_path(attention_output)
@@ -526,7 +528,9 @@ class CvtEncoder(nn.Module):
             return tuple(v for v in [hidden_state, cls_token, all_hidden_states] if v is not None)
 
         return BaseModelOutputWithCLSToken(
-            last_hidden_state=hidden_state, cls_token_value=cls_token, hidden_states=all_hidden_states,
+            last_hidden_state=hidden_state,
+            cls_token_value=cls_token,
+            hidden_states=all_hidden_states,
         )
 
 
@@ -620,7 +624,9 @@ class CvtModel(CvtPreTrainedModel):
             raise ValueError("You have to specify pixel_values")
 
         encoder_outputs = self.encoder(
-            pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict,
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
         sequence_output = encoder_outputs[0]
 
@@ -678,7 +684,11 @@ class CvtForImageClassification(CvtPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        outputs = self.cvt(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict,)
+        outputs = self.cvt(
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
 
         sequence_output = outputs[0]
         cls_token = outputs[1]

@@ -429,7 +429,11 @@ class TrainingSummary:
                 result["metrics"] = []
                 for metric_tag, metric_name in metric_mapping.items():
                     result["metrics"].append(
-                        {"name": metric_name, "type": metric_tag, "value": self.eval_results[metric_name],}
+                        {
+                            "name": metric_name,
+                            "type": metric_tag,
+                            "value": self.eval_results[metric_name],
+                        }
                     )
 
             # Remove partial results to avoid the model card being rejected.

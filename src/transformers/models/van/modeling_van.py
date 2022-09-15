@@ -186,7 +186,12 @@ class VanSpatialAttentionLayer(nn.Module):
     def __init__(self, hidden_size: int, hidden_act: str = "gelu"):
         super().__init__()
         self.pre_projection = nn.Sequential(
-            OrderedDict([("conv", nn.Conv2d(hidden_size, hidden_size, kernel_size=1)), ("act", ACT2FN[hidden_act]),])
+            OrderedDict(
+                [
+                    ("conv", nn.Conv2d(hidden_size, hidden_size, kernel_size=1)),
+                    ("act", ACT2FN[hidden_act]),
+                ]
+            )
         )
         self.attention_layer = VanLargeKernelAttentionLayer(hidden_size)
         self.post_projection = nn.Conv2d(hidden_size, hidden_size, kernel_size=1)
@@ -221,7 +226,11 @@ class VanLayer(nn.Module):
     """
 
     def __init__(
-        self, config: VanConfig, hidden_size: int, mlp_ratio: int = 4, drop_path_rate: float = 0.5,
+        self,
+        config: VanConfig,
+        hidden_size: int,
+        mlp_ratio: int = 4,
+        drop_path_rate: float = 0.5,
     ):
         super().__init__()
         self.drop_path = VanDropPath(drop_path) if drop_path_rate > 0.0 else nn.Identity()
@@ -273,7 +282,15 @@ class VanStage(nn.Module):
         super().__init__()
         self.embeddings = VanOverlappingPatchEmbedder(in_channels, hidden_size, patch_size, stride)
         self.layers = nn.Sequential(
-            *[VanLayer(config, hidden_size, mlp_ratio=mlp_ratio, drop_path_rate=drop_path_rate,) for _ in range(depth)]
+            *[
+                VanLayer(
+                    config,
+                    hidden_size,
+                    mlp_ratio=mlp_ratio,
+                    drop_path_rate=drop_path_rate,
+                )
+                for _ in range(depth)
+            ]
         )
         self.normalization = nn.LayerNorm(hidden_size, eps=config.layer_norm_eps)
 
@@ -437,7 +454,9 @@ class VanModel(VanPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         encoder_outputs = self.encoder(
-            pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict,
+            pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
         last_hidden_state = encoder_outputs[0]
         # global average pooling, n c w h -> n c

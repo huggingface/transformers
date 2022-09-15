@@ -1717,7 +1717,8 @@ REALM_FOR_OPEN_QA_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "`RealmForOpenQA` for end-to-end open domain question answering.", REALM_START_DOCSTRING,
+    "`RealmForOpenQA` for end-to-end open domain question answering.",
+    REALM_START_DOCSTRING,
 )
 class RealmForOpenQA(RealmPreTrainedModel):
     def __init__(self, config, retriever=None):
@@ -1755,7 +1756,12 @@ class RealmForOpenQA(RealmPreTrainedModel):
     @add_start_docstrings_to_model_forward(REALM_FOR_OPEN_QA_DOCSTRING.format("1, sequence_length"))
     @replace_return_docstrings(output_type=RealmForOpenQAOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
-        self, input_ids, attention_mask=None, token_type_ids=None, answer_ids=None, return_dict=None,
+        self,
+        input_ids,
+        attention_mask=None,
+        token_type_ids=None,
+        answer_ids=None,
+        return_dict=None,
     ):
         r"""
         Returns:
@@ -1843,4 +1849,7 @@ class RealmForOpenQA(RealmPreTrainedModel):
         if not return_dict:
             return reader_output, predicted_answer_ids
 
-        return RealmForOpenQAOutput(reader_output=reader_output, predicted_answer_ids=predicted_answer_ids,)
+        return RealmForOpenQAOutput(
+            reader_output=reader_output,
+            predicted_answer_ids=predicted_answer_ids,
+        )

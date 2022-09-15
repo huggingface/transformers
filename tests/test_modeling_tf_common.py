@@ -197,7 +197,7 @@ class TFModelTesterMixin:
             elif model_class in get_values(TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING):
                 num_patches = self.model_tester.image_size // self.model_tester.patch_size
                 inputs_dict["bool_masked_pos"] = tf.zeros(
-                    (self.model_tester.batch_size, num_patches ** 2), dtype=tf.int32
+                    (self.model_tester.batch_size, num_patches**2), dtype=tf.int32
                 )
             elif model_class in get_values(TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING):
                 batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
@@ -717,7 +717,9 @@ class TFModelTesterMixin:
             if model_class.__name__ in ["TFSpeech2TextModel", "TFSpeech2TextForConditionalGeneration"]:
                 inputs = {
                     "decoder_input_ids": tf.keras.Input(
-                        batch_shape=(2, max_input), name="decoder_input_ids", dtype="int32",
+                        batch_shape=(2, max_input),
+                        name="decoder_input_ids",
+                        dtype="int32",
                     ),
                     "input_features": tf.keras.Input(
                         batch_shape=(
@@ -732,7 +734,9 @@ class TFModelTesterMixin:
             elif self.is_encoder_decoder:
                 inputs = {
                     "decoder_input_ids": tf.keras.Input(
-                        batch_shape=(2, max_input), name="decoder_input_ids", dtype="int32",
+                        batch_shape=(2, max_input),
+                        name="decoder_input_ids",
+                        dtype="int32",
                     ),
                     "input_ids": tf.keras.Input(batch_shape=(2, max_input), name="input_ids", dtype="int32"),
                 }
@@ -965,7 +969,8 @@ class TFModelTesterMixin:
                 self.assertEqual(config.output_attentions, False)
                 self.assertEqual(len(hidden_states), expected_num_layers)
                 self.assertListEqual(
-                    list(hidden_states[0].shape[-2:]), [self.model_tester.seq_length, self.model_tester.hidden_size],
+                    list(hidden_states[0].shape[-2:]),
+                    [self.model_tester.seq_length, self.model_tester.hidden_size],
                 )
 
         for model_class in self.all_model_classes:
@@ -1281,7 +1286,14 @@ class TFModelTesterMixin:
                 model.generate(input_ids, do_sample=False, num_return_sequences=3, num_beams=2)
 
             # num_return_sequences > 1, sample
-            self._check_generated_ids(model.generate(input_ids, do_sample=True, num_beams=2, num_return_sequences=2,))
+            self._check_generated_ids(
+                model.generate(
+                    input_ids,
+                    do_sample=True,
+                    num_beams=2,
+                    num_return_sequences=2,
+                )
+            )
             # num_return_sequences > 1, greedy
             self._check_generated_ids(model.generate(input_ids, do_sample=False, num_beams=2, num_return_sequences=2))
 
@@ -1509,7 +1521,11 @@ class TFModelTesterMixin:
             model.set_weights(model_weights)
 
             history3 = model.fit(
-                dataset, validation_data=dataset, steps_per_epoch=1, validation_steps=1, shuffle=False,
+                dataset,
+                validation_data=dataset,
+                steps_per_epoch=1,
+                validation_steps=1,
+                shuffle=False,
             )
             val_loss3 = history3.history["val_loss"][0]
             self.assertTrue(not isnan(val_loss3))
@@ -2065,9 +2081,9 @@ class UtilsFunctionsTest(unittest.TestCase):
                 # Check a file is bigger than max_size only when it has a single weight
                 for shard_file, size in shard_to_size.items():
                     if max_size.endswith("kiB"):
-                        max_size_int = int(max_size[:-3]) * 2 ** 10
+                        max_size_int = int(max_size[:-3]) * 2**10
                     else:
-                        max_size_int = int(max_size[:-2]) * 10 ** 3
+                        max_size_int = int(max_size[:-2]) * 10**3
                     # Note: pickle adds some junk so the weight of the file can end up being slightly bigger than
                     # the size asked for (since we count parameters)
                     if size >= max_size_int + 50000:

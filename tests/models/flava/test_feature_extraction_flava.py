@@ -255,7 +255,11 @@ class FlavaFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         expected_height, expected_width = self.feature_extract_tester.get_expected_mask_size()
         self.assertEqual(
             encoded_images.bool_masked_pos.shape,
-            (self.feature_extract_tester.batch_size, expected_height, expected_width,),
+            (
+                self.feature_extract_tester.batch_size,
+                expected_height,
+                expected_width,
+            ),
         )
 
         # Test batched
@@ -289,7 +293,11 @@ class FlavaFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         expected_height, expected_width = self.feature_extract_tester.get_expected_mask_size()
         self.assertEqual(
             encoded_images.bool_masked_pos.shape,
-            (self.feature_extract_tester.batch_size, expected_height, expected_width,),
+            (
+                self.feature_extract_tester.batch_size,
+                expected_height,
+                expected_width,
+            ),
         )
 
     def test_call_numpy(self):

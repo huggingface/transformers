@@ -92,7 +92,8 @@ class ModelArguments:
         },
     )
     from_pt: bool = field(
-        default=True, metadata={"help": "whether to load the text and vision model using PyTorch checkpoints."},
+        default=True,
+        metadata={"help": "whether to load the text and vision model using PyTorch checkpoints."},
     )
     config_name: Optional[str] = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
@@ -129,7 +130,8 @@ class DataTrainingArguments:
         default=None, metadata={"help": "The input training data file (a jsonlines file)."}
     )
     validation_file: Optional[str] = field(
-        default=None, metadata={"help": "An optional input evaluation data file (a jsonlines file)."},
+        default=None,
+        metadata={"help": "An optional input evaluation data file (a jsonlines file)."},
     )
     max_seq_length: Optional[int] = field(
         default=72,
@@ -165,7 +167,8 @@ class DataTrainingArguments:
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
     preprocessing_num_workers: Optional[int] = field(
-        default=None, metadata={"help": "The number of processes to use for the preprocessing."},
+        default=None,
+        metadata={"help": "The number of processes to use for the preprocessing."},
     )
 
     def __post_init__(self):
@@ -360,11 +363,17 @@ def main():
 
     # Initialize the image-text dataset
     train_dataset = ImageTextDataset(
-        data_args.data_dir, data_args.train_file, captions_per_image=2, transform=preprocess,
+        data_args.data_dir,
+        data_args.train_file,
+        captions_per_image=2,
+        transform=preprocess,
     )
 
     eval_dataset = ImageTextDataset(
-        data_args.data_dir, data_args.validation_file, captions_per_image=1, transform=preprocess,
+        data_args.data_dir,
+        data_args.validation_file,
+        captions_per_image=1,
+        transform=preprocess,
     )
 
     # Store some constant
