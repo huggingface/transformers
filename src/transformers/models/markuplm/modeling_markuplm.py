@@ -60,8 +60,6 @@ MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/markuplm-large",
 ]
 
-MarkupLMLayerNorm = torch.nn.LayerNorm
-
 
 class XPathEmbeddings(nn.Module):
     """Construct the embeddings from xpath tags and subscripts.
@@ -144,7 +142,7 @@ class MarkupLMEmbeddings(nn.Module):
 
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-        self.LayerNorm = MarkupLMLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
@@ -201,20 +199,15 @@ class MarkupLMEmbeddings(nn.Module):
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
 
-        # xpath seq prepare
-
+        # prepare xpath seq
         if xpath_tags_seq is None:
             xpath_tags_seq = self.config.tag_pad_id * torch.ones(
                 tuple(list(input_shape) + [self.max_depth]), dtype=torch.long, device=device
             )
-            print("Xpath tags seq:", xpath_tags_seq)
-
         if xpath_subs_seq is None:
             xpath_subs_seq = self.config.subs_pad_id * torch.ones(
                 tuple(list(input_shape) + [self.max_depth]), dtype=torch.long, device=device
             )
-            print("Xpath subs seq:", xpath_subs_seq)
-        # xpath seq prepare
 
         words_embeddings = inputs_embeds
         position_embeddings = self.position_embeddings(position_ids)
@@ -715,6 +708,7 @@ class MarkupLMPreTrainedModel(PreTrainedModel):
     base_model_prefix = "markuplm"
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
+    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights with Bert->MarkupLM
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -727,7 +721,7 @@ class MarkupLMPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, MarkupLMLayerNorm):
+        elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
 
@@ -803,14 +797,18 @@ MARKUPLM_INPUTS_DOCSTRING = r"""
     MARKUPLM_START_DOCSTRING,
 )
 class MarkupLMModel(MarkupLMPreTrainedModel):
+    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->MarkupLM
     def __init__(self, config, add_pooling_layer=True):
-        super(MarkupLMModel, self).__init__(config)
+        super().__init__(config)
         self.config = config
 
         self.embeddings = MarkupLMEmbeddings(config)
         self.encoder = MarkupLMEncoder(config)
+
         self.pooler = MarkupLMPooler(config) if add_pooling_layer else None
-        self.init_weights()
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
