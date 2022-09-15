@@ -638,14 +638,13 @@ class Trainer:
                 raise RuntimeError("Torchdynamo is not installed.")
             import torchdynamo
             from torchdynamo.optimizations import backends
-            from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
 
             def get_ctx():
                 # Normal
                 if args.torchdynamo == "eager":
                     return torchdynamo.optimize("eager")
                 elif args.torchdynamo == "nvfuser":
-                    return torchdynamo.optimize(aot_autograd_speedup_strategy)
+                    return torchdynamo.optimize("aot_nvfuser")
                 # TensorRT
                 if args.torchdynamo in ["fx2trt-fp16", "fx2trt"]:
                     if not is_torch_tensorrt_fx_available():
