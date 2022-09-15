@@ -1301,17 +1301,18 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         pad_token_id = self.generator.config.pad_token_id
         assert pad_token_id is not None, "self.model.config.pad_token_id has to be defined."
 
-        shifted_input_ids = tf.cast(input_ids, tf.int32)
-        start_tokens = tf.fill((shape_list(shifted_input_ids)[0], 1), start_token_id)
-        shifted_input_ids = tf.concat([start_tokens, shifted_input_ids[:, :-1]], -1)
+        start_tokens = tf.fill((shape_list(input_ids)[0], 1), tf.cast(start_token_id, input_ids.dtype))
+        shifted_input_ids = tf.concat([start_tokens, input_ids[:, :-1]], -1)
 
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids = tf.where(
-            shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
+            shifted_input_ids == -100,
+            tf.fill(shape_list(shifted_input_ids), tf.cast(pad_token_id, input_ids.dtype)),
+            shifted_input_ids,
         )
 
         # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.cast(0, tf.int32))
+        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.cast(0, shifted_input_ids.dtype))
 
         # Make sure the assertion op is called by wrapping the result in an identity no-op
         with tf.control_dependencies([assert_gte0]):
@@ -1324,7 +1325,10 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         n_docs = n_docs if n_docs is not None else self.config.n_docs
         # shift tokens left (from original Pytorch's version)
 
-        target = tf.concat([target[:, 1:], tf.fill([target.shape[0], 1], self.config.generator.pad_token_id)], axis=1)
+        target = tf.concat(
+            [target[:, 1:], tf.fill([target.shape[0], 1], tf.cast(self.config.generator.pad_token_id, target.dtype))],
+            axis=1,
+        )
         rag_logprobs = self.marginalize(seq_logits, doc_scores, n_docs)
         loss = self.hf_compute_loss(target, rag_logprobs, from_logits=True, reduce_loss=reduce_loss)
 
@@ -1571,7 +1575,10 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         self, seq_logits, doc_scores, target, reduce_loss=False, epsilon=0.0, exclude_bos_score=False, n_docs=None
     ):
         # shift tokens left
-        target = tf.concat([target[:, 1:], tf.fill([target.shape[0], 1], self.config.generator.pad_token_id)], axis=1)
+        target = tf.concat(
+            [target[:, 1:], tf.fill([target.shape[0], 1], tf.cast(self.config.generator.pad_token_id, target.dtype))],
+            axis=1,
+        )
 
         # bos_token_id is None for T5
         bos_token_id = self.config.bos_token_id or self.config.generator.bos_token_id
@@ -1580,7 +1587,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         use_bos = bos_token_id is not None and equal_bos_token_id_all
 
         def _mask_pads(ll, smooth_obj):
-            pad_mask = tf.equal(target, self.config.generator.pad_token_id)
+            pad_mask = tf.equal(target, tf.cast(self.config.generator.pad_token_id, target.dtype))
             if tf.reduce_any(pad_mask):
                 ll = tf.where(pad_mask, 0.0, ll)
                 smooth_obj = tf.where(pad_mask, 0.0, smooth_obj)
@@ -1611,7 +1618,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         def torch_gather(param, id_tensor):
             # 2d-gather torch equivalent: https://stackoverflow.com/questions/52129909/tensorflow-equivalent-of-torch-gather
             def gather2d(target, id_tensor):
-                idx = tf.stack([tf.range(tf.shape(id_tensor)[0]), id_tensor[:, 0]], axis=-1)
+                idx = tf.stack([tf.range(tf.shape(id_tensor)[0], dtype=id_tensor.dtype), id_tensor[:, 0]], axis=-1)
                 result = tf.gather_nd(target, idx)
                 return tf.expand_dims(result, axis=-1)
 

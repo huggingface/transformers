@@ -560,6 +560,18 @@ def input_processing(func, config, **kwargs):
     if "kwargs" in output:
         del output["kwargs"]
 
+    cast_output = dict()
+    for key, val in output.items():
+        if isinstance(val, tf.Tensor) and val.dtype == tf.int32:
+            cast_output[key] = tf.cast(val, tf.int64)
+        elif isinstance(val, np.ndarray) and val.dtype == np.int32:
+            cast_output[key] = val.astype(np.int64)
+        else:
+            cast_output[key] = val
+
+    output = cast_output
+    del cast_output
+
     if config is not None:
         boolean_dict = {
             k: v
@@ -1054,9 +1066,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int64, name="token_type_ids"),
             }
         ]
     )
@@ -1081,6 +1093,29 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 The output returned by the model.
         """
         raise NotImplementedError
+
+    def save(
+        self,
+        filepath,
+        overwrite=True,
+        include_optimizer=True,
+        save_format=None,
+        signatures=None,
+        options=None,
+        save_traces=True,
+    ):
+        # Very simple wrapper that ensures we set the correct serving signature when saving
+        if signatures is None and hasattr(self, "serving"):
+            signatures = self.serving
+        super().save(
+            filepath,
+            overwrite=overwrite,
+            include_optimizer=include_optimizer,
+            save_format=save_format,
+            signatures=signatures,
+            options=options,
+            save_traces=save_traces,
+        )
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
