@@ -34,7 +34,6 @@ from unittest import mock
 
 import huggingface_hub
 from transformers import logging as transformers_logging
-from transformers.modeling_utils import PreTrainedModel
 
 from .deepspeed import is_deepspeed_available
 from .integrations import (
