@@ -45,6 +45,7 @@ from transformers import (
     SpecialTokensMixin,
     Trainer,
     TrainingArguments,
+    is_flax_available,
     is_tf_available,
     is_tokenizers_available,
     is_torch_available,
@@ -2928,8 +2929,10 @@ class TokenizerTesterMixin:
                     returned_tensor = "pt"
                 elif is_tf_available():
                     returned_tensor = "tf"
-                else:
+                elif is_flax_available():
                     returned_tensor = "jax"
+                else:
+                    return
 
                 if not tokenizer.pad_token or tokenizer.pad_token_id < 0:
                     return

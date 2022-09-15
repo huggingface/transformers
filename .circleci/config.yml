@@ -578,14 +578,40 @@ jobs:
                   key: v0.5-custom_tokenizers-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
+            - run: python utils/tests_fetcher.py | tee test_preparation.txt
+            - store_artifacts:
+                  path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest --max-worker-restart=0 -s --make-reports=tests_custom_tokenizers ./tests/test_tokenization_bert_japanese.py ./tests/test_tokenization_openai.py | tee tests_output.txt
+                    python -m pytest --max-worker-restart=0 -s --make-reports=tests_custom_tokenizers ./tests/models/bert_japanese/test_tokenization_bert_japanese.py ./tests/models/openai/test_tokenization_openai.py ./tests/models/clip/test_tokenization_clip.py | tee tests_output.txt
                   fi
-            - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 1 --max-worker-restart=0 tests/test_tokenization_clip.py --dist=loadfile -s --make-reports=tests_tokenization_clip --durations=100 | tee tests_output.txt
-                  fi
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
+    run_tests_custom_tokenizers_all:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.7.12
+        environment:
+            RUN_CUSTOM_TOKENIZERS: yes
+            TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.5-custom_tokenizers-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
+            - run: pip install --upgrade pip
+            - run: pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]
+            - run: python -m unidic download
+            - save_cache:
+                  key: v0.5-custom_tokenizers-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python -m pytest --max-worker-restart=0 -s --make-reports=tests_custom_tokenizers ./tests/models/bert_japanese/test_tokenization_bert_japanese.py ./tests/models/openai/test_tokenization_openai.py ./tests/models/clip/test_tokenization_clip.py | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -1026,6 +1052,42 @@ jobs:
             - store_artifacts:
                   path: ~/transformers/reports
 
+    run_tests_layoutlmv2_and_v3_all:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.7.12
+        environment:
+            OMP_NUM_THREADS: 1
+            TRANSFORMERS_IS_CI: yes
+            PYTEST_TIMEOUT: 120
+        resource_class: xlarge
+        parallelism: 1
+        steps:
+            - checkout
+            - restore_cache:
+                  keys:
+                      - v0.5-torch-{{ checksum "setup.py" }}
+                      - v0.5-{{ checksum "setup.py" }}
+            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
+            - run: pip install --upgrade pip
+            - run: pip install .[torch,testing,vision]
+            - run: pip install torchvision
+            # The commit `36a65a0907d90ed591479b2ebaa8b61cfa0b4ef0` in `detectron2` break things.
+            # See https://github.com/facebookresearch/detectron2/commit/36a65a0907d90ed591479b2ebaa8b61cfa0b4ef0#comments.
+            # TODO: Revert this change back once the above issue is fixed.
+            - run: python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
+            - run: sudo apt install tesseract-ocr
+            - run: pip install pytesseract
+            - save_cache:
+                  key: v0.5-torch-{{ checksum "setup.py" }}
+                  paths:
+                      - '~/.cache/pip'
+            - run: python -m pytest -n 1 --max-worker-restart=0 tests/models/*layoutlmv* --dist=loadfile -s --make-reports=tests_layoutlmv2_and_v3 --durations=100
+            - store_artifacts:
+                  path: ~/transformers/tests_output.txt
+            - store_artifacts:
+                  path: ~/transformers/reports
+
 # TPU JOBS
     run_examples_tpu:
         docker:
@@ -1094,6 +1156,7 @@ workflows:
             - run_examples_torch_all
             - run_examples_tensorflow_all
             - run_examples_flax_all
+            - run_tests_custom_tokenizers_all
             - run_tests_torch_and_tf_all
             - run_tests_torch_and_flax_all
             - run_tests_torch_all
@@ -1103,6 +1166,7 @@ workflows:
             - run_tests_pipelines_tf_all
             - run_tests_onnxruntime_all
             - run_tests_hub_all
+            - run_tests_layoutlmv2_and_v3_all
 
 #    tpu_testing_jobs:
 #        triggers:
