@@ -300,7 +300,6 @@ jobs:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
                   path: ~/transformers/reports
-                  path: ~/transformers/reports
 
     run_tests_pipelines_torch:
         working_directory: ~/transformers
