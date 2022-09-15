@@ -1123,8 +1123,6 @@ jobs:
         working_directory: ~/transformers
         docker:
             - image: cimg/python:3.7.12
-        environment:
-            TRANSFORMERS_IS_CI: yes
         resource_class: large
         parallelism: 1
         steps:
@@ -1147,6 +1145,21 @@ jobs:
                 root: test_preparation/
                 paths:
                     test_list.txt
+
+    fetch_all_tests:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.7.12
+        parallelism: 1
+        steps:
+            - run: |
+                  mkdir test_preparation
+                  echo "tests" > test_preparation/test_list.txt
+
+            - persist_to_workspace:
+                  root: test_preparation/
+                  paths:
+                      test_list.txt
 
     run_tests:
         working_directory: ~/transformers
@@ -1174,10 +1187,10 @@ workflows:
     version: 2
     build_and_test:
         jobs:
-            - fetch_tests
+            - fetch_tests_all
             - run_tests:
                 requires:
-                  - fetch_tests
+                  - fetch_tests_all
 #            - check_code_quality
 #            - check_repository_consistency
 #            - run_examples_torch
