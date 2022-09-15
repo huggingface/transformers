@@ -46,6 +46,7 @@ class MarkupLMProcessor(ProcessorMixin):
         self,
         html_strings,
         text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text_pair: Optional[Union[PreTokenizedInput, List[PreTokenizedInput]]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -75,6 +76,11 @@ class MarkupLMProcessor(ProcessorMixin):
         features = self.feature_extractor(html_strings)
 
         # second, apply the tokenizer
+        if text is not None and text_pair is None:
+            if isinstance(text, str):
+                text = [text]  # add batch dimension (as the feature extractor always adds a batch dimension)
+            text_pair = features["nodes"]
+
         encoded_inputs = self.tokenizer(
             text=text if text is not None else features["nodes"],
             text_pair=features["nodes"] if text is not None else None,
