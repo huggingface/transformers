@@ -1105,7 +1105,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         save_traces=True,
     ):
         # Very simple wrapper that ensures we set the correct serving signature when saving
-        if signatures is None:
+        if signatures is None and hasattr(self, "serving"):
             signatures = self.serving
         super().save(
             filepath,
