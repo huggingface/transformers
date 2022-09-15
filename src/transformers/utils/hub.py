@@ -1128,9 +1128,9 @@ if cache_version < 1:
     except Exception as e:
         trace = "\n".join(traceback.format_tb(e.__traceback__))
         logger.error(
-            f"There was a problem when trying to move your cache:\n\n{trace}\n\nPlease file an issue at "
-            "https://github.com/huggingface/transformers/issues/new/choose and copy paste this whole message and we "
-            "will do our best to help."
+            f"There was a problem when trying to move your cache:\n\n{trace}\n{e.__class__.__name__}: {e}\n\nPlease "
+            "file an issue at https://github.com/huggingface/transformers/issues/new/choose and copy paste this whole "
+            "message and we will do our best to help."
         )
 
     try:
