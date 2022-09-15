@@ -150,6 +150,7 @@ from .utils import (
 from .utils.generic import ContextManagers
 
 
+_is_native_cpu_amp_available = True
 _is_native_cpu_amp_available = is_torch_greater_or_equal_than_1_10
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
