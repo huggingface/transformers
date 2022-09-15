@@ -111,6 +111,7 @@ class XPathEmbeddings(nn.Module):
         return xpath_embeddings
 
 
+# Copied from transformers.models.roberta.modeling_roberta.create_position_ids_from_input_ids
 def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
     """
     Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding symbols
@@ -152,6 +153,7 @@ class MarkupLMEmbeddings(nn.Module):
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
         )
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaEmbeddings.create_position_ids_from_inputs_embeds
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
         """
         We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
@@ -846,13 +848,17 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import MarkupLMTokenizer, MarkupLMModel
+        >>> from transformers import MarkupLMProcessor, MarkupLMModel
 
-        >>> tokenizer = MarkupLMTokenizer.from_pretrained("microsoft/markuplm-base")
+        >>> processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base")
         >>> model = MarkupLMModel.from_pretrained("microsoft/markuplm-base")
-        >>> TODO
-        ```
-        """
+
+        >>> html_string = "<html> <head> <title>Page Title</title> </head> </html>"
+
+        >>> encoding = processor(html_string, return_tensors="pt")
+        >>> outputs = model(**encoding)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -921,6 +927,7 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_bert.BertModel.prepare_inputs_for_generation
     def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
@@ -933,6 +940,7 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
 
         return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
 
+    # Copied from transformers.models.bert.modeling_bert.BertModel._reorder_cache
     def _reorder_cache(self, past, beam_idx):
         reordered_past = ()
         for layer_past in past:
@@ -992,9 +1000,27 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
         Returns:
 
         Examples:
-            No example now !
 
-        """
+        ```python
+        >>> from transformers import MarkupLMProcessor, MarkupLMForQuestionAnswering
+
+        >>> processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
+        >>> model = MarkupLMForQuestionAnswering.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
+
+        >>> html_string = "<html> <head> <title>The title is Hello World</title> </head> </html>"
+        >>> question = "What's the title?"
+
+        >>> encoding = processor(html_string, questions=question, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**encoding)
+
+        >>> answer_start_index = outputs.start_logits.argmax()
+        >>> answer_end_index = outputs.end_logits.argmax()
+
+        >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
+        >>> tokenizer.decode(predict_answer_tokens)
+        ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.markuplm(
@@ -1084,15 +1110,9 @@ class MarkupLMForTokenClassification(MarkupLMPreTrainedModel):
     ):
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss. Indices should be in `[-100, 0, ...,
-            config.num_labels]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
-            loss is only computed for the tokens with labels in `[0, ..., config.num_labels]`
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
 
         Returns:
-
-        Examples:
-            No example now !
-
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1184,6 +1204,8 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:   
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
