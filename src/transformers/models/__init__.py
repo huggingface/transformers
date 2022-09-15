@@ -59,6 +59,7 @@ from . import (
     electra,
     encoder_decoder,
     ernie,
+    esm,
     flaubert,
     flava,
     fnet,
