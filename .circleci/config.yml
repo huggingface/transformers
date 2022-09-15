@@ -583,7 +583,7 @@ jobs:
                   path: ~/transformers/test_preparation.txt
             - run: |
                   if [ -f test_list.txt ]; then
-                    python -m pytest --max-worker-restart=0 -s --make-reports=tests_custom_tokenizers ./tests/models/bet_japanese/test_tokenization_bert_japanese.py ./tests/models/openai/test_tokenization_openai.py .tests/models/clip/test_tokenization_clip.py | tee tests_output.txt
+                    python -m pytest --max-worker-restart=0 -s --make-reports=tests_custom_tokenizers ./tests/models/bert_japanese/test_tokenization_bert_japanese.py ./tests/models/openai/test_tokenization_openai.py ./tests/models/clip/test_tokenization_clip.py | tee tests_output.txt
                   fi
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -611,7 +611,7 @@ jobs:
                   key: v0.5-custom_tokenizers-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest --max-worker-restart=0 -s --make-reports=tests_custom_tokenizers ./tests/models/bet_japanese/test_tokenization_bert_japanese.py ./tests/models/openai/test_tokenization_openai.py .tests/models/clip/test_tokenization_clip.py | tee tests_output.txt
+            - run: python -m pytest --max-worker-restart=0 -s --make-reports=tests_custom_tokenizers ./tests/models/bert_japanese/test_tokenization_bert_japanese.py ./tests/models/openai/test_tokenization_openai.py ./tests/models/clip/test_tokenization_clip.py | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
