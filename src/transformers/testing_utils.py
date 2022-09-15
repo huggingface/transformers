@@ -35,6 +35,7 @@ from unittest import mock
 import huggingface_hub
 from transformers import logging as transformers_logging
 from transformers.modeling_utils import PreTrainedModel
+
 from .deepspeed import is_deepspeed_available
 from .integrations import (
     is_fairscale_available,
@@ -1642,11 +1643,10 @@ class reset_seed_pre_forward(ContextDecorator):
     def trace_calls(self, frame, event, arg):
         # frame.f_code.co_filename gives us the origin file
         # should test if it is a Model class
-        if "/modeling_" in frame.f_code.co_filename and frame.f_code.co_name=="forward" :
-            _class = frame.f_locals['self'].__class__
+        if "/modeling_" in frame.f_code.co_filename and frame.f_code.co_name == "forward":
+            _class = frame.f_locals["self"].__class__
             if issubclass(_class, PreTrainedModel) and ("Model" in str(_class)):
                 return self.set_seed
-                
 
     def set_seed(self, frame, event, arg):
         set_seed(self.seed)
