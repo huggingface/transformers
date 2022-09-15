@@ -18,7 +18,7 @@ import json
 import os
 import unittest
 
-from transformers import GPT2Tokenizer, GPT2TokenizerFast
+from transformers import AutoTokenizer, GPT2Tokenizer, GPT2TokenizerFast
 from transformers.models.gpt2.tokenization_gpt2 import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_tokenizers
 
@@ -275,3 +275,57 @@ class GPT2TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 ]
                 filtered_sequence = [x for x in filtered_sequence if x is not None]
                 self.assertEqual(encoded_sequence, filtered_sequence)
+
+
+@require_tokenizers
+class OPTTokenizationTest(unittest.TestCase):
+    def test_serialize_deserialize_fast_opt(self):
+        # More context:
+        # https://huggingface.co/wjmcat/opt-350m-paddle/discussions/1
+        # https://huggingface.slack.com/archives/C01N44FJDHT/p1653511495183519
+        # https://github.com/huggingface/transformers/pull/17088#discussion_r871246439
+
+        tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m", from_slow=True)
+        text = "A photo of a cat"
+
+        tokens_ids = tokenizer.encode(
+            text,
+        )
+        self.assertEqual(tokens_ids, [2, 250, 1345, 9, 10, 4758])
+        tokenizer.save_pretrained("test_opt")
+
+        tokenizer = AutoTokenizer.from_pretrained("./test_opt")
+        tokens_ids = tokenizer.encode(
+            text,
+        )
+        self.assertEqual(tokens_ids, [2, 250, 1345, 9, 10, 4758])
+
+    def test_fast_slow_equivalence(self):
+        tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m", use_slow=True)
+        text = "A photo of a cat"
+
+        tokens_ids = tokenizer.encode(
+            text,
+        )
+        # Same as above
+        self.assertEqual(tokens_ids, [2, 250, 1345, 9, 10, 4758])
+
+    def test_users_can_modify_bos(self):
+        tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m", from_slow=True)
+
+        tokenizer.bos_token = "bos"
+        tokenizer.bos_token_id = tokenizer.get_vocab()["bos"]
+
+        text = "A photo of a cat"
+        tokens_ids = tokenizer.encode(
+            text,
+        )
+        # We changed the bos token
+        self.assertEqual(tokens_ids, [31957, 250, 1345, 9, 10, 4758])
+        tokenizer.save_pretrained("./tok")
+        tokenizer = AutoTokenizer.from_pretrained("./tok")
+        self.assertTrue(tokenizer.is_fast)
+        tokens_ids = tokenizer.encode(
+            text,
+        )
+        self.assertEqual(tokens_ids, [31957, 250, 1345, 9, 10, 4758])
