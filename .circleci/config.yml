@@ -1139,12 +1139,14 @@ jobs:
             - run: |
                 if [ -f test_list.txt ]; then
                     mv test_list.txt test_preparation/test_list.txt
+                else
+                    touch test_preparation/test_list.txt
                 fi
 
             - persist_to_workspace:
                 root: test_preparation/
                 paths:
-                    - to_run.txt
+                    test_list.txt
 
     run_tests:
         working_directory: ~/transformers
@@ -1156,7 +1158,7 @@ jobs:
             - attach_workspace:
                 at:  ~/transformers/test_preparation
             - run: |
-                if [ ! -f test_preparation/test_list.txt ]; then
+                if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
                     circleci-agent step halt
                 fi
