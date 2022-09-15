@@ -1468,12 +1468,19 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
 
         ```python
         >>> import torch
-        >>> from transformers import AutoFeatureExtractor, Wav2Vec2ConformerForPreTraining
-        >>> from transformers.models.wav2vec2_conformer.modeling_wav2vec2_conformer import _compute_mask_indices
+        >>> from transformers import AutoFeatureExtractor, Wav2Vec2ConformerConformerForPreTraining
+        >>> from transformers.models.wav2vec2_conformer_conformer.modeling_wav2vec2_conformer_conformer import (
+        ...     _compute_mask_indices,
+        ...     sampled_negative_indices,
+        ... )
         >>> from datasets import load_dataset
 
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
-        >>> model = Wav2Vec2ConformerForPreTraining.from_pretrained("facebook/wav2vec2-conformer-rel-pos-large")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained(
+        ...     "facebook/wav2vec2_conformer-conformer-rel-pos-large"
+        ... )
+        >>> model = Wav2Vec2ConformerConformerForPreTraining.from_pretrained(
+        ...     "facebook/wav2vec2_conformer-conformer-rel-pos-large"
+        ... )
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> input_values = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt").input_values  # Batch size 1
@@ -1483,6 +1490,14 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
         >>> sequence_length = model._get_feat_extract_output_lengths(raw_sequence_length)
         >>> mask_time_indices = _compute_mask_indices((batch_size, sequence_length), mask_prob=0.2, mask_length=2)
         >>> mask_time_indices = torch.tensor(mask_time_indices, device=input_values.device, dtype=torch.long)
+
+        >>> # compute negative indices
+        >>> sampled_negative_indices = _sample_negative_indices(
+        ...     (batch_size, sequence_length), model.config.num_negatives, mask_time_indices
+        ... )
+        >>> sampled_negative_indices = torch.tensor(
+        ...     sampled_negative_indices, device=input_values.device, dtype=torch.long
+        ... )
 
         >>> with torch.no_grad():
         ...     outputs = model(input_values, mask_time_indices=mask_time_indices)
@@ -1496,7 +1511,9 @@ class Wav2Vec2ConformerForPreTraining(Wav2Vec2ConformerPreTrainedModel):
 
         >>> # for contrastive loss training model should be put into train mode
         >>> model = model.train()
-        >>> loss = model(input_values, mask_time_indices=mask_time_indices).loss
+        >>> loss = model(
+        ...     input_values, mask_time_indices=mask_time_indices, sampled_negative_indices=sampled_negative_indices
+        ... ).loss
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1670,7 +1687,6 @@ class Wav2Vec2ConformerForCTC(Wav2Vec2ConformerPreTrainedModel):
 
         loss = None
         if labels is not None:
-
             if labels.max() >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
