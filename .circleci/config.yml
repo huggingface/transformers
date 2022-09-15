@@ -1133,13 +1133,18 @@ jobs:
             - run: pip install GitPython
             - run: pip install .
             - run: mkdir -p test_preparation
-            - run: python utils/tests_fetcher.py | tee test_preparation/to_run.txt
+            - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
             - store_artifacts:
-                  path: ~/transformers/test_preparation/to_run.txt
+                path: ~/transformers/tests_fetched_summary.txt
+            - run: |
+                if [ -f test_list.txt ]; then
+                    mv test_list.txt test_preparation/test_list.txt
+                fi
+
             - persist_to_workspace:
-                  root: test_preparation/
-                  paths:
-                      - to_run.txt
+                root: test_preparation/
+                paths:
+                    - to_run.txt
 
     run_tests:
         working_directory: ~/transformers
@@ -1150,7 +1155,13 @@ jobs:
         steps:
             - attach_workspace:
                 at:  ~/transformers/test_preparation
-            - run: cat ~/transformers/test_preparation/to_run.txt
+            - run: |
+                if [ ! -f test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
+            - run: echo "Running tests!"
+            - run: cat test_preparation/test_list.txt
 
 workflow_filters: &workflow_filters
     filters:
