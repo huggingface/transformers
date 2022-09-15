@@ -343,12 +343,15 @@ jobs:
           git checkout ${{ env.CI_SHA }}
           echo "log = $(git log -n 1)"
 
+      - name: Remove cached torch extensions
+        run: rm -rf /github/home/.cache/torch_extensions/
+
       # To avoid unknown test failures
       - name: Pre build DeepSpeed *again*
         working-directory: /workspace
         run: |
           python3 -m pip uninstall -y deepspeed
-          DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
       - name: NVIDIA-SMI
         run: |
@@ -422,12 +425,15 @@ jobs:
           git checkout ${{ env.CI_SHA }}
           echo "log = $(git log -n 1)"
 
+      - name: Remove cached torch extensions
+        run: rm -rf /github/home/.cache/torch_extensions/
+
       # To avoid unknown test failures
       - name: Pre build DeepSpeed *again*
         working-directory: /workspace
         run: |
           python3 -m pip uninstall -y deepspeed
-          DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
+          DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install deepspeed --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check
 
       - name: NVIDIA-SMI
         run: |

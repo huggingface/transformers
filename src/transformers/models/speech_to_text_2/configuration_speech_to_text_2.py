@@ -64,14 +64,15 @@ class Speech2Text2Config(PretrainedConfig):
             The dropout ratio for classifier.
         init_std (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            https://arxiv.org/abs/1909.11556>`__ for more details. decoder_layerdrop: (`float`, *optional*, defaults to
-            0.0): The LayerDrop probability for the decoder. See the [LayerDrop paper](see
-            https://arxiv.org/abs/1909.11556) for more details.
+            https://arxiv.org/abs/1909.11556>`__ for more details.
+        decoder_layerdrop (`float`, *optional*, defaults to 0.0):
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         max_source_positions (`int`, *optional*, defaults to 6000):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-        max_target_positions: (`int`, *optional*, defaults to 1024):
+        max_target_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
 
