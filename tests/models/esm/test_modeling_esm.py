@@ -20,9 +20,9 @@ import unittest
 from transformers import ESMConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
 
-from .test_configuration_common import ConfigTester
-from .test_generation_utils import GenerationTesterMixin
-from .test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...generation.test_generation_utils import GenerationTesterMixin
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
 
 if is_torch_available():
