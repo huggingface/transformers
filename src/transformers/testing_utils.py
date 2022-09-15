@@ -25,7 +25,7 @@ import sys
 import tempfile
 import unittest
 from collections.abc import Mapping
-from contextlib import ContextDecorator
+from contextlib import ContextDecorator, suppress
 from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
@@ -1622,10 +1622,11 @@ class RequestCounter:
 
 class reset_seed_pre_forward(ContextDecorator):
     r"""
-    # adapted from https://stackoverflow.com/questions/32163436/python-decorator-for-printing-every-line-executed-by-a-function
-    A context decorator to set a manual seed before each module's forward pass. When used, the seed will be set before
-    entering the forward pass of a class from `modeling_XXX.py`. This is useful for models that
-    involves stochasticity during their forward pass to ensure reproducibility and the capability to run som tests.
+    # adapted from
+    https://stackoverflow.com/questions/32163436/python-decorator-for-printing-every-line-executed-by-a-function A
+    context decorator to set a manual seed before each module's forward pass. When used, the seed will be set before
+    entering the forward pass of a class from `modeling_XXX.py`. This is useful for models that involves stochasticity
+    during their forward pass to ensure reproducibility and the capability to run som tests.
     """
 
     def __init__(self, seed=42):
@@ -1641,11 +1642,10 @@ class reset_seed_pre_forward(ContextDecorator):
         sys.settrace(None)
 
     def trace_calls(self, frame, event, arg):
-        # frame.f_code.co_filename gives us the origin file
-        # should test if it is a Model class
-        if "/modeling_" in frame.f_code.co_filename and frame.f_code.co_name == "forward":
-            _class = frame.f_locals["self"].__class__
-            if issubclass(_class, PreTrainedModel) and ("Model" in str(_class)):
+        # frame.f_locals provides the arguments of the function that was called
+        # we just check that it is a ...Model class
+        with suppress(KeyError):
+            if "Model" in str(frame.f_locals["self"].__class__):
                 return self.set_seed
 
     def set_seed(self, frame, event, arg):
