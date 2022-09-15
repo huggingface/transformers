@@ -126,6 +126,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "opt",
     "pegasus",
     "plbart",
+    "resnet",
     "roberta",
     "speech_to_text",
     "speech_to_text_2",
@@ -745,7 +746,7 @@ class HFTracer(Tracer):
                 elif hasattr(model.config, "encoder"):
                     image_size = model.config.encoder.image_size
                 else:
-                    raise AttributeError('Could not find the "image_size" field in the model config')
+                    image_size = (_generate_random_int(), _generate_random_int())
 
             # If no num_channels is in the config, use some arbitrary value.
             num_channels = getattr(model.config, "num_channels", 3)
