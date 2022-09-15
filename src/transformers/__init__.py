@@ -266,6 +266,7 @@ _import_structure = {
         "MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MarkupLMConfig",
         "MarkupLMFeatureExtractor",
+        "MarkupLMProcessor",
         "MarkupLMTokenizer",
     ],
     "models.maskformer": ["MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "MaskFormerConfig"],
@@ -3205,6 +3206,7 @@ if TYPE_CHECKING:
         MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MarkupLMConfig,
         MarkupLMFeatureExtractor,
+        MarkupLMProcessor,
         MarkupLMTokenizer,
     )
     from .models.maskformer import MASKFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, MaskFormerConfig

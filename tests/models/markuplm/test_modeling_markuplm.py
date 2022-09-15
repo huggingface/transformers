@@ -18,18 +18,24 @@ import unittest
 
 from transformers import MarkupLMConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
         MarkupLMForQuestionAnswering,
         MarkupLMForSequenceClassification,
         MarkupLMForTokenClassification,
         MarkupLMModel,
     )
+
+# TODO check dependencies
+from transformers import MarkupLMFeatureExtractor, MarkupLMProcessor, MarkupLMTokenizer
 
 
 class MarkupLMModelTester:
@@ -305,8 +311,54 @@ class MarkupLMModelTest(ModelTesterMixin, unittest.TestCase):
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
 
+def prepare_html_string():
+    html_string = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <title>Page Title</title>
+    </head>
+    <body>
+
+    <h1>This is a Heading</h1>
+    <p>This is a paragraph.</p>
+
+    </body>
+    </html>
+    """
+
+    return html_string
+
+
 @require_torch
 class MarkupLMModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_processor(self):
+        # TODO use from_pretrained here
+        feature_extractor = MarkupLMFeatureExtractor()
+        tokenizer = MarkupLMTokenizer.from_pretrained("microsoft/markuplm-base")
+
+        return MarkupLMProcessor(feature_extractor, tokenizer)
+
     @slow
     def test_forward_pass_no_head(self):
-        raise NotImplementedError("To do")
+        model = MarkupLMModel.from_pretrained("microsoft/markuplm-base").to(torch_device)
+
+        processor = self.default_processor
+
+        inputs = processor(prepare_html_string(), return_tensors="pt")
+        inputs = inputs.to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        # verify the last hidden states
+        expected_shape = torch.Size([1, 14, 768])
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[0.0267, -0.1289, 0.4930], [-0.2376, -0.0342, 0.2381], [-0.0329, -0.3785, 0.0263]]
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))

@@ -1,23 +1,28 @@
-from transformers import MarkupLMFeatureExtractor
+from transformers import MarkupLMFeatureExtractor, MarkupLMProcessor, MarkupLMTokenizer
 
 
 feature_extractor = MarkupLMFeatureExtractor()
+tokenizer = MarkupLMTokenizer.from_pretrained("microsoft/markuplm-base")
 
-html_string = """<HTML>
+processor = MarkupLMProcessor(feature_extractor, tokenizer)
 
-<HEAD>
-  <TITLE>sample document</TITLE>
-</HEAD>
 
-<BODY BGCOLOR="FFFFFF">
-  <HR> <a href="http://google.com">Goog</a> <H1>This is one header</H1> <H2>This is a another Header</H2> <P>Travel
-  from
-    <P>
-      <B>SFO to JFK</B> <BR> <B><I>on May 2, 2015 at 2:00 pm. For details go to confirm.com </I></B> <HR> <div
-      style="color:#0000FF">
-        <h3>Traveler <b> name </b> is <p> John Doe </p>
-      </div>"""
+def prepare_html_string():
+    html_string = """
+    <!DOCTYPE html> <html> <head> <title>Page Title</title> </head> <body>
 
-encoding = feature_extractor(html_string)
-for k, v in encoding.items():
-    print(k, v)
+    <h1>This is a Heading</h1> <p>This is a paragraph.</p>
+
+    </body> </html>
+    """
+
+    return html_string
+
+
+encoding = processor(prepare_html_string())
+# for k, v in encoding.items():
+#     print(k, v)
+
+print(encoding.input_ids)
+
+print(processor.decode(encoding.input_ids[0]))

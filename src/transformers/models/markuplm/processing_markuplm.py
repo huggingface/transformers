@@ -15,11 +15,11 @@
 """
 Processor class for MarkupLM.
 """
-from typing import Optional, Union
+from typing import List, Optional, Union
 
 from ...file_utils import TensorType
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TruncationStrategy
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 
 
 class MarkupLMProcessor(ProcessorMixin):
@@ -29,7 +29,7 @@ class MarkupLMProcessor(ProcessorMixin):
 
     [`MarkupLMProcessor`] offers all the functionalities you need to prepare data for the model.
 
-    It first uses [`MarkupLMFeatureExtractor`] to get nodes and corresponding xpaths from one or more HTML strings.
+    It first uses [`MarkupLMFeatureExtractor`] to extract nodes and corresponding xpaths from one or more HTML strings.
     Next, these are provided to [`MarkupLMTokenizer`] or [`MarkupLMTokenizerFast`], which turns them into token-level
     `input_ids`, `attention_mask`, `token_type_ids`, `xpath_tags_seq` and `xpath_subs_seq`.
 
@@ -45,7 +45,7 @@ class MarkupLMProcessor(ProcessorMixin):
     def __call__(
         self,
         html_strings,
-        text,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -97,3 +97,17 @@ class MarkupLMProcessor(ProcessorMixin):
         )
 
         return encoded_inputs
+
+    def batch_decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to TrOCRTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please refer
+        to the docstring of this method for more information.
+        """
+        return self.tokenizer.batch_decode(*args, **kwargs)
+
+    def decode(self, *args, **kwargs):
+        """
+        This method forwards all its arguments to TrOCRTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to the
+        docstring of this method for more information.
+        """
+        return self.tokenizer.decode(*args, **kwargs)
