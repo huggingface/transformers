@@ -26,7 +26,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_multi_gpu,
     require_vision,
-    set_reproducible,
+    reset_seed_pre_forward,
     slow,
     torch_device,
 )
@@ -519,30 +519,30 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
 
     @require_accelerate
     @require_torch_gpu
-    @set_reproducible()
+    @reset_seed_pre_forward()
     def test_cpu_offload(self):
         r"""
-        The model involves stochasticity when computing the hidden states. Therefore adding `set_reproducible` decorator
+        The model involves stochasticity when computing the hidden states. Therefore adding `reset_seed_pre_forward` decorator
         enables to set the seed before each forward pass of the model. This may slowdown the execution of this function.
         """
         super().test_cpu_offload()
 
     @require_accelerate
     @require_torch_gpu
-    @set_reproducible()
+    @reset_seed_pre_forward()
     def test_disk_offload(self):
         r"""
-        The model involves stochasticity when computing the hidden states. Therefore adding `set_reproducible` decorator
+        The model involves stochasticity when computing the hidden states. Therefore adding `reset_seed_pre_forward` decorator
         enables to set the seed before each forward pass of the model. This may slowdown the execution of this function.
         """
         super().test_disk_offload()
 
     @require_accelerate
     @require_torch_multi_gpu
-    @set_reproducible()
+    @reset_seed_pre_forward()
     def test_model_parallelism(self):
         r"""
-        The model involves stochasticity when computing the hidden states. Therefore adding `set_reproducible` decorator
+        The model involves stochasticity when computing the hidden states. Therefore adding `reset_seed_pre_forward` decorator
         enables to set the seed before each forward pass of the model. This may slowdown the execution of this function.
         """
         super().test_model_parallelism()

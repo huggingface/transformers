@@ -34,7 +34,7 @@ from unittest import mock
 
 import huggingface_hub
 from transformers import logging as transformers_logging
-
+from transformers.modeling_utils import PreTrainedModel
 from .deepspeed import is_deepspeed_available
 from .integrations import (
     is_fairscale_available,
@@ -1619,10 +1619,11 @@ class RequestCounter:
         return self.old_request(method=method, **kwargs)
 
 
-# adapted from https://stackoverflow.com/questions/32163436/python-decorator-for-printing-every-line-executed-by-a-function
-class set_reproducible(ContextDecorator):
+class reset_seed_pre_forward(ContextDecorator):
     r"""
-    A context decorator to set a manual seed before each PyTorch's forward pass. This is useful for models that
+    # adapted from https://stackoverflow.com/questions/32163436/python-decorator-for-printing-every-line-executed-by-a-function
+    A context decorator to set a manual seed before each module's forward pass. When used, the seed will be set before
+    entering the forward pass of a class from `modeling_XXX.py`. This is useful for models that
     involves stochasticity during their forward pass to ensure reproducibility and the capability to run som tests.
     """
 
@@ -1639,10 +1640,13 @@ class set_reproducible(ContextDecorator):
         sys.settrace(None)
 
     def trace_calls(self, frame, event, arg):
-        # Set the seed when it is a call to a forward function from the model
-        if "/modeling_" in frame.f_code.co_filename:
-            return self.set_seed
+        # frame.f_code.co_filename gives us the origin file
+        # should test if it is a Model class
+        if "/modeling_" in frame.f_code.co_filename and frame.f_code.co_name=="forward" :
+            _class = frame.f_locals['self'].__class__
+            if issubclass(_class, PreTrainedModel) and ("Model" in str(_class)):
+                return self.set_seed
+                
 
     def set_seed(self, frame, event, arg):
-        # Set the seed
         set_seed(self.seed)
