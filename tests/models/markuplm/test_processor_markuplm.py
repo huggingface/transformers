@@ -192,7 +192,7 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
     @cached_property
     def get_tokenizers(self):
         slow_tokenizer = MarkupLMTokenizer.from_pretrained("microsoft/markuplm-base")
-        fast_tokenizer = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base")
+        fast_tokenizer = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base", from_slow=True)
         return [slow_tokenizer, fast_tokenizer]
 
     @slow
@@ -277,7 +277,7 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
 
     @slow
     def test_processor_case_3(self):
-        # case 3: visual question answering (inference)
+        # case 3: question answering (inference)
 
         feature_extractor = MarkupLMFeatureExtractor()
         tokenizers = self.get_tokenizers
@@ -296,7 +296,7 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
-            expected_ids = [0, 2264, 18, 39, 766, 116, 2, 2, 31414, 232, 25194, 11773, 16, 127, 998, 4, 2]
+            expected_ids = [0, 2264, 18, 39, 766, 116, 2, 31414, 232, 25194, 11773, 16, 127, 998, 4, 2]
             self.assertSequenceEqual(inputs.input_ids[0].tolist(), expected_ids)
 
             # batched
