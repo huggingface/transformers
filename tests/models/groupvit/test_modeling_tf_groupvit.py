@@ -13,7 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the TensorFlow GroupViT model. """
-
+import random
+import numpy as np
+import tensorflow as tf
 
 import inspect
 import os
@@ -87,6 +89,9 @@ class TFGroupViTVisionModelTester:
         self.seq_length = num_patches
 
     def prepare_config_and_inputs(self):
+
+        import random
+        rng = random.Random(0)
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         config = self.get_config()
 
@@ -264,6 +269,16 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
 
             check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_pt_tf_model_equivalence(self):
+        import random
+        import numpy as np
+        import tensorflow as tf
+
+        random.seed(0)
+        np.random.seed(0)
+        tf.random.set_seed(0)
+        return super().test_pt_tf_model_equivalence()
 
     @slow
     def test_model_from_pretrained(self):
