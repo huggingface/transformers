@@ -42,13 +42,16 @@ decoding = processor.decode(inputs.input_ids[1].tolist())
 
 # CASE 2: non-batched
 processor.parse_html = False
-nodes = ["hello", "world", "how", "are"],
-xpaths=["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "html/body", "html/body/div"]
+nodes = (["hello", "world", "how", "are"],)
+xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "html/body", "html/body/div"]
 inputs = processor(nodes=nodes, xpaths=xpaths, return_tensors="pt")
 
 # CASE 2: batched
 nodes = [["hello", "world"], ["my", "name", "is"]]
-xpaths=[["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"], ["html/body", "html/body/div", "html/body"]]
+xpaths = [
+    ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"],
+    ["html/body", "html/body/div", "html/body"],
+]
 
 inputs = processor(nodes=nodes, xpaths=xpaths, padding=True, return_tensors="pt")
 
@@ -56,14 +59,17 @@ print(processor.decode(inputs.input_ids[0].tolist()))
 
 # CASE 3: not batched
 nodes = ["hello", "world", "how", "are"]
-xpaths=["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "html/body", "html/body/div"]
-node_labels = [0,1,2,3]
+xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "html/body", "html/body/div"]
+node_labels = [0, 1, 2, 3]
 inputs = processor(nodes=nodes, xpaths=xpaths, node_labels=node_labels, return_tensors="pt")
 
 # CASE 3: batched
 nodes = [["hello", "world"], ["my", "name", "is"]]
-xpaths=[["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"], ["html/body", "html/body/div", "html/body"]]
-node_labels = [[0,1], [67,2]]
+xpaths = [
+    ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"],
+    ["html/body", "html/body/div", "html/body"],
+]
+node_labels = [[0, 1], [67, 2]]
 inputs = processor(nodes=nodes, xpaths=xpaths, node_labels=node_labels, return_tensors="pt")
 
 # for id, label in zip(inputs.input_ids[1], inputs.labels[1]):
@@ -77,7 +83,14 @@ inputs = processor(html_strings[0], questions="how are you?", return_tensors="pt
 # print("Actual decoding:", decoding)
 
 # CASE 4: batched
-inputs = processor(html_strings, questions=["how are you?", "what's your name?"], padding="max_length", max_length=20, truncation=True, return_tensors="pt")
+inputs = processor(
+    html_strings,
+    questions=["how are you?", "what's your name?"],
+    padding="max_length",
+    max_length=20,
+    truncation=True,
+    return_tensors="pt",
+)
 
 # decoding = processor.decode(inputs.input_ids[1].tolist())
 # print("Actual decoding:", decoding)
@@ -85,7 +98,7 @@ inputs = processor(html_strings, questions=["how are you?", "what's your name?"]
 # CASE 5: not batched
 processor.parse_html = False
 nodes = ["hello", "world", "how", "are"]
-xpaths=["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "html/body", "html/body/div"]
+xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "html/body", "html/body/div"]
 inputs = processor(nodes=nodes, xpaths=xpaths, questions="how are you?", return_tensors="pt")
 
 decoding = processor.decode(inputs.input_ids[0].tolist())
@@ -93,6 +106,17 @@ print("Actual decoding:", decoding)
 
 # CASE 5: batched
 nodes = [["hello", "world"], ["my", "name", "is"]]
-xpaths=[["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"], ["html/body", "html/body/div", "html/body"]]
+xpaths = [
+    ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"],
+    ["html/body", "html/body/div", "html/body"],
+]
 
-inputs = processor(nodes=nodes, xpaths=xpaths, questions=["how are you?", "what's your name?"], padding="max_length", max_length=20, truncation=True, return_tensors="pt")
+inputs = processor(
+    nodes=nodes,
+    xpaths=xpaths,
+    questions=["how are you?", "what's your name?"],
+    padding="max_length",
+    max_length=20,
+    truncation=True,
+    return_tensors="pt",
+)

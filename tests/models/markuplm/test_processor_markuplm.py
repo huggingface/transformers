@@ -82,7 +82,7 @@ class MarkupLMProcessorTest(unittest.TestCase):
         feature_extractor_map = {
             "do_resize": True,
             "size": 224,
-            "apply_ocr": True,
+            "parse_html": True,
         }
 
         self.feature_extraction_file = os.path.join(self.tmpdirname, FEATURE_EXTRACTOR_NAME)
@@ -205,97 +205,73 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
             processor = MarkupLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
             # not batched
-            input_feat_extract = feature_extractor(html_strings[0])
-            input_processor = processor(html_strings[0], return_tensors="pt")
+            inputs = processor(html_strings[0], return_tensors="pt")
 
             # verify keys
             expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(list(inputs.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
             expected = [0, 31414, 232, 25194, 11773, 16, 127, 998, 4, 2]
-            self.assertSequenceEqual(input_processor.input_ids.squeeze().tolist(), expected)
+            self.assertSequenceEqual(inputs.input_ids.squeeze().tolist(), expected)
 
             # batched
-            input_feat_extract = feature_extractor(html_strings)
-            input_processor = processor(html_strings, padding=True, return_tensors="pt")
+            inputs = processor(html_strings, padding=True, return_tensors="pt")
 
             # verify keys
             expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(list(inputs.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
             expected = [0, 48085, 2209, 48085, 3156, 32, 6533, 19, 5, 48599, 6694, 35, 2]
-            self.assertSequenceEqual(input_processor.input_ids[1].tolist(), expected)
+            self.assertSequenceEqual(inputs.input_ids[1].tolist(), expected)
 
     @slow
     def test_processor_case_2(self):
-        # case 2: token classification (training)
+        # case 2: web page classification (training, inference) + token classification (inference), parse_html=False
 
         feature_extractor = MarkupLMFeatureExtractor()
         tokenizers = self.get_tokenizers
-        html_strings = self.get_html_strings
 
         for tokenizer in tokenizers:
             processor = MarkupLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+            processor.parse_html = False
 
             # not batched
-            nodes = ["weirdly", "world"]
-            xpaths = [[1, 2, 3, 4], [5, 6, 7, 8]]
-            node_labels = [1, 2]
-            input_processor = processor(
-                html_strings[0], words, boxes=boxes, word_labels=word_labels, return_tensors="pt"
-            )
+            nodes = ["hello", "world", "how", "are"]
+            xpaths = ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span", "html/body", "html/body/div"]
+            inputs = processor(nodes=nodes, xpaths=xpaths, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "input_ids", "labels", "pixel_values"]
-            actual_keys = sorted(list(input_processor.keys()))
-            self.assertListEqual(actual_keys, expected_keys)
+            expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
+            actual_keys = list(inputs.keys())
+            for key in expected_keys:
+                self.assertIn(key, actual_keys)
 
             # verify input_ids
-            expected_decoding = "<s> weirdly world</s>"
-            decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
+            expected_decoding = "<s>helloworldhoware</s>"
+            decoding = processor.decode(inputs.input_ids.squeeze().tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
-
-            # verify labels
-            expected_labels = [-100, 1, -100, 2, -100]
-            self.assertListEqual(input_processor.labels.squeeze().tolist(), expected_labels)
 
             # batched
-            words = [["hello", "world"], ["my", "name", "is", "niels"]]
-            boxes = [[[1, 2, 3, 4], [5, 6, 7, 8]], [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]]]
-            word_labels = [[1, 2], [6, 3, 10, 2]]
-            input_processor = processor(
-                html_strings, words, boxes=boxes, word_labels=word_labels, padding=True, return_tensors="pt"
-            )
+            nodes = [["hello", "world"], ["my", "name", "is"]]
+            xpaths = [
+                ["/html/body/div/li[1]/div/span", "/html/body/div/li[1]/div/span"],
+                ["html/body", "html/body/div", "html/body"],
+            ]
+            inputs = processor(nodes=nodes, xpaths=xpaths, padding=True, return_tensors="pt")
 
             # verify keys
-            expected_keys = ["attention_mask", "bbox", "input_ids", "labels", "pixel_values"]
-            actual_keys = sorted(list(input_processor.keys()))
+            expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
+            actual_keys = sorted(list(inputs.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
-            expected_decoding = "<s> my name is niels</s>"
-            decoding = processor.decode(input_processor.input_ids[1].tolist())
+            expected_decoding = "<s>helloworld</s><pad>"
+            decoding = processor.decode(inputs.input_ids[0].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
-
-            # verify bbox
-            expected_bbox = [
-                [0, 0, 0, 0],
-                [3, 2, 5, 1],
-                [6, 7, 4, 2],
-                [3, 9, 2, 4],
-                [1, 1, 2, 3],
-                [1, 1, 2, 3],
-                [0, 0, 0, 0],
-            ]
-            self.assertListEqual(input_processor.bbox[1].tolist(), expected_bbox)
-
-            # verify labels
-            expected_labels = [-100, 6, 3, 10, 2, -100, -100]
-            self.assertListEqual(input_processor.labels[1].tolist(), expected_labels)
 
     @slow
     def test_processor_case_3(self):
@@ -306,47 +282,173 @@ class MarkupLMProcessorIntegrationTests(unittest.TestCase):
         html_strings = self.get_html_strings
 
         for tokenizer in tokenizers:
-            print("Tokenizer:", tokenizer)
             processor = MarkupLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
 
             # not batched
             question = "What's his name?"
-            input_processor = processor(html_strings[0], question, return_tensors="pt")
+            inputs = processor(html_strings[0], questions=question, return_tensors="pt")
 
             # verify keys
             expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(list(inputs.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
-            # # verify input_ids
-            # # fmt: off
-            # expected_decoding = "<s>What's his name?</s>sample documentGoogThis is one headerThis is a another HeaderTravel fromSFO to JFKon May 2, 2015 at 2:00 pm. For details go to confirm.comTravelernameisJohn Doe</s>"  # noqa: E231
-            # # fmt: on
-            # decoding = processor.decode(input_processor.input_ids.squeeze().tolist())
-            # print("Actual decoding:", decoding)
-            # self.assertSequenceEqual(decoding, expected_decoding)
+            # verify input_ids
+            expected_ids = [0, 2264, 18, 39, 766, 116, 2, 2, 31414, 232, 25194, 11773, 16, 127, 998, 4, 2]
+            self.assertSequenceEqual(inputs.input_ids[0].tolist(), expected_ids)
 
             # batched
             questions = ["How old is he?", "what's the time"]
-            input_processor = processor(
-                html_strings, questions, padding="max_length", max_length=20, truncation=True, return_tensors="pt"
+            inputs = processor(
+                html_strings,
+                questions=questions,
+                padding="max_length",
+                max_length=20,
+                truncation=True,
+                return_tensors="pt",
             )
 
             # verify keys
             expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
-            actual_keys = sorted(list(input_processor.keys()))
+            actual_keys = sorted(list(inputs.keys()))
+            self.assertListEqual(actual_keys, expected_keys)
+
+            # verify input_ids
+            expected_ids = [
+                0,
+                12196,
+                18,
+                5,
+                86,
+                2,
+                48085,
+                2209,
+                48085,
+                3156,
+                32,
+                6533,
+                19,
+                5,
+                48599,
+                6694,
+                35,
+                2,
+                1,
+                1,
+            ]
+            self.assertSequenceEqual(inputs.input_ids[1].tolist(), expected_ids)
+
+            # # verify xpath_subs_seq
+            # # fmt: off
+            # expected_xpath_subs_seq = [[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 98, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 98, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 98, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 98, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]]  # noqa: E231
+            # # fmt: on
+            # self.assertListEqual(inputs.xpath_subs_seq[1].tolist(), expected_xpath_subs_seq)
+
+    @slow
+    def test_processor_case_4(self):
+        # case 4: visual question answering (inference), parse_html=True
+
+        feature_extractor = MarkupLMFeatureExtractor()
+        tokenizers = self.get_tokenizers
+        html_strings = self.get_html_strings
+
+        for tokenizer in tokenizers:
+            processor = MarkupLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+
+            # not batched
+            question = "What's his name?"
+            inputs = processor(html_strings[0], questions=question, return_tensors="pt")
+
+            # verify keys
+            expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
+            actual_keys = sorted(list(inputs.keys()))
+            self.assertListEqual(actual_keys, expected_keys)
+
+            # verify input_ids
+            # fmt: off
+            expected_decoding = "<s>What's his name?</s>Hello worldWelcomeHere is my website.</s>"  # noqa: E231
+            # fmt: on
+            decoding = processor.decode(inputs.input_ids.squeeze().tolist())
+            self.assertSequenceEqual(decoding, expected_decoding)
+
+            # batched
+            questions = ["How old is he?", "what's the time"]
+            inputs = processor(
+                html_strings,
+                questions=questions,
+                padding="max_length",
+                max_length=20,
+                truncation=True,
+                return_tensors="pt",
+            )
+
+            # verify keys
+            expected_keys = ["attention_mask", "input_ids", "token_type_ids", "xpath_subs_seq", "xpath_tags_seq"]
+            actual_keys = sorted(list(inputs.keys()))
             self.assertListEqual(actual_keys, expected_keys)
 
             # verify input_ids
             expected_decoding = (
-                "<s>what's the time</s>My First HeadingMy first paragraph.</s><pad><pad><pad><pad><pad>"
+                "<s>what's the time</s>HTML ImagesHTML images are defined with the img tag:</s><pad><pad>"
             )
-            decoding = processor.decode(input_processor.input_ids[1].tolist())
-            print("Actual decoding:", decoding)
+            decoding = processor.decode(inputs.input_ids[1].tolist())
             self.assertSequenceEqual(decoding, expected_decoding)
 
             # verify xpath_subs_seq
             # fmt: off
-            expected_xpath_subs_seq = [[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 98, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 98, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 98, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 98, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]]  # noqa: E231
+            expected_xpath_subs_seq = [[1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 99, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 99, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [109, 25, 148, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001], [1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001, 1001]]  # noqa: E231
             # fmt: on
-            self.assertListEqual(input_processor.xpath_subs_seq[1].tolist(), expected_xpath_subs_seq)
+            self.assertListEqual(inputs.xpath_subs_seq[1].tolist(), expected_xpath_subs_seq)
+
+    @slow
+    def test_processor_case_5(self):
+        # case 5: question answering (inference), parse_html=False
+
+        feature_extractor = MarkupLMFeatureExtractor(parse_html=False)
+        tokenizers = self.get_tokenizers
+        html_strings = self.get_html_strings
+
+        for tokenizer in tokenizers:
+            processor = MarkupLMProcessor(feature_extractor=feature_extractor, tokenizer=tokenizer)
+
+            # not batched
+            question = "What's his name?"
+            words = ["hello", "world"]
+            boxes = [[1, 2, 3, 4], [5, 6, 7, 8]]
+            inputs = processor(html_strings[0], question, words, boxes, return_tensors="pt")
+
+            # verify keys
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            actual_keys = sorted(list(inputs.keys()))
+            self.assertListEqual(actual_keys, expected_keys)
+
+            # verify input_ids
+            expected_decoding = "[CLS] what's his name? [SEP] hello world [SEP]"
+            decoding = processor.decode(inputs.input_ids.squeeze().tolist())
+            self.assertSequenceEqual(decoding, expected_decoding)
+
+            # batched
+            questions = ["How old is he?", "what's the time"]
+            nodes = [["hello", "world"], ["my", "name", "is", "niels"]]
+            xpaths = [[[1, 2, 3, 4], [5, 6, 7, 8]], [[3, 2, 5, 1], [6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3]]]
+            inputs = processor(
+                html_strings, questions=questions, nodes=nodes, xpaths=xpaths, padding=True, return_tensors="pt"
+            )
+
+            # verify keys
+            expected_keys = ["attention_mask", "bbox", "image", "input_ids", "token_type_ids"]
+            actual_keys = sorted(list(inputs.keys()))
+            self.assertListEqual(actual_keys, expected_keys)
+
+            # verify input_ids
+            expected_decoding = "[CLS] how old is he? [SEP] hello world [SEP] [PAD] [PAD] [PAD]"
+            decoding = processor.decode(inputs.input_ids[0].tolist())
+            self.assertSequenceEqual(decoding, expected_decoding)
+
+            expected_decoding = "[CLS] what's the time [SEP] my name is niels [SEP]"
+            decoding = processor.decode(inputs.input_ids[1].tolist())
+            self.assertSequenceEqual(decoding, expected_decoding)
+
+            # verify bbox
+            expected_bbox = [[6, 7, 4, 2], [3, 9, 2, 4], [1, 1, 2, 3], [1, 1, 2, 3], [1000, 1000, 1000, 1000]]
+            self.assertListEqual(inputs.bbox[1].tolist()[-5:], expected_bbox)

@@ -15,11 +15,11 @@
 """
 Processor class for MarkupLM.
 """
-from typing import List, Optional, Union
+from typing import Optional, Union
 
 from ...file_utils import TensorType
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
+from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TruncationStrategy
 
 
 class MarkupLMProcessor(ProcessorMixin):
@@ -77,6 +77,7 @@ class MarkupLMProcessor(ProcessorMixin):
         """
         # first, create nodes and xpaths
         if self.parse_html:
+            assert html_strings is not None
             assert nodes is None
             assert xpaths is None
             assert node_labels is None
