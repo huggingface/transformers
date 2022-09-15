@@ -52,8 +52,8 @@ from .base import (
     infer_framework_load_model,
 )
 from .conversational import Conversation, ConversationalPipeline
-from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .depth_estimation import DepthEstimationPipeline
+from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
