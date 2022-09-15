@@ -856,8 +856,11 @@ class MarkupLMModel(MarkupLMPreTrainedModel):
         >>> html_string = "<html> <head> <title>Page Title</title> </head> </html>"
 
         >>> encoding = processor(html_string, return_tensors="pt")
+
         >>> outputs = model(**encoding)
         >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 4, 768]
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1008,8 +1011,8 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
         >>> processor = MarkupLMProcessor.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
         >>> model = MarkupLMForQuestionAnswering.from_pretrained("microsoft/markuplm-base-finetuned-websrc")
 
-        >>> html_string = "<html> <head> <title>The title is Hello World</title> </head> </html>"
-        >>> question = "What's the title?"
+        >>> html_string = "<html> <head> <title>My name is Niels</title> </head> </html>"
+        >>> question = "What's his name?"
 
         >>> encoding = processor(html_string, questions=question, return_tensors="pt")
 
@@ -1019,8 +1022,9 @@ class MarkupLMForQuestionAnswering(MarkupLMPreTrainedModel):
         >>> answer_start_index = outputs.start_logits.argmax()
         >>> answer_end_index = outputs.end_logits.argmax()
 
-        >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
-        >>> tokenizer.decode(predict_answer_tokens)
+        >>> predict_answer_tokens = encoding.input_ids[0, answer_start_index : answer_end_index + 1]
+        >>> processor.decode(predict_answer_tokens).strip()
+        'Niels'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1200,12 +1204,7 @@ class MarkupLMForSequenceClassification(MarkupLMPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(MARKUPLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids=None,
