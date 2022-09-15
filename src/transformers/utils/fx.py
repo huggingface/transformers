@@ -134,6 +134,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "trocr",
     "vit",
     "xglm",
+    "wav2vec2",
     #    "xlnet",
 ]
 
