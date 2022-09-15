@@ -1161,8 +1161,8 @@ workflows:
     build_and_test:
         jobs:
             - fetch_tests
-            - run_tests
-                requires
+            - run_tests:
+                requires:
                   - fetch_tests
 #            - check_code_quality
 #            - check_repository_consistency
