@@ -104,6 +104,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "blenderbot-small",
     "bloom",
     "clip",
+    "convnext",
     "deberta",
     "deberta-v2",
     "distilbert",
