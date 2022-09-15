@@ -1187,10 +1187,10 @@ workflows:
     version: 2
     build_and_test:
         jobs:
-            - fetch_tests_all
+            - fetch_all_tests
             - run_tests:
                 requires:
-                  - fetch_tests_all
+                  - fetch_all_tests
 #            - check_code_quality
 #            - check_repository_consistency
 #            - run_examples_torch
