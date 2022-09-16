@@ -1107,14 +1107,14 @@ else:
 
 if cache_version < 1:
     if is_offline_mode():
-        logger.warn(
+        logger.warning(
             "You are offline and the cache for model files in Transformers v4.22.0 has been updated while your local "
             "cache seems to be the one of a previous version. It is very likely that all your calls to any "
             "`from_pretrained()` method will fail. Remove the offline mode and enable internet connection to have "
             "your cache be updated automatically, then you can go back to offline mode."
         )
     else:
-        logger.warn(
+        logger.warning(
             "The cache for model files in Transformers v4.22.0 has been updated. Migrating your old cache. This is a "
             "one-time only operation. You can interrupt this and resume the migration later on by calling "
             "`transformers.utils.move_cache()`."
@@ -1138,7 +1138,7 @@ if cache_version < 1:
         with open(cache_version_file, "w") as f:
             f.write("1")
     except Exception:
-        logger.warn(
+        logger.warning(
             f"There was a problem when trying to write in your cache folder ({TRANSFORMERS_CACHE}). You should set "
             "the environment variable TRANSFORMERS_CACHE to a writable directory."
         )
