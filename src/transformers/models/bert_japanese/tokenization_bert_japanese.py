@@ -377,8 +377,8 @@ class SudachiTokenizer:
 
         try:
             from sudachipy import dictionary, tokenizer
-        except ModuleNotFoundError as error:
-            raise error.__class__(
+        except ImportError:
+            raise ImportError(
                 "You need to install sudachipy to use SudachiTokenizer. "
                 "See https://github.com/WorksApplications/SudachiPy for installation."
             )
@@ -453,8 +453,8 @@ class JumanppTokenizer:
 
         try:
             import pyknp
-        except ModuleNotFoundError as error:
-            raise error.__class__(
+        except ImportError:
+            raise ImportError(
                 "You need to install pyknp to use JumanppTokenizer. "
                 "See https://github.com/ku-nlp/pyknp for installation."
             )
