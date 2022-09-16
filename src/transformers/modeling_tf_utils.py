@@ -1861,7 +1861,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # If word embeddings are not tied, make sure that lm head bias is resized as well
         if self.get_bias() is not None:
             old_lm_head_bias = self.get_bias()
-            new_lm_head_bias = self._get_resized_lm_head_bias(old_lm_head_bias, new_num_tokens)
+            new_lm_head_bias = self._v2_get_resized_lm_head_bias(old_lm_head_bias, new_num_tokens)
             self.set_bias(new_lm_head_bias)
 
         # If word embeddings are not tied, make sure that lm head decoder is resized as well.
@@ -1891,6 +1891,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Return:
             `tf.Variable`: Pointer to the resized bias.
         """
+        # TODO (joao): flagged for replacement (by `_v2_get_resized_lm_head_bias`) due to embeddings refactor
         new_lm_head_bias = {}
 
         for attr, weight in old_lm_head_bias.items():
@@ -1924,6 +1925,40 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             new_bias.assign(init_bias)
             new_lm_head_bias[attr] = new_bias
 
+        return new_lm_head_bias
+
+    def _v2_get_resized_lm_head_bias(
+        self, old_lm_head_bias: Dict[str, tf.Variable], new_num_tokens: int
+    ) -> Dict[str, tf.Tensor]:
+        """
+        Build a resized bias from the old ones. Increasing the size will add newly initialized vectors at the end.
+        Reducing the size will remove vectors from the end
+
+        Args:
+            old_lm_head_bias (`Dict[str, tf.Variable]`):
+                Old lm head bias to be resized.
+            new_num_tokens (`int`):
+                New number of tokens in the linear matrix. Increasing the size will add newly initialized vectors at
+                the end. Reducing the size will remove vectors from the end.
+
+        Return:
+            `tf.Tensor`: Values for the resized bias.
+        """
+        new_lm_head_bias = {}
+
+        for attr, weight in old_lm_head_bias.items():
+            # Determine the size difference (depending on the shape)
+            first_dim, old_num_tokens = (None, shape_list(weight)[0]) if tf.rank(weight) == 1 else shape_list(weight)
+            size_diff = new_num_tokens - old_num_tokens
+
+            # Copy the old bias values to the new bias
+            if old_num_tokens > new_num_tokens:
+                new_bias = weight.value()[..., :new_num_tokens]
+            else:
+                padding_shape = [[0, size_diff]] if first_dim is None else [[0, 0], [0, size_diff]]
+                new_bias = tf.pad(weight.value(), tf.convert_to_tensor(padding_shape))
+
+            new_lm_head_bias[attr] = new_bias
         return new_lm_head_bias
 
     def _get_resized_lm_head_decoder(self, old_lm_head_decoder, new_num_tokens):
