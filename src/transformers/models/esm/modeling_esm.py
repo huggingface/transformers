@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch ESM model. """
+""" PyTorch ESM model."""
 
 import math
 import os
@@ -493,10 +493,8 @@ class ESMLayer(nn.Module):
         if self.is_decoder and encoder_hidden_states is not None:
             if not hasattr(self, "crossattention"):
                 raise AttributeError(
-                    (
-                        f"If `encoder_hidden_states` are passed, {self} has to be instantiated"
-                        " with cross-attention layers by setting `config.add_cross_attention=True`"
-                    )
+                    f"If `encoder_hidden_states` are passed, {self} has to be instantiated"
+                    " with cross-attention layers by setting `config.add_cross_attention=True`"
                 )
 
             # cross_attn cached key/values tuple is at positions 3,4 of past_key_value tuple
@@ -736,8 +734,9 @@ ESM_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]``.
 
             `What are position IDs? <../glossary.html#position-ids>`_
-        head_mask (:obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
+        head_mask (:
+            obj:`torch.FloatTensor` of shape :obj:`(num_heads,)` or :obj:`(num_layers, num_heads)`, `optional`): Mask
+            to nullify selected heads of the self-attention modules. Mask values selected in ``[0, 1]``:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
@@ -779,7 +778,7 @@ class ESMModel(ESMPreTrainedModel):
     """
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
 
     # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->ESM
     def __init__(self, config, add_pooling_layer=True):
@@ -836,17 +835,20 @@ class ESMModel(ESMPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
+        encoder_hidden_states  (:
+            obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`): Sequence
+            of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model
+            is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+        past_key_values (:
+            obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of
+            shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains precomputed key
+            and value hidden states of the attention blocks. Can be used to speed up decoding.
 
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
@@ -950,7 +952,7 @@ class ESMModel(ESMPreTrainedModel):
 
 
 @add_start_docstrings(
-    """ESM Model with a `language modeling` head on top for CLM fine-tuning. """, ESM_START_DOCSTRING
+    """ESM Model with a `language modeling` head on top for CLM fine-tuning.""", ESM_START_DOCSTRING
 )
 class ESMForCausalLM(ESMPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
@@ -997,9 +999,10 @@ class ESMForCausalLM(ESMPreTrainedModel):
         return_dict=None,
     ):
         r"""
-        encoder_hidden_states  (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
+        encoder_hidden_states  (:
+            obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length, hidden_size)`, `optional`): Sequence
+            of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if the model
+            is configured as a decoder.
         encoder_attention_mask (:obj:`torch.FloatTensor` of shape :obj:`(batch_size, sequence_length)`, `optional`):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in ``[0, 1]``:
@@ -1011,8 +1014,10 @@ class ESMForCausalLM(ESMPreTrainedModel):
             Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
             ``[-100, 0, ..., config.vocab_size]`` (see ``input_ids`` docstring) Tokens with indices set to ``-100`` are
             ignored (masked), the loss is only computed for the tokens with labels in ``[0, ..., config.vocab_size]``
-        past_key_values (:obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+        past_key_values (:
+            obj:`tuple(tuple(torch.FloatTensor))` of length :obj:`config.n_layers` with each tuple having 4 tensors of
+            shape :obj:`(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`): Contains precomputed key
+            and value hidden states of the attention blocks. Can be used to speed up decoding.
 
             If :obj:`past_key_values` are used, the user can optionally input only the last :obj:`decoder_input_ids`
             (those that don't have their past key value states given to this model) of shape :obj:`(batch_size, 1)`
@@ -1025,16 +1030,13 @@ class ESMForCausalLM(ESMPreTrainedModel):
 
         Example::
 
-            >>> from transformers import ESMTokenizer, ESMForCausalLM, ESMConfig
-            >>> import torch
+            >>> from transformers import ESMTokenizer, ESMForCausalLM, ESMConfig >>> import torch
 
-            >>> tokenizer = ESMTokenizer.from_pretrained('facebook/esm-1b')
-            >>> config = ESMConfig.from_pretrained("facebook/esm-1b")
-            >>> config.is_decoder = True
-            >>> model = ESMForCausalLM.from_pretrained('facebook/esm-1b', config=config)
+            >>> tokenizer = ESMTokenizer.from_pretrained('facebook/esm-1b') >>> config =
+            ESMConfig.from_pretrained("facebook/esm-1b") >>> config.is_decoder = True >>> model =
+            ESMForCausalLM.from_pretrained('facebook/esm-1b', config=config)
 
-            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-            >>> outputs = model(**inputs)
+            >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt") >>> outputs = model(**inputs)
 
             >>> prediction_logits = outputs.logits
         """
@@ -1101,7 +1103,7 @@ class ESMForCausalLM(ESMPreTrainedModel):
         return reordered_past
 
 
-@add_start_docstrings("""ESM Model with a `language modeling` head on top. """, ESM_START_DOCSTRING)
+@add_start_docstrings("""ESM Model with a `language modeling` head on top.""", ESM_START_DOCSTRING)
 class ESMForMaskedLM(ESMPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]

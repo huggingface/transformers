@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" ESM model configuration """
+""" ESM model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -83,14 +83,11 @@ class ESMConfig(PretrainedConfig):
 
         >>> from transformers import ESMModel, ESMConfig
 
-        >>> # Initializing a ESM esm-base-uncased style configuration
-        >>> configuration = ESMConfig()
+        >>> # Initializing a ESM esm-base-uncased style configuration >>> configuration = ESMConfig()
 
-        >>> # Initializing a model from the configuration
-        >>> model = ESMModel(configuration)
+        >>> # Initializing a model from the configuration >>> model = ESMModel(configuration)
 
-        >>> # Accessing the model configuration
-        >>> configuration = model.config
+        >>> # Accessing the model configuration >>> configuration = model.config
     """
     model_type = "esm"
 
