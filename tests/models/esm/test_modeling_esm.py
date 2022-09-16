@@ -269,17 +269,14 @@ class ESMModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_masked_lm(self):
         model = ESMForMaskedLM.from_pretrained("facebook/esm-1b")
-        # model = ESMForMaskedLM.from_pretrained("/checkpoint/jasonliu/tmp/huggingface/")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
-        # TODO Replace vocab size
         vocab_size = 33
 
         expected_shape = torch.Size((1, 6, vocab_size))
         self.assertEqual(output.shape, expected_shape)
 
-        # TODO Replace values below with what was printed above.
         expected_slice = torch.tensor(
             [[[[24.4653, -8.0736, 10.0146], [-9.0505, -15.9262, -4.8583], [-6.9496, -14.6652, 6.2619]]]]
         )
