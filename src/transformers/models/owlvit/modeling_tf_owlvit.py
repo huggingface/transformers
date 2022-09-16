@@ -89,6 +89,62 @@ def owlvit_loss(similarity: tf.Tensor) -> tf.Tensor:
     return (caption_loss + image_loss) / 2.0
 
 
+def center_to_corners_format(boxes: tf.Tensor) -> tf.Tensor:
+    """
+    Converts a TensorFlow tensor of bounding boxes of center format (center_x, center_y, width, height) to corners
+    format (left, top, right, bottom).
+    """
+    x_center, y_center, width, height = tf.squeeze(boxes, axis=-1)
+    boxes = [(x_center - 0.5 * width), (y_center - 0.5 * height), (x_center + 0.5 * width), (y_center + 0.5 * height)]
+    return tf.stack(boxes, dim=-1)
+
+
+def box_area(boxes: tf.Tensor) -> tf.Tensor:
+    """
+    Args:
+    Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
+        boxes (`tf.Tensor` of shape `(number_of_boxes, 4)`):
+            Boxes for which the area will be computed. They are expected to be in (x1, y1, x2, y2) format with `0 <= x1
+            < x2` and `0 <= y1 < y2`.
+    Returns:
+        `tf.FloatTensor`: a tensor containing the area for each box.
+    """
+    return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
+
+
+def box_iou(boxes1: tf.Tensor, boxes2: tf.Tensor) -> tf.Tensor:
+    area1 = box_area(boxes1)
+    area2 = box_area(boxes2)
+
+    left_top = tf.reduce_max(boxes1[:, None, :2], boxes2[:, :2])  # [N,M,2]
+    right_bottom = tf.reduce_max(boxes1[:, None, 2:], boxes2[:, 2:])  # [N,M,2]
+
+    width_height = right_bottom - left_top  # [N,M,2]
+    width_height = tf.clip_by_value(width_height, clip_value_min=0)
+    inter = width_height[:, :, 0] * width_height[:, :, 1]  # [N,M]
+
+    union = area1[:, None] + area2 - inter
+
+    iou = inter / union
+    return iou, union
+
+
+def generalized_box_iou(boxes1: tf.Tensor, boxes2: tf.Tensor) -> tf.Tensor:
+    """
+    Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format. Returns:
+        `tf.FloatTensor`: a [N, M] pairwise matrix, where N = len(boxes1) and M = len(boxes2)
+    """
+    iou, union = box_iou(boxes1, boxes2)
+
+    lt = tf.reduce_min(boxes1[:, None, :2], boxes2[:, :2])
+    rb = tf.reduce_max(boxes1[:, None, 2:], boxes2[:, 2:])
+
+    wh = tf.clip_by_value(rb - lt, clip_value_min=0)  # [N,M,2]
+    area = wh[:, :, 0] * wh[:, :, 1]
+
+    return iou - (area - union) / area
+
+
 @dataclass
 class TFOwlViTOutput(ModelOutput):
     """
@@ -195,7 +251,7 @@ class TFOwlViTVisionEmbeddings(tf.keras.layers.Layer):
         )
 
         self.position_embedding = tf.keras.layers.Embedding(
-            input_dim=self.num_positions, 
+            input_dim=self.num_positions,
             output_dim=self.embed_dim,
             embeddings_initializer=get_initializer(self.config.initializer_factor * self.config.initializer_range),
             name="position_embedding",
@@ -244,14 +300,14 @@ class TFOwlViTTextEmbeddings(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.token_embedding = tf.keras.layers.Embedding(
-            input_dim=config.vocab_size, 
+            input_dim=config.vocab_size,
             output_dim=config.hidden_size,
             embeddings_initializer=get_initializer(self.config.initializer_factor * self.config.initializer_range),
             name="token_embedding",
         )
 
         self.position_embedding = tf.keras.layers.Embedding(
-            input_dim=config.max_position_embeddings, 
+            input_dim=config.max_position_embeddings,
             output_dim=config.hidden_size,
             embeddings_initializer=get_initializer(self.config.initializer_factor * self.config.initializer_range),
             name="position_embedding",
@@ -830,7 +886,7 @@ class TFOwlViTMainLayer(tf.keras.layers.Layer):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        return_projected: Optional[bool] = True,
+        return_base_image_embeds: Optional[bool] = None,
         training: bool = False,
     ) -> tf.Tensor:
         if pixel_values is None:
@@ -845,11 +901,16 @@ class TFOwlViTMainLayer(tf.keras.layers.Layer):
         )
 
         pooled_output = vision_outputs[1]  # pooled_output
-        # Return projected output
-        if return_projected:
-            image_features = self.visual_projection(inputs=pooled_output)
+
+        # Apply post_layernorm to last_hidden_state, return non-projected output
+        if return_base_image_embeds:
+            last_hidden_state = vision_outputs[0]
+            image_features = self.vision_model.post_layernorm(inputs=last_hidden_state)
+
+        # Unmodified OwlViTModel / CLIP embeddings
         else:
-            image_features = pooled_output
+            pooled_output = vision_outputs[1]
+            image_features = self.visual_projection(inputs=pooled_output)
 
         return image_features
 
@@ -917,14 +978,8 @@ class TFOwlViTMainLayer(tf.keras.layers.Layer):
             loss = owlvit_loss(logits_per_text)
 
         if return_base_image_embeds:
-            image_embeds = self.get_image_features(
-                pixel_values=pixel_values,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-                return_projected=False,
-                training=training,
-            )
+            last_hidden_state = vision_outputs[0]
+            image_embeds = self.vision_model.post_layernorm(inputs=last_hidden_state)
 
         if not return_dict:
             output = (logits_per_image, logits_per_text, text_embeds, image_embeds, text_outputs, vision_outputs)
@@ -1307,8 +1362,8 @@ class TFOwlViTModel(TFOwlViTPreTrainedModel):
     ) -> tf.Tensor:
         r"""
         Returns:
-            text_features (`tf.Tensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`TFOwlViTTextModel`].
+            text_features (`tf.Tensor` of shape `(batch_size, output_dim`): The text embeddings obtained by applying
+            the projection layer to the pooled output of [`TFOwlViTTextModel`].
 
         Examples:
         ```python
@@ -1345,7 +1400,7 @@ class TFOwlViTModel(TFOwlViTPreTrainedModel):
     ) -> tf.Tensor:
         r"""
         Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
+            image_features (`tf.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
             applying the projection layer to the pooled output of [`TFOwlViTVisionModel`].
 
         Examples:
@@ -1460,10 +1515,16 @@ class TFOwlViTClassPredictionHead(tf.keras.layers.Layer):
         self.elu = get_tf_activation("elu")
 
     def call(
-        self, image_embeds: tf.Tensor, query_embeds: tf.Tensor, query_mask: tf.Tensor,
+        self,
+        image_embeds: tf.Tensor,
+        query_embeds: tf.Tensor,
+        query_mask: tf.Tensor,
     ) -> Tuple[tf.Tensor]:
 
         image_class_embeds = self.dense0(image_embeds)
+
+        if query_embeds is None:
+            return (None, image_class_embeds)
 
         # Normalize image and text features
         image_class_embeds = (
@@ -1509,9 +1570,9 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
 
         num_patches = feature_map.shape[1]
 
-        box_coordinates = np.stack(np.meshgrid(np.arange(1, num_patches + 1), np.arange(1, num_patches + 1)), axis=-1).astype(
-            np.float32
-        )
+        box_coordinates = np.stack(
+            np.meshgrid(np.arange(1, num_patches + 1), np.arange(1, num_patches + 1)), axis=-1
+        ).astype(np.float32)
         box_coordinates /= np.array([num_patches, num_patches], np.float32)
 
         # Flatten (num_patches, num_patches, 2) -> (num_patches**2, 2)
@@ -1586,6 +1647,7 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Tuple[tf.Tensor]:
+
         # Encode text and image
         outputs = self.owlvit(
             pixel_values=pixel_values,
@@ -1602,7 +1664,7 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
 
         # Merge image embedding with class tokens
         image_embeds = image_embeds[:, 1:, :] * class_token_out
-        image_embeds = self.layer_norm(image_embeds)
+        image_embeds = self.layer_norm(inputs=image_embeds)
 
         # Resize to [batch_size, num_patches, num_patches, hidden_size]
         batch_size, all_patches, hidden_size = tf.shape(image_embeds)
@@ -1618,6 +1680,105 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
 
         return (text_embeds, image_embeds, text_model_last_hidden_states, vision_model_last_hidden_states)
 
+    def embed_image_query(
+        self, query_pixel_values: tf.Tensor, query_feature_map: tf.Tensor, iou_threshold: float = 0.65
+    ) -> tf.Tensor:
+
+        (_, class_embeds) = self.class_predictor(query_pixel_values)
+        pred_boxes = self.box_predictor(query_pixel_values, query_feature_map)
+        pred_boxes_as_corners = center_to_corners_format(pred_boxes)
+
+        filtered_embeds = []
+        for i in range(query_pixel_values.shape[0]):
+            each_query_box = tf.Tensor([[0, 0, 1, 1]])
+            each_query_pred_boxes = pred_boxes_as_corners[i]
+            ious, _ = box_iou(each_query_box, each_query_pred_boxes)
+
+            if tf.math.reduce_all(ious[0] == 0.0):
+                ious = generalized_box_iou(each_query_box, each_query_pred_boxes)
+
+            selected_inds = ious[0] >= iou_threshold
+            non_zero_mask = tf.greater(selected_inds, 0)
+            selected_inds = tf.boolean_mask(selected_inds, non_zero_mask)
+            selected_inds = tf.squeeze(selected_inds, axis=0)
+
+            if tf.size(selected_inds) > 0:
+                selected_embeddings = class_embeds[i][selected_inds]
+                mean_embeds = tf.math.reduce_mean(class_embeds[i], axis=0)
+                mean_sim = tf.einsum("d,id->i", mean_embeds, selected_embeddings)
+                best_box_ind = selected_inds[tf.math.argmin(mean_sim)]
+                filtered_embeds.append(class_embeds[i][best_box_ind])
+
+        if filtered_embeds:
+            query_embeds = tf.stack(filtered_embeds)
+        else:
+            query_embeds = None
+
+        return query_embeds
+
+    def image_image_embedder(
+        self,
+        query_pixel_values: tf.Tensor,
+        pixel_values: tf.Tensor,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+    ) -> Tuple[tf.Tensor]:
+
+        query_image_embeds = self.owlvit.get_image_features(
+            pixel_values=query_pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_base_image_embeds=True,
+        )
+        image_embeds = self.owlvit.get_image_features(
+            pixel_values=pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_base_image_embeds=True,
+        )
+
+        # Normalize query image, image embeddings
+        image_embeds = image_embeds / tf.norm(tensor=image_embeds, ord="euclidean", axis=-1, keepdims=True)
+        query_image_embeds = query_image_embeds / tf.norm(
+            tensor=query_image_embeds, ord="euclidean", axis=-1, keepdims=True
+        )
+
+        # Resize class token
+        new_size = tuple(np.array(image_embeds.shape) - np.array((0, 1, 0)))
+        class_token_out = tf.broadcast_to(image_embeds[:, :1, :], new_size)
+
+        # Merge image embedding with class tokens
+        image_embeds = image_embeds[:, 1:, :] * class_token_out
+        image_embeds = self.layer_norm(inputs=image_embeds)
+
+        # Resize to [batch_size, num_patches, num_patches, hidden_size]
+        new_size = (
+            image_embeds.shape[0],
+            int(np.sqrt(image_embeds.shape[1])),
+            int(np.sqrt(image_embeds.shape[1])),
+            image_embeds.shape[-1],
+        )
+        image_embeds = tf.reshape(image_embeds, new_size)
+
+        # Resize class token
+        new_size = tuple(np.array(query_image_embeds.shape) - np.array((0, 1, 0)))
+        class_token_out = tf.broadcast_to(query_image_embeds[:, :1, :], new_size)
+
+        # Merge image embedding with class tokens
+        query_image_embeds = query_image_embeds[:, 1:, :] * class_token_out
+        query_image_embeds = self.layer_norm(inputs=query_image_embeds)
+
+        # Resize to [batch_size, num_patches, num_patches, hidden_size]
+        new_size = (
+            query_image_embeds.shape[0],
+            int(np.sqrt(query_image_embeds.shape[1])),
+            int(np.sqrt(query_image_embeds.shape[1])),
+            query_image_embeds.shape[-1],
+        )
+        query_image_embeds = tf.reshape(query_image_embeds, new_size)
+
+        return (query_image_embeds, image_embeds)
+
     @unpack_inputs
     @add_start_docstrings_to_model_forward(OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFOwlViTObjectDetectionOutput, config_class=OwlViTConfig)
@@ -1625,6 +1786,7 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
         self,
         input_ids: Optional[TFModelInputType] = None,
         pixel_values: Optional[TFModelInputType] = None,
+        query_pixel_values: Optional[TFModelInputType] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1654,31 +1816,52 @@ class TFOwlViTForObjectDetection(TFOwlViTPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.return_dict
 
-        # Embed images and text queries
-        outputs = self.image_text_embedder(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-        )
+        query_embeds, query_mask = None, None
+        assert (
+            input_ids is None or query_pixel_values is None
+        ), "Both input_ids and query_pixel_values cannot be passed"
 
-        # Last hidden states of text and vision transformers
-        text_model_last_hidden_states = outputs[2]
-        vision_model_last_hidden_states = outputs[3]
+        # Embed images and image queries
+        if query_pixel_values is not None:
+            outputs = self.image_image_embedder(
+                query_pixel_values=query_pixel_values,
+                pixel_values=pixel_values,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+            query_feature_map = outputs[0]
+        else:
+            # Embed images and text queries
+            outputs = self.image_text_embedder(
+                input_ids=input_ids,
+                pixel_values=pixel_values,
+                attention_mask=attention_mask,
+                output_attentions=output_attentions,
+            )
 
-        query_embeds = outputs[0]
+            # Last hidden states of text and vision transformers
+            text_model_last_hidden_states = outputs[2]
+            vision_model_last_hidden_states = outputs[3]
+
+            query_embeds = outputs[0]
+
         feature_map = outputs[1]
-        
+
         batch_size, num_patches, num_patches, hidden_dim = tf.shape(feature_map)
         image_feats = tf.reshape(feature_map, (batch_size, num_patches**2, hidden_dim))
 
-        # Reshape from [batch_size * max_text_queries, hidden_dim] -> [batch_size, max_text_queries, hidden_dim]
-        max_text_queries = tf.shape(input_ids)[0] // batch_size
-        query_embeds = tf.reshape(query_embeds, (batch_size, max_text_queries, tf.shape(query_embeds)[-1]))
+        if input_ids is not None:
+            # Reshape from [batch_size * max_text_queries, hidden_dim] -> [batch_size, max_text_queries, hidden_dim]
+            max_text_queries = tf.shape(input_ids)[0] // batch_size
+            query_embeds = tf.reshape(query_embeds, (batch_size, max_text_queries, tf.shape(query_embeds)[-1]))
 
-        # If first token is 0, then this is a padded query [batch_size, num_queries].
-        input_ids = tf.reshape(input_ids, (batch_size, max_text_queries, tf.shape(input_ids)[-1]))
-        query_mask = input_ids[..., 0] > 0
+            # If first token is 0, then this is a padded query [batch_size, num_queries].
+            input_ids = tf.reshape(input_ids, (batch_size, max_text_queries, tf.shape(input_ids)[-1]))
+            query_mask = input_ids[..., 0] > 0
+        else:
+            batch_size, num_patches, num_patches, hidden_dim = tf.shape(query_feature_map)
+            query_image_feats = tf.reshape(query_feature_map, (batch_size, num_patches * num_patches, hidden_dim))
+            query_embeds = self.embed_image_query(query_image_feats, query_feature_map)
 
         # Predict object classes [batch_size, num_patches, num_queries+1]
         (pred_logits, class_embeds) = self.class_predictor(image_feats, query_embeds, query_mask)
