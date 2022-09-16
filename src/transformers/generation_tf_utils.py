@@ -1606,11 +1606,12 @@ class TFGenerationMixin:
             )
 
         # decoder-only models should use left-padding for generation
-        if not self.config.is_encoder_decoder and tf.math.reduce_any(input_ids[:, -1] == pad_token_id):
-            logger.warning(
-                "A decoder-only architecture is being used, but right-padding was detected! For correct generation "
-                "results, please set `padding_side='left'` when initializing the tokenizer."
-            )
+        if not self.config.is_encoder_decoder:
+            if pad_token_id is not None and tf.math.reduce_any(input_ids[:, -1] == pad_token_id):
+                logger.warning(
+                    "A decoder-only architecture is being used, but right-padding was detected! For correct "
+                    "generation results, please set `padding_side='left'` when initializing the tokenizer."
+                )
 
         # 4. Prepare model inputs which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:

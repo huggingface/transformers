@@ -326,12 +326,13 @@ class FlaxGenerationMixin:
         if decoder_start_token_id is None and self.config.is_encoder_decoder:
             raise ValueError("`decoder_start_token_id` has to be defined for encoder-decoder generation.")
 
-        # decoder-only models should use left-padding for generation
-        if not self.config.is_encoder_decoder and jnp.sum(input_ids[:, -1] == pad_token_id) > 0:
-            logger.warning(
-                "A decoder-only architecture is being used, but right-padding was detected! For correct generation "
-                "results, please set `padding_side='left'` when initializing the tokenizer."
-            )
+        # decoder-only models should use left-padding for generation (can't be checked with `trace=True`)
+        if not self.config.is_encoder_decoder and not trace:
+            if pad_token_id is not None and jnp.sum(input_ids[:, -1] == pad_token_id) > 0:
+                logger.warning(
+                    "A decoder-only architecture is being used, but right-padding was detected! For correct "
+                    "generation results, please set `padding_side='left'` when initializing the tokenizer."
+                )
 
         if self.config.is_encoder_decoder:
             # add encoder_outputs to model_kwargs
