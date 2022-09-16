@@ -119,7 +119,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at:  ~/transformers/test_preparation
+                at: ~/transformers/test_preparation
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
@@ -161,7 +161,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at:  ~/transformers/test_preparation
+                at: ~/transformers/test_preparation
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
@@ -200,7 +200,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at:  ~/transformers/test_preparation
+                at: ~/transformers/test_preparation
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
@@ -239,7 +239,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at:  ~/transformers/test_preparation
+                at: ~/transformers/test_preparation
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
@@ -277,7 +277,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at:  ~/transformers/test_preparation
+                at: ~/transformers/test_preparation
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
@@ -315,7 +315,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at:  ~/transformers/test_preparation
+                at: ~/transformers/test_preparation
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
@@ -354,7 +354,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at:  ~/transformers/test_preparation
+                at: ~/transformers/test_preparation
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
@@ -388,7 +388,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at:  ~/transformers/test_preparation
+                at: ~/transformers/test_preparation
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
@@ -424,7 +424,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at:  ~/transformers/test_preparation
+                at: ~/transformers/test_preparation
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
@@ -461,7 +461,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at:  ~/transformers/test_preparation
+                at: ~/transformers/test_preparation
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
@@ -497,7 +497,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at:  ~/transformers/test_preparation
+                at: ~/transformers/test_preparation
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
@@ -534,7 +534,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at:  ~/transformers/test_preparation
+                at: ~/transformers/test_preparation
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
@@ -573,7 +573,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at:  ~/transformers/test_preparation
+                at: ~/transformers/test_preparation
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
@@ -669,7 +669,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at:  ~/transformers/test_preparation
+                at: ~/transformers/test_preparation
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
@@ -729,22 +729,6 @@ jobs:
                   cluster: $GKE_CLUSTER
                   perform-login: true
             - *delete_gke_jobs
-
-    run_tests:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        parallelism: 1
-        steps:
-            - attach_workspace:
-                at:  ~/transformers/test_preparation
-            - run: |
-                if [ ! -s test_preparation/test_list.txt ]; then
-                    echo "No tests to run, exiting early!"
-                    circleci-agent step halt
-                fi
-            - run: echo "Running tests!"
-            - run: cat test_preparation/test_list.txt
 
 workflow_filters: &workflow_filters
     filters:
