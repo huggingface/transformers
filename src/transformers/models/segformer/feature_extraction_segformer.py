@@ -14,7 +14,7 @@
 # limitations under the License.
 """Feature extractor class for SegFormer."""
 
-from typing import Optional, Union, List, Tuple
+from typing import List, Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -217,7 +217,8 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: Union[torch.Tensor, List[Tuple]] = None):
         """
-        Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+        Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps. Only supports
+        PyTorch.
 
         Parameters:
             outputs ([`SegformerForSemanticSegmentation`]):
@@ -227,9 +228,9 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
                 None, predictions will not be resized.
 
         Returns:
-            `List[torch.Tensor]`: A list of `torch.Tensor` of length `batch_size`, where each item is a semantic segmentation map of
-            of the corresponding target_sizes entry shape (if `target_sizes` is specified). Each pixel of `torch.Tensor` items correspond
-            to a semantic class id.
+            `List[torch.Tensor]`: A list of `torch.Tensor` of length `batch_size`, where each item is a semantic
+            segmentation map of of the corresponding target_sizes entry shape (if `target_sizes` is specified). Each
+            pixel of `torch.Tensor` items correspond to a semantic class id.
         """
         logits = outputs.logits
 
