@@ -62,6 +62,49 @@ references:
 
 
 jobs:
+    # Fetch the tests to run
+    fetch_tests:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.7.12
+        parallelism: 1
+        steps:
+            - checkout
+            - run: pip install --upgrade pip
+            - run: pip install GitPython
+            - run: pip install .
+            - run: mkdir -p test_preparation
+            - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
+            - store_artifacts:
+                path: ~/transformers/tests_fetched_summary.txt
+            - run: |
+                if [ -f test_list.txt ]; then
+                    mv test_list.txt test_preparation/test_list.txt
+                else
+                    touch test_preparation/test_list.txt
+                fi
+
+            - persist_to_workspace:
+                root: test_preparation/
+                paths:
+                    test_list.txt
+
+    # To run all tests for the nightly build
+    fetch_all_tests:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.7.12
+        parallelism: 1
+        steps:
+            - run: |
+                  mkdir test_preparation
+                  echo "tests" > test_preparation/test_list.txt
+
+            - persist_to_workspace:
+                  root: test_preparation/
+                  paths:
+                      test_list.txt
+
     run_tests_torch_and_tf:
         working_directory: ~/transformers
         docker:
@@ -75,6 +118,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - attach_workspace:
+                at: ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                   keys:
                       - v0.5-torch_and_tf-{{ checksum "setup.py" }}
@@ -91,49 +141,7 @@ jobs:
                 key: v0.5-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf $(cat test_list.txt) -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
-                  fi
-            - store_artifacts:
-                  path: ~/transformers/tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
-    run_tests_torch_and_tf_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            OMP_NUM_THREADS: 1
-            RUN_PT_TF_CROSS_TESTS: yes
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-torch_and_tf-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng git-lfs
-            - run: git lfs install
-            - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tf-cpu,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
-            - run: pip install tensorflow_probability
-            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
-            - run: pip install git+https://github.com/huggingface/accelerate
-            - save_cache:
-                key: v0.5-{{ checksum "setup.py" }}
-                paths:
-                    - '~/.cache/pip'
-            - run: |
-                  python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf tests -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf $(cat test_preparation/test_list.txt) -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -152,6 +160,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - attach_workspace:
+                at: ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                   keys:
                       - v0.5-torch_and_flax-{{ checksum "setup.py" }}
@@ -166,47 +181,7 @@ jobs:
                 key: v0.5-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax $(cat test_list.txt) -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
-                  fi
-            - store_artifacts:
-                  path: ~/transformers/tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
-    run_tests_torch_and_flax_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            OMP_NUM_THREADS: 1
-            RUN_PT_FLAX_CROSS_TESTS: yes
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-torch_and_flax-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
-            - run: pip install --upgrade pip
-            - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
-            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
-            - run: pip install git+https://github.com/huggingface/accelerate
-            - save_cache:
-                key: v0.5-{{ checksum "setup.py" }}
-                paths:
-                    - '~/.cache/pip'
-            - run: |
-                  python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax tests -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax $(cat test_preparation/test_list.txt) -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -224,6 +199,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - attach_workspace:
+                at: ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                   keys:
                       - v0.5-torch-{{ checksum "setup.py" }}
@@ -238,46 +220,7 @@ jobs:
                   key: v0.5-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 3 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_torch $(cat test_list.txt) | tee tests_output.txt
-                  fi
-            - store_artifacts:
-                  path: ~/transformers/tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
-    run_tests_torch_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            OMP_NUM_THREADS: 1
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-torch-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
-            - run: pip install --upgrade pip
-            - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
-            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
-            - run: pip install git+https://github.com/huggingface/accelerate
-            - save_cache:
-                  key: v0.5-torch-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: |
-                  python -m pytest -n 3 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_torch tests | tee tests_output.txt
+            - run: python -m pytest -n 3 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_torch $(cat test_preparation/test_list.txt) | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -295,6 +238,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - attach_workspace:
+                at: ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                   keys:
                       - v0.5-tf-{{ checksum "setup.py" }}
@@ -308,45 +258,7 @@ jobs:
                   key: v0.5-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_tf $(cat test_list.txt) | tee tests_output.txt
-                  fi
-            - store_artifacts:
-                  path: ~/transformers/tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
-    run_tests_tf_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            OMP_NUM_THREADS: 1
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-tf-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
-            - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
-            - run: pip install tensorflow_probability
-            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
-            - save_cache:
-                  key: v0.5-tf-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: |
-                  python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_tf tests | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_tf $(cat test_preparation/test_list.txt) | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -364,6 +276,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - attach_workspace:
+                at: ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                 keys:
                     - v0.5-flax-{{ checksum "setup.py" }}
@@ -376,44 +295,7 @@ jobs:
                   key: v0.5-flax-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_flax $(cat test_list.txt) | tee tests_output.txt
-                  fi
-            - store_artifacts:
-                  path: ~/transformers/tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
-    run_tests_flax_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            OMP_NUM_THREADS: 1
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                keys:
-                    - v0.5-flax-{{ checksum "setup.py" }}
-                    - v0.5-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
-            - run: pip install --upgrade pip
-            - run: pip install .[flax,testing,sentencepiece,vision,flax-speech]
-            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
-            - save_cache:
-                  key: v0.5-flax-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: |
-                  python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_flax tests | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_flax $(cat test_preparation/test_list.txt) | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -432,6 +314,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - attach_workspace:
+                at: ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                   keys:
                       - v0.5-torch-{{ checksum "setup.py" }}
@@ -445,46 +334,7 @@ jobs:
                   key: v0.5-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test $(cat test_list.txt) | tee tests_output.txt
-                  fi
-            - store_artifacts:
-                  path: ~/transformers/tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
-    run_tests_pipelines_torch_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            OMP_NUM_THREADS: 1
-            RUN_PIPELINE_TESTS: yes
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-torch-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
-            - run: pip install --upgrade pip
-            - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
-            - run: pip install torch-scatter -f https://pytorch-geometric.com/whl/torch-1.12.0+cpu.html
-            - run: pip install https://github.com/kpu/kenlm/archive/master.zip
-            - save_cache:
-                  key: v0.5-torch-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: |
-                  python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test tests | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test $(cat test_preparation/test_list.txt) | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -503,6 +353,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - attach_workspace:
+                at: ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                   keys:
                       - v0.5-tf-{{ checksum "setup.py" }}
@@ -514,44 +371,7 @@ jobs:
                   key: v0.5-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf $(cat test_list.txt) -m is_pipeline_test | tee tests_output.txt
-                  fi
-            - store_artifacts:
-                  path: ~/transformers/tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
-    run_tests_pipelines_tf_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            OMP_NUM_THREADS: 1
-            RUN_PIPELINE_TESTS: yes
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-tf-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
-            - run: pip install tensorflow_probability
-            - save_cache:
-                  key: v0.5-tf-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: |
-                  python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf tests -m is_pipeline_test | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf $(cat test_preparation/test_list.txt) -m is_pipeline_test | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -567,39 +387,13 @@ jobs:
             PYTEST_TIMEOUT: 120
         steps:
             - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-custom_tokenizers-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
-            - run: pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]
-            - run: python -m unidic download
-            - save_cache:
-                  key: v0.5-custom_tokenizers-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
+            - attach_workspace:
+                at: ~/transformers/test_preparation
             - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest --max-worker-restart=0 -s --make-reports=tests_custom_tokenizers ./tests/models/bert_japanese/test_tokenization_bert_japanese.py ./tests/models/openai/test_tokenization_openai.py ./tests/models/clip/test_tokenization_clip.py | tee tests_output.txt
-                  fi
-            - store_artifacts:
-                  path: ~/transformers/tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
-    run_tests_custom_tokenizers_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            RUN_CUSTOM_TOKENIZERS: yes
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        steps:
-            - checkout
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                   keys:
                       - v0.5-custom_tokenizers-{{ checksum "setup.py" }}
@@ -629,6 +423,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - attach_workspace:
+                at: ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                   keys:
                       - v0.5-torch_examples-{{ checksum "setup.py" }}
@@ -641,44 +442,7 @@ jobs:
                   key: v0.5-torch_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py --filters examples tests | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee tests_output.txt
-                  fi
-            - store_artifacts:
-                  path: ~/transformers/examples_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
-    run_examples_torch_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            OMP_NUM_THREADS: 1
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-torch_examples-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
-            - run: pip install --upgrade pip
-            - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
-            - run: pip install -r examples/pytorch/_tests_requirements.txt
-            - save_cache:
-                  key: v0.5-torch_examples-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: |
-                  TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee examples_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_torch ./examples/pytorch/ | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/examples_output.txt
             - store_artifacts:
@@ -696,6 +460,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - attach_workspace:
+                at: ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                   keys:
                       - v0.5-tensorflow_examples-{{ checksum "setup.py" }}
@@ -707,43 +478,7 @@ jobs:
                   key: v0.5-tensorflow_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py --filters examples tests | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_tensorflow ./examples/tensorflow/ | tee tests_output.txt
-                  fi
-            - store_artifacts:
-                  path: ~/transformers/tensorflow_examples_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
-    run_examples_tensorflow_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            OMP_NUM_THREADS: 1
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-tensorflow_examples-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
-            - run: pip install .[sklearn,tensorflow,sentencepiece,testing]
-            - run: pip install -r examples/tensorflow/_tests_requirements.txt
-            - save_cache:
-                  key: v0.5-tensorflow_examples-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: |
-                  TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_tensorflow ./examples/tensorflow/ | tee examples_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_tensorflow ./examples/tensorflow/ | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tensorflow_examples_output.txt
             - store_artifacts:
@@ -761,6 +496,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - attach_workspace:
+                at: ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                 keys:
                     - v0.5-flax_examples-{{ checksum "setup.py" }}
@@ -772,43 +514,7 @@ jobs:
                   key: v0.5-flax_examples-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py --filters examples tests | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_flax ./examples/flax/ | tee tests_output.txt
-                  fi
-            - store_artifacts:
-                  path: ~/transformers/flax_examples_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
-    run_examples_flax_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            OMP_NUM_THREADS: 1
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                keys:
-                    - v0.5-flax_examples-{{ checksum "setup.py" }}
-                    - v0.5-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
-            - run: pip install .[flax,testing,sentencepiece]
-            - run: pip install -r examples/flax/_tests_requirements.txt
-            - save_cache:
-                  key: v0.5-flax_examples-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: |
-                  TRANSFORMERS_IS_CI=1 python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_flax ./examples/flax/ | tee examples_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -s --make-reports=examples_flax ./examples/flax/ | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/flax_examples_output.txt
             - store_artifacts:
@@ -827,6 +533,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - attach_workspace:
+                at: ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                   keys:
                       - v0.5-hub-{{ checksum "setup.py" }}
@@ -841,47 +554,7 @@ jobs:
                   key: v0.5-hub-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest --max-worker-restart=0 -sv --make-reports=tests_hub $(cat test_list.txt) -m is_staging_test | tee tests_output.txt
-                  fi
-            - store_artifacts:
-                  path: ~/transformers/tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
-    run_tests_hub_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            HUGGINGFACE_CO_STAGING: yes
-            RUN_GIT_LFS_TESTS: yes
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-hub-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install git-lfs
-            - run: |
-                git config --global user.email "ci@dummy.com"
-                git config --global user.name "ci"
-            - run: pip install --upgrade pip
-            - run: pip install .[torch,sentencepiece,testing]
-            - save_cache:
-                  key: v0.5-hub-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: |
-                  python -m pytest --max-worker-restart=0 -sv --make-reports=tests_hub tests -m is_staging_test | tee tests_output.txt
+            - run: python -m pytest --max-worker-restart=0 -sv --make-reports=tests_hub $(cat test_preparation/test_list.txt) -m is_staging_test | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -899,6 +572,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
+            - attach_workspace:
+                at: ~/transformers/test_preparation
+            - run: |
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                   keys:
                       - v0.5-torch-{{ checksum "setup.py" }}
@@ -909,42 +589,8 @@ jobs:
                   key: v0.5-onnx-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
-            - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_onnx $(cat test_list.txt) -k onnx | tee tests_output.txt
-                  fi
-            - store_artifacts:
-                  path: ~/transformers/tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
+            - run: python -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_onnx $(cat test_preparation/test_list.txt) -k onnx | tee tests_output.txt
 
-    run_tests_onnxruntime_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            OMP_NUM_THREADS: 1
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-torch-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
-            - run: pip install --upgrade pip
-            - run: pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision]
-            - save_cache:
-                  key: v0.5-onnx-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: |
-                  python -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_onnx tests -k onnx | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -1022,48 +668,13 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - restore_cache:
-                  keys:
-                      - v0.5-torch-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
-            - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
-            - run: pip install --upgrade pip
-            - run: pip install .[torch,testing,vision]
-            - run: pip install torchvision
-            # The commit `36a65a0907d90ed591479b2ebaa8b61cfa0b4ef0` in `detectron2` break things.
-            # See https://github.com/facebookresearch/detectron2/commit/36a65a0907d90ed591479b2ebaa8b61cfa0b4ef0#comments.
-            # TODO: Revert this change back once the above issue is fixed.
-            - run: python -m pip install 'git+https://github.com/facebookresearch/detectron2.git'
-            - run: sudo apt install tesseract-ocr
-            - run: pip install pytesseract
-            - save_cache:
-                  key: v0.5-torch-{{ checksum "setup.py" }}
-                  paths:
-                      - '~/.cache/pip'
-            - run: python utils/tests_fetcher.py | tee test_preparation.txt
-            - store_artifacts:
-                  path: ~/transformers/test_preparation.txt
+            - attach_workspace:
+                at: ~/transformers/test_preparation
             - run: |
-                  if [ -f test_list.txt ]; then
-                    python -m pytest -n 1 --max-worker-restart=0 tests/models/*layoutlmv* --dist=loadfile -s --make-reports=tests_layoutlmv2_and_v3 --durations=100
-                  fi
-            - store_artifacts:
-                  path: ~/transformers/tests_output.txt
-            - store_artifacts:
-                  path: ~/transformers/reports
-
-    run_tests_layoutlmv2_and_v3_all:
-        working_directory: ~/transformers
-        docker:
-            - image: cimg/python:3.7.12
-        environment:
-            OMP_NUM_THREADS: 1
-            TRANSFORMERS_IS_CI: yes
-            PYTEST_TIMEOUT: 120
-        resource_class: xlarge
-        parallelism: 1
-        steps:
-            - checkout
+                if [ ! -s test_preparation/test_list.txt ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
             - restore_cache:
                   keys:
                       - v0.5-torch-{{ checksum "setup.py" }}
@@ -1130,20 +741,49 @@ workflows:
         jobs:
             - check_code_quality
             - check_repository_consistency
-            - run_examples_torch
-            - run_examples_tensorflow
-            - run_examples_flax
-            - run_tests_custom_tokenizers
-            - run_tests_torch_and_tf
-            - run_tests_torch_and_flax
-            - run_tests_torch
-            - run_tests_tf
-            - run_tests_flax
-            - run_tests_pipelines_torch
-            - run_tests_pipelines_tf
-            - run_tests_onnxruntime
-            - run_tests_hub
-            - run_tests_layoutlmv2_and_v3
+            - fetch_tests
+            - run_examples_torch:
+                requires:
+                  - fetch_tests
+            - run_examples_tensorflow:
+                requires:
+                  - fetch_tests
+            - run_examples_flax:
+                requires:
+                  - fetch_tests
+            - run_tests_custom_tokenizers:
+                requires:
+                  - fetch_tests
+            - run_tests_torch_and_tf:
+                requires:
+                  - fetch_tests
+            - run_tests_torch_and_flax:
+                requires:
+                  - fetch_tests
+            - run_tests_torch:
+                requires:
+                  - fetch_tests
+            - run_tests_tf:
+                requires:
+                  - fetch_tests
+            - run_tests_flax:
+                requires:
+                  - fetch_tests
+            - run_tests_pipelines_torch:
+                requires:
+                  - fetch_tests
+            - run_tests_pipelines_tf:
+                requires:
+                  - fetch_tests
+            - run_tests_onnxruntime:
+                requires:
+                  - fetch_tests
+            - run_tests_hub:
+                requires:
+                  - fetch_tests
+            - run_tests_layoutlmv2_and_v3:
+                requires:
+                  - fetch_tests
     nightly:
         triggers:
             - schedule:
@@ -1153,20 +793,49 @@ workflows:
                         only:
                             - main
         jobs:
-            - run_examples_torch_all
-            - run_examples_tensorflow_all
-            - run_examples_flax_all
-            - run_tests_custom_tokenizers_all
-            - run_tests_torch_and_tf_all
-            - run_tests_torch_and_flax_all
-            - run_tests_torch_all
-            - run_tests_tf_all
-            - run_tests_flax_all
-            - run_tests_pipelines_torch_all
-            - run_tests_pipelines_tf_all
-            - run_tests_onnxruntime_all
-            - run_tests_hub_all
-            - run_tests_layoutlmv2_and_v3_all
+            - fetch_all_tests
+            - run_examples_torch:
+                requires:
+                  - fetch_all_tests
+            - run_examples_tensorflow:
+                requires:
+                  - fetch_all_tests
+            - run_examples_flax:
+                requires:
+                  - fetch_all_tests
+            - run_tests_custom_tokenizers:
+                requires:
+                  - fetch_all_tests
+            - run_tests_torch_and_tf:
+                requires:
+                  - fetch_all_tests
+            - run_tests_torch_and_flax:
+                requires:
+                  - fetch_all_tests
+            - run_tests_torch:
+                requires:
+                  - fetch_all_tests
+            - run_tests_tf:
+                requires:
+                  - fetch_all_tests
+            - run_tests_flax:
+                requires:
+                  - fetch_all_tests
+            - run_tests_pipelines_torch:
+                requires:
+                  - fetch_all_tests
+            - run_tests_pipelines_tf:
+                requires:
+                  - fetch_all_tests
+            - run_tests_onnxruntime:
+                requires:
+                  - fetch_all_tests
+            - run_tests_hub:
+                requires:
+                  - fetch_all_tests
+            - run_tests_layoutlmv2_and_v3:
+                requires:
+                  - fetch_all_tests
 
 #    tpu_testing_jobs:
 #        triggers:
