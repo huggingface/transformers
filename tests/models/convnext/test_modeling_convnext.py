@@ -137,6 +137,7 @@ class ConvNextModelTest(ModelTesterMixin, unittest.TestCase):
         else ()
     )
 
+    fx_compatible = True
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
