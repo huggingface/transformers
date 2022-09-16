@@ -3896,7 +3896,7 @@ class TokenizerUtilTester(unittest.TestCase):
             with open(tmp_file, "wb") as f:
                 http_get("https://huggingface.co/albert-base-v1/resolve/main/spiece.model", f)
 
-            tokenizer = AlbertTokenizer.from_pretrained(tmp_file)
+            AlbertTokenizer.from_pretrained(tmp_file)
         finally:
             os.remove(tmp_file)
 
