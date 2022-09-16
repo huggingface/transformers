@@ -426,6 +426,32 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 ],
             )
 
+    def test_seq_classifier_train(self):
+        config = self.model_tester.get_config()
+        config.max_decoder_position_embeddings = 512
+        config.max_encoder_position_embeddings = 16384
+
+        model = LEDForSequenceClassification(config)
+        model.to(torch_device)
+        model.train()
+
+        input_ids = ids_tensor([1, 16384], config.vocab_size)
+        input_ids[:, -1] = config.eos_token_id  # Eos Token
+
+        decoder_input_ids = ids_tensor([1, 512], config.vocab_size)
+        decoder_input_ids[:, -1] = config.eos_token_id  # Eos Token
+
+        inputs_dict = prepare_led_inputs_dict(config, input_ids, decoder_input_ids)
+
+        input_lengths = [inputs_dict["input_ids"].shape[-1] // i for i in [4, 2, 1]]
+        labels = ids_tensor((inputs_dict["input_ids"].shape[0], 1), len(config.id2label))
+
+        loss = model(**inputs_dict, labels=labels).loss
+
+        assert not (torch.isinf(loss).item())
+
+        loss.backward()
+
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
     """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
