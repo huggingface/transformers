@@ -1670,7 +1670,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         init_configuration = {}
 
         is_local = os.path.isdir(pretrained_model_name_or_path)
-        if os.path.isfile(pretrained_model_name_or_path):
+        if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             if len(cls.vocab_files_names) > 1:
                 raise ValueError(
                     f"Calling {cls.__name__}.from_pretrained() with the path to a single file or url is not "

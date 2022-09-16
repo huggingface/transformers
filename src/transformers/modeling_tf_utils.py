@@ -2418,7 +2418,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 archive_file = pretrained_model_name_or_path + ".index"
                 is_local = True
             elif is_remote_url(pretrained_model_name_or_path):
-                archive_file = pretrained_model_name_or_path
+                filename = pretrained_model_name_or_path
                 resolved_archive_file = download_url(pretrained_model_name_or_path)
             else:
                 # set correct filename
