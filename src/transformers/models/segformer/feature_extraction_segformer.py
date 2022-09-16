@@ -229,8 +229,8 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
         Returns:
             `List[torch.Tensor]`: A list of `torch.Tensor` of length `batch_size`, where each item is a semantic
-            segmentation map of of the corresponding target_sizes entry shape (if `target_sizes` is specified). Each
-            pixel of `torch.Tensor` items correspond to a semantic class id.
+            segmentation map of of the corresponding target_sizes entry (if `target_sizes` is specified). Each
+            entry of each `torch.Tensor` correspond to a semantic class id.
         """
         logits = outputs.logits
 
