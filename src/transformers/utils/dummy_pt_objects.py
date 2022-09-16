@@ -1951,63 +1951,53 @@ class ErniePreTrainedModel(metaclass=DummyObject):
 ESM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ESMForCausalLM:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
+class ESMForCausalLM(metaclass=DummyObject):
+    _backends = ["torch"]
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class ESMForMaskedLM:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class ESMForSequenceClassification:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class ESMForTokenClassification:
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
-
-
-class ESMLayer:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ESMModel:
+class ESMForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
 
+class ESMForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
 
-class ESMPreTrainedModel:
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
-    @classmethod
-    def from_pretrained(cls, *args, **kwargs):
-        requires_backends(cls, ["torch"])
+
+class ESMForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ESMLayer(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ESMModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class ESMPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 
 def load_tf_weights_in_esm(*args, **kwargs):
