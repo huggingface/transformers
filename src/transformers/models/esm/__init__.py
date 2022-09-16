@@ -17,7 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...file_utils import _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
@@ -25,7 +25,12 @@ _import_structure = {
     "tokenization_esm": ["ESMTokenizer"],
 }
 
-if is_torch_available():
+try:
+    if not is_torch_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
     _import_structure["modeling_esm"] = [
         "ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
         "ESMForCausalLM",
@@ -43,7 +48,12 @@ if TYPE_CHECKING:
     from .configuration_esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, ESMConfig
     from .tokenization_esm import ESMTokenizer
 
-    if is_torch_available():
+    try:
+        if not is_torch_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
         from .modeling_esm import (
             ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
             ESMForCausalLM,
