@@ -1726,6 +1726,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         for file_id, file_path in vocab_files.items():
             if file_path is None:
                 resolved_vocab_files[file_id] = None
+            elif os.path.isfile(file_path):
+                resolved_vocab_files[file_id] = file_path
             elif is_remote_url(file_path):
                 resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
             else:
