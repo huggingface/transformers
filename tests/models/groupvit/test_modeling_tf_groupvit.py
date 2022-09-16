@@ -13,19 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """ Testing suite for the TensorFlow GroupViT model. """
-import random
-import numpy as np
-import tensorflow as tf
+
 
 import inspect
 import os
+import random
 import tempfile
 import unittest
 from importlib import import_module
 
+import numpy as np
+
 import requests
 from transformers import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
-from transformers.testing_utils import require_tf, require_vision, slow
+from transformers.testing_utils import is_pt_tf_cross_test, require_tf, require_vision, slow
 from transformers.utils import is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -90,9 +91,8 @@ class TFGroupViTVisionModelTester:
 
     def prepare_config_and_inputs(self):
 
-        import random
         rng = random.Random(0)
-        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
+        pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size], rng=rng)
         config = self.get_config()
 
         return config, pixel_values
@@ -270,14 +270,16 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
             check_hidden_states_output(inputs_dict, config, model_class)
 
+    @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
-        import random
-        import numpy as np
-        import tensorflow as tf
+        import torch
 
-        random.seed(0)
-        np.random.seed(0)
-        tf.random.set_seed(0)
+        seed = 338
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        tf.random.set_seed(seed)
         return super().test_pt_tf_model_equivalence()
 
     @slow
@@ -377,7 +379,8 @@ class TFGroupViTTextModelTester:
         self.scope = scope
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        rng = random.Random(0)
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size, rng=rng)
 
         input_mask = None
         if self.use_input_mask:
@@ -567,6 +570,18 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="CLIPModel does not have input/output embeddings")
     def test_model_common_attributes(self):
         pass
+
+    @is_pt_tf_cross_test
+    def test_pt_tf_model_equivalence(self):
+        import torch
+
+        seed = 158
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        tf.random.set_seed(seed)
+        return super().test_pt_tf_model_equivalence()
 
     # overwrite from common since `TFGroupViTModelTester` set `return_loss` to `True` and causes the preparation of
     # `symbolic_inputs` failed.
