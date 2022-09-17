@@ -134,7 +134,9 @@ def gumbel_softmax(logits: tf.Tensor, tau: float = 1, hard: bool = False, dim: i
         y_hard = tf.one_hot(
             index,
             depth=shape_list(logits)[dim],
-            axis=dim,
+            # TensorFlow expects axis to be -1 or between [0, 3).  But received: -2
+            # This is why the following code snippet is used.
+            axis=range(len(shape_list(logits)))[dim],
             dtype=y_soft.dtype,
         )
         ret = y_hard - tf.stop_gradient(y_soft) + y_soft
