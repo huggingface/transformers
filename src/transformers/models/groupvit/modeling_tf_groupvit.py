@@ -1423,7 +1423,7 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
 
         loss = None
         if return_loss:
-            loss = groupvit_loss(logits_per_text)
+            loss = groupvit_loss(logits_per_text)[None, ...]
 
         if not return_dict:
             if seg_logits is not None:
