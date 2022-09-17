@@ -20,7 +20,6 @@ import unittest
 from datasets import load_dataset
 from packaging import version
 
-import requests
 from transformers import ViltConfig, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
@@ -527,8 +526,6 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
         r"""
         We have to customly redefine these tests since the default test retrieves the first element
         of the output which correspond to the non-deterministic hidden states.
-        Also since image tokens are sampled from a probabilistic distribution, it involves stochasticy.
-        we have to change the tolerance to `1e-3` to make sure the test pass.
         """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -568,8 +565,6 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
         r"""
         We have to customly redefine these tests since the default test retrieves the first element
         of the output which correspond to the non-deterministic hidden states.
-        Also since image tokens are sampled from a probabilistic distribution, it involves stochasticy.
-        we have to change the tolerance to `1e-3` to make sure the test pass.
         """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -611,8 +606,6 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
         r"""
         We have to customly redefine these tests since the default test retrieves the first element
         of the output which correspond to the non-deterministic hidden states.
-        Also since image tokens are sampled from a probabilistic distribution, it involves stochasticy.
-        we have to change the tolerance to `1e-3` to make sure the test pass.
         """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -666,8 +659,7 @@ class ViltForImagesAndTextClassificationModelTest(ViltModelTest, unittest.TestCa
 
 # We will verify our results on an image of cute cats
 def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
 
 
