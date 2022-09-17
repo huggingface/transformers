@@ -360,6 +360,12 @@ class ConfigTestUtils(unittest.TestCase):
             # This check we did call the fake head request
             mock_head.assert_called()
 
+    def test_legacy_load_from_url(self):
+        # This test is for deprecated behavior and can be removed in v5
+        _ = BertConfig.from_pretrained(
+            "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/config.json"
+        )
+
 
 class ConfigurationVersioningTest(unittest.TestCase):
     def test_local_versioning(self):
