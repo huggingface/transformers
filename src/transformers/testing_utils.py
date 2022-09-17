@@ -25,7 +25,6 @@ import sys
 import tempfile
 import unittest
 from collections.abc import Mapping
-from contextlib import ContextDecorator, suppress
 from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
@@ -43,7 +42,6 @@ from .integrations import (
     is_sigopt_available,
     is_wandb_available,
 )
-from .trainer_utils import set_seed
 from .utils import (
     is_accelerate_available,
     is_apex_available,
@@ -774,7 +772,6 @@ class CaptureStd:
     ```"""
 
     def __init__(self, out=True, err=True, replay=True):
-
         self.replay = replay
 
         if out:
@@ -1124,7 +1121,6 @@ class TestCasePlus(unittest.TestCase):
             tmp_dir(`string`): either the same value as passed via *tmp_dir* or the path to the auto-selected tmp dir
         """
         if tmp_dir is not None:
-
             # defining the most likely desired behavior for when a custom path is provided.
             # this most likely indicates the debug mode where we want an easily locatable dir that:
             # 1. gets cleared out before the test (if it already exists)
@@ -1202,7 +1198,6 @@ class TestCasePlus(unittest.TestCase):
         return max_rss
 
     def tearDown(self):
-
         # get_auto_remove_tmp_dir feature: remove registered temp dirs
         for path in self.teardown_tmp_dirs:
             shutil.rmtree(path, ignore_errors=True)
@@ -1474,7 +1469,6 @@ async def _stream_subprocess(cmd, env=None, stdin=None, timeout=None, quiet=Fals
 
 
 def execute_subprocess_async(cmd, env=None, stdin=None, timeout=180, quiet=False, echo=True) -> _RunOutput:
-
     loop = asyncio.get_event_loop()
     result = loop.run_until_complete(
         _stream_subprocess(cmd, env=env, stdin=stdin, timeout=timeout, quiet=quiet, echo=echo)
@@ -1617,35 +1611,3 @@ class RequestCounter:
             self.other_request_count += 1
 
         return self.old_request(method=method, **kwargs)
-
-
-class reset_seed_pre_forward(ContextDecorator):
-    r"""
-    # adapted from
-    https://stackoverflow.com/questions/32163436/python-decorator-for-printing-every-line-executed-by-a-function A
-    context decorator to set a manual seed before each module's forward pass. When used, the seed will be set before
-    entering the forward pass of a class from `modeling_XXX.py`. This is useful for models that involves stochasticity
-    during their forward pass to ensure reproducibility and the capability to run som tests.
-    """
-
-    def __init__(self, seed=42):
-        super().__init__()
-        self.seed = seed
-
-    def __enter__(self):
-        sys.settrace(self.trace_calls)
-
-    def __exit__(self, *exc):
-        # stop tracing functions after quitting
-        # the context manager
-        sys.settrace(None)
-
-    def trace_calls(self, frame, event, arg):
-        # frame.f_locals provides the arguments of the function that was called
-        # we just check that it is a ...Model class
-        with suppress(KeyError):
-            if "Model" in str(frame.f_locals["self"].__class__):
-                return self.set_seed
-
-    def set_seed(self, frame, event, arg):
-        set_seed(self.seed)
