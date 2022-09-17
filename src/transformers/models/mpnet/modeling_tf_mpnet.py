@@ -1187,19 +1187,19 @@ class TFMPNetForQuestionAnswering(TFMPNetPreTrainedModel, TFQuestionAnsweringLos
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        start_positions=None,
-        end_positions=None,
-        training=False,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.array, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.array, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.array, tf.Tensor]] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        start_positions: Optional[tf.Tensor] = None,
+        end_positions: Optional[tf.Tensor] = None,
+        training: bool = False,
         **kwargs,
-    ):
+    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
