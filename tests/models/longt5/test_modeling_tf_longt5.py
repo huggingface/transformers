@@ -16,8 +16,7 @@
 import unittest
 
 from transformers import LongT5Config, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow, tooslow
-from transformers.utils import cached_property
+from transformers.testing_utils import require_tf, slow, tooslow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_attention_mask
@@ -382,7 +381,7 @@ class TFLongT5ModelTest(TFModelTesterMixin, unittest.TestCase):
             self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
             self.assertEqual(model.config.output_hidden_states, True)
             check_encoder_attentions_output(outputs)
-    
+
     def test_model_common_attributes(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -434,7 +433,7 @@ class TFLongT5ModelTest(TFModelTesterMixin, unittest.TestCase):
                 max_length=max_length,
                 output_attentions=True,
                 return_dict_in_generate=True,
-                **head_masks
+                **head_masks,
             )
             # We check the state of decoder_attentions just from the last step
             # TF generate does not return `cross_attentions`
@@ -459,4 +458,184 @@ class TFLongT5ModelTest(TFModelTesterMixin, unittest.TestCase):
     # This test is run in `TFLongT5EncoderOnlyModelTest`, where the main layer has the same inputs as the model
     @unittest.skip(reason="The inputs of the Main Layer are different.")
     def test_keras_save_load(self):
+        pass
+
+
+class TFLongT5EncoderOnlyModelTester:
+    def __init__(
+        self,
+        parent,
+        vocab_size=99,
+        batch_size=13,
+        encoder_seq_length=7,
+        n_positions=14,
+        local_radius=5,
+        encoder_attention_type="local",
+        global_block_size=3,
+        # For common tests
+        use_attention_mask=True,
+        hidden_size=32,
+        num_hidden_layers=5,
+        num_attention_heads=4,
+        d_ff=37,
+        relative_attention_num_buckets=8,
+        is_training=False,
+        dropout_rate=0.1,
+        initializer_factor=0.002,
+        is_encoder_decoder=False,
+        eos_token_id=1,
+        pad_token_id=0,
+        scope=None,
+    ):
+
+        self.parent = parent
+        self.batch_size = batch_size
+        self.encoder_seq_length = encoder_seq_length
+        self.n_positions = n_positions
+        self.local_radius = local_radius
+        self.block_len = local_radius + 1
+        self.encoder_attention_type = encoder_attention_type
+        self.global_block_size = global_block_size
+        # For common tests
+        self.seq_length = self.encoder_seq_length
+        self.use_attention_mask = use_attention_mask
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.d_ff = d_ff
+        self.relative_attention_num_buckets = relative_attention_num_buckets
+        self.dropout_rate = dropout_rate
+        self.initializer_factor = initializer_factor
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.is_encoder_decoder = is_encoder_decoder
+        self.scope = None
+        self.is_training = is_training
+
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
+
+        attention_mask = None
+        if self.use_attention_mask:
+            attention_mask = ids_tensor([self.batch_size, self.encoder_seq_length], vocab_size=2)
+
+        config = LongT5Config(
+            vocab_size=self.vocab_size,
+            n_positions=self.n_positions,
+            d_model=self.hidden_size,
+            d_ff=self.d_ff,
+            d_kv=self.hidden_size // self.num_attention_heads,
+            num_layers=self.num_hidden_layers,
+            num_heads=self.num_attention_heads,
+            relative_attention_num_buckets=self.relative_attention_num_buckets,
+            dropout_rate=self.dropout_rate,
+            initializer_factor=self.initializer_factor,
+            eos_token_id=self.eos_token_id,
+            bos_token_id=self.pad_token_id,
+            pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.pad_token_id,
+            is_encoder_decoder=self.is_encoder_decoder,
+            local_radius=self.local_radius,
+            encoder_attention_type=self.encoder_attention_type,
+        )
+
+        return (
+            config,
+            input_ids,
+            attention_mask,
+        )
+
+    def create_and_check_model(
+        self,
+        config,
+        input_ids,
+        attention_mask,
+    ):
+        model = TFLongT5EncoderModel(config=config)
+        result = model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+        )
+        result = model(input_ids=input_ids)
+        encoder_output = result.last_hidden_state
+
+        self.parent.assertEqual(encoder_output.shape, (self.batch_size, self.encoder_seq_length, self.hidden_size))
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            attention_mask,
+        ) = config_and_inputs
+
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+        return config, inputs_dict
+
+
+class TFLongT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
+    is_encoder_decoder = False
+    all_model_classes = (TFLongT5EncoderModel,) if is_tf_available() else ()
+    test_onnx = False
+
+    def setUp(self):
+        self.model_tester = TFLongT5EncoderOnlyModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_attention_outputs(self):
+        if not self.has_attentions:
+            return
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+        block_len = getattr(self.model_tester, "block_len", None)
+
+        def check_attentions_output(outputs):
+            attentions = [t.numpy() for t in (outputs.attentions)]
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, block_len, 3 * block_len],
+            )
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            config.output_hidden_states = False
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            out_len = len(outputs)
+            self.assertEqual(config.output_hidden_states, False)
+            check_attentions_output(outputs)
+
+            # Check that output attentions can also be changed via the config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+            self.assertEqual(config.output_hidden_states, False)
+            check_attentions_output(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            config.output_hidden_states = True
+            model = model_class(config)
+            outputs = model(self._prepare_for_class(inputs_dict, model_class))
+
+            self.assertEqual(out_len + (2 if self.is_encoder_decoder else 1), len(outputs))
+            self.assertEqual(model.config.output_hidden_states, True)
+            check_attentions_output(outputs)
+
+    # is not able to be part of a pipeline
+    def test_train_pipeline_custom_model(self):
         pass

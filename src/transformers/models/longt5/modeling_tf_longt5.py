@@ -882,7 +882,6 @@ class TFLongT5Block(tf.keras.layers.Layer):
             self.layer.append(TFLongT5LayerCrossAttention(config, name="layer_._1"))
         self.layer.append(TFLongT5LayerFF(config, name=f"layer_._{len(self.layer)}"))
 
-    # Copied from transformers.models.t5.modeling_tf_t5.TFT5Block.call
     def call(
         self,
         hidden_states: tf.Tensor,
