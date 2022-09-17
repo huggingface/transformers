@@ -436,9 +436,11 @@ class TFLongT5ModelTest(TFModelTesterMixin, unittest.TestCase):
                 return_dict_in_generate=True,
                 **head_masks
             )
-            # We check the state of decoder_attentions and cross_attentions just from the last step
-            attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
-            self.assertEqual(sum([tf.reduce_sum(w).numpy() for w in attn_weights]), 0.0)
+            # We check the state of decoder_attentions just from the last step
+            # TF generate does not return `cross_attentions`
+            if attn_name != "cross_attentions":
+                attn_weights = out[attn_name] if attn_name == attention_names[0] else out[attn_name][-1]
+                self.assertEqual(sum([tf.reduce_sum(w).numpy() for w in attn_weights]), 0.0)
 
     @slow
     def test_resize_embeddings(self):
