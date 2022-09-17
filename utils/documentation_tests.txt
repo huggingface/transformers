@@ -26,6 +26,9 @@ src/transformers/models/ctrl/modeling_ctrl.py
 src/transformers/models/cvt/modeling_cvt.py
 src/transformers/models/data2vec/modeling_data2vec_audio.py
 src/transformers/models/data2vec/modeling_data2vec_vision.py
+src/transformers/models/deberta/modeling_deberta.py
+src/transformers/models/deberta_v2/modeling_deberta_v2.py
+src/transformers/models/deformable_detr/modeling_deformable_detr.py
 src/transformers/models/deit/modeling_deit.py
 src/transformers/models/deit/modeling_tf_deit.py
 src/transformers/models/detr/modeling_detr.py
@@ -36,8 +39,11 @@ src/transformers/models/glpn/modeling_glpn.py
 src/transformers/models/gpt2/modeling_gpt2.py
 src/transformers/models/gptj/modeling_gptj.py
 src/transformers/models/hubert/modeling_hubert.py
+src/transformers/models/layoutlm/modeling_layoutlm.py
+src/transformers/models/layoutlm/modeling_tf_layoutlm.py
 src/transformers/models/layoutlmv2/modeling_layoutlmv2.py
 src/transformers/models/layoutlmv3/modeling_layoutlmv3.py
+src/transformers/models/layoutlmv3/modeling_tf_layoutlmv3.py
 src/transformers/models/longformer/modeling_longformer.py
 src/transformers/models/longformer/modeling_tf_longformer.py
 src/transformers/models/longt5/modeling_longt5.py
@@ -46,6 +52,7 @@ src/transformers/models/mbart/modeling_mbart.py
 src/transformers/models/mobilebert/modeling_mobilebert.py
 src/transformers/models/mobilebert/modeling_tf_mobilebert.py
 src/transformers/models/mobilevit/modeling_mobilevit.py
+src/transformers/models/mobilevit/modeling_tf_mobilevit.py
 src/transformers/models/opt/modeling_opt.py
 src/transformers/models/opt/modeling_tf_opt.py
 src/transformers/models/owlvit/modeling_owlvit.py
