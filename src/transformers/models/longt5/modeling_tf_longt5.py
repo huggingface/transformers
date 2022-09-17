@@ -164,6 +164,71 @@ def _get_local_attention_mask(attention_mask: tf.Tensor, block_len: int) -> tf.T
     return tf.expand_dims(local_attention_mask, 1)
 
 
+def _make_global_fixed_block_ids(attention_mask: tf.Tensor, global_block_size: int) -> Tuple[tf.Tensor, tf.Tensor]:
+    """Obtain the "fixed block" global id corresponding to each input token.
+
+    This implementation is a simlified version of the original Flaxformr implementation adopted from:
+    https://github.com/google/flaxformer/blob/main/flaxformer/architectures/longt5/long_attention.py.
+
+    In our scenario, as we use this strategy only for a decoder, orphan tokens, i.e. those tokens which do not make for
+    the whole fixed block, are assigned to the preceding block.
+
+    Padding tokens from the original sequence are represented by -1.
+    """
+    batch_size, seq_len = shape_list(attention_mask)[:2]
+
+    def handle_orphan_tokens(block_ids: tf.Tensor) -> tf.Tensor:
+        block_ends = tf.cast((tf.range(seq_len) % global_block_size) == global_block_size - 1, tf.bool)
+        true_block_ends = tf.cast(tf.logical_and(block_ends, block_ids >= 0), tf.int32)
+        full_blocks = tf.cast(tf.expand_dims(tf.math.reduce_sum(true_block_ends, -1), -1), block_ids.dtype) - 1
+        block_ids = tf.where(block_ids < full_blocks, block_ids, full_blocks)
+        return block_ids
+
+    fixed_block_mask = tf.ones_like(attention_mask) / global_block_size
+    fixed_block_mask = tf.cumsum(fixed_block_mask, axis=1) - fixed_block_mask
+    mask = tf.cast(tf.where(attention_mask != 0.0, 1.0, -1000.0), attention_mask.dtype)
+    global_block_ids = tf.cast(tf.floor(mask + fixed_block_mask - 1.0), attention_mask.dtype)
+    _global_block_ids_lower_bound = tf.constant(-1.0, dtype=global_block_ids.dtype)
+    global_block_ids = tf.where(
+        global_block_ids > _global_block_ids_lower_bound, global_block_ids, _global_block_ids_lower_bound
+    )
+    # set padding tokens to -1
+    global_block_ids = (global_block_ids * attention_mask) + (attention_mask - 1)
+    # [batch_size, seq_len]
+    global_block_ids = handle_orphan_tokens(global_block_ids)
+    num_globals = seq_len // global_block_size
+    # [batch_size, seq_len // global_block_size]
+    if num_globals > 0:
+        _sequence_block_ids_max = tf.expand_dims(tf.reduce_max(global_block_ids, axis=-1), axis=1)
+        _sequence_block_ids_max = tf.repeat(_sequence_block_ids_max, num_globals, axis=1)
+        _sequence_block_ids_max = tf.transpose(_sequence_block_ids_max, [0, 1])
+    else:
+        _sequence_block_ids_max = tf.zeros((batch_size, 0), dtype=global_block_ids.dtype)
+    global_segment_ids = tf.cumsum(tf.ones((batch_size, num_globals)), axis=-1) - 1
+    global_segment_ids = tf.where(global_segment_ids <= _sequence_block_ids_max, 1, 0)
+
+    global_block_ids = tf.cast(global_block_ids, tf.int32)
+    global_segment_ids = tf.cast(global_segment_ids, tf.int32)
+    return global_block_ids, global_segment_ids
+
+
+def _make_side_relative_position_ids(attention_mask: tf.Tensor, global_block_size: int) -> tf.Tensor:
+    """Create the relative position tensor for local -> global attention."""
+    block_ids, global_segment_ids = _make_global_fixed_block_ids(attention_mask, global_block_size)
+    global_seq_len = shape_list(global_segment_ids)[-1]
+    global_positions = tf.range(global_seq_len)
+    side_relative_position = global_positions - block_ids[..., None]
+    return tf.cast(side_relative_position, tf.int64)
+
+
+def _create_global_aggregates(hidden_states: tf.Tensor, block_ids: tf.Tensor, global_seq_len: int) -> tf.Tensor:
+    """Compute individual block aggregates by summing over individual blocks."""
+    # (batch..., seq_len, global_seq_len))
+    block_ids = tf.where(block_ids >= 0, block_ids, global_seq_len)
+    one_hot_block_ids = tf.one_hot(block_ids, global_seq_len + 1)[..., :-1]
+    return tf.einsum("...nd,...ng->...gd", hidden_states, tf.cast(one_hot_block_ids, hidden_states.dtype))
+
+
 # Copied from transformers.models.t5.modeling_tf_t5.TFT5LayerNorm with T5->LongT5
 class TFLongT5LayerNorm(tf.keras.layers.Layer):
     def __init__(self, epsilon=1e-6, **kwargs):
@@ -640,7 +705,7 @@ class TFLongT5LocalAttention(tf.keras.layers.Layer):
         relative_buckets += tf.where(is_small, relative_position, relative_position_if_large)
         return relative_buckets
 
-    def compute_bias(self, block_length: int):
+    def compute_bias(self, block_length: int) -> tf.Tensor:
         """Compute binned relative position bias"""
         memory_position = tf.range(3 * block_length, dtype=tf.int64)
         context_position = memory_position[block_length:-block_length]
@@ -740,6 +805,293 @@ class TFLongT5LocalAttention(tf.keras.layers.Layer):
         return outputs
 
 
+class TFLongT5TransientGlobalAttention(tf.keras.layers.Layer):
+    NEW_ID = itertools.count()
+
+    def __init__(self, config: LongT5Config, has_relative_attention_bias: bool = False, **kwargs: Any) -> None:
+        super().__init__(**kwargs)
+        self.layer_id = next(TFLongT5TransientGlobalAttention.NEW_ID)
+        self.is_decoder = config.is_decoder
+        self.use_cache = config.use_cache
+        self.has_relative_attention_bias = has_relative_attention_bias
+        self.output_attentions = config.output_attentions
+
+        self.relative_attention_num_buckets = config.relative_attention_num_buckets
+        self.relative_attention_max_distance = config.relative_attention_max_distance
+        self.d_model = config.d_model
+        self.key_value_proj_dim = config.d_kv
+        self.n_heads = config.num_heads
+        self.inner_dim = self.n_heads * self.key_value_proj_dim
+
+        self.local_radius = config.local_radius
+        self.block_len = self.local_radius + 1
+        self.global_block_size = config.global_block_size
+
+        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+
+        # Mesh TensorFlow initialization to avoid scaling before softmax
+        q_initializer = tf.keras.initializers.RandomNormal(
+            mean=0, stddev=config.initializer_factor * ((self.inner_dim * self.key_value_proj_dim) ** -0.5)
+        )
+        k_initializer = tf.keras.initializers.RandomNormal(
+            mean=0, stddev=config.initializer_factor * (self.inner_dim**-0.5)
+        )
+        v_initializer = tf.keras.initializers.RandomNormal(
+            mean=0, stddev=config.initializer_factor * (self.inner_dim**-0.5)
+        )
+        o_initializer = tf.keras.initializers.RandomNormal(
+            mean=0, stddev=config.initializer_factor * (self.inner_dim**-0.5)
+        )
+        self.relative_attention_bias_initializer = tf.keras.initializers.RandomNormal(
+            mean=0, stddev=config.initializer_factor * (self.inner_dim**-0.5)
+        )
+
+        self.q = tf.keras.layers.Dense(
+            self.inner_dim, use_bias=False, name="q", kernel_initializer=q_initializer
+        )  # Update init weights as in flax
+        self.k = tf.keras.layers.Dense(
+            self.inner_dim, use_bias=False, name="k", kernel_initializer=k_initializer
+        )  # Update init weights as in flax
+        self.v = tf.keras.layers.Dense(
+            self.inner_dim, use_bias=False, name="v", kernel_initializer=v_initializer
+        )  # Update init weights as in flax
+        self.o = tf.keras.layers.Dense(
+            self.d_model, use_bias=False, name="o", kernel_initializer=o_initializer
+        )  # Update init weights as in flax
+        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+
+        self.pruned_heads = set()
+
+        self.global_input_layer_norm = TFLongT5LayerNorm(
+            epsilon=config.layer_norm_epsilon, name="global_input_layer_norm"
+        )
+
+    def build(self, input_shape):
+        if self.has_relative_attention_bias:
+            with tf.name_scope("relative_attention_bias"):
+                self.relative_attention_bias = self.add_weight(
+                    name="embeddings",
+                    shape=[self.relative_attention_num_buckets, self.n_heads],
+                    initializer=self.relative_attention_bias_initializer,  # Add initializer
+                )
+
+            with tf.name_scope("global_relative_attention_bias"):
+                self.global_relative_attention_bias = self.add_weight(
+                    name="embeddings",
+                    shape=[self.relative_attention_num_buckets, self.n_heads],
+                    initializer=self.relative_attention_bias_initializer,  # Add initializer
+                )
+
+        return super().build(input_shape)
+
+    def prune_heads(self, heads):
+        raise NotImplementedError
+
+    @staticmethod
+    # Copied from transformers.models.t5.modeling_tf_t5.TFT5Attention._relative_position_bucket
+    def _relative_position_bucket(relative_position, bidirectional=True, num_buckets=32, max_distance=128):
+        """
+        Adapted from Mesh Tensorflow:
+        https://github.com/tensorflow/mesh/blob/0cb87fe07da627bf0b7e60475d59f95ed6b5be3d/mesh_tensorflow/transformer/transformer_layers.py#L593
+
+        Translate relative position to a bucket number for relative attention. The relative position is defined as
+        memory_position - query_position, i.e. the distance in tokens from the attending position to the attended-to
+        position. If bidirectional=False, then positive relative positions are invalid. We use smaller buckets for
+        small absolute relative_position and larger buckets for larger absolute relative_positions. All relative
+        positions >=max_distance map to the same bucket. All relative positions <=-max_distance map to the same bucket.
+        This should allow for more graceful generalization to longer sequences than the model has been trained on
+
+        Args:
+            relative_position: an int32 Tensor
+            bidirectional: a boolean - whether the attention is bidirectional
+            num_buckets: an integer
+            max_distance: an integer
+
+        Returns:
+            a Tensor with the same shape as relative_position, containing int32 values in the range [0, num_buckets)
+        """
+        relative_buckets = 0
+        #        n = -relative_position
+        if bidirectional:
+            num_buckets //= 2
+            relative_buckets += (
+                tf.cast(tf.math.greater(relative_position, 0), dtype=relative_position.dtype) * num_buckets
+            )
+            relative_position = tf.math.abs(relative_position)
+        else:
+            relative_position = -tf.math.minimum(relative_position, 0)
+        # now n is in the range [0, inf)
+        max_exact = num_buckets // 2
+        is_small = tf.math.less(relative_position, max_exact)
+        relative_position_if_large = max_exact + tf.cast(
+            tf.math.log(tf.cast(relative_position, tf.float32) / tf.cast(max_exact, tf.float32))
+            / math.log(max_distance / max_exact)
+            * (num_buckets - max_exact),
+            dtype=relative_position.dtype,
+        )
+        relative_position_if_large = tf.math.minimum(relative_position_if_large, num_buckets - 1)
+        relative_buckets += tf.where(is_small, relative_position, relative_position_if_large)
+        return relative_buckets
+
+    def compute_bias(self, block_length: int) -> tf.Tensor:
+        """Compute binned relative position bias"""
+        memory_position = tf.range(3 * block_length, dtype=tf.int64)
+        context_position = memory_position[block_length:-block_length]
+
+        # (block_length, 3 * block_length)
+        relative_position = memory_position[None, :] - context_position[:, None]
+        relative_position_bucket = self._relative_position_bucket(
+            relative_position,
+            bidirectional=(not self.is_decoder),
+            num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
+        )
+
+        # (block_length, 3 * block_length, num_heads)
+        values = tf.gather(self.relative_attention_bias, relative_position_bucket)
+        # (1, 1, num_heads, block_length, 3 * block_length)
+        values = tf.expand_dims(tf.expand_dims(tf.transpose(values, [2, 0, 1]), 0), 0)
+        return values
+
+    def compute_side_bias(self, mask: tf.Tensor, global_segment_ids: tf.Tensor) -> tf.Tensor:
+
+        # (batch_size, seq_len, global_seq_len)
+        side_attention_bias = tf.math.equal(mask[..., None], tf.cast(global_segment_ids[:, None, :], mask.dtype))
+        side_attention_bias = tf.cast(side_attention_bias, mask.dtype)
+        # (batch_size, 1, seq_len, global_seq_len)
+        side_attention_bias = side_attention_bias[:, None, ...]
+        attention_side_bias = tf.where(side_attention_bias > 0, 0.0, -1e10)
+        # (batch_size, seq_len, global_seq_len)
+        side_relative_position = _make_side_relative_position_ids(mask, self.global_block_size)
+        side_relative_position_bucket = self._relative_position_bucket(
+            side_relative_position,
+            bidirectional=(not self.is_decoder),
+            num_buckets=self.relative_attention_num_buckets,
+            max_distance=self.relative_attention_max_distance,
+        )
+        # (batch_size, seq_len, global_seq_len, num_heads)
+        side_bias = tf.gather(self.global_relative_attention_bias, side_relative_position_bucket)
+        # (batch_size, num_heads, seq_len, global_seq_len)
+        side_bias = tf.transpose(side_bias, [0, 3, 1, 2])
+        # (batch_size, num_heads, seq_len, global_seq_len)
+        attention_side_bias = attention_side_bias + side_bias
+        return attention_side_bias
+
+    def call(
+        self,
+        hidden_states: tf.Tensor,
+        mask: Optional[tf.Tensor] = None,
+        position_bias: Optional[tf.Tensor] = None,
+        layer_head_mask: Optional[tf.Tensor] = None,
+        training: bool = False,
+        output_attentions: bool = False,
+    ) -> Tuple[tf.Tensor, Optional[tf.Tensor]]:
+        batch_size, seq_length = shape_list(hidden_states)[:2]
+
+        def shape(states: tf.Tensor) -> tf.Tensor:
+            """projection"""
+            return tf.reshape(states, [batch_size, -1, self.n_heads, self.key_value_proj_dim])
+
+        def unshape(states: tf.Tensor) -> tf.Tensor:
+            """reshape"""
+            return tf.reshape(states, [batch_size, -1, self.inner_dim])
+
+        # Prepare components for transient-global attention
+        # Obtain block_ids and global_segment_ids
+        # global_seq_len := seq_len // self.global_block_size
+        # shapes: (batch_size, seq_len) & (batch_size, global_seq_len)
+        block_ids, global_segment_ids = _make_global_fixed_block_ids(
+            mask if mask is not None else tf.ones(shape_list(hidden_states)[:-1]), self.global_block_size
+        )
+        # Create global inputs
+        _global_seq_len = shape_list(global_segment_ids)[-1]
+        global_inputs = _create_global_aggregates(hidden_states, block_ids, _global_seq_len)
+        global_inputs = self.global_input_layer_norm(global_inputs)
+
+        # get query states -> (batch_size, seq_length, n_heads, dim_per_head)
+        query_states = shape(self.q(hidden_states))
+        key_states = shape(self.k(hidden_states))
+        value_states = shape(self.v(hidden_states))
+        # Get global/side key/value states  shape: (batch_size, global_seq_len, n_heads, dim_per_head)
+        side_key_states = shape(self.k(global_inputs))
+        side_value_states = shape(self.v(global_inputs))
+
+        # Split into blocks -> (batch_size, num_blocks, block_len, n_heads, dim_per_head)
+        query_states = _split_into_blocks(query_states, self.block_len, dim=1)
+        key_states = _split_into_blocks(key_states, self.block_len, dim=1)
+        value_states = _split_into_blocks(value_states, self.block_len, dim=1)
+
+        # Concatenate 3 blocks for keys and values -> (batch_size, num_blocks, 3 * block_len, n_heads, dim_per_head)
+        key_states = _concatenate_3_blocks(key_states, block_dim=1, sequence_dim=2)
+        value_states = _concatenate_3_blocks(value_states, block_dim=1, sequence_dim=2)
+
+        # Tile side inputs across local key/value blocks
+        # New shape: (batch_size, num_blocks, global_seq_len, n_heads, dim_per_head)
+        reps = shape_list(key_states)[1]
+        side_key_states = tf.repeat(tf.expand_dims(side_key_states, 1), reps, 1)
+        side_value_states = tf.repeat(tf.expand_dims(side_value_states, 1), reps, 1)
+
+        # Concatenate "local" and "side"/"global" key/value states to allow each token to attend global aggregated ones
+        # New shape: (batch_size, num_blocks, 3 * block_len + global_seq_len, n_heads, dim_per_head)
+        key_states = tf.concat([key_states, side_key_states], axis=2)
+        value_states = tf.concat([value_states, side_value_states], axis=2)
+
+        # Compute scores -> (batch_size, num_block, n_heads, block_len, 3 * block_len + global_seq_len)
+        scores = tf.einsum("...qhd,...khd->...hqk", query_states, key_states)
+
+        if mask is not None:
+            # We need to adjust position bias shape to be sum with mask
+            local_attention_mask = _get_local_attention_mask(mask, self.block_len)
+            # Replace masked positions with -10_000 (according to the original implementation)
+            local_attention_mask = tf.where(local_attention_mask > 0, 0.0, -1e10)
+        else:
+            local_attention_mask = None
+
+        if position_bias is None:
+            # position_bias shape: # (1, 1, n_heads, block_len, 3 * block_len)
+            if not self.has_relative_attention_bias:
+                position_bias = tf.zeros((1, 1, self.n_heads, self.block_len, 3 * self.block_len), dtype=scores.dtype)
+            else:
+                position_bias = self.compute_bias(self.block_len)
+
+            if local_attention_mask is not None:
+                # (batch_size, 1, n_heads, block_len, 3 * block_len)
+                position_bias = position_bias + tf.experimental.numpy.swapaxes(local_attention_mask, 1, 2)
+            position_bias = tf.cast(position_bias, scores.dtype)
+
+            # Calculate global/side bias - shape: # (batch_size, num_heads, seq_len, global_seq_len)
+            if mask is None:
+                mask = tf.ones((batch_size, seq_length))
+            side_position_bias = self.compute_side_bias(mask, global_segment_ids)
+            # (batch_size, num_blocks, num_heads, block_len, global_seq_len)
+            side_position_bias = _split_into_blocks(side_position_bias, self.block_len, dim=-2)
+            side_position_bias = tf.experimental.numpy.swapaxes(side_position_bias, 1, 2)
+            side_position_bias = tf.cast(side_position_bias, scores.dtype)
+            # (batch_size, num_blocks, num_heads, block_len, 3 * block_len + global_seq_len)
+            position_bias = tf.concat([position_bias, side_position_bias], axis=-1)
+
+        scores += position_bias
+        # (batch_size, num_blocks, n_heads, block_len, 3 * block_len + global_seq_len)
+        attn_weights = tf.nn.softmax(scores, axis=-1)
+        attn_weights = self.dropout(attn_weights, training=training)
+
+        # Mask heads if we want to
+        if layer_head_mask is not None:
+            attn_weights = tf.reshape(layer_head_mask, (1, 1, -1, 1, 1)) * attn_weights
+        attn_weights = tf.cast(attn_weights, value_states.dtype)
+        attn_output = unshape(tf.einsum("...hqk,...khd->...qhd", attn_weights, value_states))
+        attn_output = attn_output[:, :seq_length, :]
+        attn_output = self.o(attn_output)
+
+        present_key_value_state = None
+        outputs = (attn_output,) + (present_key_value_state,) + (position_bias,)
+
+        if output_attentions:
+            outputs = outputs + (attn_weights,)
+
+        return outputs
+
+
 # Copied from transformers.models.t5.modeling_tf_t5.TFT5LayerSelfAttention with T5->LongT5
 class TFLongT5LayerSelfAttention(tf.keras.layers.Layer):
     def __init__(self, config, has_relative_attention_bias=False, **kwargs):
@@ -816,6 +1168,43 @@ class TFLongT5LayerLocalSelfAttention(tf.keras.layers.Layer):
         return outputs
 
 
+class TFLongT5LayerTransientGlobalSelfAttention(tf.keras.layers.Layer):
+    """Transient-Global self attention used in encoder"""
+
+    def __init__(self, config, has_relative_attention_bias=False, **kwargs):
+        super().__init__(**kwargs)
+        self.TransientGlobalSelfAttention = TFLongT5TransientGlobalAttention(
+            config,
+            has_relative_attention_bias=has_relative_attention_bias,
+            name="TransientGlobalSelfAttention",
+        )
+        self.layer_norm = TFLongT5LayerNorm(epsilon=config.layer_norm_epsilon, name="layer_norm")
+        self.dropout = tf.keras.layers.Dropout(config.dropout_rate)
+
+    def call(
+        self,
+        hidden_states: tf.Tensor,
+        attention_mask: Optional[tf.Tensor] = None,
+        position_bias: Optional[tf.Tensor] = None,
+        layer_head_mask: Optional[tf.Tensor] = None,
+        output_attentions: bool = False,
+        training: bool = False,
+        **kwargs: Any,  # to accept past_key_value and use_cache kwargs
+    ):
+        normed_hidden_states = self.layer_norm(hidden_states)
+        attention_output = self.TransientGlobalSelfAttention(
+            normed_hidden_states,
+            mask=attention_mask,
+            position_bias=position_bias,
+            layer_head_mask=layer_head_mask,
+            output_attentions=output_attentions,
+            training=training,
+        )
+        hidden_states = hidden_states + self.dropout(attention_output[0], training=training)
+        outputs = (hidden_states,) + attention_output[1:]  # add attentions if we output them
+        return outputs
+
+
 # Copied from transformers.models.t5.modeling_tf_t5.TFT5LayerCrossAttention with T5->LongT5
 class TFLongT5LayerCrossAttention(tf.keras.layers.Layer):
     def __init__(self, config, **kwargs):
@@ -868,7 +1257,7 @@ class TFLongT5Block(tf.keras.layers.Layer):
         elif config.encoder_attention_type == "local":
             attention_layer = TFLongT5LayerLocalSelfAttention
         elif config.encoder_attention_type == "transient-global":
-            raise NotImplementedError
+            attention_layer = TFLongT5LayerTransientGlobalSelfAttention
         else:
             raise ValueError(
                 "For encoder attention mechanism, either `local` or `transient-global` attention type is expected, "

@@ -461,6 +461,15 @@ class TFLongT5ModelTest(TFModelTesterMixin, unittest.TestCase):
         pass
 
 
+@require_tf
+class TFLongT5TGlobalModelTest(TFLongT5ModelTest):
+    def setUp(self):
+        self.model_tester = TFLongT5ModelTester(
+            self, encoder_attention_type="transient-global", large_model_config_path="google/long-t5-tglobal-large"
+        )
+        self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
+
+
 class TFLongT5EncoderOnlyModelTester:
     def __init__(
         self,
@@ -486,6 +495,7 @@ class TFLongT5EncoderOnlyModelTester:
         eos_token_id=1,
         pad_token_id=0,
         scope=None,
+        large_model_config_path="google/long-t5-local-large",
     ):
 
         self.parent = parent
@@ -512,6 +522,7 @@ class TFLongT5EncoderOnlyModelTester:
         self.is_encoder_decoder = is_encoder_decoder
         self.scope = None
         self.is_training = is_training
+        self.large_model_config_path = large_model_config_path
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.encoder_seq_length], self.vocab_size)
@@ -577,6 +588,7 @@ class TFLongT5EncoderOnlyModelTester:
         return config, inputs_dict
 
 
+@require_tf
 class TFLongT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     all_model_classes = (TFLongT5EncoderModel,) if is_tf_available() else ()
@@ -639,3 +651,10 @@ class TFLongT5EncoderOnlyModelTest(TFModelTesterMixin, unittest.TestCase):
     # is not able to be part of a pipeline
     def test_train_pipeline_custom_model(self):
         pass
+
+
+@require_tf
+class TFLongT5EncoderOnlyTGlobalModelTest(TFLongT5EncoderOnlyModelTest):
+    def setUp(self):
+        self.model_tester = TFLongT5EncoderOnlyModelTester(self, encoder_attention_type="transient-global")
+        self.config_tester = ConfigTester(self, config_class=LongT5Config, d_model=37)
