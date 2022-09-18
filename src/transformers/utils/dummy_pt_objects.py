@@ -1477,7 +1477,13 @@ class Data2VecVisionPreTrainedModel(metaclass=DummyObject):
 DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class DebertaForMaskedLM(metaclass=DummyObject):
+class OldDebertaForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+class NewDebertaForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -1522,7 +1528,13 @@ class DebertaPreTrainedModel(metaclass=DummyObject):
 DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class DebertaV2ForMaskedLM(metaclass=DummyObject):
+class OldDebertaV2ForMaskedLM(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+class NewDebertaV2ForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
