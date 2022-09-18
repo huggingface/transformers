@@ -25,7 +25,8 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        DebertaForMaskedLM,
+        OldDebertaForMaskedLM,
+        NewDebertaForMaskedLM,
         DebertaForQuestionAnswering,
         DebertaForSequenceClassification,
         DebertaForTokenClassification,
@@ -150,10 +151,20 @@ class DebertaModelTester(object):
 
         self.parent.assertListEqual(list(sequence_output.size()), [self.batch_size, self.seq_length, self.hidden_size])
 
-    def create_and_check_deberta_for_masked_lm(
+    def create_and_check_old_deberta_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = DebertaForMaskedLM(config=config)
+        model = OldDebertaForMaskedLM(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
+    def create_and_check_new_deberta_for_masked_lm(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = NewDebertaForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -218,7 +229,8 @@ class DebertaModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DebertaModel,
-            DebertaForMaskedLM,
+            OldDebertaForMaskedLM,
+            NewDebertaForMaskedLM,
             DebertaForSequenceClassification,
             DebertaForTokenClassification,
             DebertaForQuestionAnswering,
