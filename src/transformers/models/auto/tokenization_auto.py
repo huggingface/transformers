@@ -127,6 +127,7 @@ else:
                 ),
             ),
             ("electra", ("ElectraTokenizer", "ElectraTokenizerFast" if is_tokenizers_available() else None)),
+            ("ernie", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("flaubert", ("FlaubertTokenizer", None)),
             ("fnet", ("FNetTokenizer", "FNetTokenizerFast" if is_tokenizers_available() else None)),
             ("fsmt", ("FSMTTokenizer", None)),
@@ -134,6 +135,7 @@ else:
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gpt_neo", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gpt_neox", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+            ("gpt_neox_japanese", ("GPTNeoXJapaneseTokenizer", None)),
             ("gptj", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("groupvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
@@ -259,6 +261,7 @@ else:
             ("wav2vec2", ("Wav2Vec2CTCTokenizer", None)),
             ("wav2vec2-conformer", ("Wav2Vec2CTCTokenizer", None)),
             ("wav2vec2_phoneme", ("Wav2Vec2PhonemeCTCTokenizer", None)),
+            ("xclip", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "xglm",
                 (
@@ -275,7 +278,13 @@ else:
                     "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            ("xlm-roberta-xl", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "xlm-roberta-xl",
+                (
+                    "XLMRobertaTokenizer" if is_sentencepiece_available() else None,
+                    "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             (
                 "xlnet",
                 (

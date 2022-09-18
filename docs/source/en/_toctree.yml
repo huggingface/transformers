@@ -237,6 +237,8 @@
         title: ELECTRA
       - local: model_doc/encoder-decoder
         title: Encoder Decoder Models
+      - local: model_doc/ernie
+        title: ERNIE
       - local: model_doc/flaubert
         title: FlauBERT
       - local: model_doc/fnet
@@ -251,6 +253,8 @@
         title: GPT Neo
       - local: model_doc/gpt_neox
         title: GPT NeoX
+      - local: model_doc/gpt_neox_japanese
+        title: GPT NeoX Japanese
       - local: model_doc/gptj
         title: GPT-J
       - local: model_doc/gpt2
@@ -362,6 +366,8 @@
         title: ConvNeXT
       - local: model_doc/cvt
         title: CvT
+      - local: model_doc/deformable_detr
+        title: Deformable DETR
       - local: model_doc/deit
         title: DeiT
       - local: model_doc/detr
@@ -470,6 +476,8 @@
         title: Vision Text Dual Encoder
       - local: model_doc/visual_bert
         title: VisualBERT
+      - local: model_doc/xclip
+        title: X-CLIP
       title: Multimodal models
     - isExpanded: false
       sections:

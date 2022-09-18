@@ -74,5 +74,5 @@ jobs:
           CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY_DOCS }}
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
         run: |
-          pip install slack_sdk==3.18.1
+          pip install slack_sdk
           python utils/notification_service_doc_tests.py

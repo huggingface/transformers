@@ -282,8 +282,20 @@ class GPT2Converter(Converter):
 
         tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=self.original_tokenizer.add_prefix_space)
         tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
-
+        if self.original_tokenizer.add_bos_token:
+            bos = self.original_tokenizer.bos_token
+            bos_token_id = self.original_tokenizer.bos_token_id
+            tokenizer.post_processor = processors.TemplateProcessing(
+                single=f"{bos}:0 $A:0",  # token_type_id is 2 for Funnel transformer
+                pair=f"{bos}:0 $A:0 $B:1",
+                special_tokens=[
+                    (bos, bos_token_id),
+                ],
+            )
+        else:
+            # XXX trim_offsets=False actually means this post_processor doesn't
+            # really do anything.
+            tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
         return tokenizer
 
 

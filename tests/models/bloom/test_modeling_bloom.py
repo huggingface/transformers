@@ -57,7 +57,7 @@ class BloomModelTester:
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
+        attention_dropout_prob=0.1,
         max_position_embeddings=512,
         type_vocab_size=16,
         type_sequence_label_size=2,
@@ -81,7 +81,7 @@ class BloomModelTester:
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.attention_dropout_prob = attention_dropout_prob
         self.max_position_embeddings = max_position_embeddings
         self.type_vocab_size = type_vocab_size
         self.type_sequence_label_size = type_sequence_label_size
@@ -118,8 +118,8 @@ class BloomModelTester:
             hidden_size=self.hidden_size,
             n_layer=self.num_hidden_layers,
             n_head=self.num_attention_heads,
-            resid_pdrop=self.hidden_dropout_prob,
-            attn_pdrop=self.attention_probs_dropout_prob,
+            hidden_dropout=self.hidden_dropout_prob,
+            attention_dropout=self.attention_dropout_prob,
             n_positions=self.max_position_embeddings,
             type_vocab_size=self.type_vocab_size,
             initializer_range=self.initializer_range,
