@@ -48,7 +48,8 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_deberta"] = [
         "DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "DebertaForMaskedLM",
+        "OldDebertaForMaskedLM",
+        "NewDebertaForMaskedLM",
         "DebertaForQuestionAnswering",
         "DebertaForSequenceClassification",
         "DebertaForTokenClassification",
@@ -93,7 +94,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DebertaForMaskedLM,
+            OldDebertaForMaskedLM,
+            NewDebertaForMaskedLM,
             DebertaForQuestionAnswering,
             DebertaForSequenceClassification,
             DebertaForTokenClassification,

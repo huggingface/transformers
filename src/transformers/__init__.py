@@ -1087,7 +1087,8 @@ else:
     _import_structure["models.deberta"].extend(
         [
             "DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "DebertaForMaskedLM",
+            "OldDebertaForMaskedLM",
+            "NewDebertaForMaskedLM",
             "DebertaForQuestionAnswering",
             "DebertaForSequenceClassification",
             "DebertaForTokenClassification",
@@ -1098,7 +1099,8 @@ else:
     _import_structure["models.deberta_v2"].extend(
         [
             "DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "DebertaV2ForMaskedLM",
+            "OldDebertaV2ForMaskedLM",
+            "NewDebertaV2ForMaskedLM",
             "DebertaV2ForMultipleChoice",
             "DebertaV2ForQuestionAnswering",
             "DebertaV2ForSequenceClassification",
@@ -3854,7 +3856,8 @@ if TYPE_CHECKING:
         )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DebertaForMaskedLM,
+            OldDebertaForMaskedLM,
+            NewDebertaForMaskedLM,
             DebertaForQuestionAnswering,
             DebertaForSequenceClassification,
             DebertaForTokenClassification,
@@ -3863,7 +3866,8 @@ if TYPE_CHECKING:
         )
         from .models.deberta_v2 import (
             DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DebertaV2ForMaskedLM,
+            OldDebertaV2ForMaskedLM,
+            NewDebertaV2ForMaskedLM,
             DebertaV2ForMultipleChoice,
             DebertaV2ForQuestionAnswering,
             DebertaV2ForSequenceClassification,
