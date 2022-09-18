@@ -1288,10 +1288,13 @@ class NewDebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     def resize_token_embeddings(self, new_num_tokens: int):
 
         old_bias = self.lm_predictions.lm_head.bias.data
-        old_size = len(old_bias)
 
         new_bias = nn.Parameter(torch.zeros(new_num_tokens))
-        new_bias.data[:old_size] = old_bias
+
+        # If there are more tokens, will transfer all of old values
+        # If there are fewer tokens, will transfer some of old values
+        num_to_transfer = min(len(old_bias), new_num_tokens)
+        new_bias.data[:num_to_transfer] = old_bias[:num_to_transfer]
 
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
