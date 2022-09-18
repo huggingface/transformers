@@ -46,6 +46,8 @@ PRIVATE_MODELS = [
 # Being in this list is an exception and should **not** be the rule.
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
+    "DeformableDetrEncoder",  # Building part of bigger (tested) model.
+    "DeformableDetrDecoder",  # Building part of bigger (tested) model.
     "OPTDecoder",  # Building part of bigger (tested) model.
     "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
     "SegformerDecodeHead",  # Building part of bigger (tested) model.
@@ -207,6 +209,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "TFWav2Vec2ForCTC",
     "TFHubertForCTC",
     "MaskFormerForInstanceSegmentation",
+    "XCLIPVisionModel",
+    "XCLIPTextModel",
 ]
 
 # Update this list for models that have multiple model types for the same

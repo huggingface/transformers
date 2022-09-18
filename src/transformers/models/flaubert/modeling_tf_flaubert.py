@@ -73,22 +73,27 @@ FLAUBERT_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
-
-    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -195,9 +200,9 @@ def get_masks(slen, lengths, causal, padding_mask=None):
 
     # sanity check
     # assert shape_list(mask) == [bs, slen]
-    if tf.executing_eagerly():
-        tf.debugging.assert_equal(shape_list(mask), [bs, slen])
-        assert causal is False or shape_list(attn_mask) == [bs, slen, slen]
+    tf.debugging.assert_equal(shape_list(mask), [bs, slen])
+    if causal:
+        tf.debugging.assert_equal(shape_list(attn_mask), [bs, slen, slen])
 
     return mask, attn_mask
 
@@ -512,10 +517,9 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
 
         # check inputs
         # assert shape_list(lengths)[0] == bs
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(lengths)[0], bs
-            ), f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched"
+        tf.debugging.assert_equal(
+            shape_list(lengths)[0], bs
+        ), f"Expected batch size {shape_list(lengths)[0]} and received batch size {bs} mismatched"
         # assert lengths.max().item() <= slen
         # input_ids = input_ids.transpose(0, 1)  # batch size as dimension 0
         # assert (src_enc is None) == (src_len is None)
@@ -533,15 +537,14 @@ class TFFlaubertMainLayer(tf.keras.layers.Layer):
             position_ids = tf.expand_dims(tf.range(slen), axis=0)
             position_ids = tf.tile(position_ids, (bs, 1))
 
-        if tf.executing_eagerly():
-            # assert shape_list(position_ids) == [bs, slen]  # (slen, bs)
-            tf.debugging.assert_equal(
-                shape_list(position_ids), [bs, slen]
-            ), f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched"
-            # position_ids = position_ids.transpose(0, 1)
+        # assert shape_list(position_ids) == [bs, slen]  # (slen, bs)
+        tf.debugging.assert_equal(
+            shape_list(position_ids), [bs, slen]
+        ), f"Position id shape {shape_list(position_ids)} and input shape {[bs, slen]} mismatched"
+        # position_ids = position_ids.transpose(0, 1)
 
         # langs
-        if langs is not None and tf.executing_eagerly():
+        if langs is not None:
             # assert shape_list(langs) == [bs, slen]  # (slen, bs)
             tf.debugging.assert_equal(
                 shape_list(langs), [bs, slen]

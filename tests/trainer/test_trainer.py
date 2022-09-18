@@ -1799,6 +1799,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torchdynamo
     @require_torch_tensorrt_fx
     def test_torchdynamo_full_eval(self):
+        import torchdynamo
+
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
         n_gpus = get_gpu_count()
 
@@ -1820,11 +1822,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         metrics = trainer.evaluate()
         self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
         del trainer
+        torchdynamo.reset()
 
         # 3. TorchDynamo nvfuser
         trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="nvfuser")
         metrics = trainer.evaluate()
         self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
+        torchdynamo.reset()
 
         # 4. TorchDynamo fx2trt
         trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="fx2trt")
@@ -1832,6 +1836,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         t1 = metrics["eval_loss"]
         t2 = original_eval_loss
         self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
+        torchdynamo.reset()
 
         # 5. TorchDynamo fx2trt-fp16
         trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="fx2trt-fp16")
@@ -1840,11 +1845,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         t2 = original_eval_loss
         # fp16 has accuracy accuracy degradation
         self.assertLess(np.max(np.abs(t1 - t2)), 1e-3)
+        torchdynamo.reset()
 
     @require_torch_non_multi_gpu
     @require_torchdynamo
     def test_torchdynamo_memory(self):
         # torchdynamo at the moment doesn't support DP/DDP, therefore require a single gpu
+        import torchdynamo
+
         class CustomTrainer(Trainer):
             def compute_loss(self, model, inputs, return_outputs=False):
                 x = inputs["x"]
@@ -1861,7 +1869,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             def forward(self, x):
                 for _ in range(20):
-                    x = torch.nn.functional.relu(x)
+                    x = torch.cos(x)
                 return x
 
         mod = MyModule()
@@ -1881,6 +1889,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         orig_loss = trainer.training_step(mod, {"x": a})
         orig_peak_mem = torch.cuda.max_memory_allocated()
+        torchdynamo.reset()
         del trainer
 
         # 2. TorchDynamo nvfuser
@@ -1899,6 +1908,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         loss = trainer.training_step(mod, {"x": a})
         peak_mem = torch.cuda.max_memory_allocated()
+        torchdynamo.reset()
         del trainer
 
         # Functional check

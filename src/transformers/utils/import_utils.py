@@ -471,6 +471,10 @@ def is_apex_available():
     return importlib.util.find_spec("apex") is not None
 
 
+def is_ninja_available():
+    return importlib.util.find_spec("ninja") is not None
+
+
 def is_ipex_available():
     def get_major_and_minor_from_version(full_version):
         return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)

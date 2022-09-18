@@ -117,7 +117,7 @@ class TrOCRConfig(PretrainedConfig):
         classifier_dropout=0.0,
         init_std=0.02,
         decoder_layerdrop=0.0,
-        use_cache=False,
+        use_cache=True,
         scale_embedding=False,
         use_learned_position_embeddings=True,
         layernorm_embedding=True,
