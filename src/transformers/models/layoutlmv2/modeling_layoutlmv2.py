@@ -72,8 +72,12 @@ class RelationExtractionOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
             Classification (or regression if config.num_labels==1) loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
-            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        entities (...)
+            ...
+        relations (...)
+            ...
+        pred_relations (...)
+            ...
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
@@ -85,7 +89,9 @@ class RelationExtractionOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
+    entities: dict = None
+    relations: dict = None
+    pred_relations: dict = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -1669,5 +1675,6 @@ class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
             entities=entities,
             relations=relations,
             pred_relations=pred_relations,
-            hidden_states=outputs[0],
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
