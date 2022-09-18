@@ -94,13 +94,13 @@ if TYPE_CHECKING:
     else:
         from .modeling_deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            OldDebertaForMaskedLM,
-            NewDebertaForMaskedLM,
             DebertaForQuestionAnswering,
             DebertaForSequenceClassification,
             DebertaForTokenClassification,
             DebertaModel,
             DebertaPreTrainedModel,
+            NewDebertaForMaskedLM,
+            OldDebertaForMaskedLM,
         )
 
     try:

@@ -25,12 +25,12 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        OldDebertaForMaskedLM,
-        NewDebertaForMaskedLM,
         DebertaForQuestionAnswering,
         DebertaForSequenceClassification,
         DebertaForTokenClassification,
         DebertaModel,
+        NewDebertaForMaskedLM,
+        OldDebertaForMaskedLM,
     )
     from transformers.models.deberta.modeling_deberta import DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST
 

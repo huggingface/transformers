@@ -3856,24 +3856,24 @@ if TYPE_CHECKING:
         )
         from .models.deberta import (
             DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
-            OldDebertaForMaskedLM,
-            NewDebertaForMaskedLM,
             DebertaForQuestionAnswering,
             DebertaForSequenceClassification,
             DebertaForTokenClassification,
             DebertaModel,
             DebertaPreTrainedModel,
+            NewDebertaForMaskedLM,
+            OldDebertaForMaskedLM,
         )
         from .models.deberta_v2 import (
             DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            OldDebertaV2ForMaskedLM,
-            NewDebertaV2ForMaskedLM,
             DebertaV2ForMultipleChoice,
             DebertaV2ForQuestionAnswering,
             DebertaV2ForSequenceClassification,
             DebertaV2ForTokenClassification,
             DebertaV2Model,
             DebertaV2PreTrainedModel,
+            NewDebertaV2ForMaskedLM,
+            OldDebertaV2ForMaskedLM,
         )
         from .models.decision_transformer import (
             DECISION_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

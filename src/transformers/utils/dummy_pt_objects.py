@@ -1483,6 +1483,7 @@ class OldDebertaForMaskedLM(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+
 class NewDebertaForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -1533,6 +1534,7 @@ class OldDebertaV2ForMaskedLM(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
+
 
 class NewDebertaV2ForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]

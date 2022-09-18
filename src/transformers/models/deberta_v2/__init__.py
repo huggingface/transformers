@@ -115,14 +115,14 @@ if TYPE_CHECKING:
     else:
         from .modeling_deberta_v2 import (
             DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST,
-            OldDebertaV2ForMaskedLM,
-            NewDebertaV2ForMaskedLM,
             DebertaV2ForMultipleChoice,
             DebertaV2ForQuestionAnswering,
             DebertaV2ForSequenceClassification,
             DebertaV2ForTokenClassification,
             DebertaV2Model,
             DebertaV2PreTrainedModel,
+            NewDebertaV2ForMaskedLM,
+            OldDebertaV2ForMaskedLM,
         )
 
 else:
