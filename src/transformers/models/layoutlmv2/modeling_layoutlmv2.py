@@ -15,6 +15,8 @@
 """ PyTorch LayoutLMv2 model."""
 
 import math
+from copy import copy
+from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import torch
@@ -33,6 +35,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, torch_int_div
 from ...utils import (
+    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_detectron2_available,
@@ -59,6 +62,32 @@ LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/layoutlmv2-large-uncased",
     # See all LayoutLMv2 models at https://huggingface.co/models?filter=layoutlmv2
 ]
+
+
+@dataclass
+class RelationExtractionOutput(ModelOutput):
+    """
+    Class for outputs of [`LayoutLMv2ForRelationExtraction`].
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        logits (`torch.FloatTensor` of shape `(batch_size, config.num_labels)`):
+            Classification (or regression if config.num_labels==1) scores (before SoftMax).
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
+            the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
+            the self-attention heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    logits: torch.FloatTensor = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 class LayoutLMv2Embeddings(nn.Module):
@@ -1423,4 +1452,222 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
             end_logits=end_logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+
+class BiaffineAttention(torch.nn.Module):
+    """Implements a biaffine attention operator for binary relation classification.
+    Args:
+    PyTorch implementation of the biaffine attention operator from "End-to-end neural relation extraction using deep
+    biaffine attention" (https://arxiv.org/abs/1812.11275) which can be used as a classifier for binary relation
+    classification.
+        in_features (int): The size of the feature dimension of the inputs. out_features (int): The size of the feature
+        dimension of the output.
+    Shape:
+        - x_1: `(N, *, in_features)` where `N` is the batch dimension and `*` means any number of additional
+          dimensisons.
+        - x_2: `(N, *, in_features)`, where `N` is the batch dimension and `*` means any number of additional
+          dimensions.
+        - Output: `(N, *, out_features)`, where `N` is the batch dimension and `*` means any number
+            of additional dimensions.
+    Examples:
+        >>> batch_size, in_features, out_features = 32, 100, 4 >>> biaffine_attention = BiaffineAttention(in_features,
+        out_features) >>> x_1 = torch.randn(batch_size, in_features) >>> x_2 = torch.randn(batch_size, in_features) >>>
+        output = biaffine_attention(x_1, x_2) >>> print(output.size()) torch.Size([32, 4])
+    """
+
+    def __init__(self, in_features, out_features):
+        super(BiaffineAttention, self).__init__()
+
+        self.in_features = in_features
+        self.out_features = out_features
+
+        self.bilinear = torch.nn.Bilinear(in_features, in_features, out_features, bias=False)
+        self.linear = torch.nn.Linear(2 * in_features, out_features, bias=True)
+
+        self.reset_parameters()
+
+    def forward(self, x_1, x_2):
+        return self.bilinear(x_1, x_2) + self.linear(torch.cat((x_1, x_2), dim=-1))
+
+    def reset_parameters(self):
+        self.bilinear.reset_parameters()
+        self.linear.reset_parameters()
+
+
+class LayoutLMv2RelationExtractionDecoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.entity_emb = nn.Embedding(3, config.hidden_size, scale_grad_by_freq=True)
+        projection = nn.Sequential(
+            nn.Linear(config.hidden_size * 2, config.hidden_size),
+            nn.ReLU(),
+            nn.Dropout(config.hidden_dropout_prob),
+            nn.Linear(config.hidden_size, config.hidden_size // 2),
+            nn.ReLU(),
+            nn.Dropout(config.hidden_dropout_prob),
+        )
+        self.ffnn_head = copy.deepcopy(projection)
+        self.ffnn_tail = copy.deepcopy(projection)
+        self.rel_classifier = BiaffineAttention(config.hidden_size // 2, 2)
+        self.loss_fct = CrossEntropyLoss()
+
+    def build_relation(self, relations, entities):
+        batch_size = len(relations)
+        new_relations = []
+        for b in range(batch_size):
+            if len(entities[b]["start"]) <= 2:
+                entities[b] = {"end": [1, 1], "label": [0, 0], "start": [0, 0]}
+            all_possible_relations = set(
+                [
+                    (i, j)
+                    for i in range(len(entities[b]["label"]))
+                    for j in range(len(entities[b]["label"]))
+                    if entities[b]["label"][i] == 1 and entities[b]["label"][j] == 2
+                ]
+            )
+            if len(all_possible_relations) == 0:
+                all_possible_relations = set([(0, 1)])
+            positive_relations = set(list(zip(relations[b]["head"], relations[b]["tail"])))
+            negative_relations = all_possible_relations - positive_relations
+            positive_relations = set([i for i in positive_relations if i in all_possible_relations])
+            reordered_relations = list(positive_relations) + list(negative_relations)
+            relation_per_doc = {"head": [], "tail": [], "label": []}
+            relation_per_doc["head"] = [i[0] for i in reordered_relations]
+            relation_per_doc["tail"] = [i[1] for i in reordered_relations]
+            relation_per_doc["label"] = [1] * len(positive_relations) + [0] * (
+                len(reordered_relations) - len(positive_relations)
+            )
+            assert len(relation_per_doc["head"]) != 0
+            new_relations.append(relation_per_doc)
+        return new_relations, entities
+
+    def get_predicted_relations(self, logits, relations, entities):
+        pred_relations = []
+        for i, pred_label in enumerate(logits.argmax(-1)):
+            if pred_label != 1:
+                continue
+            rel = {}
+            rel["head_id"] = relations["head"][i]
+            rel["head"] = (entities["start"][rel["head_id"]], entities["end"][rel["head_id"]])
+            rel["head_type"] = entities["label"][rel["head_id"]]
+
+            rel["tail_id"] = relations["tail"][i]
+            rel["tail"] = (entities["start"][rel["tail_id"]], entities["end"][rel["tail_id"]])
+            rel["tail_type"] = entities["label"][rel["tail_id"]]
+            rel["type"] = 1
+            pred_relations.append(rel)
+        return pred_relations
+
+    def forward(self, hidden_states, entities, relations):
+        batch_size, max_n_words, context_dim = hidden_states.size()
+        device = hidden_states.device
+        relations, entities = self.build_relation(relations, entities)
+        loss = 0
+        all_pred_relations = []
+        for b in range(batch_size):
+            head_entities = torch.tensor(relations[b]["head"], device=device)
+            tail_entities = torch.tensor(relations[b]["tail"], device=device)
+            relation_labels = torch.tensor(relations[b]["label"], device=device)
+            entities_start_index = torch.tensor(entities[b]["start"], device=device)
+            entities_labels = torch.tensor(entities[b]["label"], device=device)
+            head_index = entities_start_index[head_entities]
+            head_label = entities_labels[head_entities]
+            head_label_repr = self.entity_emb(head_label)
+
+            tail_index = entities_start_index[tail_entities]
+            tail_label = entities_labels[tail_entities]
+            tail_label_repr = self.entity_emb(tail_label)
+
+            head_repr = torch.cat(
+                (hidden_states[b][head_index], head_label_repr),
+                dim=-1,
+            )
+            tail_repr = torch.cat(
+                (hidden_states[b][tail_index], tail_label_repr),
+                dim=-1,
+            )
+            heads = self.ffnn_head(head_repr)
+            tails = self.ffnn_tail(tail_repr)
+            logits = self.rel_classifier(heads, tails)
+            loss += self.loss_fct(logits, relation_labels)
+            pred_relations = self.get_predicted_relations(logits, relations[b], entities[b])
+            all_pred_relations.append(pred_relations)
+        return loss, all_pred_relations
+
+
+@add_start_docstrings(
+    """
+    LayoutLMv2 Model with a relation extraction head on top for key-value extraction tasks such as
+    [XFUND](https://github.com/doc-analysis/XFUND) (a bi-affine attention layer on top).
+    """,
+    LAYOUTLMV2_START_DOCSTRING,
+)
+class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+
+        self.layoutlmv2 = LayoutLMv2Model(config)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.extractor = LayoutLMv2RelationExtractionDecoder(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(LAYOUTLMV2_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=RelationExtractionOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        bbox: Optional[torch.LongTensor] = None,
+        image: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        end_positions: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        entities=None,
+        relations=None,
+    ):
+        r"""
+        entities (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            ...
+        relations (...):
+            ...
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForRelationExtraction
+        >>> from PIL import Image
+        >>> from datasets import load_dataset
+        ```
+        """
+        outputs = self.layoutlmv2(
+            input_ids=input_ids,
+            bbox=bbox,
+            image=image,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+        )
+
+        seq_length = input_ids.size(1)
+        sequence_output = outputs[0][:, :seq_length]
+        sequence_output = self.dropout(sequence_output)
+        loss, pred_relations = self.extractor(sequence_output, entities, relations)
+
+        return RelationExtractionOutput(
+            loss=loss,
+            entities=entities,
+            relations=relations,
+            pred_relations=pred_relations,
+            hidden_states=outputs[0],
         )

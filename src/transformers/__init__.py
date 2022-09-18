@@ -1379,6 +1379,7 @@ else:
             "LayoutLMv2ForTokenClassification",
             "LayoutLMv2Model",
             "LayoutLMv2PreTrainedModel",
+            "LayoutLMv2ForRelationExtraction",
         ]
     )
     _import_structure["models.layoutlmv3"].extend(
@@ -4080,6 +4081,7 @@ if TYPE_CHECKING:
         from .models.layoutlmv2 import (
             LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST,
             LayoutLMv2ForQuestionAnswering,
+            LayoutLMv2ForRelationExtraction,
             LayoutLMv2ForSequenceClassification,
             LayoutLMv2ForTokenClassification,
             LayoutLMv2Model,

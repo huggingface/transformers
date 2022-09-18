@@ -34,6 +34,7 @@ if is_torch_available():
         MODEL_MAPPING,
         LayoutLMv2Config,
         LayoutLMv2ForQuestionAnswering,
+        LayoutLMv2ForRelationExtraction,
         LayoutLMv2ForSequenceClassification,
         LayoutLMv2ForTokenClassification,
         LayoutLMv2Model,
@@ -269,6 +270,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
             LayoutLMv2ForSequenceClassification,
             LayoutLMv2ForTokenClassification,
             LayoutLMv2ForQuestionAnswering,
+            LayoutLMv2ForRelationExtraction,
         )
         if is_torch_available()
         else ()
