@@ -85,6 +85,13 @@ class OwlViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin
         image_std=None,
         **kwargs
     ):
+        # Early versions of the OWL-ViT config on the hub had "rescale" as a flag. This clashes with the
+        # vision feature extractor method `rescale` as it would be set as an attribute during the super().__init__
+        # call. This is for backwards compatibility.
+        if "rescale" in kwargs:
+            rescale_val = kwargs.pop("rescale")
+            kwargs["do_rescale"] = rescale_val
+
         super().__init__(**kwargs)
         self.size = size
         self.resample = resample

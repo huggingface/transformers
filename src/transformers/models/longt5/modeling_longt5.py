@@ -518,7 +518,14 @@ class LongT5Attention(nn.Module):
             if mask is not None:
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
-        scores += position_bias
+        if self.pruned_heads:
+            mask = torch.ones(position_bias.shape[1])
+            mask[list(self.pruned_heads)] = 0
+            position_bias_masked = position_bias[:, mask.bool()]
+        else:
+            position_bias_masked = position_bias
+
+        scores += position_bias_masked
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
             scores
         )  # (batch_size, n_heads, seq_length, key_length)
@@ -1966,13 +1973,12 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         ... )
 
         >>> # Let's try a very long input.
-        >>> input_ids = tokenizer(
-        ...     "summarize: " + 100 * "studies have shown that owning a dog is good for you ", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> inputs = tokenizer(100 * "studies have shown that owning a dog is good for you ", return_tensors="pt")
+        >>> input_ids = inputs.input_ids
 
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        abstractthe aim of this article is to summarize the studies have shown that owning a dog
+        abstractthe aim of this article is to provide an overview of the literature on the role of dog
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

@@ -704,7 +704,12 @@ class Wav2Vec2EncoderLayerStableLayerNorm(nn.Module):
         self.feed_forward = Wav2Vec2FeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ):
         attn_residual = hidden_states
         hidden_states = self.layer_norm(hidden_states)
         hidden_states, attn_weights, _ = self.attention(
@@ -734,11 +739,11 @@ class Wav2Vec2Encoder(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        hidden_states: torch.tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -960,7 +965,7 @@ class Wav2Vec2GumbelVectorQuantizer(nn.Module):
             # take argmax in non-differentiable way
             # comptute hard codevector distribution (one hot)
             codevector_idx = hidden_states.argmax(dim=-1)
-            codevector_probs = hidden_states.new_zeros(*hidden_states.shape).scatter_(
+            codevector_probs = hidden_states.new_zeros(hidden_states.shape).scatter_(
                 -1, codevector_idx.view(-1, 1), 1.0
             )
             codevector_probs = codevector_probs.view(batch_size * sequence_length, self.num_groups, -1)

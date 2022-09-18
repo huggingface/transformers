@@ -41,10 +41,12 @@ jobs:
         run: |
           . ~/venv/bin/activate
           python setup.py develop
-          transformer_loc=$(pip show transformers | grep "Location: " | cut -c11-)
-          transformer_repo_loc=$(pwd .)
-          if [ "$transformer_loc" != "$transformer_repo_loc/src" ]; then
-              echo "transformers is from $transformer_loc but it shoud be from $transformer_repo_loc/src."
+          transformers_install=$(pip list -e | grep transformers)
+          transformers_install_array=($transformers_install)
+          transformers_loc=${transformers_install_array[-1]}
+          transformers_repo_loc=$(pwd .)
+          if [ "$transformers_loc" != "$transformers_repo_loc" ]; then
+              echo "transformers is from $transformers_loc but it shoud be from $transformers_repo_loc/src."
               echo "A fix is required. Stop testing."
               exit 1
           fi

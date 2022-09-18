@@ -26,6 +26,7 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPastAndCrossAttentions,
     TFBaseModelOutputWithPoolingAndCrossAttentions,
     TFMaskedLMOutput,
+    TFQuestionAnsweringModelOutput,
     TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
 )
@@ -33,6 +34,7 @@ from ...modeling_tf_utils import (
     TFMaskedLanguageModelingLoss,
     TFModelInputType,
     TFPreTrainedModel,
+    TFQuestionAnsweringLoss,
     TFSequenceClassificationLoss,
     TFTokenClassificationLoss,
     get_initializer,
@@ -47,7 +49,6 @@ from .configuration_layoutlm import LayoutLMConfig
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LayoutLMConfig"
-_TOKENIZER_FOR_DOC = "LayoutLMTokenizer"
 
 TF_LAYOUTLM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "microsoft/layoutlm-base-uncased",
@@ -816,22 +817,27 @@ LAYOUTLM_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
-
-    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -934,10 +940,10 @@ class TFLayoutLMModel(TFLayoutLMPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import LayoutLMTokenizer, TFLayoutLMModel
+        >>> from transformers import AutoTokenizer, TFLayoutLMModel
         >>> import tensorflow as tf
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         >>> model = TFLayoutLMModel.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "world"]
@@ -1058,10 +1064,10 @@ class TFLayoutLMForMaskedLM(TFLayoutLMPreTrainedModel, TFMaskedLanguageModelingL
         Examples:
 
         ```python
-        >>> from transformers import LayoutLMTokenizer, TFLayoutLMForMaskedLM
+        >>> from transformers import AutoTokenizer, TFLayoutLMForMaskedLM
         >>> import tensorflow as tf
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         >>> model = TFLayoutLMForMaskedLM.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "[MASK]"]
@@ -1181,10 +1187,10 @@ class TFLayoutLMForSequenceClassification(TFLayoutLMPreTrainedModel, TFSequenceC
         Examples:
 
         ```python
-        >>> from transformers import LayoutLMTokenizer, TFLayoutLMForSequenceClassification
+        >>> from transformers import AutoTokenizer, TFLayoutLMForSequenceClassification
         >>> import tensorflow as tf
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         >>> model = TFLayoutLMForSequenceClassification.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "world"]
@@ -1310,9 +1316,9 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
 
         ```python
         >>> import tensorflow as tf
-        >>> from transformers import LayoutLMTokenizer, TFLayoutLMForTokenClassification
+        >>> from transformers import AutoTokenizer, TFLayoutLMForTokenClassification
 
-        >>> tokenizer = LayoutLMTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
+        >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/layoutlm-base-uncased")
         >>> model = TFLayoutLMForTokenClassification.from_pretrained("microsoft/layoutlm-base-uncased")
 
         >>> words = ["Hello", "world"]
@@ -1377,3 +1383,150 @@ class TFLayoutLMForTokenClassification(TFLayoutLMPreTrainedModel, TFTokenClassif
         attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
         return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
+
+@add_start_docstrings(
+    """
+    LayoutLM Model with a span classification head on top for extractive question-answering tasks such as
+    [DocVQA](https://rrc.cvc.uab.es/?ch=17) (a linear layer on top of the final hidden-states output to compute `span
+    start logits` and `span end logits`).
+    """,
+    LAYOUTLM_START_DOCSTRING,
+)
+class TFLayoutLMForQuestionAnswering(TFLayoutLMPreTrainedModel, TFQuestionAnsweringLoss):
+    # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
+    _keys_to_ignore_on_load_unexpected = [
+        r"pooler",
+        r"mlm___cls",
+        r"nsp___cls",
+        r"cls.predictions",
+        r"cls.seq_relationship",
+    ]
+
+    def __init__(self, config: LayoutLMConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+        self.num_labels = config.num_labels
+
+        self.layoutlm = TFLayoutLMMainLayer(config, add_pooling_layer=True, name="layoutlm")
+        self.qa_outputs = tf.keras.layers.Dense(
+            units=config.num_labels,
+            kernel_initializer=get_initializer(config.initializer_range),
+            name="qa_outputs",
+        )
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(LAYOUTLM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=TFQuestionAnsweringModelOutput, config_class=_CONFIG_FOR_DOC)
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        bbox: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFQuestionAnsweringModelOutput, Tuple[tf.Tensor]]:
+        r"""
+        start_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the start of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+        end_positions (`tf.Tensor` or `np.ndarray` of shape `(batch_size,)`, *optional*):
+            Labels for position (index) of the end of the labelled span for computing the token classification loss.
+            Positions are clamped to the length of the sequence (`sequence_length`). Position outside of the sequence
+            are not taken into account for computing the loss.
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> import tensorflow as tf
+        >>> from transformers import AutoTokenizer, TFLayoutLMForQuestionAnswering
+        >>> from datasets import load_dataset
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("impira/layoutlm-document-qa", add_prefix_space=True)
+        >>> model = TFLayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa", revision="1e3ebac")
+
+        >>> dataset = load_dataset("nielsr/funsd", split="train")
+        >>> example = dataset[0]
+        >>> question = "what's his name?"
+        >>> words = example["words"]
+        >>> boxes = example["bboxes"]
+
+        >>> encoding = tokenizer(
+        ...     question.split(), words, is_split_into_words=True, return_token_type_ids=True, return_tensors="tf"
+        ... )
+        >>> bbox = []
+        >>> for i, s, w in zip(encoding.input_ids[0], encoding.sequence_ids(0), encoding.word_ids(0)):
+        ...     if s == 1:
+        ...         bbox.append(boxes[w])
+        ...     elif i == tokenizer.sep_token_id:
+        ...         bbox.append([1000] * 4)
+        ...     else:
+        ...         bbox.append([0] * 4)
+        >>> encoding["bbox"] = tf.convert_to_tensor([bbox])
+
+        >>> word_ids = encoding.word_ids(0)
+        >>> outputs = model(**encoding)
+        >>> loss = outputs.loss
+        >>> start_scores = outputs.start_logits
+        >>> end_scores = outputs.end_logits
+        >>> start, end = word_ids[tf.math.argmax(start_scores, -1)[0]], word_ids[tf.math.argmax(end_scores, -1)[0]]
+        >>> print(" ".join(words[start : end + 1]))
+        M. Hamann P. Harper, P. Martinez
+        ```"""
+
+        outputs = self.layoutlm(
+            input_ids=input_ids,
+            bbox=bbox,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+
+        sequence_output = outputs[0]
+
+        logits = self.qa_outputs(inputs=sequence_output)
+        start_logits, end_logits = tf.split(value=logits, num_or_size_splits=2, axis=-1)
+        start_logits = tf.squeeze(input=start_logits, axis=-1)
+        end_logits = tf.squeeze(input=end_logits, axis=-1)
+        loss = None
+
+        if start_positions is not None and end_positions is not None:
+            labels = {"start_position": start_positions}
+            labels["end_position"] = end_positions
+            loss = self.hf_compute_loss(labels=labels, logits=(start_logits, end_logits))
+
+        if not return_dict:
+            output = (start_logits, end_logits) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TFQuestionAnsweringModelOutput(
+            loss=loss,
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFQuestionAnsweringModelOutput(
+            start_logits=output.start_logits, end_logits=output.end_logits, hidden_states=hs, attentions=attns
+        )

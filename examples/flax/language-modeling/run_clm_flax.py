@@ -781,7 +781,7 @@ def main():
 
                 # normalize eval metrics
                 eval_metrics = get_metrics(eval_metrics)
-                eval_metrics = jax.tree_map(jnp.mean, eval_metrics)
+                eval_metrics = jax.tree_util.tree_map(jnp.mean, eval_metrics)
 
                 try:
                     eval_metrics["perplexity"] = math.exp(eval_metrics["loss"])
@@ -824,7 +824,7 @@ def main():
 
         # normalize eval metrics
         eval_metrics = get_metrics(eval_metrics)
-        eval_metrics = jax.tree_map(lambda x: jnp.mean(x).item(), eval_metrics)
+        eval_metrics = jax.tree_util.tree_map(lambda x: jnp.mean(x).item(), eval_metrics)
 
         try:
             eval_metrics["perplexity"] = math.exp(eval_metrics["loss"])

@@ -872,10 +872,10 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int64, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int64, name="decoder_attention_mask"),
             }
         ]
     )
@@ -954,22 +954,27 @@ T5_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
-
-    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -1008,14 +1013,14 @@ T5_INPUTS_DOCSTRING = r"""
         decoder_attention_mask (`tf.Tensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
             be used by default.
-        head_mask: (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules in the encoder. Mask values selected in `[0,
             1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        decoder_head_mask: (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        decoder_head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules in the decoder. Mask values selected in `[0,
             1]`:
 
@@ -1084,7 +1089,7 @@ T5_ENCODER_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        head_mask: (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
@@ -1179,6 +1184,10 @@ class TFT5Model(TFT5PreTrainedModel):
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="tf"
         ... ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
+
+        >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for T5Model.
+        >>> # This is not needed for torch's T5ForConditionalGeneration as it does this internally using labels arg.
+        >>> decoder_input_ids = model._shift_right(decoder_input_ids)
 
         >>> # forward pass
         >>> outputs = model(input_ids, decoder_input_ids=decoder_input_ids)

@@ -1,10 +1,11 @@
+import os
 from functools import partial, reduce
 from typing import TYPE_CHECKING, Callable, Dict, Optional, Tuple, Type, Union
 
 import transformers
 
 from .. import PretrainedConfig, is_tf_available, is_torch_available
-from ..utils import logging
+from ..utils import TF2_WEIGHTS_NAME, WEIGHTS_NAME, logging
 from .config import OnnxConfig
 
 
@@ -25,6 +26,7 @@ if is_torch_available():
         AutoModelForMultipleChoice,
         AutoModelForObjectDetection,
         AutoModelForQuestionAnswering,
+        AutoModelForSemanticSegmentation,
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
         AutoModelForTokenClassification,
@@ -36,6 +38,7 @@ if is_tf_available():
         TFAutoModelForMaskedLM,
         TFAutoModelForMultipleChoice,
         TFAutoModelForQuestionAnswering,
+        TFAutoModelForSemanticSegmentation,
         TFAutoModelForSeq2SeqLM,
         TFAutoModelForSequenceClassification,
         TFAutoModelForTokenClassification,
@@ -94,6 +97,7 @@ class FeaturesManager:
             "image-classification": AutoModelForImageClassification,
             "image-segmentation": AutoModelForImageSegmentation,
             "masked-im": AutoModelForMaskedImageModeling,
+            "semantic-segmentation": AutoModelForSemanticSegmentation,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -105,6 +109,7 @@ class FeaturesManager:
             "token-classification": TFAutoModelForTokenClassification,
             "multiple-choice": TFAutoModelForMultipleChoice,
             "question-answering": TFAutoModelForQuestionAnswering,
+            "semantic-segmentation": TFAutoModelForSemanticSegmentation,
         }
 
     # Set of model topologies we support associated to the features supported by each topology and the factory
@@ -236,7 +241,8 @@ class FeaturesManager:
         "data2vec-vision": supported_features_mapping(
             "default",
             "image-classification",
-            "image-segmentation",
+            # ONNX doesn't support `adaptive_avg_pool2d` yet
+            # "semantic-segmentation",
             onnx_config_cls="models.data2vec.Data2VecVisionOnnxConfig",
         ),
         "deberta": supported_features_mapping(
@@ -320,6 +326,10 @@ class FeaturesManager:
             "sequence-classification",
             onnx_config_cls="models.gpt_neo.GPTNeoOnnxConfig",
         ),
+        "groupvit": supported_features_mapping(
+            "default",
+            onnx_config_cls="models.groupvit.GroupViTOnnxConfig",
+        ),
         "ibert": supported_features_mapping(
             "default",
             "masked-lm",
@@ -352,6 +362,15 @@ class FeaturesManager:
             "seq2seq-lm",
             "seq2seq-lm-with-past",
             onnx_config_cls="models.longt5.LongT5OnnxConfig",
+        ),
+        "longformer": supported_features_mapping(
+            "default",
+            "masked-lm",
+            "multiple-choice",
+            "question-answering",
+            "sequence-classification",
+            "token-classification",
+            onnx_config_cls="models.longformer.LongformerOnnxConfig",
         ),
         "marian": supported_features_mapping(
             "default",
@@ -401,6 +420,10 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.m2m_100.M2M100OnnxConfig",
         ),
+        "owlvit": supported_features_mapping(
+            "default",
+            onnx_config_cls="models.owlvit.OwlViTOnnxConfig",
+        ),
         "perceiver": supported_features_mapping(
             "image-classification",
             "masked-lm",
@@ -432,6 +455,12 @@ class FeaturesManager:
             "question-answering",
             "token-classification",
             onnx_config_cls="models.roformer.RoFormerOnnxConfig",
+        ),
+        "segformer": supported_features_mapping(
+            "default",
+            "image-classification",
+            "semantic-segmentation",
+            onnx_config_cls="models.segformer.SegformerOnnxConfig",
         ),
         "squeezebert": supported_features_mapping(
             "default",
@@ -553,8 +582,58 @@ class FeaturesManager:
         return task_to_automodel[task]
 
     @staticmethod
+    def determine_framework(model: str, framework: str = None) -> str:
+        """
+        Determines the framework to use for the export.
+
+        The priority is in the following order:
+            1. User input via `framework`.
+            2. If local checkpoint is provided, use the same framework as the checkpoint.
+            3. Available framework in environment, with priority given to PyTorch
+
+        Args:
+            model (`str`):
+                The name of the model to export.
+            framework (`str`, *optional*, defaults to `None`):
+                The framework to use for the export. See above for priority if none provided.
+
+        Returns:
+            The framework to use for the export.
+
+        """
+        if framework is not None:
+            return framework
+
+        framework_map = {"pt": "PyTorch", "tf": "TensorFlow"}
+        exporter_map = {"pt": "torch", "tf": "tf2onnx"}
+
+        if os.path.isdir(model):
+            if os.path.isfile(os.path.join(model, WEIGHTS_NAME)):
+                framework = "pt"
+            elif os.path.isfile(os.path.join(model, TF2_WEIGHTS_NAME)):
+                framework = "tf"
+            else:
+                raise FileNotFoundError(
+                    "Cannot determine framework from given checkpoint location."
+                    f" There should be a {WEIGHTS_NAME} for PyTorch"
+                    f" or {TF2_WEIGHTS_NAME} for TensorFlow."
+                )
+            logger.info(f"Local {framework_map[framework]} model found.")
+        else:
+            if is_torch_available():
+                framework = "pt"
+            elif is_tf_available():
+                framework = "tf"
+            else:
+                raise EnvironmentError("Neither PyTorch nor TensorFlow found in environment. Cannot export to ONNX.")
+
+        logger.info(f"Framework not requested. Using {exporter_map[framework]} to export to ONNX.")
+
+        return framework
+
+    @staticmethod
     def get_model_from_feature(
-        feature: str, model: str, framework: str = "pt", cache_dir: str = None
+        feature: str, model: str, framework: str = None, cache_dir: str = None
     ) -> Union["PreTrainedModel", "TFPreTrainedModel"]:
         """
         Attempts to retrieve a model from a model's name and the feature to be enabled.
@@ -564,20 +643,24 @@ class FeaturesManager:
                 The feature required.
             model (`str`):
                 The name of the model to export.
-            framework (`str`, *optional*, defaults to `"pt"`):
-                The framework to use for the export.
+            framework (`str`, *optional*, defaults to `None`):
+                The framework to use for the export. See `FeaturesManager.determine_framework` for the priority should
+                none be provided.
 
         Returns:
             The instance of the model.
 
         """
+        framework = FeaturesManager.determine_framework(model, framework)
         model_class = FeaturesManager.get_model_class_for_feature(feature, framework)
         try:
             model = model_class.from_pretrained(model, cache_dir=cache_dir)
         except OSError:
             if framework == "pt":
+                logger.info("Loading TensorFlow model in PyTorch before exporting to ONNX.")
                 model = model_class.from_pretrained(model, from_tf=True, cache_dir=cache_dir)
             else:
+                logger.info("Loading PyTorch model in TensorFlow before exporting to ONNX.")
                 model = model_class.from_pretrained(model, from_pt=True, cache_dir=cache_dir)
         return model
 

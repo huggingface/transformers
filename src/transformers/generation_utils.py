@@ -51,6 +51,13 @@ from .generation_stopping_criteria import (
     StoppingCriteriaList,
     validate_stopping_criteria,
 )
+from .models.auto import (
+    MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
+    MODEL_FOR_CAUSAL_LM_MAPPING,
+    MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+    MODEL_FOR_VISION_2_SEQ_MAPPING,
+)
 from .pytorch_utils import torch_int_div
 from .utils import ModelOutput, logging
 
@@ -463,12 +470,6 @@ class GenerationMixin:
 
         return can_retrieve_inputs
 
-    def prepare_inputs_for_generation(self, input_ids: torch.LongTensor, **kwargs) -> Dict[str, Any]:
-        """
-        Implement in subclasses of [`PreTrainedModel`] for custom behavior to prepare inputs in the generate method.
-        """
-        return {"input_ids": input_ids}
-
     def adjust_logits_during_generation(self, logits: torch.FloatTensor, **kwargs) -> torch.FloatTensor:
         """
         Implement in subclasses of [`PreTrainedModel`] for custom behavior to adjust the logits in the generate method.
@@ -495,9 +496,8 @@ class GenerationMixin:
     ) -> torch.LongTensor:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in [torch.int, torch.long]
         is_pad_token_in_inputs = (pad_token_id is not None) and (pad_token_id in inputs)
-        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
-            (eos_token_id is not None) and (pad_token_id != eos_token_id)
-        )
+        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id != eos_token_id)
+
         # Check if input is input_ids and padded -> only then is attention_mask defined
         if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
             return inputs.ne(pad_token_id).long()
@@ -841,6 +841,32 @@ class GenerationMixin:
 
         return transition_scores
 
+    def _validate_model_class(self):
+        """
+        Confirms that the model class is compatible with generation. If not, raises an exception that points to the
+        right class to use.
+        """
+        if not hasattr(self, "prepare_inputs_for_generation"):
+            generate_compatible_mappings = [
+                MODEL_FOR_CAUSAL_LM_MAPPING,
+                MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
+                MODEL_FOR_VISION_2_SEQ_MAPPING,
+                MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+                MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+            ]
+            generate_compatible_classes = set()
+            for model_mapping in generate_compatible_mappings:
+                supported_models = model_mapping.get(type(self.config), default=None)
+                if supported_models is not None:
+                    generate_compatible_classes.add(supported_models.__name__)
+            exception_message = (
+                f"The current model class ({self.__class__.__name__}) is not compatible with `.generate()`, as "
+                "it doesn't have a language model head."
+            )
+            if generate_compatible_classes:
+                exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
+            raise TypeError(exception_message)
+
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         # Excludes arguments that are handled before calling any model function
@@ -964,8 +990,8 @@ class GenerationMixin:
             top_k (`int`, *optional*, defaults to `model.config.top_k` or 50 if the config does not set any value):
                 The number of highest probability vocabulary tokens to keep for top-k-filtering.
             top_p (`float`, *optional*, defaults to `model.config.top_p` or 1.0 if the config does not set any value):
-                If set to float < 1, only the most probable tokens with probabilities that add up to `top_p` or higher
-                are kept for generation.
+                If set to float < 1, only the smallest set of most probable tokens with probabilities that add up to
+                `top_p` or higher are kept for generation.
             typical_p (`float`, *optional*, defaults to `model.config.typical_p` or 1.0 if the config does not set any value):
                 The amount of probability mass from the original distribution to be considered in typical decoding. If
                 set to 1.0 it takes no effect. See [this paper](https://arxiv.org/pdf/2202.00666.pdf) for more details.
@@ -979,9 +1005,10 @@ class GenerationMixin:
             eos_token_id (`int`, *optional*, defaults to `model.config.eos_token_id`):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to `model.config.length_penalty` or 1.0 if the config does not set any value):
-                 Exponential penalty to the length. 1.0 means that the beam score is penalized by the sequence length.
-                 0.0 means no penalty. Set to values < 0.0 in order to encourage the model to generate longer
-                 sequences, to a value > 0.0 in order to encourage the model to produce shorter sequences.
+                Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
+                to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
+                the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
+                while `length_penalty` < 0.0 encourages shorter sequences.
             no_repeat_ngram_size (`int`, *optional*, defaults to `model.config.no_repeat_ngram_size` or 0 if the config does not set any value):
                 If set to int > 0, all ngrams of that size can only occur once.
             encoder_no_repeat_ngram_size (`int`, *optional*, defaults to `model.config.encoder_no_repeat_ngram_size` or 0 if the config does not set any value):
@@ -1139,11 +1166,12 @@ class GenerationMixin:
         >>> sentence = "Paris is one of the densest populated areas in Europe."
         >>> input_ids = tokenizer(sentence, return_tensors="pt").input_ids
 
-        >>> outputs = model.generate(input_ids)
+        >>> outputs = model.generate(input_ids, num_beams=5)
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ['Paris ist eines der dichtesten besiedelten Gebiete Europas.']
         ```"""
-        # 0. Validate model kwargs
+        # 0. Validate the `.generate()` call
+        self._validate_model_class()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # 1. Set generation parameters if not already defined
@@ -1635,7 +1663,7 @@ class GenerationMixin:
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
         >>> model = AutoModelForCausalLM.from_pretrained("gpt2")
 
-        >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
+        >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
         >>> model.config.pad_token_id = model.config.eos_token_id
 
         >>> input_prompt = "It might be possible to"
@@ -2212,6 +2240,8 @@ class GenerationMixin:
                 model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
             )
 
+        # initialise score of first beam with 0 and the rest with -1e9. This makes sure that only tokens
+        # of the first beam are considered to avoid sampling the exact same tokens across all beams.
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view((batch_size * num_beams,))
@@ -2275,6 +2305,7 @@ class GenerationMixin:
             vocab_size = next_token_scores.shape[-1]
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
 
+            # Sample 2 next tokens for each beam (so we have some spare tokens and match output of beam search)
             next_token_scores, next_tokens = torch.topk(
                 next_token_scores, 2 * num_beams, dim=1, largest=True, sorted=True
             )
@@ -2845,9 +2876,9 @@ class GenerationMixin:
                 model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
             )
 
-        beam_scores = torch.full((batch_size, num_beams), -1e9, dtype=torch.float, device=device)
-        # initialise score of first beam of each group with 0 and the rest with 1e-9. This ensures that the beams in
+        # initialise score of first beam of each group with 0 and the rest with -1e9. This ensures that the beams in
         # the same group don't produce same tokens everytime.
+        beam_scores = torch.full((batch_size, num_beams), -1e9, dtype=torch.float, device=device)
         beam_scores[:, ::num_sub_beams] = 0
         beam_scores = beam_scores.view((batch_size * num_beams,))
 
@@ -2923,6 +2954,7 @@ class GenerationMixin:
                 # reshape for beam search
                 next_token_scores = next_token_scores.view(batch_size, group_size * vocab_size)
 
+                # Sample 2 next tokens for each beam (so we have some spare tokens and match output of beam search)
                 next_token_scores, next_tokens = torch.topk(
                     next_token_scores, 2 * group_size, dim=1, largest=True, sorted=True
                 )
@@ -3207,6 +3239,8 @@ class GenerationMixin:
                 f"Batch dimension of `input_ids` should be {num_beams * batch_size}, but is {batch_beam_size}."
             )
 
+        # initialise score of first beam with 0 and the rest with -1e9. This makes sure that only tokens
+        # of the first beam are considered to avoid sampling the exact same tokens across all beams.
         beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         beam_scores[:, 1:] = -1e9
         beam_scores = beam_scores.view((batch_size * num_beams,))
@@ -3273,6 +3307,7 @@ class GenerationMixin:
             vocab_size = next_token_scores.shape[-1]
             next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
 
+            # Sample 2 next tokens for each beam (so we have some spare tokens and match output of beam search)
             next_token_scores, next_tokens = torch.topk(
                 next_token_scores, 2 * num_beams, dim=1, largest=True, sorted=True
             )
