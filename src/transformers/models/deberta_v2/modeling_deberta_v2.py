@@ -1136,8 +1136,9 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
             attentions=encoder_outputs.attentions,
         )
 
+
 @add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
-# Copied from transformers.models.deberta.modeling_deberta.DebertaForMaskedLM with Deberta->DebertaV2
+# Copied from transformers.models.deberta.modeling_deberta.OldDebertaForMaskedLM with Deberta->DebertaV2
 class OldDebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
@@ -1268,8 +1269,9 @@ class OldDebertaV2OnlyMLMHead(nn.Module):
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
+
 @add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
-# Copied from transformers.models.deberta.modeling_deberta.DebertaForMaskedLM with Deberta->DebertaV2
+# Copied from transformers.models.deberta.modeling_deberta.OldDebertaForMaskedLM with Deberta->DebertaV2
 class NewDebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
@@ -1294,7 +1296,7 @@ class NewDebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         old_embeddings = self.get_input_embeddings()
         new_embeddings = self._get_resized_embeddings(old_embeddings, new_num_tokens)
         self.set_input_embeddings(new_embeddings)
-        
+
         self.lm_predictions.lm_head.bias = new_bias
 
         return self.get_input_embeddings()
@@ -1366,6 +1368,7 @@ class NewDebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
 
 class NewDebertaV2LMPredictionHead(nn.Module):
     """https://github.com/microsoft/DeBERTa/blob/master/DeBERTa/deberta/bert.py#L270"""
+
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -1383,7 +1386,9 @@ class NewDebertaV2LMPredictionHead(nn.Module):
     def forward(self, hidden_states, word_embeddings):
         hidden_states = self.dense(hidden_states)
         hidden_states = self.transform_act_fn(hidden_states)
-        hidden_states = self.LayerNorm(hidden_states) # original used MaskedLayerNorm, but passed no mask. This is equivalent.
+        hidden_states = self.LayerNorm(
+            hidden_states
+        )  # original used MaskedLayerNorm, but passed no mask. This is equivalent.
         hidden_states = torch.matmul(hidden_states, word_embeddings.weight.t()) + self.bias
         return hidden_states
 
@@ -1807,5 +1812,3 @@ class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-
