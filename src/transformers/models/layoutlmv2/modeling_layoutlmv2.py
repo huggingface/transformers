@@ -14,8 +14,8 @@
 # limitations under the License.
 """ PyTorch LayoutLMv2 model."""
 
+import copy
 import math
-from copy import copy
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
