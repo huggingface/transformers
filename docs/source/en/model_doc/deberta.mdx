@@ -38,6 +38,17 @@ pre-trained models will be made publicly available at https://github.com/microso
 This model was contributed by [DeBERTa](https://huggingface.co/DeBERTa). This model TF 2.0 implementation was
 contributed by [kamalkraj](https://huggingface.co/kamalkraj) . The original code can be found [here](https://github.com/microsoft/DeBERTa).
 
+## Note  
+
+As of v4.23.0, a new implementation of DebertaForMaskedLM is available that is closer to the original 
+implementation. This is a breaking change, so there are now two versions: OldDebertaForMaskedLM and NewDebertaForMaskedLM.
+
+The new implementation can be used in the `fill-mask` pipeline for DeBERTa v1 models because
+it will load the pre-trained weights in the language model head. The old implementation will produce nonsense because it 
+does not load the pre-trained weights.
+
+Furthermore, the new implementation should have noticeably lower loss during training compared to the old implementation 
+if doing additional language modeling from the pre-trained checkpoint.
 
 ## DebertaConfig
 
@@ -66,9 +77,14 @@ contributed by [kamalkraj](https://huggingface.co/kamalkraj) . The original code
 
 [[autodoc]] DebertaPreTrainedModel
 
-## DebertaForMaskedLM
+## OldDebertaForMaskedLM
 
-[[autodoc]] DebertaForMaskedLM
+[[autodoc]] OldDebertaForMaskedLM
+    - forward
+
+## NewDebertaForMaskedLM
+
+[[autodoc]] NewDebertaForMaskedLM
     - forward
 
 ## DebertaForSequenceClassification
