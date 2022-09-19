@@ -1285,7 +1285,7 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         >>> import torch
 
         >>> tokenizer = AutoTokenizer.from_pretrained("impira/layoutlm-document-qa", add_prefix_space=True)
-        >>> model = LayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa")
+        >>> model = LayoutLMForQuestionAnswering.from_pretrained("impira/layoutlm-document-qa", revision="1e3ebac")
 
         >>> dataset = load_dataset("nielsr/funsd", split="train")
         >>> example = dataset[0]

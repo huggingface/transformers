@@ -21,44 +21,57 @@
     title: Share a model
   title: Tutorials
 - sections:
-  - local: fast_tokenizers
-    title: Use tokenizers from 🤗 Tokenizers
-  - local: create_a_model
-    title: Create a custom architecture
-  - local: custom_models
-    title: Sharing custom models
   - sections:
-    - local: tasks/sequence_classification
-      title: Text classification
-    - local: tasks/token_classification
-      title: Token classification
-    - local: tasks/question_answering
-      title: Question answering
-    - local: tasks/language_modeling
-      title: Language modeling
-    - local: tasks/translation
-      title: Translation
-    - local: tasks/summarization
-      title: Summarization
-    - local: tasks/multiple_choice
-      title: Multiple choice
+    - local: create_a_model
+      title: Create a custom architecture
+    - local: custom_models
+      title: Sharing custom models
+    - local: run_scripts
+      title: Train with a script
+    - local: sagemaker
+      title: Run training on Amazon SageMaker
+    - local: converting_tensorflow_models
+      title: Converting TensorFlow Checkpoints
+    - local: serialization
+      title: Export 🤗 Transformers models
+    - local: troubleshooting
+      title: Troubleshoot
+    title: General usage
+  - sections:
+    - local: fast_tokenizers
+      title: Use tokenizers from 🤗 Tokenizers
+    - local: multilingual
+      title: Inference for multilingual models
+    - sections:
+      - local: tasks/sequence_classification
+        title: Text classification
+      - local: tasks/token_classification
+        title: Token classification
+      - local: tasks/question_answering
+        title: Question answering
+      - local: tasks/language_modeling
+        title: Language modeling
+      - local: tasks/translation
+        title: Translation
+      - local: tasks/summarization
+        title: Summarization
+      - local: tasks/multiple_choice
+        title: Multiple choice
+      title: Task guides
+      isExpanded: false
+    title: Natural Language Processing
+  - sections:
     - local: tasks/audio_classification
       title: Audio classification
     - local: tasks/asr
       title: Automatic speech recognition
+    title: Audio
+  - sections:
     - local: tasks/image_classification
       title: Image classification
-    title: Fine-tune for downstream tasks
-  - local: run_scripts
-    title: Train with a script
-  - local: sagemaker
-    title: Run training on Amazon SageMaker
-  - local: multilingual
-    title: Inference for multilingual models
-  - local: converting_tensorflow_models
-    title: Converting TensorFlow Checkpoints
-  - local: serialization
-    title: Export 🤗 Transformers models
+    - local: tasks/semantic_segmentation
+      title: Semantic segmentation
+    title: Computer Vision
   - sections:
     - local: performance
       title: Overview
@@ -84,31 +97,31 @@
       title: Inference on Specialized Hardware
     - local: perf_hardware
       title: Custom hardware for training
+    - local: big_models
+      title: Instantiating a big model
+    - local: debugging
+      title: Debugging
     title: Performance and scalability
-  - local: big_models
-    title: Instantiating a big model
+  - sections:
+    - local: contributing
+      title: How to contribute to transformers?
+    - local: add_new_model
+      title: How to add a model to 🤗 Transformers?
+    - local: add_new_pipeline
+      title: How to add a pipeline to 🤗 Transformers?
+    - local: testing
+      title: Testing
+    - local: pr_checks
+      title: Checks on a Pull Request
+    title: Contribute
+  - local: notebooks
+    title: 🤗 Transformers Notebooks
+  - local: community
+    title: Community resources
   - local: benchmarks
     title: Benchmarks
   - local: migration
     title: Migrating from previous packages
-  - local: troubleshooting
-    title: Troubleshoot
-  - local: debugging
-    title: Debugging
-  - local: notebooks
-    title: 🤗 Transformers Notebooks
-  - local: community
-    title: Community
-  - local: contributing
-    title: How to contribute to transformers?
-  - local: add_new_model
-    title: How to add a model to 🤗 Transformers?
-  - local: add_new_pipeline
-    title: How to create a custom pipeline?
-  - local: testing
-    title: Testing
-  - local: pr_checks
-    title: Checks on a Pull Request
   title: How-to guides
 - sections:
   - local: philosophy
@@ -224,6 +237,8 @@
         title: ELECTRA
       - local: model_doc/encoder-decoder
         title: Encoder Decoder Models
+      - local: model_doc/ernie
+        title: ERNIE
       - local: model_doc/flaubert
         title: FlauBERT
       - local: model_doc/fnet
@@ -238,6 +253,8 @@
         title: GPT Neo
       - local: model_doc/gpt_neox
         title: GPT NeoX
+      - local: model_doc/gpt_neox_japanese
+        title: GPT NeoX Japanese
       - local: model_doc/gptj
         title: GPT-J
       - local: model_doc/gpt2
@@ -286,6 +303,8 @@
         title: OPT
       - local: model_doc/pegasus
         title: Pegasus
+      - local: model_doc/pegasus_x
+        title: PEGASUS-X
       - local: model_doc/phobert
         title: PhoBERT
       - local: model_doc/plbart
@@ -347,6 +366,8 @@
         title: ConvNeXT
       - local: model_doc/cvt
         title: CvT
+      - local: model_doc/deformable_detr
+        title: Deformable DETR
       - local: model_doc/deit
         title: DeiT
       - local: model_doc/detr
@@ -365,8 +386,6 @@
         title: MaskFormer
       - local: model_doc/mobilevit
         title: MobileViT
-      - local: model_doc/owlvit
-        title: OWL-ViT
       - local: model_doc/poolformer
         title: PoolFormer
       - local: model_doc/regnet
@@ -441,6 +460,8 @@
         title: LayoutXLM
       - local: model_doc/lxmert
         title: LXMERT
+      - local: model_doc/owlvit
+        title: OWL-ViT
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/speech-encoder-decoder
@@ -455,6 +476,8 @@
         title: Vision Text Dual Encoder
       - local: model_doc/visual_bert
         title: VisualBERT
+      - local: model_doc/xclip
+        title: X-CLIP
       title: Multimodal models
     - isExpanded: false
       sections:

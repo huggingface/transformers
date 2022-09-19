@@ -21,7 +21,7 @@ import os
 import sys
 import warnings
 from collections import OrderedDict
-from functools import wraps
+from functools import lru_cache, wraps
 from itertools import chain
 from types import ModuleType
 from typing import Any
@@ -414,6 +414,7 @@ def is_ftfy_available():
     return _ftfy_available
 
 
+@lru_cache()
 def is_torch_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     if not _torch_available:
@@ -468,6 +469,10 @@ def is_sacremoses_available():
 
 def is_apex_available():
     return importlib.util.find_spec("apex") is not None
+
+
+def is_ninja_available():
+    return importlib.util.find_spec("ninja") is not None
 
 
 def is_ipex_available():

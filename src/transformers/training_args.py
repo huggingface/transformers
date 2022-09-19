@@ -18,6 +18,7 @@ import math
 import os
 import warnings
 from dataclasses import asdict, dataclass, field
+from datetime import timedelta
 from enum import Enum
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
@@ -90,6 +91,15 @@ def get_int_from_env(env_keys, default):
         if val >= 0:
             return val
     return default
+
+
+def get_xla_device_type(device: "torch.device") -> Optional[str]:
+    """
+    Returns the xla device type (CPU|GPU|TPU) or None if the device is a non-xla device.
+    """
+    if is_torch_tpu_available():
+        return xm.xla_real_devices([device])[0].split(":")[0]
+    return None
 
 
 class OptimizerNames(ExplicitEnum):
@@ -404,8 +414,8 @@ class TrainingArguments:
             instance of `Dataset`.
         report_to (`str` or `List[str]`, *optional*, defaults to `"all"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
-            `"comet_ml"`, `"mlflow"`, `"tensorboard"` and `"wandb"`. Use `"all"` to report to all integrations
-            installed, `"none"` for no integrations.
+            `"comet_ml"`, `"mlflow"`, `"neptune"`, `"tensorboard"` and `"wandb"`. Use `"all"` to report to all
+            integrations installed, `"none"` for no integrations.
         ddp_find_unused_parameters (`bool`, *optional*):
             When using distributed training, the value of the flag `find_unused_parameters` passed to
             `DistributedDataParallel`. Will default to `False` if gradient checkpointing is used, `True` otherwise.
@@ -481,6 +491,11 @@ class TrainingArguments:
             are also available. See the [Ray documentation](
             https://docs.ray.io/en/latest/tune/api_docs/analysis.html#ray.tune.ExperimentAnalysis.get_best_trial) for
             more options.
+        ddp_timeout (`int`, *optional*, defaults to 1800):
+            The timeout for `torch.distributed.init_process_group` calls, used to avoid GPU socket timeouts when
+            performing slow operations in distributed runnings. Please refer the [PyTorch documentation]
+            (https://pytorch.org/docs/stable/distributed.html#torch.distributed.init_process_group) for more
+            information.
         use_mps_device (`bool`, *optional*, defaults to `False`):
             Whether to use Apple Silicon chip based `mps` device.
     """
@@ -971,6 +986,12 @@ class TrainingArguments:
             )
         },
     )
+    ddp_timeout: Optional[int] = field(
+        default=1800,
+        metadata={
+            "help": "Overrides the default timeout for distributed training (value should be given in seconds)."
+        },
+    )
 
     def __post_init__(self):
         # Handle --use_env option in torch.distributed.launch (local_rank not passed as an arg then).
@@ -1096,7 +1117,7 @@ class TrainingArguments:
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
-            and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
+            and (get_xla_device_type(self.device) != "GPU")
             and (self.fp16 or self.fp16_full_eval)
         ):
             raise ValueError(
@@ -1108,7 +1129,7 @@ class TrainingArguments:
             self.framework == "pt"
             and is_torch_available()
             and (self.device.type != "cuda")
-            and not (self.device.type == "xla" and "GPU_NUM_DEVICES" in os.environ)
+            and (get_xla_device_type(self.device) != "GPU")
             and (self.device.type != "cpu")
             and (self.bf16 or self.bf16_full_eval)
         ):
@@ -1291,6 +1312,13 @@ class TrainingArguments:
         eval_batch_size = per_device_batch_size * max(1, self.n_gpu)
         return eval_batch_size
 
+    @property
+    def ddp_timeout_delta(self) -> timedelta:
+        """
+        The actual timeout for torch.distributed.init_process_group since it expects a timedelta variable.
+        """
+        return timedelta(seconds=self.ddp_timeout)
+
     @cached_property
     @torch_required
     def _setup_devices(self) -> "torch.device":
@@ -1358,7 +1386,9 @@ class TrainingArguments:
                         f"num_cpu_threads_per_process unset, we set it at {num_cpu_threads_per_process} to improve oob"
                         " performance."
                     )
-                torch.distributed.init_process_group(backend=self.xpu_backend, rank=rank, world_size=size)
+                torch.distributed.init_process_group(
+                    backend=self.xpu_backend, rank=rank, world_size=size, timeout=self.ddp_timeout_delta
+                )
         elif is_torch_tpu_available():
             device = xm.xla_device()
             self._n_gpu = 0
@@ -1369,7 +1399,7 @@ class TrainingArguments:
         elif is_sagemaker_dp_enabled():
             import smdistributed.dataparallel.torch.torch_smddp  # noqa: F401
 
-            dist.init_process_group(backend="smddp")
+            dist.init_process_group(backend="smddp", timeout=self.ddp_timeout_delta)
             self.local_rank = int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
@@ -1431,7 +1461,7 @@ class TrainingArguments:
             # Here, we'll use torch.distributed.
             # Initializes the distributed backend which will take care of synchronizing nodes/GPUs
             if not torch.distributed.is_initialized():
-                torch.distributed.init_process_group(backend="nccl")
+                torch.distributed.init_process_group(backend="nccl", timeout=self.ddp_timeout_delta)
             device = torch.device("cuda", self.local_rank)
             self._n_gpu = 1
 
