@@ -88,20 +88,16 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
             Expected duration of the generated music, in samples. The duration has to be smaller than the total lenght,
             which represent the overall length of the signal,
     """
-
+    import torch
     full_tokens = full_tokens[0]
     if len(full_tokens) < max_n_lyric_tokens:
         tokens = torch.cat([torch.zeros(max_n_lyric_tokens - len(full_tokens)), full_tokens])
         indices = [-1] * (max_n_lyric_tokens - len(full_tokens)) + list(range(0, len(full_tokens)))
     else:
-        assert 0 <= offset < total_length
         midpoint = int(len(full_tokens) * (offset + duration / 2.0) / total_length)
         midpoint = min(max(midpoint, max_n_lyric_tokens // 2), len(full_tokens) - max_n_lyric_tokens // 2)
         tokens = full_tokens[midpoint - max_n_lyric_tokens // 2 : midpoint + max_n_lyric_tokens // 2]
         indices = list(range(midpoint - max_n_lyric_tokens // 2, midpoint + max_n_lyric_tokens // 2))
-    # assert len(tokens) == max_n_lyric_tokens, f"Expected length {max_n_lyric_tokens}, got {len(tokens)}"
-    # assert len(indices) == max_n_lyric_tokens, f"Expected length {max_n_lyric_tokens}, got {len(indices)}"
-    # # assert tokens == [full_tokens[index] if index != -1 else 0 for index in indices]
     return tokens.unsqueeze(dim=0), indices
 
 
@@ -119,11 +115,12 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     Depending on the number of genres on which the model should be conditioned (`n_genres`).
     ```
     >>> from transformers import JukeboxTokenizer
-    >>> tokenizer = JukeboxTokenizer.from_pretrained("jukebox")
+    >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
     >>> tokenizer("Alan Jackson", "Country Rock", "old town road")['input_ids']
-    ## TODO UPDATE THIS OUTPUT
-    >>> tokenizer("Alan Jackson", "Country Rock")['input_ids']
-    [6785],[546]]
+    [tensor([[  0,   0,   0, 145,   0]]),
+     tensor([[  0,   0,   0, 145,   0]]),
+     tensor([[   0,    0,    0, 6785,  546,   41,   38,   30,   76,   46,   41,   49,
+                40,   76,   44,   41,   27,   30]])]
     ```
 
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
@@ -144,6 +141,9 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         vocab_file (`str`):
             Path to the vocabulary file which should contain a dictionnary where the keys are 'artist', 'genre' and
             'lyrics' and the values are their corresponding vocabulary files.
+        version (`List[`str`], `optional`, default to ["v3", "v2", "v2"]) : 
+            List of the tokenizer versions. The `5b-lyrics`'s top level prior model was trained using `v3` instead of `v2`. 
+
         n_genres (`int`, `optional`, defaults to 1):
             Maximum number of genres to use for composition.
         max_n_lyric_tokens (`int`, `optional`, defaults to 512):
@@ -399,20 +399,16 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
         return inputs
 
-    def __call__(self, artist, genres, lyrics, return_tensors="pt") -> BatchEncoding:
+    def __call__(self, artist, genres, lyrics = "", return_tensors="pt") -> BatchEncoding:
         """Convert the raw string to a list of token ids
 
         Args:
             artist (`str`):
-                _description_
-            genre (`str`):
-                _description_
-            lyrics (`srt`):
-                _description_
-            total_length (`int`):
-                _description_
-            offset (`_type_`):
-                _description_
+                Name of the artist. 
+            genres (`str`):
+                List of genres that will be mixed to condition the audio
+            lyrics (`srt`, Optional):
+                Lyrics used to condition the generation
         """
         input_ids = [0, 0, 0]
         artist = [artist] * len(self.version)

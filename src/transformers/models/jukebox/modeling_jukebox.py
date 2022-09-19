@@ -2302,11 +2302,12 @@ class JukeboxPrior(nn.Module):
         Extracts current level's conditioning music tokens.
         """
         if self.level != self.levels - 1:
-            assert start % self.cond_downsample == end % self.cond_downsample == 0
             music_tokens_cond = music_tokens[self.level + 1][
                 :, start // self.cond_downsample : end // self.cond_downsample
             ]
-            assert music_tokens_cond.shape[1] == self.n_ctx // self.cond_downsample
+            missing_cond_len = self.n_ctx // self.cond_downsample  - music_tokens_cond[-1].shape[-1]
+            if (missing_cond_len > 0 ):
+                music_tokens_cond = torch.cat((music_tokens_cond, torch.zeros(1, missing_cond_len).to(music_tokens_cond.device)), dim=-1).long()
             music_tokens_conds = [music_tokens_cond]
         else:
             music_tokens_conds = None
@@ -3017,20 +3018,22 @@ class JukeboxModel(JukeboxPreTrainedModel):
         ```python
         >>> from transformers import JukeboxTokenizer, JukeboxModel
 
-        >>> model = JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics")
+        >>> model = JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics", min_duration=0)
+        Level:0, Cond downsample:4, Raw to tokens:8, Sample length:65536
+        Level:1, Cond downsample:4, Raw to tokens:32, Sample length:262144
+        Level:2, Cond downsample:None, Raw to tokens:128, Sample length:786432
         >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
 
         >>> lyrics = "Hey, are you awake? Can you talk to me?"
         >>> artist = "Zac Brown Band"
-        >>> genre = ("Country",)
-        >>> metas = tokenizer(artist=artist, genre=genre, lyrics=lyrics)
+        >>> genre = "Country"
+        >>> metas = tokenizer(artist=artist, genres=genre, lyrics=lyrics)
 
-        >>> # Generate
-        >>> music_tokens = model.ancestral_sample(metas, sample_length_in_seconds=2)
+        >>> music_tokens = model.ancestral_sample(metas.input_ids, sample_length_in_seconds=2)
         >>> model.decode(music_tokens)[:, :, 30]
-        [...,...,...]
+
         ```
-        """,
+        """
     )
     def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs) -> List[torch.LongTensor]:
 
