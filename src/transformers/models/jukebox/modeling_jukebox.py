@@ -515,13 +515,13 @@ class JukeboxVQVAE(PreTrainedModel):
     """
 
     Args:
-        PreTrainedModel (_type_): _description_
+        PreTrainedModel (`__type__`): _description_
 
     Raises:
         NotImplementedError: _description_ TypeError: _description_
 
     Returns:
-        _type_: _description_
+        `__type__`: _description_
     """
 
     def __init__(self, config):
@@ -2714,20 +2714,9 @@ JUKEBOX_SAMPLING_INPUT_DOCSTRING = r"""
             labels (`List[Torch.LongTensor]` of lenght `n_sample`, and shape `(self.levels, self.config.max_nb_genre + lyric_sequence_lenght)` :
                 List of metadata such as `artist_id`, `genre_id` and the full list of lyric tokens which are used to
                 condition the generation.
-            sampling_kwargs (`Dict[Any]`): 
-                Various additional sampling arguments that are used by the `_sample` function.
-                - metas=None,
-                - chunk_size=32,
-                - sampling_temperature=0.98,
-                - lower_batch_size=16,
-                - max_batch_size=16,
-                - sample_length_in_seconds=24,
-                - alignments=None,
-                - sample_tokens=None,
-                - offset=0,
-                - save_results=True,
-                - sample_length=None,
-                - fp16=False,
+            sampling_kwargs (`Dict[Any]`):
+                Various additional sampling arguments that are used by the `_sample` function. A detail list of the
+                arguments can bee seen in the [`_sample`] function documentation.
 
 """
 
@@ -2880,6 +2869,29 @@ class JukeboxModel(JukeboxPreTrainedModel):
         sample_length=None,
         fp16=False,
     ):
+        """_summary_
+
+        Args:
+            music_tokens (`__type__`): _description_
+            labels (`__type__`): _description_
+            sample_levels (`__type__`): _description_
+            metas (`__type__`, optional): _description_. Defaults to None.
+            chunk_size (int, optional): _description_. Defaults to 32.
+            sampling_temperature (float, optional): _description_. Defaults to 0.98.
+            lower_batch_size (int, optional): _description_. Defaults to 16.
+            max_batch_size (int, optional): _description_. Defaults to 16.
+            sample_length_in_seconds (int, optional): _description_. Defaults to 24.
+            alignments (`__type__`, optional): _description_. Defaults to None.
+            sample_tokens (`__type__`, optional): _description_. Defaults to None.
+            offset (int, optional): _description_. Defaults to 0.
+            save_results (bool, optional): _description_. Defaults to True.
+            sample_length (`__type__`, optional): _description_. Defaults to None.
+            fp16 (bool, optional): _description_. Defaults to False.
+
+        Returns:
+            `__type__`: _description_
+        """
+
         top_prior = self.priors[-1]
         if sample_length is not None:
             total_length = sample_length
@@ -2958,7 +2970,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
     @add_start_docstrings(
         """
-        Args: 
+        Args:
         Generate music tokens based on the provided `labels. Will start at the desired prior level and automatically
         upsample the sequence. If you want to create the audio, you should call `model.decode(tokens)`, which will use
         the VQ-VAE decoder to convert the music tokens to raw audio.""",
@@ -2975,9 +2987,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
     @add_start_docstrings(
         """
-        Args: 
+        Args:
         Generate a continuation of the previously generated tokens.
-            music_tokens (`List[torch.LongTensor`] of length `self.levels` ) : 
+            music_tokens (`List[torch.LongTensor`] of length `self.levels` ) :
                 A sequence of music tokens which will be used as context to continue the sampling process. Should have
                 `self.levels` tensors, each corresponding to the generation at a certain level.
         """,
@@ -2990,9 +3002,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
     @add_start_docstrings(
         """
-        Args: 
+        Args:
         Upsamples a sequence of music tokens using the prior at level `level`.
-            music_tokens (`List[torch.LongTensor`] of length `self.levels` ) : 
+            music_tokens (`List[torch.LongTensor`] of length `self.levels` ) :
                 A sequence of music tokens which will be used as context to continue the sampling process. Should have
                 `self.levels` tensors, each corresponding to the generation at a certain level.
         """,
@@ -3005,11 +3017,11 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
     @add_start_docstrings(
         """
-        Args: 
+        Args:
         Generate a raw audio conditioned on the provided `raw_audio` which is used as conditioning at each of the
-        generation levels. The audio is encoded to music tokens using the 3 levels of the VQ-VAE. These tokens are used
+        generation levels. The audio is encoded to music tokens using the 3 levels of the VQ-VAE. These tokens are used:
         as conditioning for each level, which means that no ancestral sampling is required.
-            raw_audio (`List[torch.Tensor`] of length `n_samples` ) : 
+            raw_audio (`List[torch.Tensor`] of length `n_samples` ) :
                 A list of raw audio that will be used as conditioning information for each samples that will be
                 generated.
         """,
@@ -3024,6 +3036,3 @@ class JukeboxModel(JukeboxPreTrainedModel):
             )
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
-
-
-# TODO add tied embeddings for the lyric encoder lm head as well as the proj_out when they are not seperated.
