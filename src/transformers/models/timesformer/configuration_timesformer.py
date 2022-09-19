@@ -101,7 +101,7 @@ class TimeSformerConfig(PretrainedConfig):
         image_size=224,
         patch_size=16,
         num_channels=3,
-        num_frames=16,
+        num_frames=8,
         tubelet_size=2,
         hidden_size=768,
         num_hidden_layers=12,
@@ -119,6 +119,8 @@ class TimeSformerConfig(PretrainedConfig):
         decoder_num_hidden_layers=4,
         decoder_intermediate_size=1536,
         norm_pix_loss=True,
+        attention_type='divided_space_time',
+        drop_path_prob=0.1,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -146,3 +148,6 @@ class TimeSformerConfig(PretrainedConfig):
         self.decoder_num_hidden_layers = decoder_num_hidden_layers
         self.decoder_intermediate_size = decoder_intermediate_size
         self.norm_pix_loss = norm_pix_loss
+
+        self.attention_type = attention_type
+        self.drop_path_prob = drop_path_prob
