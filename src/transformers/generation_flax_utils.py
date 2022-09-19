@@ -36,6 +36,11 @@ from .generation_flax_logits_process import (
     FlaxTopKLogitsWarper,
     FlaxTopPLogitsWarper,
 )
+from .models.auto import (
+    FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+    FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
+)
 from .utils import ModelOutput, logging
 
 
@@ -161,6 +166,30 @@ class FlaxGenerationMixin:
         """
         return logits
 
+    def _validate_model_class(self):
+        """
+        Confirms that the model class is compatible with generation. If not, raises an exception that points to the
+        right class to use.
+        """
+        if not hasattr(self, "prepare_inputs_for_generation"):
+            generate_compatible_mappings = [
+                FLAX_MODEL_FOR_CAUSAL_LM_MAPPING,
+                FLAX_MODEL_FOR_VISION_2_SEQ_MAPPING,
+                FLAX_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+            ]
+            generate_compatible_classes = set()
+            for model_mapping in generate_compatible_mappings:
+                supported_models = model_mapping.get(type(self.config), default=None)
+                if supported_models is not None:
+                    generate_compatible_classes.add(supported_models.__name__)
+            exception_message = (
+                f"The current model class ({self.__class__.__name__}) is not compatible with `.generate()`, as "
+                "it doesn't have a language model head."
+            )
+            if generate_compatible_classes:
+                exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
+            raise TypeError(exception_message)
+
     def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
         """Validates model kwargs for generation. Generate argument typos will also be caught here."""
         unused_model_args = []
@@ -281,7 +310,8 @@ class FlaxGenerationMixin:
         >>> outputs = model.generate(input_ids=input_ids, max_length=20, top_k=30, do_sample=True)
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ```"""
-        # Validate model kwargs
+        # Validate the `.generate()` call
+        self._validate_model_class()
         self._validate_model_kwargs(model_kwargs.copy())
 
         # set init values
@@ -699,7 +729,7 @@ class FlaxGenerationMixin:
                 else:
                     return tensor[batch_indices, beam_indices]
 
-            return jax.tree_map(gather_fn, nested)
+            return jax.tree_util.tree_map(gather_fn, nested)
 
         # init values
         max_length = max_length if max_length is not None else self.config.max_length
@@ -788,7 +818,7 @@ class FlaxGenerationMixin:
             model_outputs = model(input_token, params=params, **state.model_kwargs)
 
             logits = unflatten_beam_dim(model_outputs.logits[:, -1], batch_size, num_beams)
-            cache = jax.tree_map(
+            cache = jax.tree_util.tree_map(
                 lambda tensor: unflatten_beam_dim(tensor, batch_size, num_beams), model_outputs.past_key_values
             )
 
@@ -874,7 +904,7 @@ class FlaxGenerationMixin:
             # With these, gather the top k beam-associated caches.
             next_running_indices = gather_beams(topk_beam_indices, next_topk_indices, batch_size, num_beams)
             next_cache = gather_beams(cache, next_running_indices, batch_size, num_beams)
-            model_outputs["past_key_values"] = jax.tree_map(lambda x: flatten_beam_dim(x), next_cache)
+            model_outputs["past_key_values"] = jax.tree_util.tree_map(lambda x: flatten_beam_dim(x), next_cache)
             next_model_kwargs = self.update_inputs_for_generation(model_outputs, state.model_kwargs)
 
             return BeamSearchState(
