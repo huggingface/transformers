@@ -837,7 +837,16 @@ class ViTMAEDecoder(nn.Module):
 
 
 @add_start_docstrings(
-    "The ViTMAE Model transformer with the decoder on top for self-supervised pre-training.",
+    """The ViTMAE Model transformer with the decoder on top for self-supervised pre-training.
+
+    <Tip>
+
+    Note that we provide a script to pre-train this model on custom data in our [examples
+    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
+
+    </Tip>
+
+    """,
     VIT_MAE_START_DOCSTRING,
 )
 class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
