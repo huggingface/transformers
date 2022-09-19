@@ -1352,7 +1352,8 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
 
         if attention_mask is None:
             attention_mask = tf.fill(dims=input_shape, value=1)
-
+        if output_segmentation:
+            output_attentions = True
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -1403,7 +1404,9 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
             grouping = get_grouping_from_attentions(attentions, pixel_values.shape[2:])
 
             # normalized features
-            image_group_embeds = image_group_embeds / image_group_embeds.norm(dim=-1, keepdim=True)
+            image_group_embeds = image_group_embeds / tf.norm(
+                tensor=image_group_embeds, ord="euclidean", axis=-1, keepdims=True
+            )
             # [batch_size_image x num_group, batch_size_text]
             logits_per_image_group = tf.matmul(image_group_embeds, text_embeds, transpose_b=True) * logit_scale
             # [batch_size_image, batch_size_text, num_group]
@@ -1417,8 +1420,8 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
 
             # [batch_size_image, batch_size_text, height, width]
             seg_logits = tf.matmul(logits_per_image_group, flatten_grouping) * logit_scale
-            seg_logits = seg_logits.reshape(
-                seg_logits.shape[0], seg_logits.shape[1], grouping.shape[2], grouping.shape[3]
+            seg_logits = tf.reshape(
+                seg_logits, shape=(seg_logits.shape[0], seg_logits.shape[1], grouping.shape[2], grouping.shape[3])
             )
 
         loss = None
