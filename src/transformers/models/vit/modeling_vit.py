@@ -723,8 +723,8 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
     <Tip>
 
         Note that it's possible to fine-tune ViT on higher resolution images than the ones it has been trained on, by
-        setting `interpolate_pos_encoding` to `True`. This will interpolate the pre-trained position embeddings to the
-        higher resolution.
+        setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
+        position embeddings to the higher resolution.
 
     </Tip>
     """,
