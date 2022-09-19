@@ -215,7 +215,7 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
         return encoded_inputs
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Union[torch.Tensor, List[Tuple]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: Union[TensorType, List[Tuple]] = None):
         """
         Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps. Only supports
         PyTorch.
@@ -229,8 +229,8 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
         Returns:
             `List[torch.Tensor]`: A list of `torch.Tensor` of length `batch_size`, where each item is a semantic
-            segmentation map of of the corresponding target_sizes entry (if `target_sizes` is specified). Each
-            entry of each `torch.Tensor` correspond to a semantic class id.
+            segmentation map of of the corresponding target_sizes entry (if `target_sizes` is specified). Each entry of
+            each `torch.Tensor` correspond to a semantic class id.
         """
         logits = outputs.logits
 
