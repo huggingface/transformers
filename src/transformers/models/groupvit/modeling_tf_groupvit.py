@@ -54,7 +54,7 @@ if is_tensorflow_probability_available():
 
         # On the first call, check whether a compatible version of TensorFlow is installed
         # TensorFlow Probability depends on a recent stable release of TensorFlow
-        n = tfp.distributions.Normal(loc=0.0, scale=1.0)
+        _ = tfp.distributions.Normal(loc=0.0, scale=1.0)
     except ImportError:
         logger.error(
             "GroupViT models are not usable since `tensorflow_probability` can't be loaded."
@@ -1537,12 +1537,13 @@ GROUPVIT_TEXT_INPUTS_DOCSTRING = r"""
 
 GROUPVIT_VISION_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`CLIPFeatureExtractor`]. See
-            [`CLIPFeatureExtractor.__call__`] for details. output_attentions (`bool`, *optional*): Whether or not to
-            return the attentions tensors of all attention layers. See `attentions` under returned tensors for more
-            detail. This argument can be used only in eager mode, in graph mode the value in the config will be used
-            instead.
+        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]`, `Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`CLIPFeatureExtractor`].
+            See [`CLIPFeatureExtractor.__call__`] for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the config
+            will be used instead.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
