@@ -1632,12 +1632,11 @@ class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         entities=None,
         relations=None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ):
         r"""
         entities (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1655,6 +1654,9 @@ class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
         >>> from datasets import load_dataset
         ```
         """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         outputs = self.layoutlmv2(
             input_ids=input_ids,
             bbox=bbox,
@@ -1663,12 +1665,20 @@ class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
         )
 
         seq_length = input_ids.size(1)
-        sequence_output = outputs[0][:, :seq_length]
-        sequence_output = self.dropout(sequence_output)
-        loss, pred_relations = self.extractor(sequence_output, entities, relations)
+        text_output = outputs[0][:, :seq_length]
+        text_output = self.dropout(text_output)
+        loss, pred_relations = self.extractor(text_output, entities, relations)
+
+        if not return_dict:
+            output = (pred_relations,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
 
         return RelationExtractionOutput(
             loss=loss,
