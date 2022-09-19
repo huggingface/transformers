@@ -52,8 +52,8 @@ class JukeboxConfig(PretrainedConfig):
             trained using a top prior and 2 upsampler priors.
         timing_dims (`int`, *optional*, defaults to 64):
             Dimensions of the JukeboxRangeEmbedding layer which is equivalent to traditional positional embedding
-            layer. #TODO the timing embedding layer converts the absolute and relative position in the currently
-            sampled audio to a tensor of lenght `timing_dims` that will be added to the music tokens.
+            layer. The timing embedding layer converts the absolute and relative position in the currently sampled
+            audio to a tensor of lenght `timing_dims` that will be added to the music tokens.
         single_enc_dec (`list`, *optional*, defaults to [True, False, False]):
             Whether or not to use a single encoder-decoder architecture or split both modules and have a seperate
             `lyric_encoder` for each of the priors.
@@ -61,7 +61,7 @@ class JukeboxConfig(PretrainedConfig):
             Whether or not to use metadata conditioning, corresponding to the artist, the genre and the min/maximum
             duration.
         merged_decoder (`list`, *optional*, defaults to [True, False, False]):
-            # FIXME is that the same as single_enc_dec ??
+            Whether or not the decoder is merged with the encoder.
         lyric_conditioning (`list`, *optional*, defaults to [True, False, False]):
             Whether or not to use the lyrics as conditioning.
         nb_relevant_lyric_tokens (`list`, *optional*, defaults to [384, 0, 0]):
@@ -75,7 +75,7 @@ class JukeboxConfig(PretrainedConfig):
         init_std (`float`, *optional*, defaults to 0.2):
             Standard deviation used to inital the model.
         hop_fraction (`list`, *optional*, defaults to [0.125, 0.5, 0.5]):
-            # TODO detail this amount of space between each of the sampling windows oif `n_ctx` tokens
+            Fraction of non-intersecting window used when continuing the sampling process.
         cond_zero_out (`bool`, *optional*, defaults to False):
             Zero out weights when initialising.
         cond_depth (`list`, *optional*, defaults to [3, 16, 16]):
@@ -92,21 +92,23 @@ class JukeboxConfig(PretrainedConfig):
         cond_m_conv (`int`, *optional*, defaults to 1):
             Conditionner multiplier (the input states are mulitplied by that parameter for each convolution.
         cond_downs_t (`tuple`, *optional*, defaults to (3, 2, 2)):
-            Downsampling ... # TODO
+            Downsampling rates used in the audio conditioning network
         cond_strides_t (`tuple`, *optional*, defaults to (2, 2, 2)):
-            Striding pattern to use #TODO
+            Striding used in the audio conditioning network
         lyric_enc_spread (`bool`, *optional*, defaults to False):
             Spread used in the attention pattern #TODO check what that is actually
         lyric_enc_width (`list`, *optional*, defaults to [128, 128, 128]):
             Width of the lyric encoder
         lyric_enc_depth (`list`, *optional*, defaults to [18, 3, 3]):
-            Number of blocks used in the lyric encoder is this different from lyric_enc_blocks? FIXME
+            Number of encoder blocks used in the lyric encoder
         lyric_enc_heads (`int`, *optional*, defaults to 4):
             Number of heads in the lyric encoder
         lyric_enc_m_attn (`float`, *optional*, defaults to 0.25):
-            # again, m_attn and m_mlp, I don't really know how to rename it
+            Multiplier coefficient used to define the hidden dimension of the attention layers. 0.25 means that
+            0.25*width of the model will be used.
         lyric_enc_m_mlp (`float`, *optional*, defaults to 1.0):
-            # again, m_attn and m_mlp, I don't really know how to rename it
+            Multiplier coefficient used to define the hidden dimension of the MLP layers. 0.25 means that 0.25*width of
+            the model will be used.
         lyric_enc_blocks (`int`, *optional*, defaults to 32):
 
         lyric_enc_init_scale (`list`, *optional*, defaults to [0.1, 0.4, 0.4]):

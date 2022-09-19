@@ -91,12 +91,12 @@ class JukeboxConv1D(nn.Module):
 
 
 class JukeboxResConv1DBlock(nn.Module):
-    def __init__(self, n_in, n_state, dilation=1, zero_out=False, res_scale=1.0):
+    def __init__(self, n_in, hidden_dim, dilation=1, zero_out=False, res_scale=1.0):
         super().__init__()
         padding = dilation
         self.relu = nn.ReLU()
-        self.conv1d_1 = nn.Conv1d(n_in, n_state, 3, 1, padding, dilation)
-        self.conv1d_2 = nn.Conv1d(n_state, n_in, 1, 1, 0)
+        self.conv1d_1 = nn.Conv1d(n_in, hidden_dim, 3, 1, padding, dilation)
+        self.conv1d_2 = nn.Conv1d(hidden_dim, n_in, 1, 1, 0)
         self.res_scale = res_scale
 
     def forward(self, hidden_states):
@@ -512,19 +512,31 @@ class JukeboxBottleneck(nn.Module):
         return music_tokens, quantised_states, commit_losses, metrics
 
 
+JUKEBOX_START_DOCSTRING = r"""
+
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config (`JukeboxConfig`): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    """The Hierarchical VQ-VAE model used in Jukebox. This model follows the Hierarchical VQVAE paper from [Will Williams, Sam
+Ringer, Tom Ash, John Hughes, David MacLeod, Jamie Dougherty](https://arxiv.org/abs/2002.08111).
+
+    """,
+    JUKEBOX_START_DOCSTRING,
+)
 class JukeboxVQVAE(PreTrainedModel):
-    """
-
-    Args:
-        PreTrainedModel (`__type__`): _description_
-
-    Raises:
-        NotImplementedError: _description_ TypeError: _description_
-
-    Returns:
-        `__type__`: _description_
-    """
-
     def __init__(self, config):
         super().__init__(config)
         if not config.sample_length:
@@ -624,6 +636,18 @@ class JukeboxVQVAE(PreTrainedModel):
         return dequantised_state
 
     def decode(self, music_tokens, start_level=0, end_level=None, bs_chunks=1):
+        """
+        _summary_
+
+        Args:
+            music_tokens (_type_): _description_
+            start_level (int, optional): _description_. Defaults to 0.
+            end_level (_type_, optional): _description_. Defaults to None.
+            bs_chunks (int, optional): _description_. Defaults to 1.
+
+        Returns:
+            _type_: _description_
+        """
         token_chunks = [torch.chunk(token, bs_chunks, dim=0) for token in music_tokens]
         dequantised_states = []
         for i in range(bs_chunks):
@@ -646,6 +670,19 @@ class JukeboxVQVAE(PreTrainedModel):
         return music_tokens[start_level:end_level]
 
     def encode(self, input_audio, start_level=0, end_level=None, bs_chunks=1):
+        """
+        _summary_
+
+        Args:
+            input_audio (_type_): _description_
+            start_level (int, optional): _description_. Defaults to 0.
+            end_level (_type_, optional): _description_. Defaults to None.
+            bs_chunks (int, optional): _description_. Defaults to 1.
+
+
+        Returns:
+            _type_: _description_
+        """
         audio_chunks = torch.chunk(input_audio, bs_chunks, dim=0)
         music_tokens_list = []
         for chunk_i in audio_chunks:
@@ -662,6 +699,29 @@ class JukeboxVQVAE(PreTrainedModel):
         return self.decode(music_tokens)
 
     def forward(self, raw_audio):
+        """
+        Forward pass of the VQ-VAE, encodes the `raw_audio` to latent states, which are then decoded for each level.
+        The commit loss, which ensure that the encoder's computed embeddings are close to the codebook vectors, is
+        computed.
+
+
+        Args:
+            raw_audio (`torch.FloatTensor`):
+                Audio input which will be encoded and decoded.
+
+
+        Returns:
+            `Tuple[torch.Tensor, torch.Tensoor`
+
+
+        Example:
+        ```python
+        >>> model = JukeboxVQVAE.from_pretrained(self.model_id).eval()
+
+        >>> zs = [torch.random(1, 0, dtype=torch.long).cuda() for _ in range(3)]
+        >>> zs = model(zs)
+        ```"""
+
         # Encode/Decode
         input_audio = self.preprocess(raw_audio)
         latent_states = []
@@ -687,11 +747,11 @@ class JukeboxVQVAE(PreTrainedModel):
 
 
 class JukeboxMLP(nn.Module):
-    def __init__(self, width, n_state, resid_dropout=0.0, afn="gelu", zero_out=False, init_scale=1.0):
+    def __init__(self, width, hidden_dim, resid_dropout=0.0, afn="gelu", zero_out=False, init_scale=1.0):
         # a single channel is always used in original code
         super().__init__()
-        self.c_fc = JukeboxConv1D(width, n_state)
-        self.c_proj = JukeboxConv1D(n_state, width, zero_out)
+        self.c_fc = JukeboxConv1D(width, hidden_dim)
+        self.c_proj = JukeboxConv1D(hidden_dim, width, zero_out)
         self.act = ACT2FN[afn]
         self.dropout = nn.Dropout(resid_dropout) if resid_dropout > 0.0 else lambda x: x
 
@@ -747,7 +807,7 @@ class JukeboxAttention(nn.Module):
         self,
         width,
         n_ctx,
-        n_state,
+        hidden_dim,
         num_heads,
         attn_dropout=0.0,
         resid_dropout=0.0,
@@ -764,16 +824,16 @@ class JukeboxAttention(nn.Module):
         super().__init__()
         self.width = width  # should have a better name
         self.n_ctx = n_ctx  # NOTE: n_ctx could be different within operations. This is complete n_ctx
-        self.n_state = n_state
+        self.hidden_dim = hidden_dim
         self.num_heads = num_heads
         self.scale = scale
         self.mask = mask
         if attn_func == 6:
-            self.c_attn = JukeboxConv1D(width, n_state)
-            self.c_enc_kv = JukeboxConv1D(width, n_state * 2)
+            self.c_attn = JukeboxConv1D(width, hidden_dim)
+            self.c_enc_kv = JukeboxConv1D(width, hidden_dim * 2)
         else:
-            self.c_attn = JukeboxConv1D(width, n_state * 3)
-        self.c_proj = JukeboxConv1D(n_state, width, zero_out)
+            self.c_attn = JukeboxConv1D(width, hidden_dim * 3)
+        self.c_proj = JukeboxConv1D(hidden_dim, width, zero_out)
         self.attn_dropout = nn.Dropout(attn_dropout) if attn_dropout > 0.0 else lambda x: x
         self.resid_dropout = nn.Dropout(resid_dropout) if resid_dropout > 0.0 else lambda x: x
 
@@ -805,7 +865,7 @@ class JukeboxAttention(nn.Module):
         self.w = None
 
     def _attn(self, query_states, key_states, value_states, sample):
-        scale = 1.0 / math.sqrt(math.sqrt(self.n_state // self.num_heads))
+        scale = 1.0 / math.sqrt(math.sqrt(self.hidden_dim // self.num_heads))
         if self.training:
             attention_weight = torch.matmul(query_states * scale, key_states * scale)
         else:
@@ -1172,8 +1232,8 @@ class JukeboxAttention(nn.Module):
         else:
             dtype = {True: torch.float16, False: torch.float32}[fp16]
             l_cache = self._suff_cache_len()
-            assert self.cache["key"].shape == (n_samples, l_cache, self.n_state)
-            assert self.cache["value"].shape == (n_samples, l_cache, self.n_state)
+            assert self.cache["key"].shape == (n_samples, l_cache, self.hidden_dim)
+            assert self.cache["value"].shape == (n_samples, l_cache, self.hidden_dim)
             assert self.cache["key"].dtype == dtype, f"Expected {dtype}, got {self.cache['key'].dtype}"
             assert self.cache["value"].dtype == dtype, f"Expected {dtype}, got {self.cache['value'].dtype}"
 
@@ -1204,7 +1264,7 @@ class JukeboxBlock(nn.Module):
         self.attn = JukeboxAttention(
             width=width,
             n_ctx=n_ctx,
-            n_state=int(m_attn * width),
+            hidden_dim=int(m_attn * width),
             num_heads=num_heads,
             attn_dropout=attn_dropout,
             resid_dropout=resid_dropout,
@@ -1222,7 +1282,7 @@ class JukeboxBlock(nn.Module):
         self.layer_norm_0 = JukeboxLayerNorm(width)
         self.mlp = JukeboxMLP(
             width=width,
-            n_state=int(m_mlp * width),
+            hidden_dim=int(m_mlp * width),
             resid_dropout=resid_dropout,
             afn=afn,
             zero_out=zero_out,
@@ -2563,25 +2623,6 @@ class JukeboxPreTrainedModel(PreTrainedModel):
         super().__init__(*inputs, **kwargs)
 
 
-JUKEBOX_START_DOCSTRING = r"""
-
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config (`JukeboxConfig`): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-JUKEBOX_SAMPLE_INPUT_DOCSTRING = r""""""
-
-
 # Break total_length into hops/windows of size n_ctx separated by hop_length
 def get_starts(total_length, n_ctx, hop_length):
     starts = []
@@ -2593,13 +2634,7 @@ def get_starts(total_length, n_ctx, hop_length):
     return starts
 
 
-# NOTE, consumes a lot of RAM so should probably be ran on CPU
 def get_alignment(music_tokens, labels, prior, fp16, config):
-    """
-    Compute the lyric to music token alignment, but for now it cannot be used.
-
-    IN THE Oiginal code,
-    """
     level = prior.levels - 1  # Top level used
     n_ctx = prior.n_ctx
     tokens = music_tokens[level]
