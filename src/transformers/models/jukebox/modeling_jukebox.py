@@ -2985,13 +2985,14 @@ class JukeboxModel(JukeboxPreTrainedModel):
         return music_tokens
 
     @add_start_docstrings(
-        r"""
-        Args:
-        Generate music tokens based on the provided `labels. Will start at the desired prior level and automatically
+        """
+        Generates music tokens based on the provided `labels. Will start at the desired prior level and automatically
         upsample the sequence. If you want to create the audio, you should call `model.decode(tokens)`, which will use
-        the VQ-VAE decoder to convert the music tokens to raw audio.""",
+        the VQ-VAE decoder to convert the music tokens to raw audio.
+        
+        Args:""",
         JUKEBOX_SAMPLING_INPUT_DOCSTRING,
-        r"""
+        """
         Example:
 
         ```python
@@ -3022,9 +3023,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
         return music_tokens
 
     @add_start_docstrings(
-        """
+        """Generates a continuation of the previously generated tokens.
+        
         Args:
-        Generate a continuation of the previously generated tokens.
             music_tokens (`List[torch.LongTensor`] of length `self.levels` ) :
                 A sequence of music tokens which will be used as context to continue the sampling process. Should have
                 `self.levels` tensors, each corresponding to the generation at a certain level.
@@ -3037,9 +3038,9 @@ class JukeboxModel(JukeboxPreTrainedModel):
         return music_tokens
 
     @add_start_docstrings(
-        """
+        """Upsamples a sequence of music tokens using the prior at level `level`.
+
         Args:
-        Upsamples a sequence of music tokens using the prior at level `level`.
             music_tokens (`List[torch.LongTensor`] of length `self.levels` ) :
                 A sequence of music tokens which will be used as context to continue the sampling process. Should have
                 `self.levels` tensors, each corresponding to the generation at a certain level.
@@ -3053,11 +3054,11 @@ class JukeboxModel(JukeboxPreTrainedModel):
         return music_tokens
 
     @add_start_docstrings(
-        """
-        Args:
-        Generate a raw audio conditioned on the provided `raw_audio` which is used as conditioning at each of the
+        """Generate a raw audio conditioned on the provided `raw_audio` which is used as conditioning at each of the
         generation levels. The audio is encoded to music tokens using the 3 levels of the VQ-VAE. These tokens are
         used: as conditioning for each level, which means that no ancestral sampling is required.
+        
+        Args:
             raw_audio (`List[torch.Tensor`] of length `n_samples` ) :
                 A list of raw audio that will be used as conditioning information for each samples that will be
                 generated.
