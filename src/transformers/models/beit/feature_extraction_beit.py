@@ -228,12 +228,12 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: Union[TensorType, List[Tuple]] = None):
         """
-        Parameters:
         Converts the output of [`BeitForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+
+        Args:
             outputs ([`BeitForSemanticSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`,
-            *optional*):
+            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`, *optional*):
                 Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction. If left to
                 None, predictions will not be resized.
         Returns:
