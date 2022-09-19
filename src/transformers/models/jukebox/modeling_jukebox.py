@@ -635,18 +635,20 @@ class JukeboxVQVAE(PreTrainedModel):
         dequantised_state = self.postprocess(dequantised_state)
         return dequantised_state
 
-    def decode(self, music_tokens, start_level=0, end_level=None, bs_chunks=1):
+    def decode(self, music_tokens, start_level=0, end_level=None, bs_chunks=1) -> torch.Tensor:
         """
-        _summary_
+        Transforms the input `music_tokens` to their `raw_audio` representation.
 
         Args:
-            music_tokens (_type_): _description_
-            start_level (int, optional): _description_. Defaults to 0.
-            end_level (_type_, optional): _description_. Defaults to None.
-            bs_chunks (int, optional): _description_. Defaults to 1.
-
-        Returns:
-            _type_: _description_
+            music_tokens (`torch.LongTensor`):
+                Tensor of music tokens which will be decoded to raw audio by using the codebook. Each music token
+                should be an index to a coresponding `code` vector in the codebook.
+            start_level (`int`, *optional*):
+                Level at which the decoding process will start. Default to 0.
+            end_level (`int`, *optional*):
+                Level at which the decoding process will start. Default to None.
+            bs_chunks (int, *optional*):
+                Number of chuncks to process at the same time.
         """
         token_chunks = [torch.chunk(token, bs_chunks, dim=0) for token in music_tokens]
         dequantised_states = []
@@ -671,17 +673,18 @@ class JukeboxVQVAE(PreTrainedModel):
 
     def encode(self, input_audio, start_level=0, end_level=None, bs_chunks=1):
         """
-        _summary_
+        Transforms the `input_audio` to a discrete representation made out of `music_tokens`.
 
         Args:
-            input_audio (_type_): _description_
-            start_level (int, optional): _description_. Defaults to 0.
-            end_level (_type_, optional): _description_. Defaults to None.
-            bs_chunks (int, optional): _description_. Defaults to 1.
-
-
-        Returns:
-            _type_: _description_
+            input_audio (`torch.Tensor`):
+                Raw audio which will be encoded to its discrete representation using the codebook. The closest `code`
+                form the codebook will be computed for each sequence of samples.
+            start_level (`int`, *optional*):
+                Level at which the encoding process will start. Default to 0.
+            end_level (`int`, *optional*):
+                Level at which the encoding process will start. Default to None.
+            bs_chunks (int, *optional*):
+                Number of chuncks of raw audio to process at the same time.
         """
         audio_chunks = torch.chunk(input_audio, bs_chunks, dim=0)
         music_tokens_list = []
@@ -1225,18 +1228,6 @@ class JukeboxAttention(nn.Module):
             del self.cache["value"]
         self.cache = {}
 
-    def check_cache(self, n_samples, sample_t, fp16):
-        assert self.sample_t == sample_t, f"{self.sample_t} != {sample_t}"
-        if sample_t == 0:
-            assert self.cache == {}
-        else:
-            dtype = {True: torch.float16, False: torch.float32}[fp16]
-            l_cache = self._suff_cache_len()
-            assert self.cache["key"].shape == (n_samples, l_cache, self.hidden_dim)
-            assert self.cache["value"].shape == (n_samples, l_cache, self.hidden_dim)
-            assert self.cache["key"].dtype == dtype, f"Expected {dtype}, got {self.cache['key'].dtype}"
-            assert self.cache["value"].dtype == dtype, f"Expected {dtype}, got {self.cache['value'].dtype}"
-
 
 class JukeboxBlock(nn.Module):
     def __init__(
@@ -1431,10 +1422,6 @@ class JukeboxTransformer(nn.Module):
         if not fp16_out:
             hidden_states = hidden_states.float()
         return hidden_states
-
-    def check_cache(self, n_samples, sample_t, fp16):
-        for attn_layer in self._attn_mods:
-            attn_layer.attn.check_cache(n_samples, sample_t, fp16)
 
     def del_cache(self):
         for attn_layer in self._attn_mods:
@@ -1691,7 +1678,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 hidden_states, cond = self.get_emb(
                     sample_t, n_samples, tokens, audio_conditioning, metadata_conditioning
                 )
-                self.transformer.check_cache(n_samples, sample_t, fp16)
+
                 hidden_states = self.transformer(
                     hidden_states, lyric_encoder_states=lyric_encoder_states, sample=True, fp16=fp16, fp16_out=fp16
                 )
@@ -1801,17 +1788,13 @@ class JukeboxConditionalAutoregressive(nn.Module):
 
             gc.collect()
             torch.cuda.empty_cache()
-            self.transformer.check_cache(n_samples, len(sampled_audio), fp16)
-
             hidden_states = sampled_audio[-1]
-            gc.collect()
-            torch.cuda.empty_cache()
 
             for sample_t in get_range(range(len(sampled_audio), sample_tokens)):
                 hidden_states, cond = self.get_emb(
                     sample_t, n_samples, hidden_states, audio_conditioning, metadata_conditioning
                 )
-                self.transformer.check_cache(n_samples, sample_t, fp16)
+
                 hidden_states = self.transformer(
                     hidden_states, lyric_encoder_states=lyric_encoder_states, sample=True, fp16=fp16, fp16_out=fp16
                 )  # Transformer
@@ -1917,8 +1900,10 @@ class JukeboxMusicTokenConditioner(nn.Module):
     def forward(self, music_tokens, raw_audio_conditionning=None):
         """
         Args :
-            - music_tokens : int or long, in range(codebook_dim)
-            - raw_audio_conditionning : used when primed sampling, raw audio information that conditions
+            music_tokens (`torch.LongTensor`):
+                Music tokens form the uper level in range(codebook_dim)
+            raw_audio_conditionning (`torch.LongTensor`):
+                Audio used when primed sampling, raw audio information that conditions
             the generation
         """
         if raw_audio_conditionning is None:
@@ -1937,7 +1922,7 @@ class JukeboxMusicTokenConditioner(nn.Module):
 
 
 class JukeboxSimpleEmbedding(nn.Module):
-    def __init__(self, embed_dim, out_width, init_scale):
+    def __init__(self, embed_dim, out_width):
         super().__init__()
         self.embed_dim = embed_dim
         self.emb = nn.Embedding(embed_dim, out_width)
@@ -2017,8 +2002,8 @@ class LabelConditioner(nn.Module):
         self.out_width = out_width
         nb_genres, nb_artists = metadata_dims
         self.max_nb_genres = max_nb_genres
-        self.bow_genre_emb = JukeboxSimpleEmbedding(nb_genres, out_width, init_scale)
-        self.artist_emb = JukeboxSimpleEmbedding(nb_artists, out_width, init_scale)
+        self.bow_genre_emb = JukeboxSimpleEmbedding(nb_genres, out_width)
+        self.artist_emb = JukeboxSimpleEmbedding(nb_artists, out_width)
         self.include_time_signal = include_time_signal
         if self.include_time_signal:
             t_ranges = (
@@ -2026,7 +2011,6 @@ class LabelConditioner(nn.Module):
                 (0.0, max_duration * sampling_rate),  # Absolute pos
                 (0.0, 1.0),
             )  # Relative pos
-            assert len(t_ranges) == 3, f"Expecting (total, absolute, relative) ranges, got {t_ranges}"
             total_length_range, absolute_pos_range, relative_pos_range = t_ranges
             self.total_length_emb = JukeboxRangeEmbedding(1, timing_dims, total_length_range, out_width, init_scale)
             self.absolute_pos_emb = JukeboxRangeEmbedding(
@@ -2912,18 +2896,18 @@ class JukeboxModel(JukeboxPreTrainedModel):
             music_tokens (`__type__`): _description_
             labels (`__type__`): _description_
             sample_levels (`__type__`): _description_
-            metas (`__type__`, optional): _description_. Defaults to None.
-            chunk_size (int, optional): _description_. Defaults to 32.
-            sampling_temperature (float, optional): _description_. Defaults to 0.98.
-            lower_batch_size (int, optional): _description_. Defaults to 16.
-            max_batch_size (int, optional): _description_. Defaults to 16.
-            sample_length_in_seconds (int, optional): _description_. Defaults to 24.
-            alignments (`__type__`, optional): _description_. Defaults to None.
-            sample_tokens (`__type__`, optional): _description_. Defaults to None.
-            offset (int, optional): _description_. Defaults to 0.
-            save_results (bool, optional): _description_. Defaults to True.
-            sample_length (`__type__`, optional): _description_. Defaults to None.
-            fp16 (bool, optional): _description_. Defaults to False.
+            metas (`__type__`, *optional*): _description_. Defaults to None.
+            chunk_size (int, *optional*): _description_. Defaults to 32.
+            sampling_temperature (float, *optional*): _description_. Defaults to 0.98.
+            lower_batch_size (int, *optional*): _description_. Defaults to 16.
+            max_batch_size (int, *optional*): _description_. Defaults to 16.
+            sample_length_in_seconds (int, *optional*): _description_. Defaults to 24.
+            alignments (`__type__`, *optional*): _description_. Defaults to None.
+            sample_tokens (`__type__`, *optional*): _description_. Defaults to None.
+            offset (int, *optional*): _description_. Defaults to 0.
+            save_results (bool, *optional*): _description_. Defaults to True.
+            sample_length (`__type__`, *optional*): _description_. Defaults to None.
+            fp16 (bool, *optional*): _description_. Defaults to False.
 
         Returns:
             `__type__`: _description_
