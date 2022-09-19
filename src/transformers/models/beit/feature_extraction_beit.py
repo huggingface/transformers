@@ -237,9 +237,9 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction. If left to
                 None, predictions will not be resized.
         Returns:
-            `List[torch.Tensor]`: A list of `torch.Tensor` of length `batch_size`, where each item is a semantic
-            segmentation map of of the corresponding target_sizes entry (if `target_sizes` is specified). Each entry of
-            each `torch.Tensor` correspond to a semantic class id.
+            semantic_segmentation: `torch.Tensor` of shape `(batch_size, 2)` or `List[torch.Tensor]` of length
+            `batch_size`, where each item is a semantic segmentation map of of the corresponding target_sizes entry (if
+            `target_sizes` is specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
         logits = outputs.logits
 
