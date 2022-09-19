@@ -680,7 +680,7 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                 archive_file = pretrained_model_name_or_path
                 is_local = True
             elif is_remote_url(pretrained_model_name_or_path):
-                archive_file = pretrained_model_name_or_path
+                filename = pretrained_model_name_or_path
                 resolved_archive_file = download_url(pretrained_model_name_or_path)
             else:
                 filename = WEIGHTS_NAME if from_pt else FLAX_WEIGHTS_NAME

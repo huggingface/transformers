@@ -23,7 +23,7 @@ from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module
 from ...feature_extraction_utils import FeatureExtractionMixin
 from ...tokenization_utils import TOKENIZER_CONFIG_FILE
-from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
+from ...utils import FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -31,6 +31,8 @@ from .configuration_auto import (
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
+from .feature_extraction_auto import AutoFeatureExtractor
+from .tokenization_auto import AutoTokenizer
 
 
 logger = logging.get_logger(__name__)
@@ -250,10 +252,24 @@ class AutoProcessor:
         if type(config) in PROCESSOR_MAPPING:
             return PROCESSOR_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, **kwargs)
 
+        # At this stage, there doesn't seem to be a `Processor` class available for this model, so let's try a
+        # tokenizer.
+        try:
+            return AutoTokenizer.from_pretrained(
+                pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+            )
+        except Exception:
+            try:
+                return AutoFeatureExtractor.from_pretrained(
+                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                )
+            except Exception:
+                pass
+
         raise ValueError(
-            f"Unrecognized processor in {pretrained_model_name_or_path}. Should have a `processor_type` key in "
-            f"its {FEATURE_EXTRACTOR_NAME}, or one of the following `model_type` keys in its {CONFIG_NAME}: "
-            f"{', '.join(c for c in PROCESSOR_MAPPING_NAMES.keys())}"
+            f"Unrecognized processing class in {pretrained_model_name_or_path}. Can't instantiate a processor, a "
+            "tokenizer or a feature extractor for this model. Make sure the repository contains the files of at least "
+            "one of those processing classes."
         )
 
     @staticmethod
