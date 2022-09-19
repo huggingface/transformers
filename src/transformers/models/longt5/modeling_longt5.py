@@ -503,7 +503,7 @@ class LongT5Attention(nn.Module):
         if position_bias is None:
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
-                    (1, self.n_heads, real_seq_length, key_length), device=scores.device, dtype=scores.dtype
+                    (1, self.n_heads + len(self.pruned_heads), real_seq_length, key_length), device=scores.device, dtype=scores.dtype
                 )
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
@@ -702,7 +702,7 @@ class LongT5LocalAttention(nn.Module):
             # position_bias shape: # (1, 1, n_heads, block_len, 3 * block_len)
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
-                    (1, 1, self.n_heads, self.block_len, 3 * self.block_len), device=scores.device, dtype=scores.dtype
+                    (1, 1, self.n_heads + len(self.pruned_heads), self.block_len, 3 * self.block_len), device=scores.device, dtype=scores.dtype
                 )
                 if self.gradient_checkpointing and self.training:
                     position_bias.requires_grad = True
@@ -715,7 +715,14 @@ class LongT5LocalAttention(nn.Module):
                 # We need to adjust position bias shape to be sum with mask
                 position_bias = position_bias + mask.transpose(1, 2)
 
-        scores += position_bias
+        if self.pruned_heads:
+            mask = torch.ones(position_bias.shape[1])
+            mask[list(self.pruned_heads)] = 0
+            position_bias_masked = position_bias[:, mask.bool()]
+        else:
+            position_bias_masked = position_bias
+
+        scores += position_bias_masked
         # (batch_size, num_blocks, n_heads, block_len, 3 * block_len)
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
         # (batch_size, num_blocks, n_heads, block_len, 3 * block_len)
@@ -952,7 +959,7 @@ class LongT5TransientGlobalAttention(nn.Module):
             # position_bias shape: # (1, 1, n_heads, block_len, 3 * block_len)
             if not self.has_relative_attention_bias:
                 position_bias = torch.zeros(
-                    (1, 1, self.n_heads, self.block_len, 3 * self.block_len),
+                    (1, 1, self.n_heads + len(self.pruned_heads), self.block_len, 3 * self.block_len),
                     device=scores.device,
                     dtype=scores.dtype,
                 )
@@ -977,7 +984,14 @@ class LongT5TransientGlobalAttention(nn.Module):
             # (batch_size, num_blocks, num_heads, block_len, 3 * block_len + global_seq_len)
             position_bias = torch.cat([position_bias, side_position_bias], dim=-1)
 
-        scores += position_bias
+        if self.pruned_heads:
+            mask = torch.ones(position_bias.shape[1])
+            mask[list(self.pruned_heads)] = 0
+            position_bias_masked = position_bias[:, mask.bool()]
+        else:
+            position_bias_masked = position_bias
+
+        scores += position_bias_masked
         # (batch_size, num_blocks, n_heads, block_len, 3 * block_len + global_seq_len)
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(scores)
         attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
