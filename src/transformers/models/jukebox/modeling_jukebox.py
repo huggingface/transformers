@@ -306,20 +306,6 @@ class JukeboxDecoder(nn.Module):
         return hidden_state
 
 
-def dont_update(params):
-    for param in params:
-        param.requires_grad = False
-
-
-def update(params):
-    for param in params:
-        param.requires_grad = True
-
-
-def calculate_strides(strides, downs):
-    return [stride**down for stride, down in zip(strides, downs)]
-
-
 class JukeboxBottleneckBlock(nn.Module):
     def __init__(self, codebook_dim, codebook_width, mu):
         super().__init__()
@@ -526,10 +512,22 @@ class JukeboxBottleneck(nn.Module):
 
 
 class JukeboxVQVAE(PreTrainedModel):
+    """
+
+    Args:
+        PreTrainedModel (_type_): _description_
+
+    Raises:
+        NotImplementedError: _description_ TypeError: _description_
+
+    Returns:
+        _type_: _description_
+    """
+
     def __init__(self, config):
         super().__init__(config)
         if not config.sample_length:
-            downsamples = calculate_strides(config.vqvae_strides_t, config.vqvae_downs_t)
+            downsamples = [stride**down for stride, down in zip(config.vqvae_strides_t, config.vqvae_down_t)]
             top_raw_to_tokens = np.prod(downsamples)
             config.sample_length = (
                 (config.sample_length_in_seconds * config.sampling_rate // top_raw_to_tokens) * top_raw_to_tokens
@@ -559,7 +557,7 @@ class JukeboxVQVAE(PreTrainedModel):
         x_shape, x_channels = input_shape[:-1], input_shape[-1]
         self.x_shape = x_shape
 
-        self.downsamples = calculate_strides(strides_t, downs_t)
+        self.downsamples = [stride**down for stride, down in zip(strides_t, downs_t)]
         self.hop_lengths = np.cumprod(self.downsamples)
         self.levels = levels = config.vqvae_levels
         self.music_tokens_shapes = [(int(x_shape[0] // self.hop_lengths[-level - 1]),) for level in range(levels)]
@@ -717,18 +715,6 @@ class JukeboxLayerNorm(FusedLayerNorm):
             return super(JukeboxLayerNorm, self).forward(input).type_as(input)
 
 
-def repeat(hidden_states, n_repeat, dim):
-    if dim == -1:
-        dim = len(hidden_states.shape) - 1
-    return (
-        hidden_states.view(
-            int(np.prod(hidden_states.shape[: dim + 1])), 1, int(np.prod(hidden_states.shape[dim + 1 :]))
-        )
-        .repeat(1, n_repeat, 1)
-        .view(*hidden_states.shape[:dim], n_repeat * hidden_states.shape[dim], *hidden_states.shape[dim + 1 :])
-    )
-
-
 def get_mask(mask, query_length, key_value_length, blocks, spread, device, sample, sample_t):
     # returns a mask of shape 1 x 1 x query_length x key_value_length or None if masking is not needed.
     if mask is None or query_length == 1:
@@ -756,7 +742,6 @@ def get_mask(mask, query_length, key_value_length, blocks, spread, device, sampl
 
 
 class JukeboxAttention(nn.Module):
-    # previously FactoredAttention
     def __init__(
         self,
         width,
@@ -2215,7 +2200,7 @@ class JukeboxPrior(nn.Module):
             )
 
         self.n_ctx = self.gen_loss_dims
-        self.downsamples = calculate_strides(config.cond_strides_t, config.cond_downs_t)
+        self.downsamples = [stride**down for stride, down in zip(config.cond_strides_t, config.cond_downs_t)]
         self.cond_downsample = self.downsamples[level + 1] if level != self.levels - 1 else None
         self.raw_to_tokens = np.prod(self.downsamples[: level + 1])
         self.sample_length = self.n_ctx * self.raw_to_tokens
@@ -2725,8 +2710,34 @@ def load_prompts(audio_files, hps, sample_length_in_seconds=70, offset_in_second
     return raw_audio
 
 
+JUKEBOX_SAMPLING_INPUT_DOCSTRING = r"""
+            labels (`List[Torch.LongTensor]` of lenght `n_sample`, and shape `(self.levels, self.config.max_nb_genre + lyric_sequence_lenght)` :
+                List of metadata such as `artist_id`, `genre_id` and the full list of lyric tokens which are used to
+                condition the generation.
+            sampling_kwargs (`Dict[Any]`): 
+                Various additional sampling arguments that are used by the `_sample` function.
+                - metas=None,
+                - chunk_size=32,
+                - sampling_temperature=0.98,
+                - lower_batch_size=16,
+                - max_batch_size=16,
+                - sample_length_in_seconds=24,
+                - alignments=None,
+                - sample_tokens=None,
+                - offset=0,
+                - save_results=True,
+                - sample_length=None,
+                - fp16=False,
+
+"""
+
+
 @add_start_docstrings(
-    "The bare JUKEBOX Model from which you can sample",
+    """The bare JUKEBOX Model used for music generation. 4 sampling techniques are supported : `primed_sample`, `upsample`,
+`continue_sample` and `ancestral_sample`.
+    It does not have a `forward` method as the training is not end to end. If you want to fine tune the model, it is
+    recommended to use the `JukeboxPrior` class and train each prior individually.
+    """,
     JUKEBOX_START_DOCSTRING,
 )
 class JukeboxModel(JukeboxPreTrainedModel):
@@ -2737,6 +2748,12 @@ class JukeboxModel(JukeboxPreTrainedModel):
         self.vqvae = JukeboxVQVAE(config)
         config.vqvae_music_tokens_shapes = self.vqvae.music_tokens_shapes
         self.priors = nn.ModuleList([JukeboxPrior(config, level=i) for i in range(config.nb_priors)])
+
+    def decode(self, music_tokens, start_level=0, end_level=None, bs_chunks=1):
+        return self.vqvae.decode(music_tokens, start_level, end_level, bs_chunks)
+
+    def encode(self, input_audio, start_level=0, end_level=None, bs_chunks=1):
+        return self.vqvae.encode(input_audio, start_level, end_level, bs_chunks)
 
     def split_batch(self, obj, n_samples, split_size):
         n_passes = (n_samples + split_size - 1) // split_size
@@ -2939,8 +2956,16 @@ class JukeboxModel(JukeboxPreTrainedModel):
                     # disable saving to html, TODO should we do it
         return music_tokens
 
-    # Generate ancestral samples given a list of artists and genres
+    @add_start_docstrings(
+        """
+        Args: 
+        Generate music tokens based on the provided `labels. Will start at the desired prior level and automatically
+        upsample the sequence. If you want to create the audio, you should call `model.decode(tokens)`, which will use
+        the VQ-VAE decoder to convert the music tokens to raw audio.""",
+        JUKEBOX_SAMPLING_INPUT_DOCSTRING,
+    )
     def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs):
+
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         music_tokens = [
             torch.zeros(n_samples, 0, dtype=torch.long, device=labels[0].device) for _ in range(len(self.priors))
@@ -2948,19 +2973,48 @@ class JukeboxModel(JukeboxPreTrainedModel):
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
 
-    # Continue ancestral sampling from previously saved codes
+    @add_start_docstrings(
+        """
+        Args: 
+        Generate a continuation of the previously generated tokens.
+            music_tokens (`List[torch.LongTensor`] of length `self.levels` ) : 
+                A sequence of music tokens which will be used as context to continue the sampling process. Should have
+                `self.levels` tensors, each corresponding to the generation at a certain level.
+        """,
+        JUKEBOX_SAMPLING_INPUT_DOCSTRING,
+    )
     def continue_sample(self, music_tokens, labels, **sampling_kwargs):
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
 
-    # Upsample given already generated upper-level codes
+    @add_start_docstrings(
+        """
+        Args: 
+        Upsamples a sequence of music tokens using the prior at level `level`.
+            music_tokens (`List[torch.LongTensor`] of length `self.levels` ) : 
+                A sequence of music tokens which will be used as context to continue the sampling process. Should have
+                `self.levels` tensors, each corresponding to the generation at a certain level.
+        """,
+        JUKEBOX_SAMPLING_INPUT_DOCSTRING,
+    )
     def upsample(self, music_tokens, labels, **sampling_kwargs):
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors) - 1)))
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
 
-    # Prompt the model with raw audio input (dimension: NTC) and generate continuations
+    @add_start_docstrings(
+        """
+        Args: 
+        Generate a raw audio conditioned on the provided `raw_audio` which is used as conditioning at each of the
+        generation levels. The audio is encoded to music tokens using the 3 levels of the VQ-VAE. These tokens are used
+        as conditioning for each level, which means that no ancestral sampling is required.
+            raw_audio (`List[torch.Tensor`] of length `n_samples` ) : 
+                A list of raw audio that will be used as conditioning information for each samples that will be
+                generated.
+        """,
+        JUKEBOX_SAMPLING_INPUT_DOCSTRING,
+    )
     def primed_sample(self, raw_audio, labels, **sampling_kwargs):
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         self.vqvae.to(raw_audio.device).float()
