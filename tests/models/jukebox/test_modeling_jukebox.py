@@ -138,16 +138,11 @@ class Jukebox1bModelTester(unittest.TestCase):
         zs = model._sample(zs, labels, [2], sample_length=40 * model.priors[-1].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[-1][0], torch.tensor(self.EXPECTED_OUTPUT_2))
 
-        zs[-1] = torch.tensor(self.EXPECTED_OUTPUT_2).unsqueeze(0)
         set_seed(0)
-        zs[-1] = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cpu()), dim=-1).long()
         zs = model._sample(zs, labels, [1], sample_length=40 * model.priors[-2].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[-2][0], torch.tensor(self.EXPECTED_OUTPUT_1))
 
-        zs[-2] = torch.tensor(self.EXPECTED_OUTPUT_1).unsqueeze(0)
-
         set_seed(0)
-        zs[-2] = torch.cat((zs[-2], torch.zeros(1, 1000000 - zs[-2].shape[-1]).cpu()), dim=-1).long()
         zs = model._sample(zs, labels, [0], sample_length=40 * model.priors[-3].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[0][0], torch.tensor(self.EXPECTED_OUTPUT_0))
 
@@ -174,16 +169,11 @@ class Jukebox1bModelTester(unittest.TestCase):
         zs = model._sample(zs, labels, [2], sample_length=40 * model.priors[-1].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[-1][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_2))
 
-        zs[-1] = torch.tensor(self.EXPECTED_GPU_OUTPUTS_2).unsqueeze(0)
         set_seed(0)
-        zs[-1] = torch.cat((zs[-1].cuda(), torch.zeros(1, 1000000 - zs[-1].shape[-1]).cuda()), dim=-1).long()
         zs = model._sample(zs, labels, [1], sample_length=40 * model.priors[-2].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[-2][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_1))
 
-        zs[-2] = torch.tensor(self.EXPECTED_GPU_OUTPUTS_1).unsqueeze(0)
-
         set_seed(0)
-        zs[-2] = torch.cat((zs[-2].cuda(), torch.zeros(1, 1000000 - zs[-2].shape[-1]).cuda()), dim=-1).long()
         zs = model._sample(zs, labels, [0], sample_length=40 * model.priors[-3].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[0][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_0))
 
@@ -311,46 +301,36 @@ class Jukebox5bModelTester(unittest.TestCase):
     @slow
     def test_sampling(self):
         model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
-
         labels = self.prepare_inputs(self.model_id)
+
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cpu() for _ in range(3)]
         zs = model._sample(zs, labels, [2], sample_length=60 * model.priors[-1].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[-1][0], torch.tensor(self.EXPECTED_OUTPUT_2))
 
-        zs[-1] = torch.tensor(self.EXPECTED_OUTPUT_2).unsqueeze(0)
         set_seed(0)
-        zs[-1] = torch.cat((zs[-1], torch.zeros(1, 1000000 - zs[-1].shape[-1]).cpu()), dim=-1).long()
         zs = model._sample(zs, labels, [1], sample_length=60 * model.priors[-2].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[-2][0], torch.tensor(self.EXPECTED_OUTPUT_1))
 
-        zs[-2] = torch.tensor(self.EXPECTED_OUTPUT_1).unsqueeze(0)
-
         set_seed(0)
-        zs[-2] = torch.cat((zs[-2], torch.zeros(1, 1000000 - zs[-2].shape[-1]).cpu()), dim=-1).long()
         zs = model._sample(zs, labels, [0], sample_length=60 * model.priors[-3].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[0][0], torch.tensor(self.EXPECTED_OUTPUT_0))
 
     @slow
     def test_slow_sampling(self):
         model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval().to("cuda")
-
         labels = [i.cuda() for i in self.prepare_inputs(self.model_id)]
+
         set_seed(0)
         zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
         zs = model._sample(zs, labels, [2], sample_length=60 * model.priors[-1].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[-1][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_2))
 
-        zs[-1] = torch.tensor(self.EXPECTED_GPU_OUTPUTS_2).unsqueeze(0)
         set_seed(0)
-        zs[-1] = torch.cat((zs[-1].cuda(), torch.zeros(1, 1000000 - zs[-1].shape[-1]).cuda()), dim=-1).long()
         zs = model._sample(zs, labels, [1], sample_length=60 * model.priors[-2].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[-2][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_1))
 
-        zs[-2] = torch.tensor(self.EXPECTED_GPU_OUTPUTS_1).unsqueeze(0)
-
         set_seed(0)
-        zs[-2] = torch.cat((zs[-2].cuda(), torch.zeros(1, 1000000 - zs[-2].shape[-1]).cuda()), dim=-1).long()
         zs = model._sample(zs, labels, [0], sample_length=60 * model.priors[-3].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[0][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_0))
 

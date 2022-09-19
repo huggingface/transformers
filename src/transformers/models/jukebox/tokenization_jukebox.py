@@ -89,6 +89,7 @@ def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, off
             which represent the overall length of the signal,
     """
     import torch
+
     full_tokens = full_tokens[0]
     if len(full_tokens) < max_n_lyric_tokens:
         tokens = torch.cat([torch.zeros(max_n_lyric_tokens - len(full_tokens)), full_tokens])
@@ -141,9 +142,9 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         vocab_file (`str`):
             Path to the vocabulary file which should contain a dictionnary where the keys are 'artist', 'genre' and
             'lyrics' and the values are their corresponding vocabulary files.
-        version (`List[`str`], `optional`, default to ["v3", "v2", "v2"]) : 
-            List of the tokenizer versions. The `5b-lyrics`'s top level prior model was trained using `v3` instead of `v2`. 
-
+        version (`List[`str`], `optional`, default to ["v3", "v2", "v2"]) :
+            List of the tokenizer versions. The `5b-lyrics`'s top level prior model was trained using `v3` instead of
+            `v2`.
         n_genres (`int`, `optional`, defaults to 1):
             Maximum number of genres to use for composition.
         max_n_lyric_tokens (`int`, `optional`, defaults to 512):
@@ -399,12 +400,12 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
         return inputs
 
-    def __call__(self, artist, genres, lyrics = "", return_tensors="pt") -> BatchEncoding:
+    def __call__(self, artist, genres, lyrics="", return_tensors="pt") -> BatchEncoding:
         """Convert the raw string to a list of token ids
 
         Args:
             artist (`str`):
-                Name of the artist. 
+                Name of the artist.
             genres (`str`):
                 List of genres that will be mixed to condition the audio
             lyrics (`srt`, Optional):

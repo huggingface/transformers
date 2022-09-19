@@ -2305,9 +2305,11 @@ class JukeboxPrior(nn.Module):
             music_tokens_cond = music_tokens[self.level + 1][
                 :, start // self.cond_downsample : end // self.cond_downsample
             ]
-            missing_cond_len = self.n_ctx // self.cond_downsample  - music_tokens_cond[-1].shape[-1]
-            if (missing_cond_len > 0 ):
-                music_tokens_cond = torch.cat((music_tokens_cond, torch.zeros(1, missing_cond_len).to(music_tokens_cond.device)), dim=-1).long()
+            missing_cond_len = self.n_ctx // self.cond_downsample - music_tokens_cond[-1].shape[-1]
+            if missing_cond_len > 0:
+                music_tokens_cond = torch.cat(
+                    (music_tokens_cond, torch.zeros(1, missing_cond_len).to(music_tokens_cond.device)), dim=-1
+                ).long()
             music_tokens_conds = [music_tokens_cond]
         else:
             music_tokens_conds = None
@@ -3022,6 +3024,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         Level:0, Cond downsample:4, Raw to tokens:8, Sample length:65536
         Level:1, Cond downsample:4, Raw to tokens:32, Sample length:262144
         Level:2, Cond downsample:None, Raw to tokens:128, Sample length:786432
+
         >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
 
         >>> lyrics = "Hey, are you awake? Can you talk to me?"
@@ -3031,9 +3034,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
         >>> music_tokens = model.ancestral_sample(metas.input_ids, sample_length_in_seconds=2)
         >>> model.decode(music_tokens)[:, :, 30]
-
         ```
-        """
+        """,
     )
     def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs) -> List[torch.LongTensor]:
 
