@@ -113,7 +113,7 @@ class TimeSformerConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         qkv_bias=True,
-        use_mean_pooling=True,
+        use_mean_pooling=False,
         decoder_num_attention_heads=6,
         decoder_hidden_size=384,
         decoder_num_hidden_layers=4,
