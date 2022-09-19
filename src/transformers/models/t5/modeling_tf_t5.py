@@ -681,6 +681,21 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
+            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+            vocab_size = (
+                self.embed_tokens.vocab_size
+                if isinstance(self.embed_tokens, TFSharedEmbeddings)
+                else self.embed_tokens._layer.vocab_size  # TFWrappedEmbeddings
+            )
+            tf.debugging.assert_less(
+                input_ids,
+                tf.cast(vocab_size, dtype=input_ids.dtype),
+                message=(
+                    "input_ids must be smaller than the embedding layer's input dimension (got"
+                    f" {tf.math.reduce_max(input_ids)} >= {vocab_size})"
+                ),
+            )
             inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
