@@ -246,27 +246,36 @@ class TimeSformerOutput(nn.Module):
 
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L89
 class TimeSformerLayer(nn.Module):
-    def __init__(self, dim, num_heads, qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0.1, act_layer=nn.GELU, norm_layer=nn.LayerNorm, attention_type='divided_space_time'):
+    def __init__(self, config: TimeSformerConfig):
         super().__init__()
+
+        dim = config.hidden_size
+        num_heads = config.num_attention_heads
+        qkv_bias = config.qkv_bias
+        attention_type = config.attention_type
+        drop_path = config.drop_path_prob
+        drop = config.hidden_dropout_prob
+        attn_drop = config.attention_probs_dropout_prob
+
+        self.attention = TimeSformerAttention(config)
+        self.intermediate = TimeSformerIntermediate(config)
+        self.output = TimeSformerOutput(config)
+        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
         self.attention_type = attention_type
         assert(attention_type in ['divided_space_time', 'space_only', 'joint_space_time'])
 
-        self.norm1 = norm_layer(dim)
-        self.attn = TimeSformerAttention(
-           dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
-
-        ## Temporal Attention Parameters
+        # Temporal Attention Parameters
         if self.attention_type == 'divided_space_time':
-            self.temporal_norm1 = norm_layer(dim)
+            self.temporal_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
             self.temporal_attn = TimeSformerAttention(
-              dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
+                dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop
+            )
             self.temporal_fc = nn.Linear(dim, dim)
 
-        ## drop path
+        # drop path
         self.drop_path = TimeSformerDropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.norm2 = norm_layer(dim)
-        self.mlp = TimeSformerIntermediate(config)
 
 
     def forward(self, x, B, T, W):
@@ -274,8 +283,8 @@ class TimeSformerLayer(nn.Module):
         H = num_spatial_tokens // W
 
         if self.attention_type in ['space_only', 'joint_space_time']:
-            x = x + self.drop_path(self.attn(self.norm1(x)))
-            x = x + self.drop_path(self.mlp(self.norm2(x)))
+            x = x + self.drop_path(self.attention(self.layernorm_before(x)))
+            x = x + self.drop_path(self.intermediate(self.layernorm_after(x)))
             return x
         elif self.attention_type == 'divided_space_time':
             ## Temporal
@@ -293,7 +302,7 @@ class TimeSformerLayer(nn.Module):
             xs = xt
             xs = rearrange(xs, 'b (h w t) m -> (b t) (h w) m',b=B,h=H,w=W,t=T)
             xs = torch.cat((cls_token, xs), 1)
-            res_spatial = self.drop_path(self.attn(self.norm1(xs)))
+            res_spatial = self.drop_path(self.attention(self.layernorm_before(xs)))
 
             ### Taking care of CLS token
             cls_token = res_spatial[:,0,:]
@@ -306,7 +315,7 @@ class TimeSformerLayer(nn.Module):
 
             ## Mlp
             x = torch.cat((init_cls_token, x), 1) + torch.cat((cls_token, res), 1)
-            x = x + self.drop_path(self.mlp(self.norm2(x)))
+            x = x + self.drop_path(self.intermediate(self.layernorm_after(x)))
             return x
 
 

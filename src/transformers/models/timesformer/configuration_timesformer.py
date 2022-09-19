@@ -111,7 +111,7 @@ class TimeSformerConfig(PretrainedConfig):
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
-        layer_norm_eps=1e-12,
+        layer_norm_eps=1e-5,
         qkv_bias=True,
         use_mean_pooling=True,
         decoder_num_attention_heads=6,
