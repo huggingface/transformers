@@ -19,6 +19,7 @@ import math
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional, Set, Tuple, Union
+from einops import rearrange
 
 import numpy as np
 import torch
@@ -157,11 +158,11 @@ class TimeSformerEmbeddings(nn.Module):
         attention_type = config.attention_type
 
         self.patch_embeddings = TimeSformerPatchEmbed(config)
-        num_patches = self.patch_embeddings.num_patches
+        self.num_patches = self.patch_embeddings.num_patches
 
         # Positional Embeddings
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim))
+        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches + 1, embed_dim))
         self.pos_drop = nn.Dropout(p=drop_rate)
         if attention_type != 'space_only':
             self.time_embed = nn.Parameter(torch.zeros(1, num_frames, embed_dim))
@@ -457,7 +458,7 @@ class TimeSformerLayer(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_prob, config.num_hidden_layers)]  # stochastic depth decay rule
         drop_path_prob = dpr[layer_index]
 
-        self.drop_path = TimeSformerDropPath(drop_path_prob) if drop_path_prob > 0. else nn.Identity()
+        self.drop_path = TimeSformerDropPath(config) if drop_path_prob > 0. else nn.Identity()
         self.attention = TimeSformerAttention(config)
         self.intermediate = TimeSformerIntermediate(config)
         self.output = TimeSformerOutput(config)
@@ -470,14 +471,8 @@ class TimeSformerLayer(nn.Module):
         # Temporal Attention Parameters
         if self.attention_type == 'divided_space_time':
             self.temporal_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-            self.temporal_attn = TimeSformerAttention(
-                dim, num_heads=num_heads, qkv_bias=qkv_bias, attn_drop=attn_drop, proj_drop=drop
-            )
+            self.temporal_attn = TimeSformerAttention(config)
             self.temporal_fc = nn.Linear(dim, dim)
-
-        # drop path
-        
-
 
     def forward(self, x, B, T, W):
         num_spatial_tokens = (x.size(1) - 1) // T
@@ -799,76 +794,7 @@ class TimeSformerDecoder(nn.Module):
         decoder_config.num_attention_heads = config.decoder_num_attention_heads
         decoder_config.intermediate_size = config.decoder_intermediate_size
         self.decoder_layers = nn.ModuleList(
-            [TimeSformerLayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
-        )
-
-        self.norm = nn.LayerNorm(config.decoder_hidden_size)
-        self.head = (
-            nn.Linear(config.decoder_hidden_size, decoder_num_labels) if decoder_num_labels > 0 else nn.Identity()
-        )
-
-        self.gradient_checkpointing = False
-        self.config = config
-
-    def forward(
-        self,
-        hidden_states,
-        return_token_num,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
-        # apply Transformer layers (blocks)
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-        for i, layer_module in enumerate(self.decoder_layers):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    None,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions)
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if return_token_num > 0:
-            hidden_states = hidden_states[:, -return_token_num:]
-
-        # predictor projection
-        hidden_states = self.norm(hidden_states)
-        logits = self.head(hidden_states)
-
-        if not return_dict:
-            return tuple(v for v in [logits, all_hidden_states, all_self_attentions] if v is not None)
-        return TimeSformerDecoderOutput(logits=logits, hidden_states=all_hidden_states, attentions=all_self_attentions)
-
-        decoder_num_labels = config.num_channels * config.tubelet_size * config.patch_size**2
-
-        decoder_config = deepcopy(config)
-        decoder_config.hidden_size = config.decoder_hidden_size
-        decoder_config.num_hidden_layers = config.decoder_num_hidden_layers
-        decoder_config.num_attention_heads = config.decoder_num_attention_heads
-        decoder_config.intermediate_size = config.decoder_intermediate_size
-        self.decoder_layers = nn.ModuleList(
-            [TimeSformerLayer(decoder_config) for _ in range(config.decoder_num_hidden_layers)]
+            [TimeSformerLayer(decoder_config, ind) for ind in range(config.decoder_num_hidden_layers)]
         )
 
         self.norm = nn.LayerNorm(config.decoder_hidden_size)
@@ -942,13 +868,13 @@ class TimeSformerForPreTraining(TimeSformerPreTrainedModel):
 
         self.timesformer = TimeSformerModel(config)
 
+        num_patches = self.timesformer.embeddings.num_patches
+
         self.encoder_to_decoder = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=False)
         self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
-        self.position_embeddings = get_sinusoid_encoding_table(
-            self.timesformer.embeddings.num_patches, config.decoder_hidden_size
-        )
+        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
 
-        self.decoder = TimeSformerDecoder(config, num_patches=self.timesformer.embeddings.num_patches)
+        self.decoder = TimeSformerDecoder(config, num_patches=num_patches)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -978,166 +904,6 @@ class TimeSformerForPreTraining(TimeSformerPreTrainedModel):
 
         >>> feature_extractor = TimeSformerFeatureExtractor.from_pretrained("MCG-NJU/timesformer-base")
         >>> model = TimeSformerForPreTraining.from_pretrained("MCG-NJU/timesformer-base")
-
-        >>> pixel_values = feature_extractor(video, return_tensors="pt").pixel_values
-
-        >>> num_patches_per_frame = (model.config.image_size // model.config.patch_size) ** 2
-        >>> seq_length = (num_frames // model.config.tubelet_size) * num_patches_per_frame
-        >>> bool_masked_pos = torch.randint(0, 2, (1, seq_length)).bool()
-
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss = outputs.loss
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.timesformer(
-            pixel_values,
-            bool_masked_pos=bool_masked_pos,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-        sequence_output = self.encoder_to_decoder(
-            sequence_output
-        )  # [batch_size, num_visible_patches, decoder_hidden_size]
-        batch_size, seq_len, num_channels = sequence_output.shape
-
-        # we don't unshuffle the correct visible token order, but shuffle the position embeddings accordingly.
-        if bool_masked_pos is None:
-            raise ValueError("One must provided a boolean mask ")
-        expanded_position_embeddings = self.position_embeddings.expand(batch_size, -1, -1).type_as(pixel_values)
-        expanded_position_embeddings = expanded_position_embeddings.to(pixel_values.device).clone().detach()
-        pos_emb_visible = expanded_position_embeddings[~bool_masked_pos].reshape(batch_size, -1, num_channels)
-        pos_emb_mask = expanded_position_embeddings[bool_masked_pos].reshape(batch_size, -1, num_channels)
-
-        # [batch_size, num_patches, decoder_hidden_size]
-        x_full = torch.cat([sequence_output + pos_emb_visible, self.mask_token + pos_emb_mask], dim=1)
-
-        # [batch_size, num_masked_patches, num_channels * patch_size * patch_size]
-        decoder_outputs = self.decoder(x_full, pos_emb_mask.shape[1])
-        logits = decoder_outputs.logits
-
-        loss = None
-        with torch.no_grad():
-            # calculate the labels to be predicted
-            # first, unnormalize the frames
-            device = pixel_values.device
-            mean = torch.as_tensor(IMAGENET_DEFAULT_MEAN).to(device)[None, None, :, None, None]
-            std = torch.as_tensor(IMAGENET_DEFAULT_STD).to(device)[None, None, :, None, None]
-            frames = pixel_values * std + mean  # in [0, 1]
-
-            batch_size, time, num_channels, height, width = frames.shape
-            tubelet_size, patch_size = self.config.tubelet_size, self.config.patch_size
-            if self.config.norm_pix_loss:
-                # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
-                frames = frames.view(
-                    batch_size,
-                    time // tubelet_size,
-                    tubelet_size,
-                    num_channels,
-                    height // patch_size,
-                    patch_size,
-                    width // patch_size,
-                    patch_size,
-                )
-                # step 2: move dimensions to concatenate:
-                frames = frames.permute(0, 1, 4, 6, 2, 5, 7, 3).contiguous()
-                # step 3: concatenate:
-                frames = frames.view(
-                    batch_size,
-                    time // tubelet_size * height // patch_size * width // patch_size,
-                    tubelet_size * patch_size * patch_size,
-                    num_channels,
-                )
-                # step 4: normalize. The authors find that the mean is about 0.48 and standard deviation is about 0.08.
-                frames_norm = (frames - frames.mean(dim=-2, keepdim=True)) / (
-                    frames.var(dim=-2, unbiased=True, keepdim=True).sqrt() + 1e-6
-                )
-                # step 5: reshape to (batch_size, T//ts * H//ps * W//ps, ts * ps * ps * C)
-                videos_patch = frames_norm.view(
-                    batch_size,
-                    time // tubelet_size * height // patch_size * width // patch_size,
-                    tubelet_size * patch_size * patch_size * num_channels,
-                )
-            else:
-                # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
-                frames = frames.view(
-                    batch_size,
-                    time // tubelet_size,
-                    tubelet_size,
-                    num_channels,
-                    height // patch_size,
-                    patch_size,
-                    width // patch_size,
-                    patch_size,
-                )
-                # step 2: move dimensions to concatenate: (batch_size, T//ts, H//ps, W//ps, ts, ps, ps, C)
-                frames = frames.permute(0, 1, 4, 6, 2, 5, 7, 3).contiguous()
-                # step 3: concatenate
-                videos_patch = frames.view(
-                    batch_size,
-                    time // tubelet_size * height // patch_size * width // patch_size,
-                    tubelet_size * patch_size * patch_size * num_channels,
-                )
-
-            batch_size, _, num_channels = videos_patch.shape
-            labels = videos_patch[bool_masked_pos].reshape(batch_size, -1, num_channels)
-
-        loss_fct = MSELoss()
-        loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return TimeSformerForPreTrainingOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-        self.timesformer = TimeSformerModel(config)
-
-        self.encoder_to_decoder = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=False)
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
-        self.position_embeddings = get_sinusoid_encoding_table(
-            self.timesformer.embeddings.num_patches, config.decoder_hidden_size
-        )
-
-        self.decoder = TimeSformerDecoder(config, num_patches=self.timesformer.embeddings.num_patches)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(TIMESFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TimeSformerForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values,
-        bool_masked_pos,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        Returns:
-
-        Examples:
-        ```python
-        >>> from transformers import VideoMAEFeatureExtractor, TimeSformerForPreTraining
-        >>> import numpy as np
-        >>> import torch
-
-        >>> num_frames = 16
-        >>> video = list(np.random.randn(16, 3, 224, 224))
-
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("facebook/timesformer")
-        >>> model = TimeSformerForPreTraining.from_pretrained("facebook/timesformer")
 
         >>> pixel_values = feature_extractor(video, return_tensors="pt").pixel_values
 
@@ -1338,135 +1104,6 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
         ...     "MCG-NJU/timesformer-base-finetuned-kinetics"
         ... )
         >>> model = TimeSformerForVideoClassification.from_pretrained("MCG-NJU/timesformer-base-finetuned-kinetics")
-
-        >>> inputs = feature_extractor(video, return_tensors="pt")
-
-        >>> with torch.no_grad():
-        ...     outputs = model(**inputs)
-        ...     logits = outputs.logits
-
-        >>> # model predicts one of the 400 Kinetics-400 classes
-        >>> predicted_label = logits.argmax(-1).item()
-        >>> print(model.config.id2label[predicted_label])
-        eating spaghetti
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.timesformer(
-            pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        if self.fc_norm is not None:
-            sequence_output = self.fc_norm(sequence_output.mean(1))
-        else:
-            sequence_output = sequence_output[:, 0]
-
-        logits = self.classifier(sequence_output)
-
-        loss = None
-        if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return ImageClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-        self.num_labels = config.num_labels
-        self.timesformer = TimeSformerModel(config)
-
-        # Classifier head
-        self.fc_norm = nn.LayerNorm(config.hidden_size) if config.use_mean_pooling else None
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(TIMESFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-
-        Returns:
-
-        Examples:
-
-        ```python
-        >>> from decord import VideoReader, cpu
-        >>> import torch
-
-        >>> from transformers import VideoMAEFeatureExtractor, TimeSformerForVideoClassification
-        >>> from huggingface_hub import hf_hub_download
-
-
-        >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
-        ...     converted_len = int(clip_len * frame_sample_rate)
-        ...     end_idx = np.random.randint(converted_len, seg_len)
-        ...     start_idx = end_idx - converted_len
-        ...     indices = np.linspace(start_idx, end_idx, num=clip_len)
-        ...     indices = np.clip(indices, start_idx, end_idx - 1).astype(np.int64)
-        ...     return indices
-
-
-        >>> # video clip consists of 300 frames (10 seconds at 30 FPS)
-        >>> file_path = hf_hub_download(
-        ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
-        ... )
-        >>> vr = VideoReader(file_path, num_threads=1, ctx=cpu(0))
-
-        >>> # sample 16 frames
-        >>> vr.seek(0)
-        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=4, seg_len=len(vr))
-        >>> buffer = vr.get_batch(indices).asnumpy()
-
-        >>> # create a list of NumPy arrays
-        >>> video = [buffer[i] for i in range(buffer.shape[0])]
-
-        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("facebook/timesformer-finetuned-kinetics")
-        >>> model = TimeSformerForVideoClassification.from_pretrained("facebook/timesformer-finetuned-kinetics")
 
         >>> inputs = feature_extractor(video, return_tensors="pt")
 
