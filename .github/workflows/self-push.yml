@@ -102,6 +102,7 @@ jobs:
           fetch-depth: 2
 
       - name: Update clone using environment variables
+        working-directory: /transformers
         run: |
           echo "original branch = $(git branch --show-current)"
           git fetch && git checkout ${{ env.CI_BRANCH }}
