@@ -3540,18 +3540,18 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_timm_and_vision_objects import *
     else:
-        from .models.deformable_detr import (
-            DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DeformableDetrForObjectDetection,
-            DeformableDetrModel,
-            DeformableDetrPreTrainedModel,
-        )
         from .models.conditional_detr import (
             CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             ConditionalDetrForObjectDetection,
             ConditionalDetrForSegmentation,
             ConditionalDetrModel,
             ConditionalDetrPreTrainedModel,
+        )
+        from .models.deformable_detr import (
+            DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DeformableDetrForObjectDetection,
+            DeformableDetrModel,
+            DeformableDetrPreTrainedModel,
         )
         from .models.detr import (
             DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
