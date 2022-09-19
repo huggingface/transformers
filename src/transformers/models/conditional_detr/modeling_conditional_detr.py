@@ -280,7 +280,7 @@ class ConditionalDetrFrozenBatchNorm2d(nn.Module):
     """
 
     def __init__(self, n):
-        super(ConditionalDetrFrozenBatchNorm2d, self).__init__()
+        super().__init__()
         self.register_buffer("weight", torch.ones(n))
         self.register_buffer("bias", torch.zeros(n))
         self.register_buffer("running_mean", torch.zeros(n))
@@ -293,7 +293,7 @@ class ConditionalDetrFrozenBatchNorm2d(nn.Module):
         if num_batches_tracked_key in state_dict:
             del state_dict[num_batches_tracked_key]
 
-        super(ConditionalDetrFrozenBatchNorm2d, self)._load_from_state_dict(
+        super()._load_from_state_dict(
             state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
         )
 
@@ -398,14 +398,14 @@ class ConditionalDetrConvModel(nn.Module):
 
 
 # Copied from transformers.models.detr.modeling_detr._expand_mask with Detr->ConditionalDetr
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, target_len: Optional[int] = None):
     """
-    Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
+    Expands attention_mask from `[batch_size, seq_len]` to `[batch_size, 1, target_seq_len, source_seq_len]`.
     """
-    bsz, src_len = mask.size()
-    tgt_len = tgt_len if tgt_len is not None else src_len
+    batch_size, source_len = mask.size()
+    target_len = target_len if target_len is not None else source_len
 
-    expanded_mask = mask[:, None, None, :].expand(bsz, 1, tgt_len, src_len).to(dtype)
+    expanded_mask = mask[:, None, None, :].expand(batch_size, 1, target_len, source_len).to(dtype)
 
     inverted_mask = 1.0 - expanded_mask
 
@@ -462,12 +462,12 @@ class ConditionalDetrLearnedPositionEmbedding(nn.Module):
         self.column_embeddings = nn.Embedding(50, embedding_dim)
 
     def forward(self, pixel_values, pixel_mask=None):
-        h, w = pixel_values.shape[-2:]
-        i = torch.arange(w, device=pixel_values.device)
-        j = torch.arange(h, device=pixel_values.device)
-        x_emb = self.column_embeddings(i)
-        y_emb = self.row_embeddings(j)
-        pos = torch.cat([x_emb.unsqueeze(0).repeat(h, 1, 1), y_emb.unsqueeze(1).repeat(1, w, 1)], dim=-1)
+        height, width = pixel_values.shape[-2:]
+        width_values = torch.arange(width, device=pixel_values.device)
+        height_values = torch.arange(height, device=pixel_values.device)
+        x_emb = self.column_embeddings(width_values)
+        y_emb = self.row_embeddings(height_values)
+        pos = torch.cat([x_emb.unsqueeze(0).repeat(height, 1, 1), y_emb.unsqueeze(1).repeat(1, width, 1)], dim=-1)
         pos = pos.permute(2, 0, 1)
         pos = pos.unsqueeze(0)
         pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
@@ -2538,15 +2538,17 @@ def generalized_box_iou(boxes1, boxes2):
     """
     # degenerate boxes gives inf / nan results
     # so do an early check
-    assert (boxes1[:, 2:] >= boxes1[:, :2]).all()
-    assert (boxes2[:, 2:] >= boxes2[:, :2]).all()
+    if not (boxes1[:, 2:] >= boxes1[:, :2]).all():
+        raise ValueError(f"boxes1 must be in [x0, y0, x1, y1] (corner) format, but got {boxes1}")
+    if not (boxes2[:, 2:] >= boxes2[:, :2]).all():
+        raise ValueError(f"boxes2 must be in [x0, y0, x1, y1] (corner) format, but got {boxes2}")
     iou, union = box_iou(boxes1, boxes2)
 
-    lt = torch.min(boxes1[:, None, :2], boxes2[:, :2])
-    rb = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
+    top_left = torch.min(boxes1[:, None, :2], boxes2[:, :2])
+    bottom_right = torch.max(boxes1[:, None, 2:], boxes2[:, 2:])
 
-    wh = (rb - lt).clamp(min=0)  # [N,M,2]
-    area = wh[:, :, 0] * wh[:, :, 1]
+    width_height = (bottom_right - top_left).clamp(min=0)  # [N,M,2]
+    area = width_height[:, :, 0] * width_height[:, :, 1]
 
     return iou - (area - union) / area
 
@@ -2590,11 +2592,11 @@ def nested_tensor_from_tensor_list(tensor_list: List[Tensor]):
     if tensor_list[0].ndim == 3:
         max_size = _max_by_axis([list(img.shape) for img in tensor_list])
         batch_shape = [len(tensor_list)] + max_size
-        b, c, h, w = batch_shape
+        batch_size, num_channels, height, width = batch_shape
         dtype = tensor_list[0].dtype
         device = tensor_list[0].device
         tensor = torch.zeros(batch_shape, dtype=dtype, device=device)
-        mask = torch.ones((b, h, w), dtype=torch.bool, device=device)
+        mask = torch.ones((batch_size, height, width), dtype=torch.bool, device=device)
         for img, pad_img, m in zip(tensor_list, tensor, mask):
             pad_img[: img.shape[0], : img.shape[1], : img.shape[2]].copy_(img)
             m[: img.shape[1], : img.shape[2]] = False
