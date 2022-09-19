@@ -27,9 +27,43 @@ env:
   RUN_PT_TF_CROSS_TESTS: 1
 
 jobs:
+  check_runner_status:
+    name: Check Runner Status
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout transformers
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 2
+
+      - name: Check Runner Status
+        run: python utils/check_self_hosted_runner.py --target_runners single-gpu-ci-runner-docker,multi-gpu-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+
+  check_runners:
+    name: Check Runners
+    needs: check_runner_status
+    strategy:
+      matrix:
+        machine_type: [single-gpu, multi-gpu]
+    runs-on: [self-hosted, docker-gpu, '${{ matrix.machine_type }}']
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
   setup:
     name: Setup
-    runs-on: ubuntu-latest
+    needs: check_runners
+    strategy:
+      matrix:
+        machine_type: [single-gpu, multi-gpu]
+    runs-on: [self-hosted, docker-gpu, '${{ matrix.machine_type }}']
+    container:
+      image: huggingface/transformers-all-latest-gpu
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       test_map: ${{ steps.set-matrix.outputs.test_map }}
@@ -111,24 +145,9 @@ jobs:
           echo "::set-output name=matrix::$keys"
           echo "::set-output name=test_map::$test_map"
 
-  run_check_runners:
-    name: Check Runners
-    needs: setup
-    strategy:
-      matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: [self-hosted, docker-gpu, '${{ matrix.machine_type }}']
-    container:
-      image: huggingface/transformers-all-latest-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    steps:
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
   run_tests_single_gpu:
     name: Model tests
-    needs: [setup, run_check_runners]
+    needs: setup
     # `dummy` means there is no test to run
     if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
     strategy:
@@ -213,7 +232,7 @@ jobs:
 
   run_tests_multi_gpu:
     name: Model tests
-    needs: [setup, run_check_runners]
+    needs: setup
     # `dummy` means there is no test to run
     if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
     strategy:
@@ -300,7 +319,7 @@ jobs:
 
   run_tests_torch_cuda_extensions_single_gpu:
     name: Torch CUDA extension tests
-    needs: [setup, run_check_runners]
+    needs: setup
     if: contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')
     strategy:
       fail-fast: false
@@ -382,7 +401,7 @@ jobs:
 
   run_tests_torch_cuda_extensions_multi_gpu:
     name: Torch CUDA extension tests
-    needs: [setup, run_check_runners]
+    needs: setup
     if: contains(fromJson(needs.setup.outputs.matrix), 'deepspeed') || contains(fromJson(needs.setup.outputs.matrix), 'extended')
     strategy:
       fail-fast: false
@@ -467,8 +486,9 @@ jobs:
     runs-on: ubuntu-latest
     if: always()
     needs: [
+        check_runner_status,
+        check_runners,
         setup,
-        run_check_runners,
         run_tests_single_gpu,
         run_tests_multi_gpu,
         run_tests_torch_cuda_extensions_single_gpu,
@@ -479,8 +499,9 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
+          echo "Runner availability: ${{ needs.check_runner_status.result }}"
           echo "Setup status: ${{ needs.setup.result }}"
-          echo "Runner status: ${{ needs.run_check_runners.result }}"
+          echo "Runner status: ${{ needs.check_runners.result }}"
 
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
@@ -527,8 +548,9 @@ jobs:
           CI_TITLE_PUSH: ${{ github.event.head_commit.message }}
           CI_TITLE_WORKFLOW_RUN: ${{ github.event.workflow_run.head_commit.message }}
           CI_SHA: ${{ env.CI_SHA }}
+          RUNNER_STATUS: ${{ needs.check_runner_status.result }}
+          RUNNER_ENV_STATUS: ${{ needs.check_runners.result }}
           SETUP_STATUS: ${{ needs.setup.result }}
-          RUNNER_STATUS: ${{ needs.run_check_runners.result }}
 
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
