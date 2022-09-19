@@ -15,7 +15,6 @@
 """ PyTorch TimeSformer (masked autoencoder) model."""
 
 
-import collections.abc
 import math
 from copy import deepcopy
 from dataclasses import dataclass
@@ -26,6 +25,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+import torch.nn.functional as F
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
@@ -60,6 +60,345 @@ TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/timesformer",
     # See all TimeSformer models at https://huggingface.co/models?filter=timesformer
 ]
+
+
+# Copied from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L78
+def _ntuple(n):
+    def parse(x):
+        if isinstance(x, container_abcs.Iterable):
+            return x
+        return tuple(repeat(x, n))
+    return parse
+to_2tuple = _ntuple(2)
+
+
+# Copied from transformers.models.beit.modeling_beit.drop_path
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
+    """
+    if drop_prob == 0.0 or not training:
+        return input
+    keep_prob = 1 - drop_prob
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor.floor_()  # binarize
+    output = input.div(keep_prob) * random_tensor
+    return output
+
+
+class TimeSformerDropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+
+    def __init__(self, config: TimeSformerConfig):
+        super().__init__()
+        self.drop_prob = config.drop_path_prob
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return drop_path(x, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return "p={}".format(self.drop_prob)
+
+
+# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L57
+# and transformers.models.videomae.modeling_videomae.VideoMAESelfAttention
+class TimeSformerSelfAttention(nn.Module):
+    def __init__(self, config: TimeSformerConfig):
+        super().__init__()
+
+        dim = config.hidden_size
+        num_heads = config.num_attention_heads
+        qkv_bias = config.qkv_bias
+        attn_drop = config.attention_probs_dropout_prob
+
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = head_dim ** -0.5
+        self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+
+    def forward(self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False):
+        B, N, C = hidden_states.shape
+        qkv = self.qkv(hidden_states).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
+        q, k, v = qkv[0], qkv[1], qkv[2]
+
+        attention_probs = (q @ k.transpose(-2, -1)) * self.scale
+        attention_probs = attention_probs.softmax(dim=-1)
+        attention_probs = self.attn_drop(attention_probs)
+
+        # Mask heads if we want to
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
+
+        context_layer = (attention_probs @ v).transpose(1, 2).reshape(B, N, C)
+
+        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
+
+        return outputs
+
+
+# copied from transformers.models.videomae.modeling_videomae.VideoMAESelfOutput
+class TimeSformerSelfOutput(nn.Module):
+    """
+    The residual connection is defined in TimeSformerLayer instead of here (as is the case with other models), due to the
+    layernorm applied before each block.
+    """
+
+    def __init__(self, config: TimeSformerConfig) -> None:
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        return hidden_states
+
+
+# copied from transformers.models.videomae.modeling_videomae.VideoMAEAttention
+class TimeSformerAttention(nn.Module):
+    def __init__(self, config: TimeSformerConfig) -> None:
+        super().__init__()
+        self.attention = TimeSformerSelfAttention(config)
+        self.output = TimeSformerSelfOutput(config)
+        self.pruned_heads = set()
+
+    def prune_heads(self, heads: Set[int]) -> None:
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(
+            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
+        )
+
+        # Prune linear layers
+        self.attention.query = prune_linear_layer(self.attention.query, index)
+        self.attention.key = prune_linear_layer(self.attention.key, index)
+        self.attention.value = prune_linear_layer(self.attention.value, index)
+        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
+        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
+
+        attention_output = self.output(self_outputs[0], hidden_states)
+
+        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        return outputs
+
+
+# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L39
+# and transformers.models.videomae.modeling_videomae.VideoMAEIntermediate
+class TimeSformerIntermediate(nn.Module):
+    def __init__(self, config: TimeSformerConfig) -> None:
+        super().__init__()
+        self.dense1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.dense2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.intermediate_act_fn = config.hidden_act
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+
+        hidden_states = self.dense1(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dense2(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        return hidden_states
+
+
+# Copied from transformers.models.vit.modeling_vit.VideoMAEOutput
+class TimeSformerOutput(nn.Module):
+    def __init__(self, config: TimeSformerConfig) -> None:
+        super().__init__()
+        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        hidden_states = hidden_states + input_tensor
+
+        return hidden_states
+
+
+# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L89
+class TimeSformerLayer(nn.Module):
+    def __init__(self, dim, num_heads, qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
+                 drop_path=0.1, act_layer=nn.GELU, norm_layer=nn.LayerNorm, attention_type='divided_space_time'):
+        super().__init__()
+        self.attention_type = attention_type
+        assert(attention_type in ['divided_space_time', 'space_only', 'joint_space_time'])
+
+        self.norm1 = norm_layer(dim)
+        self.attn = TimeSformerAttention(
+           dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
+
+        ## Temporal Attention Parameters
+        if self.attention_type == 'divided_space_time':
+            self.temporal_norm1 = norm_layer(dim)
+            self.temporal_attn = TimeSformerAttention(
+              dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
+            self.temporal_fc = nn.Linear(dim, dim)
+
+        ## drop path
+        self.drop_path = TimeSformerDropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.norm2 = norm_layer(dim)
+        self.mlp = TimeSformerIntermediate(config)
+
+
+    def forward(self, x, B, T, W):
+        num_spatial_tokens = (x.size(1) - 1) // T
+        H = num_spatial_tokens // W
+
+        if self.attention_type in ['space_only', 'joint_space_time']:
+            x = x + self.drop_path(self.attn(self.norm1(x)))
+            x = x + self.drop_path(self.mlp(self.norm2(x)))
+            return x
+        elif self.attention_type == 'divided_space_time':
+            ## Temporal
+            xt = x[:,1:,:]
+            xt = rearrange(xt, 'b (h w t) m -> (b h w) t m',b=B,h=H,w=W,t=T)
+            res_temporal = self.drop_path(self.temporal_attn(self.temporal_norm1(xt)))
+            res_temporal = rearrange(res_temporal, '(b h w) t m -> b (h w t) m',b=B,h=H,w=W,t=T)
+            res_temporal = self.temporal_fc(res_temporal)
+            xt = x[:,1:,:] + res_temporal
+
+            ## Spatial
+            init_cls_token = x[:,0,:].unsqueeze(1)
+            cls_token = init_cls_token.repeat(1, T, 1)
+            cls_token = rearrange(cls_token, 'b t m -> (b t) m',b=B,t=T).unsqueeze(1)
+            xs = xt
+            xs = rearrange(xs, 'b (h w t) m -> (b t) (h w) m',b=B,h=H,w=W,t=T)
+            xs = torch.cat((cls_token, xs), 1)
+            res_spatial = self.drop_path(self.attn(self.norm1(xs)))
+
+            ### Taking care of CLS token
+            cls_token = res_spatial[:,0,:]
+            cls_token = rearrange(cls_token, '(b t) m -> b t m',b=B,t=T)
+            cls_token = torch.mean(cls_token,1,True) ## averaging for every frame
+            res_spatial = res_spatial[:,1:,:]
+            res_spatial = rearrange(res_spatial, '(b t) (h w) m -> b (h w t) m',b=B,h=H,w=W,t=T)
+            res = res_spatial
+            x = xt
+
+            ## Mlp
+            x = torch.cat((init_cls_token, x), 1) + torch.cat((cls_token, res), 1)
+            x = x + self.drop_path(self.mlp(self.norm2(x)))
+            return x
+
+
+# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L155
+class TimeSformerPatchEmbed(nn.Module):
+    """ Image to Patch Embedding
+    """
+    def __init__(self, config):
+        super().__init__()
+
+        img_size = config.image_size
+        patch_size = config.patch_size
+        in_chans = config.num_channels
+        embed_dim = config.hidden_size
+
+        img_size = to_2tuple(img_size)
+        patch_size = to_2tuple(patch_size)
+        num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0])
+        self.img_size = img_size
+        self.patch_size = patch_size
+        self.num_patches = num_patches
+
+        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+
+    def forward(self, x):
+        B, C, num_frames, H, image_width = x.shape
+        x = rearrange(x, 'b c t h w -> (b t) c h w')
+        x = self.proj(x)
+        embeddings = x.flatten(2).transpose(1, 2)
+        return embeddings, num_frames, image_width
+
+
+class TimeSformerEmbeddings(nn.Module):
+    """
+    Construct the patch and position embeddings.
+
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        embed_dim = config.hidden_size
+        num_frames = config.num_frames
+        drop_rate = config.hidden_dropout_prob
+        attention_type = config.attention_type
+
+        self.patch_embeddings = TimeSformerPatchEmbed(config)
+        num_patches = self.patch_embeddings.num_patches
+
+        # Positional Embeddings
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
+        self.pos_embed = nn.Parameter(torch.zeros(1, num_patches + 1, embed_dim))
+        self.pos_drop = nn.Dropout(p=drop_rate)
+        if attention_type != 'space_only':
+            self.time_embed = nn.Parameter(torch.zeros(1, num_frames, embed_dim))
+            self.time_drop = nn.Dropout(p=drop_rate)
+
+        self.config = config
+
+    def forward(self, pixel_values, bool_masked_pos):
+        batch_size = pixel_values.shape[0]
+
+        # create patch embeddings
+        embeddings, num_frames, image_width = self.patch_embeddings(pixel_values)
+
+        cls_tokens = self.cls_token.expand(embeddings.size(0), -1, -1)
+        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+
+        # resizing the positional embeddings in case they don't match the input at inference
+        if embeddings.size(1) != self.pos_embed.size(1):
+            pos_embed = self.pos_embed
+            cls_pos_embed = pos_embed[0,0,:].unsqueeze(0).unsqueeze(1)
+            other_pos_embed = pos_embed[0,1:,:].unsqueeze(0).transpose(1, 2)
+            P = int(other_pos_embed.size(2) ** 0.5)
+            H = embeddings.size(1) // image_width
+            other_pos_embed = other_pos_embed.reshape(1, x.size(2), P, P)
+            new_pos_embed = F.interpolate(other_pos_embed, size=(H, image_width), mode='nearest')
+            new_pos_embed = new_pos_embed.flatten(2)
+            new_pos_embed = new_pos_embed.transpose(1, 2)
+            new_pos_embed = torch.cat((cls_pos_embed, new_pos_embed), 1)
+            embeddings = embeddings + new_pos_embed
+        else:
+            embeddings = embeddings + self.pos_embed
+
+        # only keep visible patches
+        # ~bool_masked_pos means visible
+        if bool_masked_pos is not None:
+            batch_size, _, num_channels = embeddings.shape
+            embeddings = embeddings[~bool_masked_pos]
+            embeddings = embeddings.reshape(batch_size, -1, num_channels)
+
+        return embeddings
 
 
 @dataclass
@@ -111,196 +450,6 @@ class TimeSformerForPreTrainingOutput(ModelOutput):
     logits: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-# Copied from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L78
-def _ntuple(n):
-    def parse(x):
-        if isinstance(x, container_abcs.Iterable):
-            return x
-        return tuple(repeat(x, n))
-    return parse
-to_2tuple = _ntuple(2)
-
-
-# Copied from transformers.models.beit.modeling_beit.drop_path
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class TimeSformerDropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
-
-
-# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L39
-class TimeSformerMlp(nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
-        super().__init__()
-        out_features = out_features or in_features
-        hidden_features = hidden_features or in_features
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = act_layer()
-        self.fc2 = nn.Linear(hidden_features, out_features)
-        self.drop = nn.Dropout(drop)
-
-    def forward(self, x):
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
-        return x
-
-
-# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L57
-class TimeSformerAttention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0., with_qkv=True):
-        super().__init__()
-        self.num_heads = num_heads
-        head_dim = dim // num_heads
-        self.scale = qk_scale or head_dim ** -0.5
-        self.with_qkv = with_qkv
-        if self.with_qkv:
-            self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
-            self.proj = nn.Linear(dim, dim)
-            self.proj_drop = nn.Dropout(proj_drop)
-        self.attn_drop = nn.Dropout(attn_drop)
-
-    def forward(self, x):
-        B, N, C = x.shape
-        if self.with_qkv:
-            qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
-            q, k, v = qkv[0], qkv[1], qkv[2]
-        else:
-            qkv = x.reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
-            q, k, v = qkv, qkv, qkv
-
-        attn = (q @ k.transpose(-2, -1)) * self.scale
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
-
-        x = (attn @ v).transpose(1, 2).reshape(B, N, C)
-        if self.with_qkv:
-            x = self.proj(x)
-            x = self.proj_drop(x)
-        return x
-
-
-# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L89
-class TimeSformerLayer(nn.Module):
-
-    def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0.1, act_layer=nn.GELU, norm_layer=nn.LayerNorm, attention_type='divided_space_time'):
-        super().__init__()
-        self.attention_type = attention_type
-        assert(attention_type in ['divided_space_time', 'space_only', 'joint_space_time'])
-
-        self.norm1 = norm_layer(dim)
-        self.attn = TimeSformerAttention(
-           dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
-
-        ## Temporal Attention Parameters
-        if self.attention_type == 'divided_space_time':
-            self.temporal_norm1 = norm_layer(dim)
-            self.temporal_attn = TimeSformerAttention(
-              dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
-            self.temporal_fc = nn.Linear(dim, dim)
-
-        ## drop path
-        self.drop_path = TimeSformerDropPath(drop_path) if drop_path > 0. else nn.Identity()
-        self.norm2 = norm_layer(dim)
-        mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = TimeSformerMlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop)
-
-
-    def forward(self, x, B, T, W):
-        num_spatial_tokens = (x.size(1) - 1) // T
-        H = num_spatial_tokens // W
-
-        if self.attention_type in ['space_only', 'joint_space_time']:
-            x = x + self.drop_path(self.attn(self.norm1(x)))
-            x = x + self.drop_path(self.mlp(self.norm2(x)))
-            return x
-        elif self.attention_type == 'divided_space_time':
-            ## Temporal
-            xt = x[:,1:,:]
-            xt = rearrange(xt, 'b (h w t) m -> (b h w) t m',b=B,h=H,w=W,t=T)
-            res_temporal = self.drop_path(self.temporal_attn(self.temporal_norm1(xt)))
-            res_temporal = rearrange(res_temporal, '(b h w) t m -> b (h w t) m',b=B,h=H,w=W,t=T)
-            res_temporal = self.temporal_fc(res_temporal)
-            xt = x[:,1:,:] + res_temporal
-
-            ## Spatial
-            init_cls_token = x[:,0,:].unsqueeze(1)
-            cls_token = init_cls_token.repeat(1, T, 1)
-            cls_token = rearrange(cls_token, 'b t m -> (b t) m',b=B,t=T).unsqueeze(1)
-            xs = xt
-            xs = rearrange(xs, 'b (h w t) m -> (b t) (h w) m',b=B,h=H,w=W,t=T)
-            xs = torch.cat((cls_token, xs), 1)
-            res_spatial = self.drop_path(self.attn(self.norm1(xs)))
-
-            ### Taking care of CLS token
-            cls_token = res_spatial[:,0,:]
-            cls_token = rearrange(cls_token, '(b t) m -> b t m',b=B,t=T)
-            cls_token = torch.mean(cls_token,1,True) ## averaging for every frame
-            res_spatial = res_spatial[:,1:,:]
-            res_spatial = rearrange(res_spatial, '(b t) (h w) m -> b (h w t) m',b=B,h=H,w=W,t=T)
-            res = res_spatial
-            x = xt
-
-            ## Mlp
-            x = torch.cat((init_cls_token, x), 1) + torch.cat((cls_token, res), 1)
-            x = x + self.drop_path(self.mlp(self.norm2(x)))
-            return x
-
-
-# Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L155
-class TimeSformerPatchEmbed(nn.Module):
-    """ Image to Patch Embedding
-    """
-    def __init__(self, img_size=224, patch_size=16, in_chans=3, embed_dim=768):
-        super().__init__()
-        img_size = to_2tuple(img_size)
-        patch_size = to_2tuple(patch_size)
-        num_patches = (img_size[1] // patch_size[1]) * (img_size[0] // patch_size[0])
-        self.img_size = img_size
-        self.patch_size = patch_size
-        self.num_patches = num_patches
-
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
-
-    def forward(self, x):
-        B, C, T, H, W = x.shape
-        x = rearrange(x, 'b c t h w -> (b t) c h w')
-        x = self.proj(x)
-        W = x.size(-1)
-        x = x.flatten(2).transpose(1, 2)
-        return x, T, W
 
 
 # Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->TimeSformer
