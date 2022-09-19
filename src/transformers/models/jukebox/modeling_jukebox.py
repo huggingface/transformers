@@ -19,6 +19,7 @@ import math
 import os
 import sys
 import time
+from typing import List
 
 import numpy as np
 import torch
@@ -2717,7 +2718,6 @@ JUKEBOX_SAMPLING_INPUT_DOCSTRING = r"""
             sampling_kwargs (`Dict[Any]`):
                 Various additional sampling arguments that are used by the `_sample` function. A detail list of the
                 arguments can bee seen in the [`_sample`] function documentation.
-
 """
 
 
@@ -2868,8 +2868,10 @@ class JukeboxModel(JukeboxPreTrainedModel):
         save_results=True,
         sample_length=None,
         fp16=False,
-    ):
-        """_summary_
+    ) -> List[torch.LongTensor]:
+        """
+        Core sampling function used to generate music tokens. Iterates over the provided list of levels, while saving
+        the generated raw audio at each step.
 
         Args:
             music_tokens (`__type__`): _description_
@@ -2890,7 +2892,21 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
         Returns:
             `__type__`: _description_
-        """
+
+        Example:
+        ```python
+        >>> metas = dict(artist="Zac Brown Band", genres="Country", lyrics="I met a traveller from an antique land")
+        >>> tokenizer = JukeboxTokenizer.from_pretrained(self.model_id)
+        >>> model = JukeboxModel.from_pretrained(self.model_id, min_duration=0).eval()
+
+        >>> tokens = tokenizer(**self.metas)["input_ids"]
+
+        >>> zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
+        >>> zs = model._sample(zs, labels, [2], sample_length=40 * model.priors[-1].raw_to_tokens, save_results=False)
+        [1864,
+        1536, 1213, 1870, 1357, 1536, 519, 880, 1323, 789, 1082, 534, 1000, 1445, 1105, 1130, 967, 515, 1434, 1620,
+        534, 1495, 283, 1445, 333, 1307, 539, 1631, 1528, 375, 1434, 673, 627, 710, 778, 1883, 1405, 1276, 1455, 1228]
+        ```"""
 
         top_prior = self.priors[-1]
         if sample_length is not None:
@@ -2969,14 +2985,34 @@ class JukeboxModel(JukeboxPreTrainedModel):
         return music_tokens
 
     @add_start_docstrings(
-        """
+        r"""
         Args:
         Generate music tokens based on the provided `labels. Will start at the desired prior level and automatically
         upsample the sequence. If you want to create the audio, you should call `model.decode(tokens)`, which will use
         the VQ-VAE decoder to convert the music tokens to raw audio.""",
         JUKEBOX_SAMPLING_INPUT_DOCSTRING,
+        r"""
+        Example:
+
+        ```python
+        >>> from transformers import JukeboxTokenizer, JukeboxModel
+
+        >>> model = JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics")
+        >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
+
+        >>> lyrics = "Hey, are you awake? Can you talk to me?"
+        >>> artist = "Zac Brown Band"
+        >>> genre = ("Country",)
+        >>> metas = tokenizer(artist=artist, genre=genre, lyrics=lyrics)
+
+        >>> # Generate
+        >>> music_tokens = model.ancestral_sample(metas, sample_length_in_seconds=2)
+        >>> model.decode(music_tokens)[:, :, 30]
+        [...,...,...]
+        ```
+        """,
     )
-    def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs):
+    def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs) -> List[torch.LongTensor]:
 
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         music_tokens = [
@@ -2995,7 +3031,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         """,
         JUKEBOX_SAMPLING_INPUT_DOCSTRING,
     )
-    def continue_sample(self, music_tokens, labels, **sampling_kwargs):
+    def continue_sample(self, music_tokens, labels, **sampling_kwargs) -> List[torch.LongTensor]:
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
@@ -3007,10 +3043,11 @@ class JukeboxModel(JukeboxPreTrainedModel):
             music_tokens (`List[torch.LongTensor`] of length `self.levels` ) :
                 A sequence of music tokens which will be used as context to continue the sampling process. Should have
                 `self.levels` tensors, each corresponding to the generation at a certain level.
+
         """,
         JUKEBOX_SAMPLING_INPUT_DOCSTRING,
     )
-    def upsample(self, music_tokens, labels, **sampling_kwargs):
+    def upsample(self, music_tokens, labels, **sampling_kwargs) -> List[torch.LongTensor]:
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors) - 1)))
         music_tokens = self._sample(music_tokens, labels, sample_levels, **sampling_kwargs)
         return music_tokens
@@ -3019,15 +3056,15 @@ class JukeboxModel(JukeboxPreTrainedModel):
         """
         Args:
         Generate a raw audio conditioned on the provided `raw_audio` which is used as conditioning at each of the
-        generation levels. The audio is encoded to music tokens using the 3 levels of the VQ-VAE. These tokens are used:
-        as conditioning for each level, which means that no ancestral sampling is required.
+        generation levels. The audio is encoded to music tokens using the 3 levels of the VQ-VAE. These tokens are
+        used: as conditioning for each level, which means that no ancestral sampling is required.
             raw_audio (`List[torch.Tensor`] of length `n_samples` ) :
                 A list of raw audio that will be used as conditioning information for each samples that will be
                 generated.
         """,
         JUKEBOX_SAMPLING_INPUT_DOCSTRING,
     )
-    def primed_sample(self, raw_audio, labels, **sampling_kwargs):
+    def primed_sample(self, raw_audio, labels, **sampling_kwargs) -> List[torch.LongTensor]:
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         self.vqvae.to(raw_audio.device).float()
         with torch.no_grad():
