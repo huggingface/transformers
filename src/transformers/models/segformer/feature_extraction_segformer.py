@@ -255,5 +255,7 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
                 resized_maps.append(resized)
 
             semantic_segmentation = [torch.Tensor(np.array(image)) for image in resized_maps]
+        else:
+            semantic_segmentation = [semantic_segmentation]
 
         return semantic_segmentation
