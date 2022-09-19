@@ -25,7 +25,7 @@ RUN python3 -m pip uninstall -y deepspeed
 # This has to be run inside the GPU VMs running the tests. (So far, it fails here due to GPU checks during compilation.)
 # Issue: https://github.com/microsoft/DeepSpeed/issues/2010
 # RUN git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build && \
-#    DS_BUILD_CPU_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check 2>&1
+#    DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check 2>&1
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
