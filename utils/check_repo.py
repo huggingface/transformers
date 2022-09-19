@@ -47,6 +47,8 @@ PRIVATE_MODELS = [
 IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     # models to ignore for not tested
     "JukeboxVQVAE",  # Building part of bigger (tested) model.
+    "DeformableDetrEncoder",  # Building part of bigger (tested) model.
+    "DeformableDetrDecoder",  # Building part of bigger (tested) model.
     "OPTDecoder",  # Building part of bigger (tested) model.
     "DecisionTransformerGPT2Model",  # Building part of bigger (tested) model.
     "SegformerDecodeHead",  # Building part of bigger (tested) model.

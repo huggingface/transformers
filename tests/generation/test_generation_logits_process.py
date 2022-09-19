@@ -169,10 +169,10 @@ class LogitsProcessorTest(unittest.TestCase):
             torch.tensor([[0.3, 0.1, 0.1, 0.5], [0.15, 0.3, 0.3, 0.25]], device=torch_device, dtype=torch.float)
         )
 
-        top_p_warp = TopPLogitsWarper(0.7)
+        top_p_warp = TopPLogitsWarper(0.8)
         filtered_dist = torch.exp(top_p_warp(input_ids, dist))
 
-        # dist should be filtered to keep min num values so that sum is >= 0.7
+        # dist should be filtered to keep min num values so that sum is >= top_p
         # exp (-inf) => 0
         EXPECTED_FILTERED_DIST = torch.tensor(
             [[0.3, 0.0, 0.0, 0.5], [0.0, 0.3, 0.3, 0.25]], device=torch_device, dtype=torch.float

@@ -27,6 +27,24 @@ RUN python3 -m pip uninstall -y deepspeed
 # RUN git clone https://github.com/microsoft/DeepSpeed && cd DeepSpeed && rm -rf build && \
 #    DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 python3 -m pip install . --global-option="build_ext" --global-option="-j8" --no-cache -v --disable-pip-version-check 2>&1
 
+# For `torchdynamo` tests
+# (see https://github.com/huggingface/transformers/pull/17765)
+RUN git clone https://github.com/pytorch/functorch
+RUN python3 -m pip install --no-cache-dir ./functorch[aot]
+RUN cd functorch && python3 setup.py develop
+
+RUN git clone https://github.com/pytorch/torchdynamo
+RUN python3 -m pip install -r ./torchdynamo/requirements.txt
+RUN cd torchdynamo && python3 setup.py develop
+
+# install TensorRT
+RUN python3 -m pip install --no-cache-dir -U nvidia-pyindex
+RUN python3 -m pip install --no-cache-dir -U nvidia-tensorrt==8.2.4.2
+
+# install torch_tensorrt (fx path)
+RUN git clone https://github.com/pytorch/TensorRT.git
+RUN cd TensorRT/py && python3 setup.py install --fx-only
+
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop

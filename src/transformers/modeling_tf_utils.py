@@ -560,6 +560,18 @@ def input_processing(func, config, **kwargs):
     if "kwargs" in output:
         del output["kwargs"]
 
+    cast_output = dict()
+    for key, val in output.items():
+        if isinstance(val, tf.Tensor) and val.dtype == tf.int32:
+            cast_output[key] = tf.cast(val, tf.int64)
+        elif isinstance(val, np.ndarray) and val.dtype == np.int32:
+            cast_output[key] = val.astype(np.int64)
+        else:
+            cast_output[key] = val
+
+    output = cast_output
+    del cast_output
+
     if config is not None:
         boolean_dict = {
             k: v
@@ -1054,9 +1066,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int64, name="token_type_ids"),
             }
         ]
     )
@@ -1081,6 +1093,29 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 The output returned by the model.
         """
         raise NotImplementedError
+
+    def save(
+        self,
+        filepath,
+        overwrite=True,
+        include_optimizer=True,
+        save_format=None,
+        signatures=None,
+        options=None,
+        save_traces=True,
+    ):
+        # Very simple wrapper that ensures we set the correct serving signature when saving
+        if signatures is None and hasattr(self, "serving"):
+            signatures = self.serving
+        super().save(
+            filepath,
+            overwrite=overwrite,
+            include_optimizer=include_optimizer,
+            save_format=save_format,
+            signatures=signatures,
+            options=options,
+            save_traces=save_traces,
+        )
 
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
@@ -1826,7 +1861,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # If word embeddings are not tied, make sure that lm head bias is resized as well
         if self.get_bias() is not None:
             old_lm_head_bias = self.get_bias()
-            new_lm_head_bias = self._get_resized_lm_head_bias(old_lm_head_bias, new_num_tokens)
+            new_lm_head_bias = self._v2_get_resized_lm_head_bias(old_lm_head_bias, new_num_tokens)
             self.set_bias(new_lm_head_bias)
 
         # If word embeddings are not tied, make sure that lm head decoder is resized as well.
@@ -1856,6 +1891,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Return:
             `tf.Variable`: Pointer to the resized bias.
         """
+        # TODO (joao): flagged for replacement (by `_v2_get_resized_lm_head_bias`) due to embeddings refactor
         new_lm_head_bias = {}
 
         for attr, weight in old_lm_head_bias.items():
@@ -1889,6 +1925,40 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             new_bias.assign(init_bias)
             new_lm_head_bias[attr] = new_bias
 
+        return new_lm_head_bias
+
+    def _v2_get_resized_lm_head_bias(
+        self, old_lm_head_bias: Dict[str, tf.Variable], new_num_tokens: int
+    ) -> Dict[str, tf.Tensor]:
+        """
+        Build a resized bias from the old ones. Increasing the size will add newly initialized vectors at the end.
+        Reducing the size will remove vectors from the end
+
+        Args:
+            old_lm_head_bias (`Dict[str, tf.Variable]`):
+                Old lm head bias to be resized.
+            new_num_tokens (`int`):
+                New number of tokens in the linear matrix. Increasing the size will add newly initialized vectors at
+                the end. Reducing the size will remove vectors from the end.
+
+        Return:
+            `tf.Tensor`: Values for the resized bias.
+        """
+        new_lm_head_bias = {}
+
+        for attr, weight in old_lm_head_bias.items():
+            # Determine the size difference (depending on the shape)
+            first_dim, old_num_tokens = (None, shape_list(weight)[0]) if tf.rank(weight) == 1 else shape_list(weight)
+            size_diff = new_num_tokens - old_num_tokens
+
+            # Copy the old bias values to the new bias
+            if old_num_tokens > new_num_tokens:
+                new_bias = weight.value()[..., :new_num_tokens]
+            else:
+                padding_shape = [[0, size_diff]] if first_dim is None else [[0, 0], [0, size_diff]]
+                new_bias = tf.pad(weight.value(), tf.convert_to_tensor(padding_shape))
+
+            new_lm_head_bias[attr] = new_bias
         return new_lm_head_bias
 
     def _get_resized_lm_head_decoder(self, old_lm_head_decoder, new_num_tokens):
@@ -2348,7 +2418,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 archive_file = pretrained_model_name_or_path + ".index"
                 is_local = True
             elif is_remote_url(pretrained_model_name_or_path):
-                archive_file = pretrained_model_name_or_path
+                filename = pretrained_model_name_or_path
                 resolved_archive_file = download_url(pretrained_model_name_or_path)
             else:
                 # set correct filename
