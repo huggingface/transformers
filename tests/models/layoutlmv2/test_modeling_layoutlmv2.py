@@ -137,9 +137,14 @@ class LayoutLMv2ModelTester:
 
         sequence_labels = None
         token_labels = None
+        entities = None
+        relations = None
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            # we choose some random entities and relations
+            entities = [{"start": [0, 4], "end": [3, 6], "label": [2,1]} for _ in range(self.batch_size)]
+            relations =  [{"start_index": [0], "end_index": [5], "head": [0], "tail": [1]} for _ in range(self.batch_size)]
 
         config = LayoutLMv2Config(
             vocab_size=self.vocab_size,
@@ -164,10 +169,31 @@ class LayoutLMv2ModelTester:
         config.detectron2_config_args["MODEL.RESNETS.RES2_OUT_CHANNELS"] = 64
         config.detectron2_config_args["MODEL.RESNETS.NUM_GROUPS"] = 1
 
-        return config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
+        return (
+            config,
+            input_ids,
+            bbox,
+            image,
+            token_type_ids,
+            input_mask,
+            sequence_labels,
+            token_labels,
+            entities,
+            relations,
+        )
 
     def create_and_check_model(
-        self, config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        image,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        entities,
+        relations,
     ):
         model = LayoutLMv2Model(config=config)
         model.to(torch_device)
@@ -183,7 +209,17 @@ class LayoutLMv2ModelTester:
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_for_sequence_classification(
-        self, config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        image,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        entities,
+        relations,
     ):
         config.num_labels = self.num_labels
         model = LayoutLMv2ForSequenceClassification(config)
@@ -200,7 +236,17 @@ class LayoutLMv2ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_labels))
 
     def create_and_check_for_token_classification(
-        self, config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        image,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        entities,
+        relations,
     ):
         config.num_labels = self.num_labels
         model = LayoutLMv2ForTokenClassification(config=config)
@@ -217,7 +263,17 @@ class LayoutLMv2ModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_for_question_answering(
-        self, config, input_ids, bbox, image, token_type_ids, input_mask, sequence_labels, token_labels
+        self,
+        config,
+        input_ids,
+        bbox,
+        image,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        entities,
+        relations,
     ):
         model = LayoutLMv2ForQuestionAnswering(config=config)
         model.to(torch_device)
@@ -233,6 +289,36 @@ class LayoutLMv2ModelTester:
         )
         self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
         self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+
+    def create_and_check_for_relation_extraction(
+        self,
+        config,
+        input_ids,
+        bbox,
+        image,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        entities,
+        relations,
+    ):
+        model = LayoutLMv2ForRelationExtraction(config=config)
+        torch_device = "cpu"
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids.to("cpu"),
+            bbox=bbox.to("cpu"),
+            image=image.to("cpu"),
+            attention_mask=input_mask.to("cpu"),
+            token_type_ids=token_type_ids.to("cpu"),
+            entities=entities,
+            relations=relations,
+        )
+        print(result.pred_relations)
+        # self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
+        # self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -315,6 +401,10 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_question_answering(*config_and_inputs)
 
+    def test_for_relation_extraction(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_relation_extraction(*config_and_inputs)
+    
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = MODEL_MAPPING[config.__class__]
