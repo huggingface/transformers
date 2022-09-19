@@ -272,8 +272,8 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
-        # `GroupViT` computes some indices using argmax, uses them as 
-        # one-hot encoding for further computation. The problem is 
+        # `GroupViT` computes some indices using argmax, uses them as
+        # one-hot encoding for further computation. The problem is
         # while PT/TF have very small difference in `y_soft` (~ 1e-9),
         # the argmax could be totally different, if there are at least
         # 2 indices with almost identical values. This leads to very
@@ -580,8 +580,8 @@ class TFGroupViTModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @is_pt_tf_cross_test
     def test_pt_tf_model_equivalence(self):
-        # `GroupViT` computes some indices using argmax, uses them as 
-        # one-hot encoding for further computation. The problem is 
+        # `GroupViT` computes some indices using argmax, uses them as
+        # one-hot encoding for further computation. The problem is
         # while PT/TF have very small difference in `y_soft` (~ 1e-9),
         # the argmax could be totally different, if there are at least
         # 2 indices with almost identical values. This leads to very
