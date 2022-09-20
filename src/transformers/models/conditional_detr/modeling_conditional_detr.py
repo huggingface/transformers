@@ -1013,8 +1013,15 @@ class ConditionalDetrClassificationHead(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead with DetrMLPPredictionHead->MLP
 class MLP(nn.Module):
-    """Very simple multi-layer perceptron (also called FFN)"""
+    """
+    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
+    height and width of a bounding box w.r.t. an image.
+
+    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+
+    """
 
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
         super().__init__()
@@ -1024,7 +1031,7 @@ class MLP(nn.Module):
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
-            x = F.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+            x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
         return x
 
 
