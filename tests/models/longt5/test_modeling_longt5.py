@@ -43,6 +43,7 @@ if is_torch_available():
     )
     from transformers.models.longt5.modeling_longt5 import LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST
     from transformers.pytorch_utils import is_torch_less_than_1_11
+
     is_torch_available_and_torch_less_than_1_11 = is_torch_less_than_1_11
 
 
