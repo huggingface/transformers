@@ -44,7 +44,7 @@ def load_vocab_file(vocab_file):
 
 class ESMTokenizer(PreTrainedTokenizer):
     """
-    Constructs a ESM tokenizer.
+    Constructs an ESM tokenizer.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
