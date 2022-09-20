@@ -157,8 +157,10 @@ class MobileViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: Union[TensorType, List[Tuple]] = None):
         """
+        Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps. Only supports
+        PyTorch.
+
         Args:
-        Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.:
             outputs ([`MobileViTForSemanticSegmentation`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`,
