@@ -35,10 +35,6 @@ from .configuration_jukebox import JukeboxConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "ArthurZ/jukebox-dummy"
-_CONFIG_FOR_DOC = "JukeboxConfig"
-_TOKENIZER_FOR_DOC = "JukeboxTokenizer"
-
 JUKEBOX_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "openai/jukebox-1b-lyrics",
     "openai/jukebox-5b-lyrics",
@@ -2926,7 +2922,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
             metas (`List[Any]`, *optional*, defaults to None):
                 Metadatas used to generate the `labels`
             chunk_size (`int`, *optional*, defaults to 32):
-                Size of a chunk of audio, used to fill up the memory in chuncks to prevent OOM erros. Bigger chunks means faster memory filling but more consumption.
+                Size of a chunk of audio, used to fill up the memory in chuncks to prevent OOM erros. Bigger chunks
+                means faster memory filling but more consumption.
             sampling_temperature (`float`, *optional*, defaults to 0.98):
                 Temperature used to ajust the randomness of the sampling.
             lower_batch_size (`int`, *optional*, defaults to 16):
