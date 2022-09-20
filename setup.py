@@ -300,6 +300,7 @@ extras["testing"] = (
         "protobuf",  # Can be removed once we can unpin protobuf
         "sacremoses",
         "rjieba",
+        'einops'
     )
     + extras["retrieval"]
     + extras["modelcreation"]
