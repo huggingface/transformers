@@ -10,7 +10,7 @@ on:
   repository_dispatch:
   schedule:
     # run per hour
-    - cron: "* */1 * * *"
+    - cron: "0 */1 * * *"
 
 env:
   TRANSFORMERS_IS_CI: yes
