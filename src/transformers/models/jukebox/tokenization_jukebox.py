@@ -100,9 +100,12 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     However the code does not allow that and only supports composing from various genres.
 
     Args:
-        vocab_file (`str`):
-            Path to the vocabulary file which should contain a dictionnary where the keys are 'artist', 'genre' and
-            'lyrics' and the values are their corresponding vocabulary files.
+        artists_file (`str`):
+            Path to the vocabulary file which contains a mapping between artists and ids. The default file supports both "v2" and "v3" 
+        genres_file (`str`):
+            Path to the vocabulary file which contain a mapping between genres and ids.
+        lyrics_file (`str`):
+            Path to the vocabulary file which contains the accepted characters for the lyrics tokenization.
         version (`List[`str`], `optional`, default to ["v3", "v2", "v2"]) :
             List of the tokenizer versions. The `5b-lyrics`'s top level prior model was trained using `v3` instead of
             `v2`.
@@ -173,20 +176,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         """Converts the artist, genre and lyrics tokens to their index using the vocabulary.
         The total_length, offset and duration have to be provided in order to select relevant lyrics and add padding to
         the lyrics token sequence.
-
-        Args:
-            artist (`_type_`):
-                _description_
-            genre (`_type_`):
-                _description_
-            lyrics (`_type_`):
-                _description_
-            total_length (`_type_`):
-                _description_
-            offset (`_type_`):
-                _description_
-            duration (`_type_`):
-                _description_
         """
         artists_id = [self.artists_encoder.get(artist, 0) for artist in list_artists]
         for genres in range(len(list_genres)):
@@ -209,14 +198,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
     def tokenize(self, artist, genre, lyrics, **kwargs):
         """
         Converts three strings in a 3 sequence of tokens using the tokenizer
-
-        Args:
-            artist (`_type_`):
-                _description_
-            genre (`_type_`):
-                _description_
-            lyrics (`_type_`):
-                _description_
         """
         artist, genre, lyrics = self.prepare_for_tokenization(artist, genre, lyrics)
         lyrics = self._tokenize(lyrics)
@@ -244,9 +225,6 @@ class JukeboxTokenizer(PreTrainedTokenizer):
                 which it will tokenize. This is useful for NER or token classification.
             kwargs:
                 Keyword arguments to use for the tokenization.
-
-        Returns:
-            `Tuple[str, Union[List[str]|str], str, Dict[str, Any]]`:
         """
         for idx in range(len(self.version)):
             if self.version[idx] == "v3":
