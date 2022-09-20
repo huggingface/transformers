@@ -146,9 +146,10 @@ class ESMEmbeddings(nn.Module):
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
-        # self.LayerNorm is not snake-cased to stick with TensorFlow model variable name and be able to load
-        # any TensorFlow checkpoint file
-        self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        if config.emb_layer_norm_before:
+            self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        else:
+            self.layer_norm = None
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
@@ -204,7 +205,8 @@ class ESMEmbeddings(nn.Module):
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
-        embeddings = self.LayerNorm(embeddings)
+        if self.layer_norm is not None:
+            embeddings = self.layer_norm(embeddings)
         embeddings = self.dropout(embeddings)
         return embeddings
 
