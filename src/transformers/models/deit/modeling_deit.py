@@ -555,8 +555,15 @@ class DeiTPooler(nn.Module):
 
 
 @add_start_docstrings(
-    "DeiT Model with a decoder on top for masked image modeling, as proposed in"
-    " [SimMIM](https://arxiv.org/abs/2111.09886).",
+    """DeiT Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
+
+    <Tip>
+
+    Note that we provide a script to pre-train this model on custom data in our [examples
+    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
+
+    </Tip>
+    """,
     DEIT_START_DOCSTRING,
 )
 class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
