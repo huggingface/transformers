@@ -22,16 +22,21 @@ import pathlib
 import torch
 
 import esm as esm_module
-from transformers.models.bert.modeling_bert import (
-    BertIntermediate,
-    BertLayer,
-    BertOutput,
-    BertSelfAttention,
-    BertSelfOutput,
+from transformers.models.esm.modeling_esm import (
+    ESMIntermediate,
+    ESMLayer,
+    ESMOutput,
+    ESMSelfAttention,
+    ESMSelfOutput,
 )
+from transformers.models.esm.tokenization_esm import ESMTokenizer
 from transformers.models.esm.configuration_esm import ESMConfig
 from transformers.models.esm.modeling_esm import ESMForMaskedLM, ESMForSequenceClassification
 from transformers.utils import logging
+
+from tempfile import TemporaryDirectory
+
+from pathlib import Path
 
 
 # if version.parse(fairseq.__version__) < version.parse("0.9.0"):
@@ -45,13 +50,21 @@ SAMPLE_DATA = [
     ("protein1", "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG"),
 ]
 
+MODEL_MAPPING = {
+    "esm1b_t33_650M_UR50S": esm_module.pretrained.esm1b_t33_650M_UR50S,
+    "esm1v_t33_650M_UR90S_1": esm_module.pretrained.esm1v_t33_650M_UR90S_1,
+    "esm1v_t33_650M_UR90S_2": esm_module.pretrained.esm1v_t33_650M_UR90S_2,
+    "esm1v_t33_650M_UR90S_3": esm_module.pretrained.esm1v_t33_650M_UR90S_3,
+    "esm1v_t33_650M_UR90S_4": esm_module.pretrained.esm1v_t33_650M_UR90S_4,
+    "esm1v_t33_650M_UR90S_5": esm_module.pretrained.esm1v_t33_650M_UR90S_5,
+}
 
-def convert_esm_checkpoint_to_pytorch(pytorch_dump_folder_path: str, classification_head: bool):
+
+def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str, classification_head: bool):
     """
     Copy/paste/tweak esm's weights to our BERT structure.
     """
-    # esm = FairseqESMModel.from_pretrained(esm_checkpoint_path)
-    esm, alphabet = esm_module.pretrained.esm1b_t33_650M_UR50S()
+    esm, alphabet = MODEL_MAPPING[model]()
     esm.eval()  # disable dropout
     esm_sent_encoder = esm
     config = ESMConfig(
@@ -64,8 +77,9 @@ def convert_esm_checkpoint_to_pytorch(pytorch_dump_folder_path: str, classificat
         type_vocab_size=1,
         layer_norm_eps=1e-5,  # PyTorch default used in fairseq
         attention_probs_dropout_prob=0.0,
-        hidden_dropout_prob=0, # TODO: temporary hack, explained in modeling_esm
-        pad_token_id=esm.padding_idx
+        hidden_dropout_prob=0.,
+        pad_token_id=esm.padding_idx,
+        emb_layer_norm_before=esm.emb_layer_norm_before,
     )
     if classification_head:
         config.num_labels = esm.classification_heads["mnli"].out_proj.weight.shape[0]
@@ -82,20 +96,21 @@ def convert_esm_checkpoint_to_pytorch(pytorch_dump_folder_path: str, classificat
         model.esm.embeddings.token_type_embeddings.weight
     )  # just zero them out b/c ESM doesn't use them.
 
-    model.esm.embeddings.LayerNorm.weight = esm_sent_encoder.emb_layer_norm_before.weight
-    model.esm.embeddings.LayerNorm.bias = esm_sent_encoder.emb_layer_norm_before.bias
+    if config.emb_layer_norm_before:
+        model.esm.embeddings.LayerNorm.weight = esm_sent_encoder.emb_layer_norm_before.weight
+        model.esm.embeddings.LayerNorm.bias = esm_sent_encoder.emb_layer_norm_before.bias
 
     model.esm.encoder.emb_layer_norm_after.weight = esm_sent_encoder.emb_layer_norm_after.weight
     model.esm.encoder.emb_layer_norm_after.bias = esm_sent_encoder.emb_layer_norm_after.bias
 
     for i in range(config.num_hidden_layers):
         # Encoder: start of layer
-        layer: BertLayer = model.esm.encoder.layer[i]
+        layer: ESMLayer = model.esm.encoder.layer[i]
         # esm_layer: TransformerSentenceEncoderLayer = esm_sent_encoder.layers[i]
         esm_layer = esm_sent_encoder.layers[i]
 
         # self attention
-        self_attn: BertSelfAttention = layer.attention.self
+        self_attn: ESMSelfAttention = layer.attention.self
         assert (
             esm_layer.self_attn.k_proj.weight.data.shape
             == esm_layer.self_attn.q_proj.weight.data.shape
@@ -117,19 +132,19 @@ def convert_esm_checkpoint_to_pytorch(pytorch_dump_folder_path: str, classificat
         layer.LayerNorm.bias = esm_layer.final_layer_norm.bias
 
         # self-attention output
-        self_output: BertSelfOutput = layer.attention.output
+        self_output: ESMSelfOutput = layer.attention.output
         assert self_output.dense.weight.shape == esm_layer.self_attn.out_proj.weight.shape
         self_output.dense.weight = esm_layer.self_attn.out_proj.weight
         self_output.dense.bias = esm_layer.self_attn.out_proj.bias
 
         # intermediate
-        intermediate: BertIntermediate = layer.intermediate
+        intermediate: ESMIntermediate = layer.intermediate
         assert intermediate.dense.weight.shape == esm_layer.fc1.weight.shape
         intermediate.dense.weight = esm_layer.fc1.weight
         intermediate.dense.bias = esm_layer.fc1.bias
 
         # output
-        bert_output: BertOutput = layer.output
+        bert_output: ESMOutput = layer.output
         assert bert_output.dense.weight.shape == esm_layer.fc2.weight.shape
         bert_output.dense.weight = esm_layer.fc2.weight
         bert_output.dense.bias = esm_layer.fc2.bias
@@ -155,24 +170,32 @@ def convert_esm_checkpoint_to_pytorch(pytorch_dump_folder_path: str, classificat
     # Prepare data (first 2 sequences from ESMStructuralSplitDataset superfamily / 4)
 
     batch_labels, batch_strs, batch_tokens = batch_converter(SAMPLE_DATA)
-    input_ids = batch_tokens
 
-    # TODO Models have different padding tokens in their embedding layers, and we're not passing an
-    #      attention mask so this might be the cause of the differences.
+    # Prepare tokenizer and make sure it matches
+    with TemporaryDirectory() as tempdir:
+        vocab = "\n".join(alphabet.all_toks)
+        vocab_file = Path(tempdir) / "vocab.txt"
+        vocab_file.write_text(vocab)
+        hf_tokenizer = ESMTokenizer(vocab_file=str(vocab_file))
+
+    hf_tokens = hf_tokenizer(SAMPLE_DATA[0][1], return_tensors="pt")
+    success = torch.all(hf_tokens["input_ids"] == batch_tokens)
+    print("Do both models tokenizers output the same tokens?", "🔥" if success else "💩")
+    if not success:
+        raise Exception("Tokenization does not match!")
+
+    input_ids = batch_tokens
 
     with torch.no_grad():
         our_output = model(input_ids, output_hidden_states=True)
-        our_hiddens = our_output["hidden_states"]
         our_output = our_output["logits"]
         if classification_head:
             their_output = esm.model.classification_heads["mnli"](esm.extract_features(input_ids))
         else:
-            their_output = esm(input_ids, repr_layers=list(range(999)))
-            their_hiddens = their_output["representations"]
+            their_output = esm(input_ids)
             their_output = their_output["logits"]
     print(our_output.shape, their_output.shape)
     max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
-    breakpoint()
     print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
     success = torch.allclose(our_output, their_output, atol=3e-4)
     print("Do both models output the same tensors?", "🔥" if success else "💩")
@@ -182,6 +205,9 @@ def convert_esm_checkpoint_to_pytorch(pytorch_dump_folder_path: str, classificat
     pathlib.Path(pytorch_dump_folder_path).mkdir(parents=True, exist_ok=True)
     print(f"Saving model to {pytorch_dump_folder_path}")
     model.save_pretrained(pytorch_dump_folder_path)
+
+    print(f"Saving tokenizer to {pytorch_dump_folder_path}")
+    hf_tokenizer.save_pretrained(pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
@@ -193,5 +219,8 @@ if __name__ == "__main__":
     parser.add_argument(
         "--classification_head", action="store_true", help="Whether to convert a final classification head."
     )
+    parser.add_argument(
+        "--model", default=None, type=str, required=True, help="Name of model to convert."
+    )
     args = parser.parse_args()
-    convert_esm_checkpoint_to_pytorch(args.pytorch_dump_folder_path, args.classification_head)
+    convert_esm_checkpoint_to_pytorch(args.model, args.pytorch_dump_folder_path, args.classification_head)
