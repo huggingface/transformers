@@ -70,14 +70,17 @@ class RelationExtractionOutput(ModelOutput):
     Class for outputs of [`LayoutLMv2ForRelationExtraction`].
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+        loss (`torch.FloatTensor` of shape `(1,)`:
             Classification (or regression if config.num_labels==1) loss.
-        entities (...)
-            ...
-        relations (...)
-            ...
-        pred_relations (...)
-            ...
+        entities (`list[dict]`):
+            List of dictionaries (one per example in the batch). Each dictionary contains 3 keys: `start`, `end` and
+            `label`.
+        relations (`list[dict]`):
+            List of dictionaries (one per example in the batch). Each dictionary contains 4 keys: `start_index`,
+            `end_index`, `head` and `tail`.
+        pred_relations (`list[dict]`):
+            List of dictionaries (one per example in the batch). Each dictionary contains 7 keys: `head`, `head_id`,
+            `head_type`, `tail`, `tail_id`, `tail_type` and `type`.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
@@ -1634,10 +1637,12 @@ class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
         return_dict: Optional[bool] = None,
     ):
         r"""
-        entities (...):
-            ...
-        relations (...):
-            ...
+        entities (`list[dict]`):
+            List of dictionaries (one per example in the batch). Each dictionary contains 3 keys: `start`, `end` and
+            `label`.
+        relations (`list[dict]`):
+            List of dictionaries (one per example in the batch). Each dictionary contains 4 keys: `start_index`,
+            `end_index`, `head` and `tail`.
 
         Returns:
 
@@ -1647,6 +1652,21 @@ class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
         >>> from transformers import LayoutLMv2Processor, LayoutLMv2ForRelationExtraction
         >>> from PIL import Image
         >>> from datasets import load_dataset
+
+        >>> processor = LayoutLMv2Processor.from_pretrained("microsoft/layoutlmv2-base-uncased")
+        >>> model = LayoutLMv2ForRelationExtraction.from_pretrained("microsoft/layoutlmv2-base-uncased")
+
+        >>> dataset = load_dataset("hf-internal-testing/fixtures_docvqa")
+        >>> image_path = dataset["test"][0]["file"]
+        >>> image = Image.open(image_path).convert("RGB")
+        >>> encoding = processor(image, return_tensors="pt")
+
+        >>> # instantiate relations as empty at inference time
+        >>> encoding["entities"] = [{"start": [0, 4], "end": [3, 6], "label": [2, 1]}]
+        >>> encoding["relations"] = [{"start_index": [], "end_index": [], "head": [], "tail": []}]
+
+        >>> outputs = model(**encoding)
+        >>> predicted_relations = outputs.pred_relations[0]
         ```
         """
 
@@ -1677,8 +1697,8 @@ class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
         loss, pred_relations = self.extractor(text_output, entities, relations)
 
         if not return_dict:
-            output = (entities, relations) + outputs[2:]
-            return ((loss, pred_relations) + output) if loss is not None else output
+            output = (loss, pred_relations, entities, relations) + outputs[2:]
+            return output
 
         return RelationExtractionOutput(
             loss=loss,
