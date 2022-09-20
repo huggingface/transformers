@@ -704,8 +704,15 @@ def load_tf_sharded_weights(model, shard_files, ignore_mismatched_sizes=False, s
 
     # Since TF adds the name of the class to its weights, and uses the index and not the name of the layer to load
     # the weight, we have to get rid of the first prefix of the name of the layer.
-    model_keys = set("/".join(k.name.split("/")[1:]) for k in model.weights)
-    model_layer_map = {"/".join(k.name.split("/")[1:]): i for i, k in enumerate(model.weights)}
+    model_keys = set()
+    model_layer_map = dict()
+    for i, k in enumerate(model.weights):
+        if "model." in k.name:
+            layer_name = k.name
+        else:
+            layer_name = "/".join(k.name.split("/")[1:])
+        model_keys.add(layer_name)
+        model_layer_map[layer_name] = i
 
     for shard_file in shard_files:
         state_dict = tf.io.read_file(shard_file)
@@ -2153,14 +2160,12 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 with h5py.File(os.path.join(save_directory, shard_file), mode="w") as shard_file:
                     layers = []
                     for layer in sorted(shard, key=lambda x: x.name):
-                        if "embed_tokens" in layer.name: 
-                            layer_name = layer.name
-                        if "model." in layer.name : 
+                        if "model." in layer.name:
                             layer_name = layer.name
                         else:
                             layer_name = "/".join(layer.name.split("/")[1:])
                         param_dset = shard_file.create_dataset(
-                                layer_name, layer.numpy().shape, dtype=layer.numpy().dtype
+                            layer_name, layer.numpy().shape, dtype=layer.numpy().dtype
                         )
                         param_dset[:] = layer.numpy()
                         layers.append(layer_name.encode("utf8"))
