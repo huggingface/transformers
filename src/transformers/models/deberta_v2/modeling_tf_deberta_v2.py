@@ -416,7 +416,6 @@ class TFDebertaV2Encoder(tf.keras.layers.Layer):
         rel_embeddings = self.get_rel_embedding()
         output_states = next_kv
         for i, layer_module in enumerate(self.layer):
-
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (output_states,)
 
@@ -713,7 +712,6 @@ class TFDebertaV2DisentangledSelfAttention(tf.keras.layers.Layer):
         return outputs
 
     def disentangled_att_bias(self, query_layer, key_layer, relative_pos, rel_embeddings, scale_factor):
-
         if relative_pos is None:
             q = shape_list(query_layer)[-2]
             relative_pos = build_relative_position(

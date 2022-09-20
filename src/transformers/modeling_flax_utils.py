@@ -477,7 +477,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         *model_args,
         **kwargs
     ):
-
         r"""
         Instantiate a pretrained flax model from a pre-trained model configuration.
 
@@ -786,7 +785,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
         if from_pt:
             state = load_pytorch_checkpoint_in_flax_state_dict(model, resolved_archive_file, is_sharded)
         else:
-
             if is_sharded:
                 state = cls.load_flax_sharded_weights(resolved_archive_file)
             else:

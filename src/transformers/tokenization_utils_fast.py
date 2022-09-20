@@ -411,7 +411,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         return_length: bool = False,
         verbose: bool = True,
     ) -> BatchEncoding:
-
         if not isinstance(batch_text_or_text_pairs, list):
             raise TypeError(f"batch_text_or_text_pairs has to be a list (got {type(batch_text_or_text_pairs)})")
 
@@ -495,7 +494,6 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-
         batched_input = [(text, text_pair)] if text_pair else [text]
         batched_output = self._batch_encode_plus(
             batched_input,

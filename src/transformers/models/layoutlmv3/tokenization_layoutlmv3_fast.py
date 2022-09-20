@@ -398,7 +398,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=padding,
@@ -688,7 +687,6 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
-
         # make it a batched input
         # 2 options:
         # 1) only text, in case text must be a list of str

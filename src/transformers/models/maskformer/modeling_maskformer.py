@@ -2370,7 +2370,6 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> MaskFormerModelOutput:
-
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 

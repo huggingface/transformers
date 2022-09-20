@@ -213,7 +213,6 @@ class FlaxGPTJAttention(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
-
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)

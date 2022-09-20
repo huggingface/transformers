@@ -1515,7 +1515,6 @@ class RealmKnowledgeAugEncoder(RealmPreTrainedModel):
 
 @add_start_docstrings("The reader of REALM.", REALM_START_DOCSTRING)
 class RealmReader(RealmPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler", "cls"]
 
     def __init__(self, config):

@@ -1031,7 +1031,6 @@ class MobileBertForPreTraining(MobileBertPreTrainedModel):
 
 @add_start_docstrings("""MobileBert Model with a `language modeling` head on top.""", MOBILEBERT_START_DOCSTRING)
 class MobileBertForMaskedLM(MobileBertPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):

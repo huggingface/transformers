@@ -127,7 +127,8 @@ def _make_3block_relative_position_ids(block_len: int) -> torch.Tensor:
 
 
 def _mask_local_attention_mask(local_attention_mask: torch.Tensor, block_len: int) -> torch.Tensor:
-    """Mask local attention mask to enforce that tokens are not allowed to attend tokens farther than ``local_radius."""
+    """Mask local attention mask to enforce that tokens are not allowed to attend tokens farther than ``local_radius.
+    """
     relative_position_ids = _make_3block_relative_position_ids(block_len)
     locality_mask = torch.abs(relative_position_ids) < block_len
     locality_mask = locality_mask[None, None, :, :]
@@ -1168,7 +1169,6 @@ class LongT5Block(nn.Module):
         output_attentions=False,
         return_dict=True,
     ):
-
         if past_key_value is not None:
             if not self.is_decoder:
                 logger.warning("`past_key_values` is passed to the encoder. Please make sure this is intended.")
@@ -2072,7 +2072,6 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         encoder_outputs=None,
         **kwargs
     ):
-
         # cut decoder_input_ids if past is used
         if past is not None:
             input_ids = input_ids[:, -1:]

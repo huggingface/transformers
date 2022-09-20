@@ -4,7 +4,6 @@ import subprocess
 
 
 def get_runner_status(target_runners, token):
-
     cmd = (
         f'curl -H "Accept: application/vnd.github+json" -H "Authorization: Bearer {token}"'
         " https://api.github.com/repos/huggingface/transformers/actions/runners"

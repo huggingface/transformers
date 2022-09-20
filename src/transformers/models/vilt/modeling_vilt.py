@@ -1407,7 +1407,6 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
     VILT_START_DOCSTRING,
 )
 class ViltForTokenClassification(ViltPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):

@@ -786,7 +786,6 @@ class TFBartEncoder(tf.keras.layers.Layer):
 
         # encoder layers
         for idx, encoder_layer in enumerate(self.layers):
-
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
@@ -1090,7 +1089,6 @@ class TFBartMainLayer(tf.keras.layers.Layer):
         training: Optional[bool] = False,
         **kwargs
     ) -> Union[TFSeq2SeqModelOutput, Tuple[tf.Tensor]]:
-
         # different to other models, Bart automatically creates decoder_input_ids from
         # input_ids if no decoder_input_ids are provided
         if decoder_input_ids is None and decoder_inputs_embeds is None:
@@ -1164,7 +1162,6 @@ class TFBartMainLayer(tf.keras.layers.Layer):
     BART_START_DOCSTRING,
 )
 class TFBartModel(TFBartPretrainedModel):
-
     _requires_load_weight_prefix = True
 
     def __init__(self, config: BartConfig, load_weight_prefix=None, *inputs, **kwargs):
@@ -1207,7 +1204,6 @@ class TFBartModel(TFBartPretrainedModel):
         training: Optional[bool] = False,
         **kwargs
     ) -> Union[TFBaseModelOutput, Tuple[tf.Tensor]]:
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -1426,7 +1422,6 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
         encoder_outputs=None,
         **kwargs
     ):
-
         # cut decoder_input_ids if past is used
         if past is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]

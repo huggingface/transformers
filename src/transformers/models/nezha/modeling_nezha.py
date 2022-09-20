@@ -1137,7 +1137,6 @@ class NezhaForPreTraining(NezhaPreTrainedModel):
 
 @add_start_docstrings("""Nezha Model with a `language modeling` head on top.""", NEZHA_START_DOCSTRING)
 class NezhaForMaskedLM(NezhaPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"predictions.decoder.bias", r"positions_encoding"]
 
@@ -1542,7 +1541,6 @@ class NezhaForMultipleChoice(NezhaPreTrainedModel):
     NEZHA_START_DOCSTRING,
 )
 class NezhaForTokenClassification(NezhaPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1625,7 +1623,6 @@ class NezhaForTokenClassification(NezhaPreTrainedModel):
     NEZHA_START_DOCSTRING,
 )
 class NezhaForQuestionAnswering(NezhaPreTrainedModel):
-
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):

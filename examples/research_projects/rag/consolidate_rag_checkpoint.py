@@ -17,7 +17,6 @@ def consolidate(
     generator_tokenizer_name_or_path: str = None,
     question_encoder_tokenizer_name_or_path: str = None,
 ):
-
     if config_name_or_path is None:
         config_name_or_path = "facebook/rag-token-base" if model_type == "rag_token" else "facebook/rag-sequence-base"
 

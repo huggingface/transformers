@@ -2002,7 +2002,6 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
     @staticmethod  # Copied from transformers.models.big_bird.modeling_big_bird.BigBirdModel.create_masks_for_block_sparse_attn
     def create_masks_for_block_sparse_attn(attention_mask: torch.Tensor, block_size: int):
-
         batch_size, seq_length = attention_mask.size()
         if seq_length % block_size != 0:
             raise ValueError(
@@ -2269,7 +2268,6 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -2294,7 +2292,6 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,

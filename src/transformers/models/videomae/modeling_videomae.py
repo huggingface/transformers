@@ -236,7 +236,6 @@ class VideoMAESelfAttention(nn.Module):
     def forward(
         self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-
         k_bias = torch.zeros_like(self.v_bias, requires_grad=False) if self.q_bias is not None else None
         keys = nn.functional.linear(input=hidden_states, weight=self.key.weight, bias=k_bias)
         values = nn.functional.linear(input=hidden_states, weight=self.value.weight, bias=self.v_bias)
