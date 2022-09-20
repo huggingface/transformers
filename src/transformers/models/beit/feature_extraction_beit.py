@@ -226,25 +226,24 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return encoded_inputs
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Union[TensorType, List[Tuple]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
         Converts the output of [`BeitForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
         Args:
             outputs ([`BeitForSemanticSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`, *optional*):
-                Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction. If left to
+            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If left to
                 None, predictions will not be resized.
         Returns:
             semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
-            segmentation map of shape (w, h) corresponding to the target_sizes entry (if `target_sizes` is specified).
-            Each entry of each `torch.Tensor` correspond to a semantic class id.
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
         logits = outputs.logits
-        semantic_segmentation = logits.argmax(dim=1)
 
-        # Resize semantic segmentation maps
+        # Resize logits and compute semantic segmentation maps
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
                 raise ValueError(
@@ -254,15 +253,16 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             if is_torch_tensor(target_sizes):
                 target_sizes = target_sizes.numpy()
 
-            resized_maps = []
-            semantic_segmentation = semantic_segmentation.numpy()
+            semantic_segmentation = []
 
-            for idx in range(len(semantic_segmentation)):
-                resized = self.resize(image=semantic_segmentation[idx], size=target_sizes[idx])
-                resized_maps.append(resized)
-
-            semantic_segmentation = [torch.Tensor(np.array(image)).long() for image in resized_maps]
+            for idx in range(len(logits)):
+                resized_logits = torch.nn.functional.interpolate(
+                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(semantic_map)
         else:
+            semantic_segmentation = logits.argmax(dim=1)
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation

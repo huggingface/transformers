@@ -473,13 +473,10 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         outputs.logits = outputs.logits.detach().cpu()
 
-        target_size = torch.Tensor([[500, 300]])
-        segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs, target_sizes=target_size)[
-            0
-        ]
-        expected_shape = torch.Size((300, 500))
-        self.assertEqual(segmentation.shape, expected_shape)
+        segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs, target_sizes=[(500, 300)])
+        expected_shape = torch.Size((500, 300))
+        self.assertEqual(segmentation[0].shape, expected_shape)
 
-        segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs)[0]
+        segmentation = feature_extractor.post_process_semantic_segmentation(outputs=outputs)
         expected_shape = torch.Size((160, 160))
-        self.assertEqual(segmentation.shape, expected_shape)
+        self.assertEqual(segmentation[0].shape, expected_shape)
