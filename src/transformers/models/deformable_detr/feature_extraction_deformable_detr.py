@@ -37,6 +37,12 @@ logger = logging.get_logger(__name__)
 ImageInput = Union[Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]]
 
 
+def box_cxcywh_to_xyxy(x):
+    x_c, y_c, w, h = x.unbind(-1)
+    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
+    return torch.stack(b, dim=-1)
+
+
 # Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
 def center_to_corners_format(x):
     """
@@ -698,7 +704,7 @@ class DeformableDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtract
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
+        out_logits, out_bbox = outputs.pred_logits, outputs.pred_boxes
 
         if len(out_logits) != len(target_sizes):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
@@ -706,11 +712,11 @@ class DeformableDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtract
             raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
         prob = out_logits.sigmoid()
-        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 300, dim=1)
+        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 100, dim=1)
         scores = topk_values
         topk_boxes = topk_indexes // out_logits.shape[2]
         labels = topk_indexes % out_logits.shape[2]
-        boxes = center_to_corners_format(out_bbox)
+        boxes = box_cxcywh_to_xyxy(out_bbox)
         boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
 
         # and from relative [0, 1] to absolute [0, height] coordinates
