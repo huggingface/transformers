@@ -15,11 +15,13 @@
 """ Testing suite for the PyTorch LayoutLMv2 model. """
 
 
+import copy
 import os
 import random
 import tempfile
 import unittest
 
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_detectron2, require_torch, require_torch_multi_gpu, slow, torch_device
 from transformers.utils import is_detectron2_available, is_torch_available
 
@@ -31,6 +33,10 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
+        MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+        MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
+        MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         LayoutLMv2Config,
         LayoutLMv2ForQuestionAnswering,
@@ -143,8 +149,10 @@ class LayoutLMv2ModelTester:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
             token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
             # we choose some random entities and relations
-            entities = [{"start": [0, 4], "end": [3, 6], "label": [2,1]} for _ in range(self.batch_size)]
-            relations =  [{"start_index": [0], "end_index": [5], "head": [0], "tail": [1]} for _ in range(self.batch_size)]
+            entities = [{"start": [0, 4], "end": [3, 6], "label": [2, 1]} for _ in range(self.batch_size)]
+            relations = [
+                {"start_index": [0], "end_index": [5], "head": [0], "tail": [1]} for _ in range(self.batch_size)
+            ]
 
         config = LayoutLMv2Config(
             vocab_size=self.vocab_size,
@@ -304,21 +312,18 @@ class LayoutLMv2ModelTester:
         relations,
     ):
         model = LayoutLMv2ForRelationExtraction(config=config)
-        torch_device = "cpu"
         model.to(torch_device)
         model.eval()
         result = model(
-            input_ids.to("cpu"),
-            bbox=bbox.to("cpu"),
-            image=image.to("cpu"),
-            attention_mask=input_mask.to("cpu"),
-            token_type_ids=token_type_ids.to("cpu"),
+            input_ids,
+            bbox=bbox,
+            image=image,
+            attention_mask=input_mask,
+            token_type_ids=token_type_ids,
             entities=entities,
             relations=relations,
         )
-        print(result.pred_relations)
-        # self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        # self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertTrue(result.pred_relations)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -331,6 +336,8 @@ class LayoutLMv2ModelTester:
             input_mask,
             sequence_labels,
             token_labels,
+            entities,
+            relations,
         ) = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
@@ -361,6 +368,42 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
+
+    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
+        inputs_dict = copy.deepcopy(inputs_dict)
+
+        if model_class.__name__ == "LayoutLMv2ForRelationExtraction":
+            # we choose some random entities and relations
+            entities = [{"start": [0, 4], "end": [3, 6], "label": [2, 1]} for _ in range(self.model_tester.batch_size)]
+            relations = [
+                {"start_index": [0], "end_index": [5], "head": [0], "tail": [1]}
+                for _ in range(self.model_tester.batch_size)
+            ]
+            inputs_dict["entities"] = entities
+            inputs_dict["relations"] = relations
+
+        if return_labels:
+            if model_class in [
+                *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING),
+                *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING),
+            ]:
+
+                inputs_dict["start_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+                inputs_dict["end_positions"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+            elif model_class in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
+                inputs_dict["labels"] = torch.zeros(
+                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
+                )
+            elif model_class in get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING):
+                inputs_dict["labels"] = torch.zeros(
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                )
+
+        return inputs_dict
 
     def setUp(self):
         self.model_tester = LayoutLMv2ModelTester(self)
@@ -404,7 +447,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
     def test_for_relation_extraction(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_relation_extraction(*config_and_inputs)
-    
+
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         base_class = MODEL_MAPPING[config.__class__]
@@ -576,6 +619,88 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
                         [0.0, 1.0],
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
+
+    def _create_and_check_torchscript(self, config, inputs_dict):
+        if not self.test_torchscript:
+            return
+
+        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+        configs_no_init.torchscript = True
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "LayoutLMv2ForRelationExtraction":
+                continue
+
+            model = model_class(config=configs_no_init)
+            model.to(torch_device)
+            model.eval()
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            try:
+                input_ids = inputs["input_ids"]
+                bbox = inputs["bbox"]
+                image = inputs["image"].tensor
+                traced_model = torch.jit.trace(
+                    model, (input_ids, bbox, image), check_trace=False
+                )  # when traced model is checked, an error is produced due to name mangling
+            except RuntimeError:
+                self.fail("Couldn't trace module.")
+
+            with tempfile.TemporaryDirectory() as tmp_dir_name:
+                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
+
+                try:
+                    torch.jit.save(traced_model, pt_file_name)
+                except Exception:
+                    self.fail("Couldn't save module.")
+
+                try:
+                    loaded_model = torch.jit.load(pt_file_name)
+                except Exception:
+                    self.fail("Couldn't load module.")
+
+            model.to(torch_device)
+            model.eval()
+
+            loaded_model.to(torch_device)
+            loaded_model.eval()
+
+            model_state_dict = model.state_dict()
+            loaded_model_state_dict = loaded_model.state_dict()
+
+            non_persistent_buffers = {}
+            for key in loaded_model_state_dict.keys():
+                if key not in model_state_dict.keys():
+                    non_persistent_buffers[key] = loaded_model_state_dict[key]
+
+            loaded_model_state_dict = {
+                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
+            }
+
+            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
+
+            model_buffers = list(model.buffers())
+            for non_persistent_buffer in non_persistent_buffers.values():
+                found_buffer = False
+                for i, model_buffer in enumerate(model_buffers):
+                    if torch.equal(non_persistent_buffer, model_buffer):
+                        found_buffer = True
+                        break
+
+                self.assertTrue(found_buffer)
+                model_buffers.pop(i)
+
+            models_equal = True
+            for layer_name, p1 in model_state_dict.items():
+                if layer_name in loaded_model_state_dict:
+                    p2 = loaded_model_state_dict[layer_name]
+                    if p1.data.ne(p2.data).sum() > 0:
+                        models_equal = False
+
+            self.assertTrue(models_equal)
+
+            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
+            # (Even with this call, there are still memory leak by ~0.04MB)
+            self.clear_torch_jit_class_registry()
 
 
 def prepare_layoutlmv2_batch_inputs():

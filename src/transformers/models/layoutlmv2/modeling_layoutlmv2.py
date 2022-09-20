@@ -89,9 +89,9 @@ class RelationExtractionOutput(ModelOutput):
     """
 
     loss: Optional[torch.FloatTensor] = None
+    pred_relations: dict = None
     entities: dict = None
     relations: dict = None
-    pred_relations: dict = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
@@ -546,7 +546,7 @@ class LayoutLMv2PreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Linear, nn.Bilinear)):
             # Slightly different from the TF version which uses truncated_normal for initialization
             # cf https://github.com/pytorch/pytorch/pull/5617
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
@@ -1491,14 +1491,8 @@ class BiaffineAttention(torch.nn.Module):
         self.bilinear = torch.nn.Bilinear(in_features, in_features, out_features, bias=False)
         self.linear = torch.nn.Linear(2 * in_features, out_features, bias=True)
 
-        self.reset_parameters()
-
     def forward(self, x_1, x_2):
         return self.bilinear(x_1, x_2) + self.linear(torch.cat((x_1, x_2), dim=-1))
-
-    def reset_parameters(self):
-        self.bilinear.reset_parameters()
-        self.linear.reset_parameters()
 
 
 class LayoutLMv2RelationExtractionDecoder(nn.Module):
@@ -1632,14 +1626,14 @@ class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
         position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        entities=None,
-        relations=None,
+        entities: Optional[dict] = None,
+        relations: Optional[dict] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
         r"""
-        entities (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        entities (...):
             ...
         relations (...):
             ...
@@ -1671,20 +1665,24 @@ class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
             return_dict=return_dict,
         )
 
-        seq_length = input_ids.size(1)
+        seq_length = input_ids.size(1) if input_ids is not None else inputs_embeds.size(1)
         text_output = outputs[0][:, :seq_length]
         text_output = self.dropout(text_output)
-        loss, pred_relations = self.extractor(text_output, entities, relations)
+
+        loss = None
+        pred_relations = None
+        if entities is not None and relations is not None:
+            loss, pred_relations = self.extractor(text_output, entities, relations)
 
         if not return_dict:
-            output = (pred_relations,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            output = (entities, relations) + outputs[2:]
+            return ((loss, pred_relations) + output) if loss is not None else output
 
         return RelationExtractionOutput(
             loss=loss,
+            pred_relations=pred_relations,
             entities=entities,
             relations=relations,
-            pred_relations=pred_relations,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
