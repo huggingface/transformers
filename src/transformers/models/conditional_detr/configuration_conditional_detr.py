@@ -27,8 +27,8 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "microsoft/conditional_detr_resnet50": (
-        "https://huggingface.co/microsoft/conditional_detr_resnet50/resolve/main/config.json"
+    "microsoft/conditional-detr-resnet-50": (
+        "https://huggingface.co/microsoft/conditional_detr_resnet-50/resolve/main/config.json"
     ),
 }
 
