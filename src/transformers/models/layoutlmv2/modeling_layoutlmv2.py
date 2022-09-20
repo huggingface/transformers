@@ -1463,12 +1463,17 @@ class LayoutLMv2ForQuestionAnswering(LayoutLMv2PreTrainedModel):
 
 class BiaffineAttention(torch.nn.Module):
     """Implements a biaffine attention operator for binary relation classification.
-    Args:
+
     PyTorch implementation of the biaffine attention operator from "End-to-end neural relation extraction using deep
     biaffine attention" (https://arxiv.org/abs/1812.11275) which can be used as a classifier for binary relation
     classification.
-        in_features (int): The size of the feature dimension of the inputs. out_features (int): The size of the feature
-        dimension of the output.
+
+    Args:
+        in_features (int):
+            The size of the feature dimension of the inputs.
+        out_features (int):
+            The size of the feature dimension of the output.
+
     Shape:
         - x_1: `(N, *, in_features)` where `N` is the batch dimension and `*` means any number of additional
           dimensisons.
@@ -1476,10 +1481,6 @@ class BiaffineAttention(torch.nn.Module):
           dimensions.
         - Output: `(N, *, out_features)`, where `N` is the batch dimension and `*` means any number
             of additional dimensions.
-    Examples:
-        >>> batch_size, in_features, out_features = 32, 100, 4 >>> biaffine_attention = BiaffineAttention(in_features,
-        out_features) >>> x_1 = torch.randn(batch_size, in_features) >>> x_2 = torch.randn(batch_size, in_features) >>>
-        output = biaffine_attention(x_1, x_2) >>> print(output.size()) torch.Size([32, 4])
     """
 
     def __init__(self, in_features, out_features):
@@ -1669,10 +1670,11 @@ class LayoutLMv2ForRelationExtraction(LayoutLMv2PreTrainedModel):
         text_output = outputs[0][:, :seq_length]
         text_output = self.dropout(text_output)
 
-        loss = None
-        pred_relations = None
-        if entities is not None and relations is not None:
-            loss, pred_relations = self.extractor(text_output, entities, relations)
+        if entities is None or relations is None:
+            raise ValueError(
+                "You need to provide entities and relations. Instantiate relations with empty lists at inference time"
+            )
+        loss, pred_relations = self.extractor(text_output, entities, relations)
 
         if not return_dict:
             output = (entities, relations) + outputs[2:]

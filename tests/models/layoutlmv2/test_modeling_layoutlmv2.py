@@ -401,7 +401,9 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
                 )
             elif model_class in get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING):
                 inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.text_seq_length), dtype=torch.long, device=torch_device
+                    (self.model_tester.batch_size, self.model_tester.text_seq_length),
+                    dtype=torch.long,
+                    device=torch_device,
                 )
 
         return inputs_dict
@@ -545,31 +547,13 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
                         continue
                     max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
-    
+
     @slow
     def test_model_from_pretrained(self):
         for model_name in LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = LayoutLMv2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    def test_training(self):
-        if not self.model_tester.is_training:
-            return
-    
-        for model_class in self.all_model_classes:
-            print("Model class:", model_class)
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            config.return_dict = True
-    
-            if model_class in get_values(MODEL_MAPPING):
-                continue
-    
-            model = model_class(config)
-            model.to(torch_device)
-            model.train()
-            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-            loss = model(**inputs).loss
-    
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -650,7 +634,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
                 self.assertNotEqual(attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
 
             check_attentions_validity(outputs.attentions)
-    
+
     # we overwrite this as LayoutLMv2 requires special inputs + LayoutLMv2ForRelationExtraction is not supported
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
