@@ -1601,6 +1601,33 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         dataset: Optional[Union[str, List[str]]] = None,
         dataset_args: Optional[Union[str, List[str]]] = None,
     ):
+        """
+        Creates a draft of a model card using the information available to the `Trainer`.
+
+        Args:
+            output_dir (`str` or `os.PathLike`):
+                The folder in which to create the model card.
+            model_name (`str`, *optional*):
+                The name of the model.
+            language (`str`, *optional*):
+                The language of the model (if applicable)
+            license (`str`, *optional*):
+                The license of the model. Will default to the license of the pretrained model used, if the original
+                model given to the `Trainer` comes from a repo on the Hub.
+            tags (`str` or `List[str]`, *optional*):
+                Some tags to be included in the metadata of the model card.
+            finetuned_from (`str`, *optional*):
+                The name of the model used to fine-tune this one (if applicable). Will default to the name of the repo
+                of the original model given to the `Trainer` (if it comes from the Hub).
+            tasks (`str` or `List[str]`, *optional*):
+                One or several task identifiers, to be included in the metadata of the model card.
+            dataset_tags (`str` or `List[str]`, *optional*):
+                One or several dataset tags, to be included in the metadata of the model card.
+            dataset (`str` or `List[str]`, *optional*):
+                One or several dataset identifiers, to be included in the metadata of the model card.
+            dataset_args (`str` or `List[str]`, *optional*):
+               One or several dataset arguments, to be included in the metadata of the model card.
+        """
         # Avoids a circular import by doing this when necessary.
         from .modelcard import TrainingSummary  # tests_ignore
 
