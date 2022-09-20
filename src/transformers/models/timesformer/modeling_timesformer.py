@@ -136,12 +136,12 @@ class TimeSformerPatchEmbed(nn.Module):
         self.patch_size = patch_size
         self.num_patches = num_patches
 
-        self.proj = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, x):
         B, C, num_frames, H, image_width = x.shape
         x = rearrange(x, "b c t h w -> (b t) c h w")
-        x = self.proj(x)
+        x = self.projection(x)
         embeddings = x.flatten(2).transpose(1, 2)
         return embeddings, num_frames, image_width
 
@@ -165,10 +165,10 @@ class TimeSformerEmbeddings(nn.Module):
 
         # Positional Embeddings
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
-        self.pos_embed = nn.Parameter(torch.zeros(1, self.num_patches + 1, embed_dim))
+        self.position_embeddings = nn.Parameter(torch.zeros(1, self.num_patches + 1, embed_dim))
         self.pos_drop = nn.Dropout(p=drop_rate)
         if attention_type != "space_only":
-            self.time_embed = nn.Parameter(torch.zeros(1, num_frames, embed_dim))
+            self.time_embeddings = nn.Parameter(torch.zeros(1, num_frames, embed_dim))
             self.time_drop = nn.Dropout(p=drop_rate)
 
         self.config = config
@@ -183,10 +183,10 @@ class TimeSformerEmbeddings(nn.Module):
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # resizing the positional embeddings in case they don't match the input at inference
-        if embeddings.size(1) != self.pos_embed.size(1):
-            pos_embed = self.pos_embed
-            cls_pos_embed = pos_embed[0, 0, :].unsqueeze(0).unsqueeze(1)
-            other_pos_embed = pos_embed[0, 1:, :].unsqueeze(0).transpose(1, 2)
+        if embeddings.size(1) != self.position_embeddings.size(1):
+            position_embeddings = self.position_embeddings
+            cls_pos_embed = position_embeddings[0, 0, :].unsqueeze(0).unsqueeze(1)
+            other_pos_embed = position_embeddings[0, 1:, :].unsqueeze(0).transpose(1, 2)
             P = int(other_pos_embed.size(2) ** 0.5)
             H = embeddings.size(1) // image_width
             other_pos_embed = other_pos_embed.reshape(1, embeddings.size(2), P, P)
@@ -196,7 +196,24 @@ class TimeSformerEmbeddings(nn.Module):
             new_pos_embed = torch.cat((cls_pos_embed, new_pos_embed), 1)
             embeddings = embeddings + new_pos_embed
         else:
-            embeddings = embeddings + self.pos_embed
+            embeddings = embeddings + self.position_embeddings
+
+        # Time Embeddings
+        if self.attention_type != "space_only":
+            cls_tokens = embeddings[:batch_size, 0, :].unsqueeze(1)
+            embeddings = embeddings[:, 1:]
+            embeddings = rearrange(embeddings, "(b t) n m -> (b n) t m", b=batch_size, t=num_frames)
+            # Resizing time embeddings in case they don't match
+            if num_frames != self.time_embeddings.size(1):
+                time_embeddings = self.time_embeddings.transpose(1, 2)
+                new_time_embeddings = F.interpolate(time_embeddings, size=(num_frames), mode="nearest")
+                new_time_embeddings = new_time_embeddings.transpose(1, 2)
+                embeddings = embeddings + new_time_embeddings
+            else:
+                embeddings = embeddings + self.time_embeddings
+            embeddings = self.time_drop(embeddings)
+            embeddings = rearrange(embeddings, "(b n) t m -> b (n t) m", b=batch_size, t=num_frames)
+            embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         # only keep visible patches
         # ~bool_masked_pos means visible
@@ -379,24 +396,6 @@ class TimeSformerAttention(nn.Module):
         self.output = TimeSformerSelfOutput(config)
         self.pruned_heads = set()
 
-    def prune_heads(self, heads: Set[int]) -> None:
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.attention.num_attention_heads, self.attention.attention_head_size, self.pruned_heads
-        )
-
-        # Prune linear layers
-        self.attention.query = prune_linear_layer(self.attention.query, index)
-        self.attention.key = prune_linear_layer(self.attention.key, index)
-        self.attention.value = prune_linear_layer(self.attention.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.attention.num_attention_heads = self.attention.num_attention_heads - len(heads)
-        self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -416,8 +415,7 @@ class TimeSformerAttention(nn.Module):
 class TimeSformerIntermediate(nn.Module):
     def __init__(self, config: TimeSformerConfig) -> None:
         super().__init__()
-        self.dense1 = nn.Linear(config.hidden_size, config.intermediate_size)
-        self.dense2 = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
         if isinstance(config.hidden_act, str):
@@ -427,10 +425,8 @@ class TimeSformerIntermediate(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
 
-        hidden_states = self.dense1(hidden_states)
+        hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.dense2(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
         return hidden_states
@@ -477,29 +473,29 @@ class TimeSformerLayer(nn.Module):
 
         # Temporal Attention Parameters
         if self.attention_type == "divided_space_time":
-            self.temporal_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-            self.temporal_attn = TimeSformerAttention(config)
-            self.temporal_fc = nn.Linear(dim, dim)
+            self.temporal_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+            self.temporal_attention = TimeSformerAttention(config)
+            self.temporal_dense = nn.Linear(dim, dim)
 
-    def forward(self, x, B, T, W):
-        num_spatial_tokens = (x.size(1) - 1) // T
+    def forward(self, hidden_states: torch.Tensor, B, T, W):
+        num_spatial_tokens = (hidden_states.size(1) - 1) // T
         H = num_spatial_tokens // W
 
         if self.attention_type in ["space_only", "joint_space_time"]:
-            x = x + self.drop_path(self.attention(self.layernorm_before(x)))
-            x = x + self.drop_path(self.intermediate(self.layernorm_after(x)))
-            return x
+            hidden_states = hidden_states + self.drop_path(self.attention(self.layernorm_before(hidden_states)))
+            layer_output = hidden_states + self.drop_path(self.intermediate(self.layernorm_after(hidden_states)))
+            return layer_output
         elif self.attention_type == "divided_space_time":
             # Temporal
-            xt = x[:, 1:, :]
+            xt = hidden_states[:, 1:, :]
             xt = rearrange(xt, "b (h w t) m -> (b h w) t m", b=B, h=H, w=W, t=T)
-            res_temporal = self.drop_path(self.temporal_attn(self.temporal_norm1(xt)))
+            res_temporal = self.drop_path(self.temporal_attention(self.temporal_layernorm(xt)))
             res_temporal = rearrange(res_temporal, "(b h w) t m -> b (h w t) m", b=B, h=H, w=W, t=T)
-            res_temporal = self.temporal_fc(res_temporal)
-            xt = x[:, 1:, :] + res_temporal
+            res_temporal = self.temporal_dense(res_temporal)
+            xt = hidden_states[:, 1:, :] + res_temporal
 
             # Spatial
-            init_cls_token = x[:, 0, :].unsqueeze(1)
+            init_cls_token = hidden_states[:, 0, :].unsqueeze(1)
             cls_token = init_cls_token.repeat(1, T, 1)
             cls_token = rearrange(cls_token, "b t m -> (b t) m", b=B, t=T).unsqueeze(1)
             xs = xt
@@ -514,12 +510,15 @@ class TimeSformerLayer(nn.Module):
             res_spatial = res_spatial[:, 1:, :]
             res_spatial = rearrange(res_spatial, "(b t) (h w) m -> b (h w t) m", b=B, h=H, w=W, t=T)
             res = res_spatial
-            x = xt
+            hidden_states = xt
 
             # Mlp
-            x = torch.cat((init_cls_token, x), 1) + torch.cat((cls_token, res), 1)
-            x = x + self.drop_path(self.intermediate(self.layernorm_after(x)))
-            return x
+            hidden_states = torch.cat((init_cls_token, hidden_states), 1) + torch.cat((cls_token, res), 1)
+            layer_output = self.layernorm_after(hidden_states)
+            layer_output = self.intermediate(layer_output)
+            layer_output = self.output(layer_output, hidden_states)
+            layer_output = self.drop_path(layer_output)
+            return layer_output
 
 
 # Copied from transformers.models.vit.modeling_vit.VideoMAEEncoder
@@ -769,252 +768,6 @@ class TimeSformerModel(TimeSformerPreTrainedModel):
             last_hidden_state=sequence_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-        )
-
-
-# Copied from transformers.models.videomae.modeling_videomae.VideoMAEDecoder with VideoMAE->TimeSformer
-class TimeSformerDecoder(nn.Module):
-    def __init__(self, config, num_patches):
-        super().__init__()
-
-        decoder_num_labels = config.num_channels * config.tubelet_size * config.patch_size**2
-
-        decoder_config = deepcopy(config)
-        decoder_config.hidden_size = config.decoder_hidden_size
-        decoder_config.num_hidden_layers = config.decoder_num_hidden_layers
-        decoder_config.num_attention_heads = config.decoder_num_attention_heads
-        decoder_config.intermediate_size = config.decoder_intermediate_size
-        self.decoder_layers = nn.ModuleList(
-            [TimeSformerLayer(decoder_config, ind) for ind in range(config.decoder_num_hidden_layers)]
-        )
-
-        self.norm = nn.LayerNorm(config.decoder_hidden_size)
-        self.head = (
-            nn.Linear(config.decoder_hidden_size, decoder_num_labels) if decoder_num_labels > 0 else nn.Identity()
-        )
-
-        self.gradient_checkpointing = False
-        self.config = config
-
-    def forward(
-        self,
-        hidden_states,
-        return_token_num,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
-    ):
-        # apply Transformer layers (blocks)
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-        for i, layer_module in enumerate(self.decoder_layers):
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            if self.gradient_checkpointing and self.training:
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    None,
-                )
-            else:
-                layer_outputs = layer_module(hidden_states, head_mask=None, output_attentions=output_attentions)
-
-            hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if return_token_num > 0:
-            hidden_states = hidden_states[:, -return_token_num:]
-
-        # predictor projection
-        hidden_states = self.norm(hidden_states)
-        logits = self.head(hidden_states)
-
-        if not return_dict:
-            return tuple(v for v in [logits, all_hidden_states, all_self_attentions] if v is not None)
-        return TimeSformerDecoderOutput(logits=logits, hidden_states=all_hidden_states, attentions=all_self_attentions)
-
-
-@add_start_docstrings(
-    "The TimeSformer Model transformer with the decoder on top for self-supervised pre-training.",
-    TIMESFORMER_START_DOCSTRING,
-)
-# Copied from transformers.models.videomae.modeling_videomae.VideoMAEForPreTraining with VIDEOMAE->TIMESFORMER,VideoMAE->TimeSformer,videomae->timesformer,MCG-NJU/videomae-base->facebook/timesformer
-class TimeSformerForPreTraining(TimeSformerPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.config = config
-
-        self.timesformer = TimeSformerModel(config)
-
-        num_patches = self.timesformer.embeddings.num_patches
-
-        self.encoder_to_decoder = nn.Linear(config.hidden_size, config.decoder_hidden_size, bias=False)
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.decoder_hidden_size))
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
-
-        self.decoder = TimeSformerDecoder(config, num_patches=num_patches)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(TIMESFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TimeSformerForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values,
-        bool_masked_pos,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        Returns:
-
-        Examples:
-        ```python
-        >>> from transformers import TimeSformerFeatureExtractor, TimeSformerForPreTraining
-        >>> import numpy as np
-        >>> import torch
-
-        >>> num_frames = 16
-        >>> video = list(np.random.randn(16, 3, 224, 224))
-
-        >>> feature_extractor = TimeSformerFeatureExtractor.from_pretrained("MCG-NJU/timesformer-base")
-        >>> model = TimeSformerForPreTraining.from_pretrained("MCG-NJU/timesformer-base")
-
-        >>> pixel_values = feature_extractor(video, return_tensors="pt").pixel_values
-
-        >>> num_patches_per_frame = (model.config.image_size // model.config.patch_size) ** 2
-        >>> seq_length = (num_frames // model.config.tubelet_size) * num_patches_per_frame
-        >>> bool_masked_pos = torch.randint(0, 2, (1, seq_length)).bool()
-
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss = outputs.loss
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.timesformer(
-            pixel_values,
-            bool_masked_pos=bool_masked_pos,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-        sequence_output = self.encoder_to_decoder(
-            sequence_output
-        )  # [batch_size, num_visible_patches, decoder_hidden_size]
-        batch_size, seq_len, num_channels = sequence_output.shape
-
-        # we don't unshuffle the correct visible token order, but shuffle the position embeddings accordingly.
-        if bool_masked_pos is None:
-            raise ValueError("One must provided a boolean mask ")
-        expanded_position_embeddings = self.position_embeddings.expand(batch_size, -1, -1).type_as(pixel_values)
-        expanded_position_embeddings = expanded_position_embeddings.to(pixel_values.device).clone().detach()
-        pos_emb_visible = expanded_position_embeddings[~bool_masked_pos].reshape(batch_size, -1, num_channels)
-        pos_emb_mask = expanded_position_embeddings[bool_masked_pos].reshape(batch_size, -1, num_channels)
-
-        # [batch_size, num_patches, decoder_hidden_size]
-        x_full = torch.cat([sequence_output + pos_emb_visible, self.mask_token + pos_emb_mask], dim=1)
-
-        # [batch_size, num_masked_patches, num_channels * patch_size * patch_size]
-        decoder_outputs = self.decoder(x_full, pos_emb_mask.shape[1])
-        logits = decoder_outputs.logits
-
-        loss = None
-        with torch.no_grad():
-            # calculate the labels to be predicted
-            # first, unnormalize the frames
-            device = pixel_values.device
-            mean = torch.as_tensor(IMAGENET_DEFAULT_MEAN).to(device)[None, None, :, None, None]
-            std = torch.as_tensor(IMAGENET_DEFAULT_STD).to(device)[None, None, :, None, None]
-            frames = pixel_values * std + mean  # in [0, 1]
-
-            batch_size, time, num_channels, height, width = frames.shape
-            tubelet_size, patch_size = self.config.tubelet_size, self.config.patch_size
-            if self.config.norm_pix_loss:
-                # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
-                frames = frames.view(
-                    batch_size,
-                    time // tubelet_size,
-                    tubelet_size,
-                    num_channels,
-                    height // patch_size,
-                    patch_size,
-                    width // patch_size,
-                    patch_size,
-                )
-                # step 2: move dimensions to concatenate:
-                frames = frames.permute(0, 1, 4, 6, 2, 5, 7, 3).contiguous()
-                # step 3: concatenate:
-                frames = frames.view(
-                    batch_size,
-                    time // tubelet_size * height // patch_size * width // patch_size,
-                    tubelet_size * patch_size * patch_size,
-                    num_channels,
-                )
-                # step 4: normalize. The authors find that the mean is about 0.48 and standard deviation is about 0.08.
-                frames_norm = (frames - frames.mean(dim=-2, keepdim=True)) / (
-                    frames.var(dim=-2, unbiased=True, keepdim=True).sqrt() + 1e-6
-                )
-                # step 5: reshape to (batch_size, T//ts * H//ps * W//ps, ts * ps * ps * C)
-                videos_patch = frames_norm.view(
-                    batch_size,
-                    time // tubelet_size * height // patch_size * width // patch_size,
-                    tubelet_size * patch_size * patch_size * num_channels,
-                )
-            else:
-                # step 1: split up dimensions (time by tubelet_size, height by patch_size, width by patch_size)
-                frames = frames.view(
-                    batch_size,
-                    time // tubelet_size,
-                    tubelet_size,
-                    num_channels,
-                    height // patch_size,
-                    patch_size,
-                    width // patch_size,
-                    patch_size,
-                )
-                # step 2: move dimensions to concatenate: (batch_size, T//ts, H//ps, W//ps, ts, ps, ps, C)
-                frames = frames.permute(0, 1, 4, 6, 2, 5, 7, 3).contiguous()
-                # step 3: concatenate
-                videos_patch = frames.view(
-                    batch_size,
-                    time // tubelet_size * height // patch_size * width // patch_size,
-                    tubelet_size * patch_size * patch_size * num_channels,
-                )
-
-            batch_size, _, num_channels = videos_patch.shape
-            labels = videos_patch[bool_masked_pos].reshape(batch_size, -1, num_channels)
-
-        loss_fct = MSELoss()
-        loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return TimeSformerForPreTrainingOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
 
 
