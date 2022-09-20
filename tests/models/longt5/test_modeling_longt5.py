@@ -20,7 +20,6 @@ import unittest
 
 from transformers import LongT5Config, is_torch_available
 from transformers.models.auto import get_values
-from transformers.pytorch_utils import is_torch_less_than_1_11
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
@@ -40,6 +39,7 @@ if is_torch_available():
         LongT5Model,
     )
     from transformers.models.longt5.modeling_longt5 import LONGT5_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers.pytorch_utils import is_torch_less_than_1_11
 
 
 class LongT5ModelTester:
