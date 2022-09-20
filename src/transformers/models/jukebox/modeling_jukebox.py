@@ -2915,23 +2915,36 @@ class JukeboxModel(JukeboxPreTrainedModel):
         the generated raw audio at each step.
 
         Args:
-            music_tokens (`__type__`): _description_
-            labels (`__type__`): _description_
-            sample_levels (`__type__`): _description_
-            metas (`__type__`, *optional*): _description_. Defaults to None.
-            chunk_size (int, *optional*): _description_. Defaults to 32.
-            sampling_temperature (float, *optional*): _description_. Defaults to 0.98.
-            lower_batch_size (int, *optional*): _description_. Defaults to 16.
-            max_batch_size (int, *optional*): _description_. Defaults to 16.
-            sample_length_in_seconds (int, *optional*): _description_. Defaults to 24.
-            alignments (`__type__`, *optional*): _description_. Defaults to None.
-            sample_tokens (`__type__`, *optional*): _description_. Defaults to None.
-            offset (int, *optional*): _description_. Defaults to 0.
-            save_results (bool, *optional*): _description_. Defaults to True.
-            sample_length (`__type__`, *optional*): _description_. Defaults to None.
-            fp16 (bool, *optional*): _description_. Defaults to False.
-
-        Returns:
+            music_tokens (`__type__`): 
+                _description_
+            labels (`__type__`): 
+                _description_
+            sample_levels (`__type__`): 
+                _description_
+            metas (`__type__`, *optional*): 
+                _description_. Defaults to None.
+            chunk_size (int, *optional*):
+                _description_. Defaults to 32.
+            sampling_temperature (float, *optional*): 
+                _description_. Defaults to 0.98.
+            lower_batch_size (int, *optional*):
+                _description_. Defaults to 16.
+            max_batch_size (int, *optional*): 
+                _description_. Defaults to 16.
+            sample_length_in_seconds (int, *optional*): 
+                _description_. Defaults to 24.
+            alignments (`__type__`, *optional*): 
+                _description_. Defaults to None.
+            sample_tokens (`__type__`, *optional*): 
+                _description_. Defaults to None.
+            offset (int, *optional*): 
+                _description_. Defaults to 0.
+            save_results (bool, *optional*): 
+                _description_. Defaults to True.
+            sample_length (`__type__`, *optional*): 
+                _description_. Defaults to None.
+            fp16 (bool, *optional*): 
+                _description_. Defaults to False.
 
 
         Example:
