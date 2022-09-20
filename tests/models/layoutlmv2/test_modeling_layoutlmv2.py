@@ -58,7 +58,7 @@ class LayoutLMv2ModelTester:
         batch_size=2,
         num_channels=3,
         image_size=4,
-        seq_length=7,
+        text_seq_length=7,
         is_training=True,
         use_input_mask=True,
         use_token_type_ids=True,
@@ -87,7 +87,7 @@ class LayoutLMv2ModelTester:
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
-        self.seq_length = seq_length
+        self.text_seq_length = text_seq_length
         self.is_training = is_training
         self.use_input_mask = use_input_mask
         self.use_token_type_ids = use_token_type_ids
@@ -112,10 +112,13 @@ class LayoutLMv2ModelTester:
         self.scope = scope
         self.range_bbox = range_bbox
 
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        # in LayoutLMv2, the seq length equals the number of text tokens + number of image tokens
+        self.seq_length = self.text_seq_length + self.image_feature_pool_shape[0] * self.image_feature_pool_shape[1]
 
-        bbox = ids_tensor([self.batch_size, self.seq_length, 4], self.range_bbox)
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.text_seq_length], self.vocab_size)
+
+        bbox = ids_tensor([self.batch_size, self.text_seq_length, 4], self.range_bbox)
         # Ensure that bbox is legal
         for i in range(bbox.shape[0]):
             for j in range(bbox.shape[1]):
@@ -135,11 +138,11 @@ class LayoutLMv2ModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+            input_mask = random_attention_mask([self.batch_size, self.text_seq_length])
 
         token_type_ids = None
         if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
+            token_type_ids = ids_tensor([self.batch_size, self.text_seq_length], self.type_vocab_size)
 
         sequence_labels = None
         token_labels = None
@@ -147,7 +150,7 @@ class LayoutLMv2ModelTester:
         relations = None
         if self.use_labels:
             sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
+            token_labels = ids_tensor([self.batch_size, self.text_seq_length], self.num_labels)
             # we choose some random entities and relations
             entities = [{"start": [0, 4], "end": [3, 6], "label": [2, 1]} for _ in range(self.batch_size)]
             relations = [
@@ -211,9 +214,7 @@ class LayoutLMv2ModelTester:
         result = model(input_ids, bbox=bbox, image=image, token_type_ids=token_type_ids)
         result = model(input_ids, bbox=bbox, image=image)
 
-        # LayoutLMv2 has a different expected sequence length, namely also visual tokens are added
-        expected_seq_len = self.seq_length + self.image_feature_pool_shape[0] * self.image_feature_pool_shape[1]
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, expected_seq_len, self.hidden_size))
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_for_sequence_classification(
@@ -268,7 +269,7 @@ class LayoutLMv2ModelTester:
             token_type_ids=token_type_ids,
             labels=token_labels,
         )
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.text_seq_length, self.num_labels))
 
     def create_and_check_for_question_answering(
         self,
@@ -295,8 +296,8 @@ class LayoutLMv2ModelTester:
             start_positions=sequence_labels,
             end_positions=sequence_labels,
         )
-        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.seq_length))
-        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.seq_length))
+        self.parent.assertEqual(result.start_logits.shape, (self.batch_size, self.text_seq_length))
+        self.parent.assertEqual(result.end_logits.shape, (self.batch_size, self.text_seq_length))
 
     def create_and_check_for_relation_extraction(
         self,
@@ -400,7 +401,7 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
                 )
             elif model_class in get_values(MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING):
                 inputs_dict["labels"] = torch.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+                    (self.model_tester.batch_size, self.model_tester.text_seq_length), dtype=torch.long, device=torch_device
                 )
 
         return inputs_dict
@@ -496,113 +497,79 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
                     max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
                     self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
 
-    def test_attention_outputs(self):
+    def test_save_load_fast_init_to_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.return_dict = True
+        base_class = MODEL_MAPPING[config.__class__]
 
-        # LayoutLMv2 has a different expected sequence length
-        expected_seq_len = (
-            self.model_tester.seq_length
-            + self.model_tester.image_feature_pool_shape[0] * self.model_tester.image_feature_pool_shape[1]
-        )
+        if isinstance(base_class, tuple):
+            base_class = base_class[0]
 
         for model_class in self.all_model_classes:
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = False
-            config.return_dict = True
+
+            if model_class == base_class:
+                continue
+
+            # make a copy of model class to not break future tests
+            # from https://stackoverflow.com/questions/9541025/how-to-copy-a-python-class
+            class CopyClass(base_class):
+                pass
+
+            base_class_copy = CopyClass
+
+            # make sure that all keys are expected for test
+            base_class_copy._keys_to_ignore_on_load_missing = []
+
+            # make init deterministic, but make sure that
+            # non-initialized weights throw errors nevertheless
+            base_class_copy._init_weights = self._mock_init_weights
+
             model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            state_dict = model.state_dict()
 
-            # check that output_attentions also work using config
-            del inputs_dict["output_attentions"]
-            config.output_attentions = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.attentions
-            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+            # this will often delete a single weight of a multi-weight module
+            # to test an edge case
+            random_key_to_del = random.choice(list(state_dict.keys()))
+            del state_dict[random_key_to_del]
 
-            self.assertListEqual(
-                list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, expected_seq_len, expected_seq_len],
-            )
-            out_len = len(outputs)
+            # check that certain keys didn't get saved with the model
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.config.save_pretrained(tmpdirname)
+                torch.save(state_dict, os.path.join(tmpdirname, "pytorch_model.bin"))
 
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+                model_fast_init = base_class_copy.from_pretrained(tmpdirname)
+                model_slow_init = base_class_copy.from_pretrained(tmpdirname, _fast_init=False)
 
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            else:
-                added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
-
-            self_attentions = outputs.attentions
-
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            self.assertListEqual(
-                list(self_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, expected_seq_len, expected_seq_len],
-            )
-
-    def test_hidden_states_output(self):
-        def check_hidden_states_output(inputs_dict, config, model_class):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-
-            hidden_states = outputs.hidden_states
-
-            expected_num_layers = getattr(
-                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
-            )
-            self.assertEqual(len(hidden_states), expected_num_layers)
-
-            # LayoutLMv2 has a different expected sequence length
-            expected_seq_len = (
-                self.model_tester.seq_length
-                + self.model_tester.image_feature_pool_shape[0] * self.model_tester.image_feature_pool_shape[1]
-            )
-
-            self.assertListEqual(
-                list(hidden_states[0].shape[-2:]),
-                [expected_seq_len, self.model_tester.hidden_size],
-            )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            inputs_dict["output_hidden_states"] = True
-            check_hidden_states_output(inputs_dict, config, model_class)
-
-            # check that output_hidden_states also work using config
-            del inputs_dict["output_hidden_states"]
-            config.output_hidden_states = True
-
-            check_hidden_states_output(inputs_dict, config, model_class)
-
+                for key in model_fast_init.state_dict().keys():
+                    if key == "layoutlmv2.visual_segment_embedding":
+                        # we skip the visual segment embedding as it has a custom initialization scheme
+                        continue
+                    max_diff = (model_slow_init.state_dict()[key] - model_fast_init.state_dict()[key]).sum().item()
+                    self.assertLessEqual(max_diff, 1e-3, msg=f"{key} not identical")
+    
     @slow
     def test_model_from_pretrained(self):
         for model_name in LAYOUTLMV2_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = LayoutLMv2Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    def test_training(self):
+        if not self.model_tester.is_training:
+            return
+    
+        for model_class in self.all_model_classes:
+            print("Model class:", model_class)
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+    
+            if model_class in get_values(MODEL_MAPPING):
+                continue
+    
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+            loss = model(**inputs).loss
+    
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -620,6 +587,71 @@ class LayoutLMv2ModelTest(ModelTesterMixin, unittest.TestCase):
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    # we overwrite this as LayoutLMv2ForRelationExtraction is not supported
+    def test_headmasking(self):
+        if not self.test_head_masking:
+            return
+
+        global_rng = random.Random()
+
+        global_rng.seed(42)
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        global_rng.seed()
+
+        inputs_dict["output_attentions"] = True
+        config.output_hidden_states = True
+        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
+        for model_class in self.all_model_classes:
+            if model_class.__name__ == "LayoutLMv2ForRelationExtraction":
+                continue
+
+            model = model_class(config=configs_no_init)
+            model.to(torch_device)
+            model.eval()
+
+            # Prepare head_mask
+            # Set require_grad after having prepared the tensor to avoid error (leaf variable has been moved into the graph interior)
+            head_mask = torch.ones(
+                self.model_tester.num_hidden_layers,
+                self.model_tester.num_attention_heads,
+                device=torch_device,
+            )
+            head_mask[0, 0] = 0
+            head_mask[-1, :-1] = 0
+            head_mask.requires_grad_(requires_grad=True)
+            inputs = self._prepare_for_class(inputs_dict, model_class).copy()
+            inputs["head_mask"] = head_mask
+            outputs = model(**inputs, return_dict=True)
+
+            # Test that we can get a gradient back for importance score computation
+            output = sum(t.sum() for t in outputs[0])
+            output = output.sum()
+            output.backward()
+            multihead_outputs = head_mask.grad
+
+            self.assertIsNotNone(multihead_outputs)
+            self.assertEqual(len(multihead_outputs), self.model_tester.num_hidden_layers)
+
+            def check_attentions_validity(attentions):
+                # Remove Nan
+                for t in attentions:
+                    self.assertLess(
+                        torch.sum(torch.isnan(t)), t.numel() / 4
+                    )  # Check we don't have more than 25% nans (arbitrary)
+                attentions = [
+                    t.masked_fill(torch.isnan(t), 0.0) for t in attentions
+                ]  # remove them (the test is less complete)
+
+                self.assertAlmostEqual(attentions[0][..., 0, :, :].flatten().sum().item(), 0.0)
+                self.assertNotEqual(attentions[0][..., -1, :, :].flatten().sum().item(), 0.0)
+                if len(attentions) > 2:  # encoder-decoder models have only 2 layers in each module
+                    self.assertNotEqual(attentions[1][..., 0, :, :].flatten().sum().item(), 0.0)
+                self.assertAlmostEqual(attentions[-1][..., -2, :, :].flatten().sum().item(), 0.0)
+                self.assertNotEqual(attentions[-1][..., -1, :, :].flatten().sum().item(), 0.0)
+
+            check_attentions_validity(outputs.attentions)
+    
+    # we overwrite this as LayoutLMv2 requires special inputs + LayoutLMv2ForRelationExtraction is not supported
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
             return
