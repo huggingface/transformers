@@ -211,9 +211,10 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return masks
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.prepare_coco_detection with DETR->ConditionalDETR
     def prepare_coco_detection(self, image, target, return_segmentation_masks=False):
         """
-        Convert the target in COCO format into the format expected by Conditional DETR.
+        Convert the target in COCO format into the format expected by ConditionalDETR.
         """
         w, h = image.size
 
