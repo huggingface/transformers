@@ -220,7 +220,7 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
         Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps. Only supports
         PyTorch.
 
-        Parameters:
+        Args:
             outputs ([`SegformerForSemanticSegmentation`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`, *optional*):
@@ -228,9 +228,9 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
                 None, predictions will not be resized.
 
         Returns:
-            `List[torch.Tensor]`: A list of `torch.Tensor` of length `batch_size`, where each item is a semantic
-            segmentation map of of the corresponding target_sizes entry (if `target_sizes` is specified). Each entry of
-            each `torch.Tensor` correspond to a semantic class id.
+            semantic_segmentation: `torch.Tensor` of shape `(batch_size, 2)` or `List[torch.Tensor]` of length
+            `batch_size`, where each item is a semantic segmentation map of of the corresponding target_sizes entry (w,
+            h) if `target_sizes` is specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
         logits = outputs.logits
 
@@ -255,7 +255,5 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
                 resized_maps.append(resized)
 
             semantic_segmentation = [torch.Tensor(np.array(image)) for image in resized_maps]
-        else:
-            semantic_segmentation = [semantic_segmentation]
 
         return semantic_segmentation
