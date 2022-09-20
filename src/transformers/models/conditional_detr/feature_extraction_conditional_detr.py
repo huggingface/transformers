@@ -122,7 +122,7 @@ def id_to_rgb(id_map):
 
 class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs a CONDITIONAL DETR feature extractor.
+    Constructs a Conditional DETR feature extractor.
 
     This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
