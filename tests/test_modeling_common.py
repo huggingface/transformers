@@ -2297,7 +2297,7 @@ class ModelTesterMixin:
 
     @require_accelerate
     @require_torch_gpu
-    def test_disk_offload(self):
+    def test_disk_offload(self, reset_seed_before_every_forward=False):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -2307,6 +2307,8 @@ class ModelTesterMixin:
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
+            if reset_seed_before_every_forward:
+                torch.manual_seed(0)
             base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
@@ -2324,13 +2326,15 @@ class ModelTesterMixin:
                 )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                if reset_seed_before_every_forward:
+                    torch.manual_seed(0)
                 new_output = new_model(**inputs_dict)
 
                 self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
     @require_accelerate
     @require_torch_gpu
-    def test_cpu_offload(self):
+    def test_cpu_offload(self, reset_seed_before_every_forward=False):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -2340,6 +2344,8 @@ class ModelTesterMixin:
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
+            if reset_seed_before_every_forward:
+                torch.manual_seed(0)
             base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
@@ -2355,13 +2361,15 @@ class ModelTesterMixin:
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, "cpu"})
 
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                    if reset_seed_before_every_forward:
+                        torch.manual_seed(0)
                     new_output = new_model(**inputs_dict)
 
                     self.assertTrue(torch.allclose(base_output[0], new_output[0]))
 
     @require_accelerate
     @require_torch_multi_gpu
-    def test_model_parallelism(self):
+    def test_model_parallelism(self, reset_seed_before_every_forward=False):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -2371,6 +2379,8 @@ class ModelTesterMixin:
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
+            if reset_seed_before_every_forward:
+                torch.manual_seed(0)
             base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
@@ -2386,6 +2396,8 @@ class ModelTesterMixin:
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
 
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                    if reset_seed_before_every_forward:
+                        torch.manual_seed(0)
                     new_output = new_model(**inputs_dict)
 
                     self.assertTrue(torch.allclose(base_output[0], new_output[0]))

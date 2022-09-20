@@ -14,7 +14,6 @@
 # limitations under the License.
 """ Testing suite for the PyTorch ViLT model. """
 
-import tempfile
 import unittest
 
 from datasets import load_dataset
@@ -31,14 +30,10 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_accelerate_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
 
-
-if is_accelerate_available():
-    from accelerate.utils import compute_module_sizes
 
 if is_torch_available():
     import torch
@@ -524,120 +519,28 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     @require_torch_gpu
     def test_cpu_offload(self):
         r"""
-        We have to customly redefine these tests since the default test retrieves the first element
-        of the output which correspond to the non-deterministic hidden states.
+        We have to customly call the method from the superclass using the attribute `reset_seed_before_every_forward`
+        since a seed needs to be fixed before each forward pass due to model stochasticity.
         """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            if model_class._no_split_modules is None:
-                continue
-
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config).eval()
-            model = model.to(torch_device)
-
-            torch.manual_seed(42)
-            base_output = model(**inputs_dict)
-
-            model_size = compute_module_sizes(model)[""]
-            # We test several splits of sizes to make sure it works.
-            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents]
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model.cpu().save_pretrained(tmp_dir)
-
-                for max_size in max_gpu_sizes:
-                    max_memory = {0: max_size, "cpu": model_size * 2}
-                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
-                    # Making sure part of the model will actually end up offloaded
-                    self.assertSetEqual(set(new_model.hf_device_map.values()), {0, "cpu"})
-
-                    self.check_device_map_is_respected(new_model, new_model.hf_device_map)
-
-                    torch.manual_seed(42)
-                    new_output = new_model(**inputs_dict)
-
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+        super().test_cpu_offload(reset_seed_before_every_forward=True)
 
     @require_accelerate
     @require_torch_gpu
     def test_disk_offload(self):
         r"""
-        We have to customly redefine these tests since the default test retrieves the first element
-        of the output which correspond to the non-deterministic hidden states.
+        We have to customly call the method from the superclass using the attribute `reset_seed_before_every_forward`
+        since a seed needs to be fixed before each forward pass due to model stochasticity.
         """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            if model_class._no_split_modules is None:
-                continue
-
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config).eval()
-            model = model.to(torch_device)
-
-            torch.manual_seed(42)
-            base_output = model(**inputs_dict)
-
-            model_size = compute_module_sizes(model)[""]
-            max_size = int(self.model_split_percents[0] * model_size)
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model.cpu().save_pretrained(tmp_dir)
-
-                max_memory = {0: max_size, "cpu": max_size}
-                with self.assertRaises(ValueError):
-                    # This errors out cause it's missing an offload folder
-                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
-
-                new_model = model_class.from_pretrained(
-                    tmp_dir, device_map="auto", max_memory=max_memory, offload_folder=tmp_dir
-                )
-
-                self.check_device_map_is_respected(new_model, new_model.hf_device_map)
-
-                torch.manual_seed(42)
-                new_output = new_model(**inputs_dict)
-
-                self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+        super().test_disk_offload(reset_seed_before_every_forward=True)
 
     @require_accelerate
     @require_torch_multi_gpu
     def test_model_parallelism(self):
         r"""
-        We have to customly redefine these tests since the default test retrieves the first element
-        of the output which correspond to the non-deterministic hidden states.
+        We have to customly call the method from the superclass using the attribute `reset_seed_before_every_forward`
+        since a seed needs to be fixed before each forward pass due to model stochasticity.
         """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            if model_class._no_split_modules is None:
-                continue
-
-            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            model = model_class(config).eval()
-            model = model.to(torch_device)
-
-            torch.manual_seed(42)
-            base_output = model(**inputs_dict)
-
-            model_size = compute_module_sizes(model)[""]
-            # We test several splits of sizes to make sure it works.
-            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents]
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model.cpu().save_pretrained(tmp_dir)
-
-                for max_size in max_gpu_sizes:
-                    max_memory = {0: max_size, 1: model_size * 2, "cpu": model_size * 2}
-                    new_model = model_class.from_pretrained(tmp_dir, device_map="auto", max_memory=max_memory)
-                    # Making sure part of the model will actually end up offloaded
-                    self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
-
-                    self.check_device_map_is_respected(new_model, new_model.hf_device_map)
-
-                    torch.manual_seed(42)
-                    new_output = new_model(**inputs_dict)
-
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0]))
+        super().test_model_parallelism(reset_seed_before_every_forward=True)
 
 
 @require_torch
