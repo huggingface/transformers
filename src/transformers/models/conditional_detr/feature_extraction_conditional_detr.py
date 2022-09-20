@@ -152,6 +152,8 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
     model_input_names = ["pixel_values", "pixel_mask"]
 
+
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.__init__
     def __init__(
         self,
         format="coco_detection",
@@ -172,11 +174,13 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
         self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406]  # ImageNet mean
         self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225]  # ImageNet std
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._is_valid_format
     def _is_valid_format(self, format):
         if format not in ["coco_detection", "coco_panoptic"]:
             raise ValueError(f"Format {format} not supported")
         return format
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.prepare
     def prepare(self, image, target, return_segmentation_masks=False, masks_path=None):
         if self.format == "coco_detection":
             image, target = self.prepare_coco_detection(image, target, return_segmentation_masks)
@@ -310,6 +314,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return image, target
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._resize
     def _resize(self, image, size, target=None, max_size=None):
         """
         Resize the image to the given size. Size can be min_size (scalar) or (w, h) tuple. If size is an int, smaller
@@ -380,6 +385,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return rescaled_image, target
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._normalize
     def _normalize(self, image, mean, std, target=None):
         """
         Normalize the image with a certain mean and std.
@@ -402,6 +408,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return image, target
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.__call__ with Detr->ConditionalDetr,DETR->ConditionalDETR
     def __call__(
         self,
         images: ImageInput,
@@ -549,7 +556,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
             if annotations is not None:
                 annotations = [annotations]
 
-        # prepare (COCO annotations as a list of Dict -> CONDITIONAL DETR target as a single Dict per image)
+        # prepare (COCO annotations as a list of Dict -> ConditionalDETR target as a single Dict per image)
         if annotations is not None:
             for idx, (image, target) in enumerate(zip(images, annotations)):
                 if not isinstance(image, Image.Image):
@@ -624,6 +631,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
         return encoded_inputs
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._max_by_axis
     def _max_by_axis(self, the_list):
         # type: (List[List[int]]) -> List[int]
         maxes = the_list[0]
