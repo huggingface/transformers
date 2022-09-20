@@ -22,7 +22,6 @@ from typing import Dict, List, Optional, Tuple
 
 import torch
 from torch import Tensor, nn
-from torch.nn import functional as F
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
