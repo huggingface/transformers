@@ -66,6 +66,7 @@ def convert_esm_checkpoint_to_pytorch(pytorch_dump_folder_path: str, classificat
         attention_probs_dropout_prob=0.0,
         hidden_dropout_prob=0,
         encoder_keep_prob=0.88,  # TODO: temporary hack, explained in modeling_esm
+        pad_token_id=esm.padding_idx
     )
     if classification_head:
         config.num_labels = esm.classification_heads["mnli"].out_proj.weight.shape[0]
@@ -157,16 +158,24 @@ def convert_esm_checkpoint_to_pytorch(pytorch_dump_folder_path: str, classificat
     batch_labels, batch_strs, batch_tokens = batch_converter(SAMPLE_DATA)
     input_ids = batch_tokens
 
+    # TODO Models have different padding tokens in their embedding layers, and we're not passing an
+    #      attention mask so this might be the cause of the differences.
+
     with torch.no_grad():
-        our_output = model(input_ids)[0]
+        our_output = model(input_ids, output_hidden_states=True)
+        our_hiddens = our_output["hidden_states"]
+        our_output = our_output["logits"]
         if classification_head:
             their_output = esm.model.classification_heads["mnli"](esm.extract_features(input_ids))
         else:
-            their_output = esm(input_ids)["logits"]
+            their_output = esm(input_ids, repr_layers=list(range(999)))
+            their_hiddens = their_output["representations"]
+            their_output = their_output["logits"]
     print(our_output.shape, their_output.shape)
     max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
-    print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-7
-    success = torch.allclose(our_output, their_output, atol=1e-3)
+    breakpoint()
+    print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
+    success = torch.allclose(our_output, their_output, atol=3e-4)
     print("Do both models output the same tensors?", "🔥" if success else "💩")
     if not success:
         raise Exception("Something went wRoNg")
