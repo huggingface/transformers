@@ -586,7 +586,7 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             self.assertIsNotNone(model)
 
     @unittest.skipIf(
-        is_torch_available and is_torch_less_than_1_11,
+        not is_torch_available or is_torch_less_than_1_11,
         "Test failed with torch < 1.11 with an exception in a C++ file.",
     )
     @slow
