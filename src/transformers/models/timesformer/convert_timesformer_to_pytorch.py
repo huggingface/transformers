@@ -24,7 +24,6 @@ import gdown
 from huggingface_hub import hf_hub_download
 from transformers import (
     TimeSformerConfig,
-    TimeSformerForPreTraining,
     TimeSformerForVideoClassification,
     VideoMAEFeatureExtractor,
 )
@@ -46,20 +45,22 @@ def get_timesformer_config(model_name):
     if "finetuned" not in model_name:
         config.use_mean_pooling = False
 
-    if "finetuned" in model_name:
-        repo_id = "datasets/huggingface/label-files"
-        if "kinetics" in model_name:
-            config.num_labels = 400
-            filename = "kinetics400-id2label.json"
-        elif "ssv2" in model_name:
-            config.num_labels = 174
-            filename = "something-something-v2-id2label.json"
-        else:
-            raise ValueError("Model name should either contain 'kinetics' or 'ssv2' in case it's fine-tuned.")
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
-        id2label = {int(k): v for k, v in id2label.items()}
-        config.id2label = id2label
-        config.label2id = {v: k for k, v in id2label.items()}
+    repo_id = "datasets/huggingface/label-files"
+    if "k400" in model_name:
+        config.num_labels = 400
+        filename = "kinetics400-id2label.json"
+    elif "k600" in model_name:
+        config.num_labels = 600
+        filename = "kinetics600-id2label.json"
+    elif "ssv2" in model_name:
+        config.num_labels = 174
+        filename = "something-something-v2-id2label.json"
+    else:
+        raise ValueError("Model name should either contain 'k400', 'k600' or 'ssv2'.")
+    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
 
     return config
 
@@ -69,25 +70,29 @@ def rename_key(name):
         name = name.replace("encoder.", "")
     if "cls_token" in name:
         name = name.replace("cls_token", "timesformer.embeddings.cls_token")
-    if "decoder_pos_embed" in name:
-        name = name.replace("decoder_pos_embed", "decoder.decoder_pos_embed")
-    if "pos_embed" in name and "decoder" not in name:
+    if "pos_embed" in name:
         name = name.replace("pos_embed", "timesformer.embeddings.position_embeddings")
+    if "time_embed" in name:
+        name = name.replace("time_embed", "timesformer.embeddings.time_embeddings")
     if "patch_embed.proj" in name:
         name = name.replace("patch_embed.proj", "timesformer.embeddings.patch_embeddings.projection")
     if "patch_embed.norm" in name:
         name = name.replace("patch_embed.norm", "timesformer.embeddings.norm")
-    if "decoder.blocks" in name:
-        name = name.replace("decoder.blocks", "decoder.decoder_layers")
     if "blocks" in name:
         name = name.replace("blocks", "timesformer.encoder.layer")
     if "attn.proj" in name:
         name = name.replace("attn.proj", "attention.output.dense")
-    if "attn" in name and "bias" not in name:
+    if "attn" in name and "bias" not in name and 'temporal' not in name:
         name = name.replace("attn", "attention.self")
-    if "attn" in name:
+    if "attn" in name and 'temporal' not in name:
         name = name.replace("attn", "attention.attention")
-    if "norm1" in name:
+    if 'temporal_norm1' in name:
+        name = name.replace("temporal_norm1", "temporal_layernorm")
+    if 'temporal_attn.proj' in name:
+        name = name.replace('temporal_attn', 'temporal_attention.output.dense')
+    if 'temporal_fc' in name:
+        name = name.replace('temporal_fc', 'temporal_dense')
+    if "norm1" in name and 'temporal' not in name:
         name = name.replace("norm1", "layernorm_before")
     if "norm2" in name:
         name = name.replace("norm2", "layernorm_after")
@@ -95,17 +100,11 @@ def rename_key(name):
         name = name.replace("mlp.fc1", "intermediate.dense")
     if "mlp.fc2" in name:
         name = name.replace("mlp.fc2", "output.dense")
-    if "decoder_embed" in name:
-        name = name.replace("decoder_embed", "decoder.decoder_embed")
-    if "decoder_norm" in name:
-        name = name.replace("decoder_norm", "decoder.decoder_norm")
-    if "decoder_pred" in name:
-        name = name.replace("decoder_pred", "decoder.decoder_pred")
-    if "norm.weight" in name and "decoder" not in name and "fc" not in name:
+    if "norm.weight" in name and "fc" not in name and 'temporal' not in name:
         name = name.replace("norm.weight", "timesformer.layernorm.weight")
-    if "norm.bias" in name and "decoder" not in name and "fc" not in name:
+    if "norm.bias" in name and "fc" not in name and 'temporal' not in name:
         name = name.replace("norm.bias", "timesformer.layernorm.bias")
-    if "head" in name and "decoder" not in name:
+    if "head" in name:
         name = name.replace("head", "classifier")
 
     return name
@@ -115,27 +114,21 @@ def convert_state_dict(orig_state_dict, config):
     for key in orig_state_dict.copy().keys():
         val = orig_state_dict.pop(key)
 
-        if key.startswith("encoder."):
-            key = key.replace("encoder.", "")
+        if key.startswith("model."):
+            key = key.replace("model.", "")
 
         if "qkv" in key:
             key_split = key.split(".")
-            if key.startswith("decoder.blocks"):
-                dim = config.decoder_hidden_size
-                layer_num = int(key_split[2])
-                prefix = "decoder.decoder_layers."
-                if "weight" in key:
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+            layer_num = int(key_split[1])
+            prefix = "timesformer.encoder.layer."
+            if 'temporal' in key:
+                postfix = ".temporal_attention.attention.qkv."
             else:
-                dim = config.hidden_size
-                layer_num = int(key_split[1])
-                prefix = "timesformer.encoder.layer."
-                if "weight" in key:
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.query.weight"] = val[:dim, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.key.weight"] = val[dim : dim * 2, :]
-                    orig_state_dict[f"{prefix}{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                postfix = ".attention.attention.qkv."
+            if "weight" in key:
+                orig_state_dict[f"{prefix}{layer_num}{postfix}weight"] = val
+            else:
+                orig_state_dict[f"{prefix}{layer_num}{postfix}bias"] = val
         else:
             orig_state_dict[rename_key(key)] = val
 
@@ -153,10 +146,7 @@ def prepare_video():
 def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, model_name, push_to_hub):
     config = get_timesformer_config(model_name)
 
-    if "finetuned" in model_name:
-        model = TimeSformerForVideoClassification(config)
-    else:
-        model = TimeSformerForPreTraining(config)
+    model = TimeSformerForVideoClassification(config)
 
     # download original checkpoint, hosted on Google Drive
     output = "pytorch_model.bin"
@@ -164,8 +154,10 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
     files = torch.load(output, map_location="cpu")
     if "model" in files:
         state_dict = files["model"]
-    else:
+    elif "module" in files:
         state_dict = files["module"]
+    else:
+        state_dict = files["model_state"]
     new_state_dict = convert_state_dict(state_dict, config)
 
     model.load_state_dict(new_state_dict)
@@ -176,75 +168,64 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
     video = prepare_video()
     inputs = feature_extractor(video, return_tensors="pt")
 
-    if "finetuned" not in model_name:
-        local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")
-        inputs["bool_masked_pos"] = torch.load(local_path)
-
     outputs = model(**inputs)
     logits = outputs.logits
 
     model_names = [
-        # Kinetics-400 checkpoints (short = pretrained only for 800 epochs instead of 1600)
-        "timesformer-base-short",
-        "timesformer-base-short-finetuned-kinetics",
-        "timesformer-base",
-        "timesformer-base-finetuned-kinetics",
-        "timesformer-large",
-        "timesformer-large-finetuned-kinetics",
-        # Something-Something-v2 checkpoints (short = pretrained only for 800 epochs instead of 2400)
-        "timesformer-base-short-ssv2",
-        "timesformer-base-short-finetuned-ssv2",
-        "timesformer-base-ssv2",
+        # Kinetics-400 checkpoints (hr = high resolution input of 448px instead of 224px)
+        "timesformer-base-finetuned-k400",
+        "timesformer-large-finetuned-k400",
+        "timesformer-hr-finetuned-k400",
+        # Kinetics-600 checkpoints (hr = high resolution input of 448px instead of 224px)
+        "timesformer-base-finetuned-k600",
+        "timesformer-large-finetuned-k600",
+        "timesformer-hr-finetuned-k600",
+        # Something-Something-v2 checkpoints (hr = high resolution input of 448px instead of 224px)
         "timesformer-base-finetuned-ssv2",
+        "timesformer-large-finetuned-ssv2",
+        "timesformer-hr-finetuned-ssv2",
     ]
 
     # NOTE: logits were tested with image_mean and image_std equal to [0.5, 0.5, 0.5] and [0.5, 0.5, 0.5]
-    if model_name == "timesformer-base":
+    if model_name == "timesformer-base-finetuned-k400":
         expected_shape = torch.Size([1, 1408, 1536])
         expected_slice = torch.tensor([[0.7739, 0.7968, 0.7089], [0.6701, 0.7487, 0.6209], [0.4287, 0.5158, 0.4773]])
-    elif model_name == "timesformer-base-short":
+    elif model_name == "timesformer-base-finetuned-k600":
         expected_shape = torch.Size([1, 1408, 1536])
         expected_slice = torch.tensor([[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]])
         # we verified the loss both for normalized and unnormalized targets for this one
         expected_loss = torch.tensor([0.5142]) if config.norm_pix_loss else torch.tensor([0.6469])
-    elif model_name == "timesformer-large":
+    elif model_name == "timesformer-base-finetuned-ssv2":
         expected_shape = torch.Size([1, 1408, 1536])
         expected_slice = torch.tensor([[0.7149, 0.7997, 0.6966], [0.6768, 0.7869, 0.6948], [0.5139, 0.6221, 0.5605]])
-    elif model_name == "timesformer-large-finetuned-kinetics":
+    elif model_name == "timesformer-large-finetuned-k400":
         expected_shape = torch.Size([1, 400])
         expected_slice = torch.tensor([0.0771, 0.0011, -0.3625])
-    elif model_name == "timesformer-base-short-finetuned-kinetics":
+    elif model_name == "timesformer-large-finetuned-k600":
         expected_shape = torch.Size([1, 400])
         expected_slice = torch.tensor([0.6588, 0.0990, -0.2493])
-    elif model_name == "timesformer-base-finetuned-kinetics":
+    elif model_name == "timesformer-large-finetuned-ssv2":
         expected_shape = torch.Size([1, 400])
         expected_slice = torch.tensor([0.3669, -0.0688, -0.2421])
-    elif model_name == "timesformer-base-short-ssv2":
+    elif model_name == "timesformer-hr-finetuned-k400":
         expected_shape = torch.Size([1, 1408, 1536])
         expected_slice = torch.tensor([[0.4712, 0.5296, 0.5786], [0.2278, 0.2729, 0.4026], [0.0352, 0.0730, 0.2506]])
-    elif model_name == "timesformer-base-short-finetuned-ssv2":
+    elif model_name == "timesformer-hr-finetuned-k600":
         expected_shape = torch.Size([1, 174])
         expected_slice = torch.tensor([-0.0537, -0.1539, -0.3266])
-    elif model_name == "timesformer-base-ssv2":
+    elif model_name == "timesformer-hr-finetuned-ssv2":
         expected_shape = torch.Size([1, 1408, 1536])
         expected_slice = torch.tensor([[0.8131, 0.8727, 0.8546], [0.7366, 0.9377, 0.8870], [0.5935, 0.8874, 0.8564]])
-    elif model_name == "timesformer-base-finetuned-ssv2":
-        expected_shape = torch.Size([1, 174])
-        expected_slice = torch.tensor([0.1961, -0.8337, -0.6389])
     else:
         raise ValueError(f"Model name not supported. Should be one of {model_names}")
 
     # verify logits
     assert logits.shape == expected_shape
-    if "finetuned" in model_name:
-        assert torch.allclose(logits[0, :3], expected_slice, atol=1e-4)
-    else:
-        print("Logits:", logits[0, :3, :3])
-        assert torch.allclose(logits[0, :3, :3], expected_slice, atol=1e-4)
+    assert torch.allclose(logits[0, :3], expected_slice, atol=1e-4)
     print("Logits ok!")
 
     # verify loss, if applicable
-    if model_name == "timesformer-base-short":
+    if model_name == "timesformer-base-k400":
         loss = outputs.loss
         assert torch.allclose(loss, expected_loss, atol=1e-4)
         print("Loss ok!")
@@ -256,7 +237,7 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
 
     if push_to_hub:
         print("Pushing to the hub...")
-        model.push_to_hub(model_name, organization="nielsr")
+        model.push_to_hub(model_name, organization="fcakyon")
 
 
 if __name__ == "__main__":
@@ -264,7 +245,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--checkpoint_url",
-        default="https://drive.google.com/u/1/uc?id=1tEhLyskjb755TJ65ptsrafUG2llSwQE1&amp;export=download&amp;confirm=t&amp;uuid=aa3276eb-fb7e-482a-adec-dc7171df14c4",
+        default="https://drive.google.com/u/1/uc?id=17yvuYp9L4mn-HpIcK5Zo6K3UoOy1kA5l&export=download",
         type=str,
         help=(
             "URL of the original PyTorch checkpoint (on Google Drive) you'd like to convert. Should be a direct"
@@ -273,11 +254,11 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--pytorch_dump_folder_path",
-        default="/Users/nielsrogge/Documents/TimeSformer/Test",
+        default="",
         type=str,
         help="Path to the output PyTorch model directory.",
     )
-    parser.add_argument("--model_name", default="timesformer-base", type=str, help="Name of the model.")
+    parser.add_argument("--model_name", default="timesformer-base-finetuned-k400", type=str, help="Name of the model.")
     parser.add_argument(
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
     )
