@@ -119,7 +119,7 @@ class TimeSformerConfig(PretrainedConfig):
         decoder_num_hidden_layers=4,
         decoder_intermediate_size=1536,
         norm_pix_loss=True,
-        attention_type='divided_space_time',
+        attention_type="divided_space_time",
         drop_path_prob=0.1,
         **kwargs
     ):
