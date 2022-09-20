@@ -109,6 +109,7 @@ class ESMConfig(PretrainedConfig):
         use_cache=True,
         classifier_dropout=None,
         encoder_keep_prob=0.88,
+        emb_layer_norm_before=None,
         **kwargs
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -129,3 +130,4 @@ class ESMConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
         self.encoder_keep_prob = encoder_keep_prob
+        self.emb_layer_norm_before = emb_layer_norm_before
