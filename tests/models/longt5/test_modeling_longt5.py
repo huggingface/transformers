@@ -20,8 +20,8 @@ import unittest
 
 from transformers import LongT5Config, is_torch_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.pytorch_utils import is_torch_less_than_1_11
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 from transformers.utils import cached_property
 
 from ...generation.test_generation_utils import GenerationTesterMixin
