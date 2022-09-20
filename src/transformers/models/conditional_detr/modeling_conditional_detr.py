@@ -911,8 +911,7 @@ class ConditionalDetrDecoderLayer(nn.Module):
         k_pos = self.sa_kpos_proj(query_position_embeddings)
         v = self.sa_v_proj(hidden_states)
 
-        bs, num_queries, n_model = q_content.shape
-        _, hw, _ = k_content.shape
+        _, num_queries, n_model = q_content.shape
 
         q = q_content + q_pos
         k = k_content + k_pos
@@ -936,8 +935,8 @@ class ConditionalDetrDecoderLayer(nn.Module):
         k_content = self.ca_kcontent_proj(encoder_hidden_states)
         v = self.ca_v_proj(encoder_hidden_states)
 
-        bs, num_queries, n_model = q_content.shape
-        _, hw, _ = k_content.shape
+        batch_size, num_queries, n_model = q_content.shape
+        _, src_len, _ = k_content.shape
 
         k_pos = self.ca_kpos_proj(position_embeddings)
 
@@ -951,13 +950,13 @@ class ConditionalDetrDecoderLayer(nn.Module):
             q = q_content
             k = k_content
 
-        q = q.view(bs, num_queries, self.nhead, n_model // self.nhead)
+        q = q.view(batch_size, num_queries, self.nhead, n_model // self.nhead)
         query_sine_embed = self.ca_qpos_sine_proj(query_sine_embed)
-        query_sine_embed = query_sine_embed.view(bs, num_queries, self.nhead, n_model // self.nhead)
-        q = torch.cat([q, query_sine_embed], dim=3).view(bs, num_queries, n_model * 2)
-        k = k.view(bs, hw, self.nhead, n_model // self.nhead)
-        k_pos = k_pos.view(bs, hw, self.nhead, n_model // self.nhead)
-        k = torch.cat([k, k_pos], dim=3).view(bs, hw, n_model * 2)
+        query_sine_embed = query_sine_embed.view(batch_size, num_queries, self.nhead, n_model // self.nhead)
+        q = torch.cat([q, query_sine_embed], dim=3).view(batch_size, num_queries, n_model * 2)
+        k = k.view(batch_size, src_len, self.nhead, n_model // self.nhead)
+        k_pos = k_pos.view(batch_size, src_len, self.nhead, n_model // self.nhead)
+        k = torch.cat([k, k_pos], dim=3).view(batch_size, src_len, n_model * 2)
 
         # Cross-Attention Block
         cross_attn_weights = None
@@ -1118,6 +1117,7 @@ CONDITIONAL_DETR_INPUTS_DOCSTRING = r"""
 """
 
 
+# Copied from transformers.models.detr.modeling_detr.DetrEncoder with Detr->ConditionalDetr,DETR->ConditionalDETR
 class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -1125,7 +1125,7 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
 
     The encoder updates the flattened feature map through multiple self-attention layers.
 
-    Small tweak for Conditional DETR:
+    Small tweak for ConditionalDETR:
 
     - position_embeddings are added to the forward pass.
 
@@ -1141,7 +1141,7 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
 
         self.layers = nn.ModuleList([ConditionalDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
-        # in the original Conditional DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
+        # in the original ConditionalDETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1191,7 +1191,7 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
 
         # expand attention_mask
         if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
             attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None

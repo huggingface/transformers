@@ -472,7 +472,7 @@ class ConditionalDetrModelIntegrationTests(unittest.TestCase):
             outputs = model(**encoding)
 
         expected_shape = torch.Size((1, 300, 256))
-        assert outputs.last_hidden_state.shape == expected_shape
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
         expected_slice = torch.tensor(
             [[0.0616, -0.5146, -0.4032], [-0.7629, -0.4934, -1.7153], [-0.4768, -0.6403, -0.7826]]
         ).to(torch_device)
