@@ -1,0 +1,13 @@
+TransformerPrune:
+  pruned_ratio: 0.25
+Distillation:
+Quantization:
+  onnx_format: true
+TrainConfig:
+  epochs: 3
+  eval_iter: 210
+  learning_rate: 1.0e-5
+  optimizer_builder:
+    optimizer: 
+      type: AdamW
+    weight_decay: 0.01
