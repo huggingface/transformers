@@ -152,7 +152,6 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
     model_input_names = ["pixel_values", "pixel_mask"]
 
-
     # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.__init__
     def __init__(
         self,

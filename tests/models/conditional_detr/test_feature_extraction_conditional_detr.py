@@ -240,8 +240,12 @@ class ConditionalDetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, uni
         encoded_images_with_method = feature_extractor_1.pad_and_create_pixel_mask(image_inputs, return_tensors="pt")
         encoded_images = feature_extractor_2(image_inputs, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4))
-        self.assertTrue(torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4))
+        self.assertTrue(
+            torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
+        )
+        self.assertTrue(
+            torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4)
+        )
 
     @slow
     def test_call_pytorch_with_coco_detection_annotations(self):
