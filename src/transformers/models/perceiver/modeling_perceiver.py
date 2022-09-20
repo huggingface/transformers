@@ -810,6 +810,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
 
         >>> # EXAMPLE 2: using the Perceiver to classify images
         >>> # - we define an ImagePreprocessor, which can be used to embed images
+        >>> config = PerceiverConfig(image_size=224)
         >>> preprocessor = PerceiverImagePreprocessor(
         ...     config,
         ...     prep_type="conv1x1",
