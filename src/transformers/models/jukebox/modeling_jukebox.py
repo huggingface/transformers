@@ -29,7 +29,7 @@ from tqdm import tqdm
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, logging
+from ...utils import add_end_docstrings, add_start_docstrings, logging
 from .configuration_jukebox import JukeboxConfig
 
 
@@ -2932,7 +2932,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
             fp16 (bool, *optional*): _description_. Defaults to False.
 
         Returns:
-            
+
 
         Example:
         ```python
@@ -3031,31 +3031,32 @@ class JukeboxModel(JukeboxPreTrainedModel):
         upsample the sequence. If you want to create the audio, you should call `model.decode(tokens)`, which will use
         the VQ-VAE decoder to convert the music tokens to raw audio.
 
-        Args:
-        
-        """,
+        Args:""",
         JUKEBOX_SAMPLING_INPUT_DOCSTRING,
+    )
+    def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs) -> List[torch.LongTensor]:
         """
-
         Example:
 
         ```python
-        >>> from transformers import JukeboxTokenizer, JukeboxModel 
-        >>> model = JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics", min_duration=0) Level:0, Cond downsample:4, Raw to
-        tokens:8, Sample length:65536 Level:1, Cond downsample:4, Raw to tokens:32, Sample length:262144 Level:2, Cond
-        downsample:None, Raw to tokens:128, Sample length:786432 
+        >>> from transformers import JukeboxTokenizer, JukeboxModel
+
+        >>> model = JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics", min_duration=0)
+        Level:0, Cond downsample:4, Raw to tokens:8, Sample length:65536
+        Level:1, Cond downsample:4, Raw to tokens:32, Sample length:262144
+        Level:2, Cond downsample:None, Raw to tokens:128, Sample length:786432
+
         >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
-        >>> lyrics = "Hey, are you awake? Can you talk tome?" 
-        >>> artist = "Zac Brown Band" 
-        >>> genre = "Country" 
-        >>> metas = tokenizer(artist=artist, genres=genre,
-        lyrics=lyrics) 
-        >>> music_tokens = model.ancestral_sample(metas.input_ids, sample_length_in_seconds=2) 
-        >>>model.decode(music_tokens)[:, :10] 
+        >>> lyrics = "Hey, are you awake? Can you talk to me?"
+        >>> artist = "Zac Brown Band"
+        >>> genre = "Country"
+        >>> metas = tokenizer(artist=artist, genres=genre, lyrics=lyrics)
+
+        >>> music_tokens = model.ancestral_sample(metas.input_ids, sample_length_in_seconds=2)
+
+        >>> model.decode(music_tokens)[:, :10]
         tensor([[-0.0006], [ 0.0009], [ 0.0005], [-0.0010], [-0.0010], [-0.0004],[-0.0002], [-0.0004], [-0.0005], [ 0.0002]]
-        ```""",
-    )
-    def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs) -> List[torch.LongTensor]:
+        ```"""
 
         sample_levels = sampling_kwargs.pop("sample_levels", list(range(len(self.priors))))
         music_tokens = [

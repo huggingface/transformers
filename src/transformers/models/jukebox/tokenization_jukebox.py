@@ -101,7 +101,8 @@ class JukeboxTokenizer(PreTrainedTokenizer):
 
     Args:
         artists_file (`str`):
-            Path to the vocabulary file which contains a mapping between artists and ids. The default file supports both "v2" and "v3" 
+            Path to the vocabulary file which contains a mapping between artists and ids. The default file supports
+            both "v2" and "v3"
         genres_file (`str`):
             Path to the vocabulary file which contain a mapping between genres and ids.
         lyrics_file (`str`):
