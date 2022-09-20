@@ -1727,7 +1727,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
         chunk_sizes = [*[chunk_size] * (n_passes - 1), (length - 1) % chunk_size + 1]
         return chunk_sizes
 
-    # FIXME TODO last function needing renaming
     def primed_sample(
         self,
         n_samples,
@@ -1773,7 +1772,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
             for current_chunk_size in get_range(chunk_sizes):
                 sampled_audio_prime, conds_prime = [], []
                 for sample_t in range(start, start + current_chunk_size):
-                    # TODO rename x_prime, con_prime
                     x_prime, cond_prime = self.get_emb(
                         sample_t, n_samples, hidden_states, audio_conditioning, metadata_conditioning
                     )
@@ -1781,7 +1779,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
                     sampled_audio_prime.append(x_prime)
                     conds_prime.append(cond_prime)
                 start = start + current_chunk_size
-                # TODO rename x_prime, con_prime
                 x_prime, cond_prime = torch.cat(sampled_audio_prime, dim=1), torch.cat(conds_prime, dim=1)
                 del sampled_audio_prime
                 del conds_prime
