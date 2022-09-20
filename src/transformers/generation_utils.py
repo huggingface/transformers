@@ -392,6 +392,8 @@ class GenerationMixin:
           `do_sample=False`.
         - *multinomial sampling* by calling [`~generation_utils.GenerationMixin.sample`] if `num_beams=1` and
           `do_sample=True`.
+        - *typical decoding* by calling [`~generation_utils.GenerationMixin.sample`] if `typical_p` between 0 and 1, and
+          `do_sample=True`.
         - *beam-search decoding* by calling [`~generation_utils.GenerationMixin.beam_search`] if `num_beams>1` and
           `do_sample=False`.
         - *beam-search multinomial sampling* by calling [`~generation_utils.GenerationMixin.beam_sample`] if
@@ -1315,6 +1317,17 @@ class GenerationMixin:
             raise ValueError(
                 "Diverse beam search cannot be used in sampling mode. Make sure that `do_sample` is set to `False`."
             )
+
+        if typical_p is not None:
+            if typical_p < 0 or typical_p > 1:
+                raise ValueError("Value of typical_p must be between 0 and 1.")
+            elif do_sample is False:
+                raise ValueError(
+                    "Decoder argument `typical_p` must be used in sampling mode. "
+                    "Make sure that `do_sample` is set to `True`."
+                )
+            elif is_group_beam_gen_mode is True:
+                raise ValueError("Decoder argument `typical_p` is not supported with beam groups.")
 
         # 7. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
