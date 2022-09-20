@@ -64,8 +64,7 @@ def convert_esm_checkpoint_to_pytorch(pytorch_dump_folder_path: str, classificat
         type_vocab_size=1,
         layer_norm_eps=1e-5,  # PyTorch default used in fairseq
         attention_probs_dropout_prob=0.0,
-        hidden_dropout_prob=0,
-        encoder_keep_prob=0.88,  # TODO: temporary hack, explained in modeling_esm
+        hidden_dropout_prob=0, # TODO: temporary hack, explained in modeling_esm
         pad_token_id=esm.padding_idx
     )
     if classification_head:
