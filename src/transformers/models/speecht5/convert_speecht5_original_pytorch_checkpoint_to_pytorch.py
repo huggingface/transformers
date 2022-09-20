@@ -39,16 +39,16 @@ logger = logging.get_logger(__name__)
 
 def rename_key(name):
     if "speech_encoder_prenet.feature_extractor." in name:
-        name = name.replace("speech_encoder_prenet.feature_extractor.", "speecht5.speech_encoder_prenet.feature_encoder.")
+        name = name.replace("speech_encoder_prenet.feature_extractor.", "speech_encoder_prenet.feature_encoder.")
         name = name.replace(".0.0.", ".0.conv.")
         name = name.replace(".0.2.weight", ".0.layer_norm.weight")
         name = name.replace(".0.2.bias", ".0.layer_norm.bias")
         name = name.replace(".0.weight", ".conv.weight")
 
     if "speech_encoder_prenet." in name:
-        name = name.replace("speech_encoder_prenet.post_extract_proj.", "speecht5.speech_encoder_prenet.feature_projection.projection.")
-        name = name.replace("speech_encoder_prenet.layer_norm.", "speecht5.speech_encoder_prenet.feature_projection.layer_norm.")
-        name = name.replace("speech_encoder_prenet.pos_conv.0.", "speecht5.speech_encoder_prenet.pos_conv_embed.conv.")
+        name = name.replace("speech_encoder_prenet.post_extract_proj.", "speech_encoder_prenet.feature_projection.projection.")
+        name = name.replace("speech_encoder_prenet.layer_norm.", "speech_encoder_prenet.feature_projection.layer_norm.")
+        name = name.replace("speech_encoder_prenet.pos_conv.0.", "speech_encoder_prenet.pos_conv_embed.conv.")
 
     # Can ignore the following keys:
     # "speech_encoder_prenet.embed_positions._float_tensor"

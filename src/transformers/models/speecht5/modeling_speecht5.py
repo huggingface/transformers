@@ -66,6 +66,126 @@ _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND
 _CTC_EXPECTED_LOSS = 53.48
 
 
+# Copied from transformers.models.wav2vec2.modeling_wav2vec2._compute_mask_indices
+def _compute_mask_indices(
+    shape: Tuple[int, int],
+    mask_prob: float,
+    mask_length: int,
+    attention_mask: Optional[torch.LongTensor] = None,
+    min_masks: int = 0,
+) -> np.ndarray:
+    """
+    Computes random mask spans for a given shape. Used to implement [SpecAugment: A Simple Data Augmentation Method for
+    ASR](https://arxiv.org/abs/1904.08779). Note that this method is not optimized to run on TPU and should be run on
+    CPU as part of the preprocessing during training.
+
+    Args:
+        shape: The shape for which to compute masks. This should be of a tuple of size 2 where
+               the first element is the batch size and the second element is the length of the axis to span.
+        mask_prob:  The percentage of the whole axis (between 0 and 1) which will be masked. The number of
+                    independently generated mask spans of length `mask_length` is computed by
+                    `mask_prob*shape[1]/mask_length`. Note that due to overlaps, `mask_prob` is an upper bound and the
+                    actual percentage will be smaller.
+        mask_length: size of the mask
+        min_masks: minimum number of masked spans
+        attention_mask: A (right-padded) attention mask which independently shortens the feature axis of
+                        each batch dimension.
+    """
+    batch_size, sequence_length = shape
+
+    if mask_length < 1:
+        raise ValueError("`mask_length` has to be bigger than 0.")
+
+    if mask_length > sequence_length:
+        raise ValueError(
+            f"`mask_length` has to be smaller than `sequence_length`, but got `mask_length`: {mask_length}"
+            f" and `sequence_length`: {sequence_length}`"
+        )
+
+    # epsilon is used for probabilistic rounding
+    epsilon = np.random.rand(1).item()
+
+    def compute_num_masked_span(input_length):
+        """Given input length, compute how many spans should be masked"""
+        num_masked_span = int(mask_prob * input_length / mask_length + epsilon)
+        num_masked_span = max(num_masked_span, min_masks)
+
+        # make sure num masked span <= sequence_length
+        if num_masked_span * mask_length > sequence_length:
+            num_masked_span = sequence_length // mask_length
+
+        # make sure num_masked span is also <= input_length - (mask_length - 1)
+        if input_length - (mask_length - 1) < num_masked_span:
+            num_masked_span = max(input_length - (mask_length - 1), 0)
+
+        return num_masked_span
+
+    # compute number of masked spans in batch
+    input_lengths = (
+        attention_mask.sum(-1).detach().tolist()
+        if attention_mask is not None
+        else [sequence_length for _ in range(batch_size)]
+    )
+
+    # SpecAugment mask to fill
+    spec_aug_mask = np.zeros((batch_size, sequence_length), dtype=np.bool)
+    spec_aug_mask_idxs = []
+
+    max_num_masked_span = compute_num_masked_span(sequence_length)
+
+    if max_num_masked_span == 0:
+        return spec_aug_mask
+
+    for input_length in input_lengths:
+        # compute num of masked spans for this input
+        num_masked_span = compute_num_masked_span(input_length)
+
+        # get random indices to mask
+        spec_aug_mask_idx = np.random.choice(
+            np.arange(input_length - (mask_length - 1)), num_masked_span, replace=False
+        )
+
+        # pick first sampled index that will serve as a dummy index to pad vector
+        # to ensure same dimension for all batches due to probabilistic rounding
+        # Picking first sample just pads those vectors twice.
+        if len(spec_aug_mask_idx) == 0:
+            # this case can only happen if `input_length` is strictly smaller then
+            # `sequence_length` in which case the last token has to be a padding
+            # token which we can use as a dummy mask id
+            dummy_mask_idx = sequence_length - 1
+        else:
+            dummy_mask_idx = spec_aug_mask_idx[0]
+
+        spec_aug_mask_idx = np.concatenate(
+            [spec_aug_mask_idx, np.ones(max_num_masked_span - num_masked_span, dtype=np.int32) * dummy_mask_idx]
+        )
+        spec_aug_mask_idxs.append(spec_aug_mask_idx)
+
+    spec_aug_mask_idxs = np.array(spec_aug_mask_idxs)
+
+    # expand masked indices to masked spans
+    spec_aug_mask_idxs = np.broadcast_to(
+        spec_aug_mask_idxs[:, :, None], (batch_size, max_num_masked_span, mask_length)
+    )
+    spec_aug_mask_idxs = spec_aug_mask_idxs.reshape(batch_size, max_num_masked_span * mask_length)
+
+    # add offset to the starting indexes so that indexes now create a span
+    offsets = np.arange(mask_length)[None, None, :]
+    offsets = np.broadcast_to(offsets, (batch_size, max_num_masked_span, mask_length)).reshape(
+        batch_size, max_num_masked_span * mask_length
+    )
+    spec_aug_mask_idxs = spec_aug_mask_idxs + offsets
+
+    # ensure that we cannot have indices larger than sequence_length
+    if spec_aug_mask_idxs.max() > sequence_length - 1:
+        spec_aug_mask_idxs[spec_aug_mask_idxs > sequence_length - 1] = sequence_length - 1
+
+    # scatter indices to mask
+    np.put_along_axis(spec_aug_mask, spec_aug_mask_idxs, 1, -1)
+
+    return spec_aug_mask
+
+
 # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2NoLayerNormConvLayer with Wav2Vec2->SpeechT5
 class SpeechT5NoLayerNormConvLayer(nn.Module):
     def __init__(self, config, layer_id=0):
@@ -333,8 +453,14 @@ class SpeechT5FeatureProjection(nn.Module):
 class SpeechT5SpeechEncoderPrenet(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.feature_encoder = SpeechT5FeatureEncoder(config)
         self.feature_projection = SpeechT5FeatureProjection(config)
+
+        # model only needs masking vector if mask prob is > 0.0
+        if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
+            self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
+
         self.pos_conv_embed = SpeechT5PositionalConvEmbedding(config)
         self.embed_positions = SpeechT5SinusoidalPositionalEmbedding(
             config.max_source_positions + config.pad_token_id + 1,
@@ -346,72 +472,132 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
         self,
         input_values: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
     ):
         extract_features = self.feature_encoder(input_values)
         extract_features = extract_features.transpose(1, 2)
 
-        # TODO: original implementation does the following which is only
-        # used when the argument `require_feat_pen=True`
+        # TODO: the original implementation does the following, which is only used
+        #       when the argument `require_feat_pen=True` or when `target_list != None`
+        #       do we need this, maybe for training / fine-tuning?
+        #
         # x = x.transpose(1, 2) # [batch, hidden_size, length]
         # if target_list is not None:
         #     x, target_list = self.forward_targets(x, target_list)
         # features_pen = x.float().pow(2).mean()
         # x = x.transpose(1, 2) # [batch, length, hidden_size]
 
-        # TODO: note that Wav2Vec2Model calls `_get_feature_vector_attention_mask` at this point
+        if attention_mask is not None:
+            # compute reduced attention_mask corresponding to feature vectors
+            attention_mask = self._get_feature_vector_attention_mask(
+                extract_features.shape[1], attention_mask,
+            )
 
         hidden_states, extract_features = self.feature_projection(extract_features)
-
-        # TODO: original implementation does the following when `mask=True`
-        # note that `x` here is the same as `extract_features`, i.e. after the
-        # layer norm from `feature_projection` but before the conv + dropout!
-        # encoder_padding_mask = padding_mask
-        # encoder_padding_mask = self.forward_padding_mask(x, encoder_padding_mask)
-
-        # TODO: original implementation does the following when `mask=True`
-        # if mask:
-        #     x, mask_indices = self.apply_hubert_mask(
-        #         x, encoder_padding_mask
-        #     )
-        # else:
-        #     x = x
-        #     mask_indices = None
-
-        # TODO: note that Wav2Vec2Model calls `_mask_hidden_states` at this point
-
-        # TODO: Wav2Vec2Encoder does the following at this point
-        # if attention_mask is not None:
-        #     # make sure padded tokens output 0
-        #     expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-        #     hidden_states[~expand_attention_mask] = 0
-
-        #     # extend attention_mask
-        #     attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-        #     attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-        #     attention_mask = attention_mask.expand(
-        #         attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-        #     )
+        hidden_states = self._mask_hidden_states(
+            hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
+        )
 
         position_embeddings = self.pos_conv_embed(hidden_states)
         hidden_states = hidden_states + position_embeddings
 
-        # TODO: this is how Speech2TextEncoder does it
-        # if attention_mask is not None:
-        #     attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
-        #     padding_mask = attention_mask.ne(1).long()
-        # else:
-        #     padding_mask = torch.zeros(inputs_embeds.shape[:2], dtype=torch.long, device=inputs_embeds.device)
-        #embed_pos = self.embed_positions(padding_mask)
+        # TODO: Wav2Vec2Encoder at this point calls the following but not sure if we need it elsewhere
+        # hidden_states = self.layer_norm(hidden_states)
+        # hidden_states = self.dropout(hidden_states)
 
-        # TODO: for now I'm just faking the size of the attention mask
-        attention_mask = torch.ones(hidden_states.shape[:2]).long()
+        if attention_mask is not None:
+            padding_mask = attention_mask.ne(1).long()
+        else:
+            padding_mask = torch.zeros(hidden_states.shape[:2], dtype=torch.long, device=hidden_states.device)
 
-        # TODO: the sinusoidal embeddings are incorrect currently, not sure why yet
-        positions = self.embed_positions(attention_mask)
-        #print("positions", positions.shape, positions)
-        hidden_states = hidden_states + positions
+        position_embeddings = self.embed_positions(padding_mask)
+        hidden_states = hidden_states + position_embeddings
 
         return hidden_states, extract_features
+
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel._get_feature_vector_attention_mask
+    def _get_feature_vector_attention_mask(
+        self, feature_vector_length: int, attention_mask: torch.LongTensor
+    ):
+        # Effectively attention_mask.sum(-1), but not inplace to be able to run
+        # on inference mode.
+        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
+
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths)
+        output_lengths = output_lengths.to(torch.long)
+
+        batch_size = attention_mask.shape[0]
+
+        attention_mask = torch.zeros(
+            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
+        )
+        # these two operations makes sure that all values before the output lengths idxs are attended to
+        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
+        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
+        return attention_mask
+
+    # Copied from transformers.models.wav2vec2.modeling_hubert.HubertPreTrainedModel._get_feat_extract_output_lengths
+    def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
+        """
+        Computes the output length of the convolutional layers
+        """
+
+        def _conv_out_length(input_length, kernel_size, stride):
+            # 1D convolutional layer output length formula taken
+            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+            return torch_int_div(input_length - kernel_size, stride) + 1
+
+        for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
+            input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
+
+        return input_lengths
+
+    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2Model._mask_hidden_states
+    def _mask_hidden_states(
+        self,
+        hidden_states: torch.FloatTensor,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+    ):
+        """
+        Masks extracted features along time axis and/or along feature axis according to
+        [SpecAugment](https://arxiv.org/abs/1904.08779).
+        """
+
+        # `config.apply_spec_augment` can set masking to False
+        if not getattr(self.config, "apply_spec_augment", True):
+            return hidden_states
+
+        # generate indices & apply SpecAugment along time axis
+        batch_size, sequence_length, hidden_size = hidden_states.size()
+
+        if mask_time_indices is not None:
+            # apply SpecAugment along time axis with given mask_time_indices
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+        elif self.config.mask_time_prob > 0 and self.training:
+            mask_time_indices = _compute_mask_indices(
+                (batch_size, sequence_length),
+                mask_prob=self.config.mask_time_prob,
+                mask_length=self.config.mask_time_length,
+                attention_mask=attention_mask,
+                min_masks=self.config.mask_time_min_masks,
+            )
+            mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
+            hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
+
+        if self.config.mask_feature_prob > 0 and self.training:
+            # generate indices & apply SpecAugment along feature axis
+            mask_feature_indices = _compute_mask_indices(
+                (batch_size, hidden_size),
+                mask_prob=self.config.mask_feature_prob,
+                mask_length=self.config.mask_feature_length,
+                min_masks=self.config.mask_feature_min_masks,
+            )
+            mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
+            mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
+            hidden_states[mask_feature_indices] = 0
+
+        return hidden_states
 
 
 class SpeechT5PreTrainedModel(PreTrainedModel):
@@ -459,49 +645,6 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
         #         k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
         #         nn.init.uniform_(module.bias, a=-k, b=k)
         pass
-
-    # def _get_feat_extract_output_lengths(
-    #     self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
-    # ):
-    #     """
-    #     Computes the output length of the convolutional layers
-    #     """
-
-    #     add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
-
-    #     def _conv_out_length(input_length, kernel_size, stride):
-    #         # 1D convolutional layer output length formula taken
-    #         # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-    #         return torch_int_div(input_length - kernel_size, stride) + 1
-
-    #     for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
-    #         input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
-
-    #     if add_adapter:
-    #         for _ in range(self.config.num_adapter_layers):
-    #             input_lengths = _conv_out_length(input_lengths, 1, self.config.adapter_stride)
-
-    #     return input_lengths
-
-    def _get_feature_vector_attention_mask(
-        self, feature_vector_length: int, attention_mask: torch.LongTensor, add_adapter=None
-    ):
-        # Effectively attention_mask.sum(-1), but not inplace to be able to run
-        # on inference mode.
-        non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
-
-        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths, add_adapter=add_adapter)
-        output_lengths = output_lengths.to(torch.long)
-
-        batch_size = attention_mask.shape[0]
-
-        attention_mask = torch.zeros(
-            (batch_size, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-        # these two operations makes sure that all values before the output lengths idxs are attended to
-        attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
-        return attention_mask
 
     # def _set_gradient_checkpointing(self, module, value=False):
     #     if isinstance(module, (SpeechT5Encoder, SpeechT5EncoderStableLayerNorm, SpeechT5FeatureEncoder)):
@@ -562,74 +705,11 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.speech_encoder_prenet = SpeechT5SpeechEncoderPrenet(config)
-
-        # # model only needs masking vector if mask prob is > 0.0
-        # if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-        #     self.masked_spec_embed = nn.Parameter(torch.FloatTensor(config.hidden_size).uniform_())
-
-        # if config.do_stable_layer_norm:
-        #     self.encoder = SpeechT5EncoderStableLayerNorm(config)
-        # else:
-        #     self.encoder = SpeechT5Encoder(config)
-
-        # self.adapter = SpeechT5Adapter(config) if config.add_adapter else None
+        #self.encoder = SpeechT5Encoder(config)
+        #self.decoder = ...
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    # def freeze_feature_encoder(self):
-    #     """
-    #     Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-    #     not be updated during training.
-    #     """
-    #     self.feature_extractor._freeze_parameters()
-
-    # def _mask_hidden_states(
-    #     self,
-    #     hidden_states: torch.FloatTensor,
-    #     mask_time_indices: Optional[torch.FloatTensor] = None,
-    #     attention_mask: Optional[torch.LongTensor] = None,
-    # ):
-    #     """
-    #     Masks extracted features along time axis and/or along feature axis according to
-    #     [SpecAugment](https://arxiv.org/abs/1904.08779).
-    #     """
-
-    #     # `config.apply_spec_augment` can set masking to False
-    #     if not getattr(self.config, "apply_spec_augment", True):
-    #         return hidden_states
-
-    #     # generate indices & apply SpecAugment along time axis
-    #     batch_size, sequence_length, hidden_size = hidden_states.size()
-
-    #     if mask_time_indices is not None:
-    #         # apply SpecAugment along time axis with given mask_time_indices
-    #         hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-    #     elif self.config.mask_time_prob > 0 and self.training:
-    #         mask_time_indices = _compute_mask_indices(
-    #             (batch_size, sequence_length),
-    #             mask_prob=self.config.mask_time_prob,
-    #             mask_length=self.config.mask_time_length,
-    #             attention_mask=attention_mask,
-    #             min_masks=self.config.mask_time_min_masks,
-    #         )
-    #         mask_time_indices = torch.tensor(mask_time_indices, device=hidden_states.device, dtype=torch.bool)
-    #         hidden_states[mask_time_indices] = self.masked_spec_embed.to(hidden_states.dtype)
-
-    #     if self.config.mask_feature_prob > 0 and self.training:
-    #         # generate indices & apply SpecAugment along feature axis
-    #         mask_feature_indices = _compute_mask_indices(
-    #             (batch_size, hidden_size),
-    #             mask_prob=self.config.mask_feature_prob,
-    #             mask_length=self.config.mask_feature_length,
-    #             min_masks=self.config.mask_feature_min_masks,
-    #         )
-    #         mask_feature_indices = torch.tensor(mask_feature_indices, device=hidden_states.device, dtype=torch.bool)
-    #         mask_feature_indices = mask_feature_indices[:, None].expand(-1, sequence_length, -1)
-    #         hidden_states[mask_feature_indices] = 0
-
-    #     return hidden_states
 
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -655,21 +735,23 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states, extract_features = self.speech_encoder_prenet(input_values, attention_mask)
+        # TODO: not sure yet whether speech_encoder_prenet and the other pre/post nets
+        # need to go in here. If not, then this is just the Transformer encoder-decoder
+        # model and you can't use it on audio waveform inputs, only on hidden states.
 
-        # TODO: not sure if this should go into SpeechEncoderPrenet too
-        #       is this equivalent to `forward_padding_mask` from the original SpeechEncoderPrenet?
-        # if attention_mask is not None:
-        #     # compute reduced attention_mask corresponding to feature vectors
-        #     attention_mask = self._get_feature_vector_attention_mask(
-        #         extract_features.shape[1], attention_mask, add_adapter=False
-        #     )
+            # TODO: the encoder must start with the following, just like Wav2Vec2Encoder
+            # (but note that we already did the position embeddings in the SpeechEncoderPrenet)
+            # if attention_mask is not None:
+            #     # make sure padded tokens output 0
+            #     expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            #     hidden_states[~expand_attention_mask] = 0
 
-        # TODO: not sure if this should go into SpeechEncoderPrenet too
-        #       is this equivalent to `apply_hubert_mask` from the original SpeechEncoderPrenet?
-        # hidden_states = self._mask_hidden_states(
-        #     hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
-        # )
+            #     # extend attention_mask
+            #     attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+            #     attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
+            #     attention_mask = attention_mask.expand(
+            #         attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+            #     )
 
         # encoder_outputs = self.encoder(
         #     hidden_states,
@@ -681,17 +763,14 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
 
         # hidden_states = encoder_outputs[0]
 
-        # if self.adapter is not None:
-        #     hidden_states = self.adapter(hidden_states)
-
         if not return_dict:
             return (hidden_states, extract_features) + encoder_outputs[1:]
 
         return Wav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
             extract_features=extract_features,
-            hidden_states=None, #encoder_outputs.hidden_states,
-            attentions=None, #encoder_outputs.attentions,
+            hidden_states=encoder_outputs.hidden_states,
+            attentions=encoder_outputs.attentions,
         )
 
 
@@ -702,16 +781,18 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
 class SpeechT5ForCTC(SpeechT5PreTrainedModel):
     base_model_prefix = "speecht5"
     _keys_to_ignore_on_load_missing = [
-        r"speecht5.speech_encoder_prenet.embed_positions.weights",
+        r"speech_encoder_prenet.embed_positions.weights",
     ]
     _keys_to_ignore_on_save = [
-        r"speecht5.speech_encoder_prenet.embed_positions.weights",
+        r"speech_encoder_prenet.embed_positions.weights",
     ]
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.speecht5 = SpeechT5Model(config)
+        self.speech_encoder_prenet = SpeechT5SpeechEncoderPrenet(config)
+
+        # self.speecht5 = SpeechT5Model(config)
         # self.dropout = nn.Dropout(config.final_dropout)
 
         # if config.vocab_size is None:
@@ -729,12 +810,13 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_encoder(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
-        not be updated during training.
-        """
-        self.speecht5.feature_extractor._freeze_parameters()
+    # TODO: replace this with freeze_speech_encoder_prenet()?
+    # def freeze_feature_encoder(self):
+    #     """
+    #     Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+    #     not be updated during training.
+    #     """
+    #     self.speecht5.feature_extractor._freeze_parameters()
 
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -764,21 +846,23 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.speecht5(
-            input_values,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        # TODO: not sure if speech_encoder_prenet needs to return extract_features
+        hidden_states, extract_features = self.speech_encoder_prenet(input_values, attention_mask)
 
-        hidden_states = outputs[0]
+        # outputs = self.speecht5(
+        #     input_values,
+        #     attention_mask=attention_mask,
+        #     output_attentions=output_attentions,
+        #     output_hidden_states=output_hidden_states,
+        #     return_dict=return_dict,
+        # )
+
+        # hidden_states = outputs[0]
         # hidden_states = self.dropout(hidden_states)
 
-        logits = None
         # logits = self.lm_head(hidden_states)
 
-        loss = None
+        # loss = None
         # if labels is not None:
 
         #     if labels.max() >= self.config.vocab_size:
@@ -815,5 +899,6 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         #     return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
-            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+            # loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+            loss=None, logits=None, hidden_states=hidden_states, attentions=None
         )

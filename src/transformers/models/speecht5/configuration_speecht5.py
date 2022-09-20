@@ -169,19 +169,6 @@ class SpeechT5Config(PretrainedConfig):
             *XVector* model. The length of *tdnn_dilation* has to match the length of *tdnn_dim*.
         xvector_output_dim (`int`, *optional*, defaults to 512):
             Dimensionality of the *XVector* embedding vectors.
-        add_adapter (`bool`, *optional*, defaults to `False`):
-            Whether a convolutional network should be stacked on top of the SpeechT5 Encoder. Can be very useful for
-            warm-starting SpeechT5 for SpeechEncoderDecoder models.
-        adapter_kernel_size (`int`, *optional*, defaults to 3):
-            Kernel size of the convolutional layers in the adapter network. Only relevant if `add_adapter is True`.
-        adapter_stride (`int`, *optional*, defaults to 2):
-            Stride of the convolutional layers in the adapter network. Only relevant if `add_adapter is True`.
-        num_adapter_layers (`int`, *optional*, defaults to 3):
-            Number of convolutional layers that should be used in the adapter network. Only relevant if `add_adapter is
-            True`.
-        output_hidden_size (`int`, *optional*):
-            Dimensionality of the encoder output layer. If not defined, this defaults to *hidden-size*. Only relevant
-            if `add_adapter is True`.
         max_source_positions (`int`, *optional*, defaults to 4000):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
             TODO: they're not actually log-mel features in this model!
@@ -228,13 +215,13 @@ class SpeechT5Config(PretrainedConfig):
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
         # do_stable_layer_norm=False,
-        # apply_spec_augment=True,
-        # mask_time_prob=0.05,
-        # mask_time_length=10,
-        # mask_time_min_masks=2,
-        # mask_feature_prob=0.0,
-        # mask_feature_length=10,
-        # mask_feature_min_masks=0,
+        apply_spec_augment=True,
+        mask_time_prob=0.05,
+        mask_time_length=10,
+        mask_time_min_masks=2,
+        mask_feature_prob=0.0,
+        mask_feature_length=10,
+        mask_feature_min_masks=0,
         # num_codevectors_per_group=320,
         # num_codevector_groups=2,
         # contrastive_logits_temperature=0.1,
@@ -254,11 +241,6 @@ class SpeechT5Config(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         max_source_positions=4000,
-        # add_adapter=False,
-        # adapter_kernel_size=3,
-        # adapter_stride=2,
-        # num_adapter_layers=3,
-        # output_hidden_size=None,
         **kwargs
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -289,26 +271,26 @@ class SpeechT5Config(PretrainedConfig):
         # self.use_weighted_layer_sum = use_weighted_layer_sum
         self.max_source_positions = max_source_positions
 
-        # if (
-        #     (len(self.conv_stride) != self.num_feat_extract_layers)
-        #     or (len(self.conv_kernel) != self.num_feat_extract_layers)
-        #     or (len(self.conv_dim) != self.num_feat_extract_layers)
-        # ):
-        #     raise ValueError(
-        #         "Configuration for convolutional layers is incorrect. It is required that `len(config.conv_dim)` =="
-        #         " `len(config.conv_stride)` == `len(config.conv_kernel)`, but is `len(config.conv_dim) ="
-        #         f" {len(self.conv_dim)}`, `len(config.conv_stride) = {len(self.conv_stride)}`,"
-        #         f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
-        #     )
+        if (
+            (len(self.conv_stride) != self.num_feat_extract_layers)
+            or (len(self.conv_kernel) != self.num_feat_extract_layers)
+            or (len(self.conv_dim) != self.num_feat_extract_layers)
+        ):
+            raise ValueError(
+                "Configuration for convolutional layers is incorrect. It is required that `len(config.conv_dim)` =="
+                " `len(config.conv_stride)` == `len(config.conv_kernel)`, but is `len(config.conv_dim) ="
+                f" {len(self.conv_dim)}`, `len(config.conv_stride) = {len(self.conv_stride)}`,"
+                f" `len(config.conv_kernel) = {len(self.conv_kernel)}`."
+            )
 
-        # # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
-        # self.apply_spec_augment = apply_spec_augment
-        # self.mask_time_prob = mask_time_prob
-        # self.mask_time_length = mask_time_length
-        # self.mask_time_min_masks = mask_time_min_masks
-        # self.mask_feature_prob = mask_feature_prob
-        # self.mask_feature_length = mask_feature_length
-        # self.mask_feature_min_masks = mask_feature_min_masks
+        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        self.apply_spec_augment = apply_spec_augment
+        self.mask_time_prob = mask_time_prob
+        self.mask_time_length = mask_time_length
+        self.mask_time_min_masks = mask_time_min_masks
+        self.mask_feature_prob = mask_feature_prob
+        self.mask_feature_length = mask_feature_length
+        self.mask_feature_min_masks = mask_feature_min_masks
 
         # # parameters for pretraining with codevector quantized representations
         # self.num_codevectors_per_group = num_codevectors_per_group
@@ -323,13 +305,6 @@ class SpeechT5Config(PretrainedConfig):
         # # ctc loss
         # self.ctc_loss_reduction = ctc_loss_reduction
         # self.ctc_zero_infinity = ctc_zero_infinity
-
-        # # adapter
-        # self.add_adapter = add_adapter
-        # self.adapter_kernel_size = adapter_kernel_size
-        # self.adapter_stride = adapter_stride
-        # self.num_adapter_layers = num_adapter_layers
-        # self.output_hidden_size = output_hidden_size or hidden_size
 
         # # SequenceClassification-specific parameter. Feel free to ignore for other classes.
         # self.classifier_proj_size = classifier_proj_size
