@@ -29,7 +29,7 @@ from tqdm import tqdm
 
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_end_docstrings, add_start_docstrings, logging
+from ...utils import add_start_docstrings, logging
 from .configuration_jukebox import JukeboxConfig
 
 
@@ -1559,7 +1559,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
             self.share_embed_tokens_fc_proj_out = True
 
         if not only_encode:
-            # TODO rename fc_pro_out to LM head an probably use HF's linking trick
             self.fc_proj_out = nn.Linear(width, embed_dim, bias=False)
             if self.share_embed_tokens_fc_proj_out:
                 self.fc_proj_out.weight = self.embed_tokens.weight
@@ -1683,7 +1682,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
     ):
         if sample_tokens is None:
             sample_tokens = self.input_dims
-        N, _ = n_samples, self.input_dims
+        N = n_samples
 
         if not self.audio_conditioning:
             audio_conditioning = torch.zeros((N, 1, self.width), dtype=torch.float).to(
@@ -1757,7 +1756,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         sampled_audio = torch.split(hidden_states, 1, dim=1)
         sampled_audio = list(sampled_audio)
 
-        N, _ = n_samples, self.input_dims
+        N = n_samples
 
         if not self.audio_conditioning:
             audio_conditioning = torch.zeros((N, 1, self.width), dtype=torch.float).to(hidden_states.device)
@@ -2344,7 +2343,7 @@ class JukeboxPrior(nn.Module):
             tokens[i] = (tokens[i] + int(self.prior_embed_dim_shift[i])).view(N, -1)
 
         for i in range(len(conds)):
-            cond, _, dims = conds[i], self.prior_shapes[i], self.prior_dims[i]
+            cond, dims = conds[i], self.prior_dims[i]
             if cond is None:
                 conds[i] = torch.zeros((N, dims, self.prior_width), dtype=torch.float, device=tokens[0].device)
 
@@ -2903,7 +2902,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
         lower_batch_size=16,
         max_batch_size=16,
         sample_length_in_seconds=24,
-        alignments=None,
+        compute_alignments=False,
         sample_tokens=None,
         offset=0,
         save_results=True,
@@ -2915,36 +2914,42 @@ class JukeboxModel(JukeboxPreTrainedModel):
         the generated raw audio at each step.
 
         Args:
-            music_tokens (`__type__`): 
-                _description_
-            labels (`__type__`): 
-                _description_
-            sample_levels (`__type__`): 
-                _description_
-            metas (`__type__`, *optional*): 
-                _description_. Defaults to None.
-            chunk_size (int, *optional*):
-                _description_. Defaults to 32.
-            sampling_temperature (float, *optional*): 
-                _description_. Defaults to 0.98.
-            lower_batch_size (int, *optional*):
-                _description_. Defaults to 16.
-            max_batch_size (int, *optional*): 
-                _description_. Defaults to 16.
-            sample_length_in_seconds (int, *optional*): 
-                _description_. Defaults to 24.
-            alignments (`__type__`, *optional*): 
-                _description_. Defaults to None.
-            sample_tokens (`__type__`, *optional*): 
-                _description_. Defaults to None.
-            offset (int, *optional*): 
-                _description_. Defaults to 0.
-            save_results (bool, *optional*): 
-                _description_. Defaults to True.
-            sample_length (`__type__`, *optional*): 
-                _description_. Defaults to None.
-            fp16 (bool, *optional*): 
-                _description_. Defaults to False.
+           music_tokens (`List[torch.LongTensor`] of length `self.levels` ) :
+                A sequence of music tokens which will be used as context to continue the sampling process. Should have
+                `self.levels` tensors, each corresponding to the generation at a certain level.
+            labels (`List[torch.Tensor]`):
+                Raw list of tokens. Should be the same length as `self.levels`, the number of priors or the length of
+                `sample_levels`.
+            sample_levels (`List[int]`):
+                List of the desired levels at which the sampling will be done. A level is equivalent to the index of
+                the prior in the list of priors
+            metas (`List[Any]`, *optional*, defaults to None):
+                Metadatas used to generate the `labels`
+            chunk_size (`int`, *optional*, defaults to 32):
+                Size of a chunk of audio, used to fill up the memory in chuncks to prevent OOM erros. Bigger chunks means faster memory filling but more consumption.
+            sampling_temperature (`float`, *optional*, defaults to 0.98):
+                Temperature used to ajust the randomness of the sampling.
+            lower_batch_size (`int`, *optional*, defaults to 16):
+                Maximum batch size for the lower level priors
+            max_batch_size (`int`, *optional*, defaults to 16):
+                Maximum batch size for the top level priors
+            sample_length_in_seconds (`int`, *optional*, defaults to 24):
+                Desired lenght of the generation in seconds
+            compute_alignments (`bool`, *optional*, defaults to False):
+                Whether or not to compute the alignment between the lyrics and the audio using the top_prior
+            sample_tokens (`int`, *optional*, defaults to None):
+                Precise number of tokens that should be sampled at each level. This is mostly useful for running dummy
+                experiments
+            offset (`int`, *optional*, defaults to 0):
+                Audio offset used as conditioning, corresponds to the starting sample in the music. If the offset is
+                greater than 0, the lyrics will be shifted take that intoaccount
+            save_results (`bool`, *optional*, defaults to True):
+                Whether or not to save the intermediate results. If `True`, will generate a folder named with the start
+                time.
+            sample_length (`int`, *optional*, defaults to None):
+                Desired lenght of the generation in samples.
+            fp16 (`bool`, *optional*, defaults to False):
+                Whether or not to cast the hidden states to float16 in the attention layer. Defaults to False.
 
 
         Example:
@@ -2957,9 +2962,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
         >>> zs = [torch.zeros(1, 0, dtype=torch.long).cuda() for _ in range(3)]
         >>> zs = model._sample(zs, labels, [2], sample_length=40 * model.priors[-1].raw_to_tokens, save_results=False)
-        [1864,
-        1536, 1213, 1870, 1357, 1536, 519, 880, 1323, 789, 1082, 534, 1000, 1445, 1105, 1130, 967, 515, 1434, 1620,
-        534, 1495, 283, 1445, 333, 1307, 539, 1631, 1528, 375, 1434, 673, 627, 710, 778, 1883, 1405, 1276, 1455, 1228]
+        [1864,1536, 1213, 1870, 1357, 1536, 519, 880, 1323, 789, 1082, 534, 1000, 1445, 1105, 1130, 967, 515, 1434, 1620,
+         534, 1495, 283, 1445, 333, 1307, 539, 1631, 1528, 375, 1434, 673, 627, 710, 778, 1883, 1405, 1276, 1455, 1228]
         ```"""
 
         top_prior = self.priors[-1]
@@ -3029,7 +3033,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                 if not os.path.exists(logdir):
                     os.makedirs(logdir)
                 save_wav(logdir, level, metas=metas, aud=raw_audio.float(), sampling_rate=self.config.sampling_rate)
-                if alignments is None and self.priors[-1] is not None and self.priors[-1].nb_relevant_lyric_tokens > 0:
+                if compute_alignments and self.priors[-1] is not None and self.priors[-1].nb_relevant_lyric_tokens > 0:
                     gc.collect()
                     torch.cuda.empty_cache()
                     with torch.no_grad():

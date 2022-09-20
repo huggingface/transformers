@@ -26,7 +26,7 @@ As shown on the following figure, Jukebox is made of 3 `priors` which are decode
 An encoder model is used on the lyrics: the first (also called `top_prior`) prior's decoder attends to the last hidden states extracted from the `lyric_encoder`. Each prior is linked to the previous by an `AudioConditionner` module which takes care of upsampling the generated dequantised states to the correct `raw_to_token` resolution of the current prior.
 The metadatas such as *artist, genre and timing* are passed to each prior, in the form of a start token and positionnal embedding for the timing data.  The hidden states are mapped to the closest codebook vector from the VQVAE in order to convert them to raw audio. 
 
-![JukeboxModel](https://gist.githubusercontent.com/ArthurZucker/92c1acaae62ebf1b6a951710bdd8b6af/raw/2a75e9ab330ef27ae6565fcf28b129e033ff9bed/Jukebox.svg)
+![JukeboxModel](https://gist.githubusercontent.com/ArthurZucker/92c1acaae62ebf1b6a951710bdd8b6af/raw/c9c517bf4eff61393f6c7dec9366ef02bdd059a3/jukebox.svg)
 
 Tips:
 - This model is very slow, and takes 8h to generate a minute long audio using the 5b top prior.

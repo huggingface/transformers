@@ -71,7 +71,7 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         - Lyrics, character based tokenization. Must be initialized with the list of characters that are inside the
         vocabulary.
 
-    This tokenizer is straight forward and does not require trainingg. It should be able to process a different number of inputs:
+    This tokenizer does not require training. It should be able to process a different number of inputs:
     as the conditioning of the model can be done on the three different queries. If None is provided, defaults values will be used.:
 
     Depending on the number of genres on which the model should be conditioned (`n_genres`).
