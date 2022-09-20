@@ -585,7 +585,10 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
             model = LongT5Model.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    @unittest.skipIf(is_torch_less_than_1_11, "Test failed with torch < 1.11 with an exception in a C++ file.")
+    @unittest.skipIf(
+        is_torch_available and is_torch_less_than_1_11,
+        "Test failed with torch < 1.11 with an exception in a C++ file.",
+    )
     @slow
     def test_export_to_onnx(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
