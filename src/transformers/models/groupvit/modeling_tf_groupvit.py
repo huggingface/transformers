@@ -1292,6 +1292,7 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         pooled_output = text_outputs[1]
@@ -1319,6 +1320,7 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         pooled_output = vision_outputs[1]
@@ -1359,6 +1361,7 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         text_outputs = self.text_model(
@@ -1368,6 +1371,7 @@ class TFGroupViTMainLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         image_embeds = vision_outputs[1]
@@ -1673,6 +1677,7 @@ class TFGroupViTTextModel(TFGroupViTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         return outputs
@@ -1769,6 +1774,7 @@ class TFGroupViTVisionModel(TFGroupViTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         return outputs
@@ -1866,6 +1872,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         return text_features
@@ -1908,6 +1915,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         return image_features
@@ -1963,6 +1971,7 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
             output_hidden_states=output_hidden_states,
             output_segmentation=output_segmentation,
             return_dict=return_dict,
+            training=training,
         )
 
         return outputs
