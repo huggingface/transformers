@@ -168,12 +168,14 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
                     if subdir.startswith(PREFIX_CHECKPOINT_DIR):
                         checkpoint = os.path.join(checkpoint_dir, subdir)
             trainer.objective = None
-            trainer._hp_search_setup(trial)
             if trainer.args.world_size > 1:
                 if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
                     raise RuntimeError("only support DDP optuna HPO for ParallelMode.DISTRIBUTED currently.")
+                trainer._hp_search_setup(trial)
                 torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
-            trainer.train(resume_from_checkpoint=checkpoint)
+                trainer.train(resume_from_checkpoint=checkpoint)
+            else:
+                trainer.train(resume_from_checkpoint=checkpoint, trial=trial)
             # If there hasn't been any evaluation during the training loop.
             if getattr(trainer, "objective", None) is None:
                 metrics = trainer.evaluate()
@@ -362,12 +364,14 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
             for run in experiment.loop():
                 with run:
                     trainer.objective = None
-                    trainer._hp_search_setup(run.run)
                     if trainer.args.world_size > 1:
                         if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
                             raise RuntimeError("only support DDP Sigopt HPO for ParallelMode.DISTRIBUTED currently.")
+                        trainer._hp_search_setup(run.run)
                         torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
-                    trainer.train(resume_from_checkpoint=None)
+                        trainer.train(resume_from_checkpoint=None)
+                    else:
+                        trainer.train(resume_from_checkpoint=None, trial=run.run)
                     # If there hasn't been any evaluation during the training loop.
                     if getattr(trainer, "objective", None) is None:
                         metrics = trainer.evaluate()
@@ -397,12 +401,14 @@ def run_hp_search_sigopt(trainer, n_trials: int, direction: str, **kwargs) -> Be
             while experiment.progress.observation_count < experiment.observation_budget:
                 suggestion = conn.experiments(experiment.id).suggestions().create()
                 trainer.objective = None
-                trainer._hp_search_setup(suggestion)
                 if trainer.args.world_size > 1:
                     if trainer.args.parallel_mode != ParallelMode.DISTRIBUTED:
                         raise RuntimeError("only support DDP Sigopt HPO for ParallelMode.DISTRIBUTED currently.")
+                    trainer._hp_search_setup(suggestion)
                     torch.distributed.broadcast_object_list(pickle.dumps(trainer.args), src=0)
-                trainer.train(resume_from_checkpoint=None)
+                    trainer.train(resume_from_checkpoint=None)
+                else:
+                    trainer.train(resume_from_checkpoint=None, trial=suggestion)
                 # If there hasn't been any evaluation during the training loop.
                 if getattr(trainer, "objective", None) is None:
                     metrics = trainer.evaluate()
