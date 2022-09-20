@@ -1104,8 +1104,9 @@ else:
     with open(cache_version_file) as f:
         cache_version = int(f.read())
 
+cache_is_not_empty = os.path.isdir(TRANSFORMERS_CACHE) and len(os.listdir(TRANSFORMERS_CACHE)) > 0
 
-if cache_version < 1:
+if cache_version < 1 and cache_is_not_empty:
     if is_offline_mode():
         logger.warning(
             "You are offline and the cache for model files in Transformers v4.22.0 has been updated while your local "
