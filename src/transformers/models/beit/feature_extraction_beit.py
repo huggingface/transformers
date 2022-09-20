@@ -39,8 +39,10 @@ logger = logging.get_logger(__name__)
 class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a BEiT feature extractor.
+
     This feature extractor inherits from [`~feature_extraction_utils.FeatureExtractionMixin`] which contains most of
     the main methods. Users should refer to this superclass for more information regarding those methods.
+
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the input to a certain `size`.
@@ -104,25 +106,34 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several image(s).
+
         <Tip warning={true}>
+
         NumPy arrays and PyTorch tensors are converted to PIL images when resizing, so the most efficient is to pass
         PIL images.
+
         </Tip>
+
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
                 The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
                 tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
                 number of channels, H and W are image height and width.
+
             segmentation_maps (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`, *optional*):
                 Optionally, the corresponding semantic segmentation maps with the pixel-wise annotations.
+
             return_tensors (`str` or [`~utils.TensorType`], *optional*, defaults to `'np'`):
                 If set, will return tensors of a particular framework. Acceptable values are:
+
                 - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
                 - `'jax'`: Return JAX `jnp.ndarray` objects.
+
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
             - **pixel_values** -- Pixel values to be fed to a model, of shape (batch_size, num_channels, height,
               width).
             - **labels** -- Optional labels to be fed to a model (when `segmentation_maps` are provided)
@@ -215,42 +226,43 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return encoded_inputs
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Union[TensorType, List[Tuple]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
         Converts the output of [`BeitForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+
         Args:
             outputs ([`BeitForSemanticSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`, *optional*):
-                Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction. If left to
+            target_sizes (`List[Tuple]` of length `batch_size`, *optional*):
+                List of tuples corresponding to the requested final size (height, width) of each prediction. If left to
                 None, predictions will not be resized.
         Returns:
-            semantic_segmentation: `torch.Tensor` of shape `(batch_size, 2)` or `List[torch.Tensor]` of length
-            `batch_size`, where each item is a semantic segmentation map of of the corresponding target_sizes entry (if
-            `target_sizes` is specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
+            semantic_segmentation: `List[torch.Tensor]` of length `batch_size`, where each item is a semantic
+            segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
+            specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
         logits = outputs.logits
 
-        if len(logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-
-        if target_sizes is not None and target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
-
-        semantic_segmentation = logits.argmax(dim=1)
-
-        # Resize semantic segmentation maps
+        # Resize logits and compute semantic segmentation maps
         if target_sizes is not None:
+            if len(logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
             if is_torch_tensor(target_sizes):
                 target_sizes = target_sizes.numpy()
 
-            resized_maps = []
-            semantic_segmentation = semantic_segmentation.numpy()
+            semantic_segmentation = []
 
-            for idx in range(len(semantic_segmentation)):
-                resized = self.resize(image=semantic_segmentation[idx], size=target_sizes[idx])
-                resized_maps.append(resized)
-
-            semantic_segmentation = [torch.Tensor(np.array(image)) for image in resized_maps]
+            for idx in range(len(logits)):
+                resized_logits = torch.nn.functional.interpolate(
+                    logits[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(semantic_map)
+        else:
+            semantic_segmentation = logits.argmax(dim=1)
+            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
