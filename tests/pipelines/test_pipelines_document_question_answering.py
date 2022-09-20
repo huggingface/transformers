@@ -267,7 +267,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase, metaclass=Pipeli
         image = INVOICE_URL
         question = "What is the invoice number?"
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
-        self.assertEqual(nested_simplify(outputs, decimals=4), {"answer": "us-001"})
+        self.assertEqual(nested_simplify(outputs, decimals=4), [{"answer": "us-001"}])
 
     @require_tf
     @unittest.skip("Document question answering not implemented in TF")
