@@ -15,17 +15,15 @@ specific language governing permissions and limitations under the License.
 
 The Jukebox model was proposed in [Jukebox: A generative model for music](https://arxiv.org/pdf/2005.00341.pdf)
 by Prafulla Dhariwal, Heewoo Jun, Christine Payne, Jong Wook Kim, Alec Radford,
-Ilya Sutskever.
-
-This model proposes a generative music model which can be produce minute long samples which can bne conditionned on
-artist, genre and lyrics.
+Ilya Sutskever. It introduces a generative music model which can produce minute long samples that can be conditionned on
+an artist, genres and lyrics.
 
 The abstract from the paper is the following:
 
-We introduce Jukebox, a model that generates music with singing in the raw audio domain. We tackle the long context of raw audio using a multiscale VQ-VAE to compress it to discrete codes, and modeling those using autoregressive Transformers. We show that the combined model at scale can generate high-fidelity and diverse songs with coherence up to multiple minutes. We can condition on artist and genre to steer the musical and vocal style, and on unaligned lyrics to make the singing more controllable. We are releasing thousands of non cherry-picked samples, along with model weights and code.
+*We introduce Jukebox, a model that generates music with singing in the raw audio domain. We tackle the long context of raw audio using a multiscale VQ-VAE to compress it to discrete codes, and modeling those using autoregressive Transformers. We show that the combined model at scale can generate high-fidelity and diverse songs with coherence up to multiple minutes. We can condition on artist and genre to steer the musical and vocal style, and on unaligned lyrics to make the singing more controllable. We are releasing thousands of non cherry-picked samples, along with model weights and code.*
 
-As shown on the following figure, Jukebox is made of 3 `priors` which are decoders only. They follow a particular architecture described in `Scalable Transformers` #TODO add link to the paper. 
-An encoder model is used on the lyrics, on the first (also called `top_prior`) prior's decoder attends to the last lyric hidden states. Each prior is linked to the previous by an `AudioConditionner` module which takes care of upsampling the generated hidden state to the correct `raw_to_token` resolution.
+As shown on the following figure, Jukebox is made of 3 `priors` which are decoder only model. They follow the architecture described in [Generating Long Sequences with Sparse Transformers](https://arxiv.org/abs/1904.10509), modified to support longer context length. 
+An encoder model is used on the lyrics: the first (also called `top_prior`) prior's decoder attends to the last hidden states extracted from the `lyric_encoder`. Each prior is linked to the previous by an `AudioConditionner` module which takes care of upsampling the generated dequantised states to the correct `raw_to_token` resolution of the current prior.
 The metadatas such as *artist, genre and timing* are passed to each prior, in the form of a start token and positionnal embedding for the timing data.  The hidden states are mapped to the closest codebook vector from the VQVAE in order to convert them to raw audio. 
 
 ![JukeboxModel](https://gist.githubusercontent.com/ArthurZucker/92c1acaae62ebf1b6a951710bdd8b6af/raw/2a75e9ab330ef27ae6565fcf28b129e033ff9bed/Jukebox.svg)
@@ -49,8 +47,8 @@ The original code can be found [here](https://github.com/openai/jukebox).
 ## JukeboxModel
 
 [[autodoc]] JukeboxModel 
-    - primed_sample
     - ancestral_sample 
+    - primed_sample
     - continue_sample
     - upsample
     - _sample

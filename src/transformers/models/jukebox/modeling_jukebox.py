@@ -31,7 +31,6 @@ from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, logging
 from .configuration_jukebox import JukeboxConfig
-from .tokenization_jukebox import get_relevant_lyric_tokens
 
 
 logger = logging.get_logger(__name__)
@@ -63,6 +62,37 @@ try:
     print("Using apex FusedLayerNorm")
 except ImportError:
     from torch.nn import LayerNorm as FusedLayerNorm
+
+
+def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, offset, duration):
+    """
+    Extract only the relevant tokens based on the character position. A total of `max_n_lyric_tokens` tokens will be
+    returned. If the provided token sequence is smaller, it will be padded, othewise, only characters ranging from the
+    midpoint - `max_n_lyric_tokens//2` to the midpoint + `max_n_lyric_tokens//2` will be returned. This *focuses* on
+    the most relevant tokens (in time) for the sequence.
+
+    Args:
+        full_tokens (`List[int]`):
+            List containing the ids of the entire lyrics.
+        total_length (`int`):
+            Total expected length of the music (not all of it is generated, see duration), in samples.
+        offset (`int`):
+            Starting sample in the music. If the offset is greater than 0, the lyrics will be shifted take that into
+            account
+        duration (`int`):
+            Expected duration of the generated music, in samples. The duration has to be smaller than the total lenght,
+            which represent the overall length of the signal,
+    """
+    full_tokens = full_tokens[0]
+    if len(full_tokens) < max_n_lyric_tokens:
+        tokens = torch.cat([torch.zeros(max_n_lyric_tokens - len(full_tokens)), full_tokens])
+        indices = [-1] * (max_n_lyric_tokens - len(full_tokens)) + list(range(0, len(full_tokens)))
+    else:
+        midpoint = int(len(full_tokens) * (offset + duration / 2.0) / total_length)
+        midpoint = min(max(midpoint, max_n_lyric_tokens // 2), len(full_tokens) - max_n_lyric_tokens // 2)
+        tokens = full_tokens[midpoint - max_n_lyric_tokens // 2 : midpoint + max_n_lyric_tokens // 2]
+        indices = list(range(midpoint - max_n_lyric_tokens // 2, midpoint + max_n_lyric_tokens // 2))
+    return tokens.unsqueeze(dim=0), indices
 
 
 class JukeboxConv1D(nn.Module):
@@ -332,7 +362,7 @@ class JukeboxBottleneckBlock(nn.Module):
         return hidden_states
 
     def init_codebook(self, hidden_states):
-        codebook_dim = self.codebook_dim  # mu,
+        codebook_dim = self.codebook_dim
         self.init = True
         # init k_w using random vectors from hidden_states codebook_w (index w?)
         codes = self._tile(hidden_states)
@@ -558,8 +588,6 @@ class JukeboxVQVAE(PreTrainedModel):
 
         multipliers = config.vqvae_multipliers
         codebook_width = config.vqvae_emmbedding_width
-        self.width = config.vqvae_width
-        self.depth = config.vqvae_depth
 
         self.downs_t = downs_t = config.vqvae_downs_t
         self.strides_t = strides_t = config.vqvae_strides_t
@@ -1429,18 +1457,14 @@ class JukeboxTransformer(nn.Module):
 
 
 class JukeboxPositionalEmbedding(nn.Module):
-    def __init__(self, input_shape, width, init_scale=1.0, pos_init=False):
+    def __init__(self, input_shape, width, init_scale=1.0):
         super().__init__()
         self.input_shape = input_shape
         self.input_dims = np.prod(input_shape)
-        self.pos_init = pos_init
         self.pos_emb = nn.Parameter(get_normal(self.input_dims, width, std=0.01 * init_scale))
 
     def forward(self):
-        if self.pos_init:
-            pos_emb = sum([self._pos_embs[i](self.pos[:, i]) for i in range(len(self.input_shape))])
-        else:
-            pos_emb = self.pos_emb
+        pos_emb = self.pos_emb
         return pos_emb
 
 
@@ -1459,7 +1483,6 @@ class JukeboxConditionalAutoregressive(nn.Module):
         zero_out=False,
         init_scale=1.0,
         res_scale=False,
-        pos_init=False,
         m_attn=0.25,
         m_mlp=1,
         attn_order=0,
@@ -1501,9 +1524,7 @@ class JukeboxConditionalAutoregressive(nn.Module):
         if not metadata_conditioning:
             self.start_token = nn.Parameter(get_normal(1, width, std=0.01 * init_scale))
 
-        self.pos_emb = JukeboxPositionalEmbedding(
-            input_shape=input_shape, width=width, init_scale=init_scale, pos_init=pos_init
-        )
+        self.pos_emb = JukeboxPositionalEmbedding(input_shape=input_shape, width=width, init_scale=init_scale)
         self.pos_emb_dropout = nn.Dropout(emb_dropout)
 
         self.transformer = JukeboxTransformer(
@@ -2109,7 +2130,6 @@ class JukeboxPrior(nn.Module):
             emb_dropout=config.prior_emb_dropout,
             zero_out=config.prior_zero_out,
             res_scale=config.prior_res_scale,
-            pos_init=config.prior_pos_init,
             init_scale=config.prior_init_scale[-level - 1],
             m_attn=config.prior_m_attn,
         )
@@ -2129,7 +2149,6 @@ class JukeboxPrior(nn.Module):
                 emb_dropout=config.lyric_enc_emb_dropout,
                 zero_out=config.lyric_enc_zero_out,
                 res_scale=config.lyric_enc_res_scale,
-                pos_init=config.lyric_enc_pos_init,
                 init_scale=config.lyric_enc_init_scale[-level - 1],
                 m_attn=config.lyric_enc_m_attn,
                 m_mlp=config.lyric_enc_m_mlp,
@@ -3003,7 +3022,7 @@ class JukeboxModel(JukeboxPreTrainedModel):
                     with torch.no_grad():
                         alignments = get_alignment(music_tokens, labels[-1], self.priors[-1], fp16, self.config)
                     torch.save({"alignments": alignments}, f"{logdir}/lyric_alignments.pt")
-                    # disable saving to html, TODO should we do it
+                    # disabled saving to html, as it requires too many dependencies.
         return music_tokens
 
     @add_start_docstrings(
@@ -3018,24 +3037,15 @@ class JukeboxModel(JukeboxPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import JukeboxTokenizer, JukeboxModel
-
-        >>> model = JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics", min_duration=0)
-        Level:0, Cond downsample:4, Raw to tokens:8, Sample length:65536
-        Level:1, Cond downsample:4, Raw to tokens:32, Sample length:262144
-        Level:2, Cond downsample:None, Raw to tokens:128, Sample length:786432
-
-        >>> tokenizer = JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics")
-
-        >>> lyrics = "Hey, are you awake? Can you talk to me?"
-        >>> artist = "Zac Brown Band"
-        >>> genre = "Country"
-        >>> metas = tokenizer(artist=artist, genres=genre, lyrics=lyrics)
-
-        >>> music_tokens = model.ancestral_sample(metas.input_ids, sample_length_in_seconds=2)
-        >>> model.decode(music_tokens)[:, :, 30]
-        ```
-        """,
+        >>> from transformers import JukeboxTokenizer, JukeboxModel >>> model =
+        JukeboxModel.from_pretrained("openai/jukebox-1b-lyrics", min_duration=0) Level:0, Cond downsample:4, Raw to
+        tokens:8, Sample length:65536 Level:1, Cond downsample:4, Raw to tokens:32, Sample length:262144 Level:2, Cond
+        downsample:None, Raw to tokens:128, Sample length:786432 >>> tokenizer =
+        JukeboxTokenizer.from_pretrained("openai/jukebox-1b-lyrics") >>> lyrics = "Hey, are you awake? Can you talk to
+        me?" >>> artist = "Zac Brown Band" >>> genre = "Country" >>> metas = tokenizer(artist=artist, genres=genre,
+        lyrics=lyrics) >>> music_tokens = model.ancestral_sample(metas.input_ids, sample_length_in_seconds=2) >>>
+        model.decode(music_tokens)[:, :10] tensor([[-0.0006], [ 0.0009], [ 0.0005], [-0.0010], [-0.0010], [-0.0004],
+        [-0.0002], [-0.0004], [-0.0005], [ 0.0002]]```""",
     )
     def ancestral_sample(self, labels, n_samples=1, **sampling_kwargs) -> List[torch.LongTensor]:
 

@@ -96,7 +96,7 @@ class JukeboxConfig(PretrainedConfig):
         cond_strides_t (`tuple`, *optional*, defaults to (2, 2, 2)):
             Striding used in the audio conditioning network
         lyric_enc_spread (`bool`, *optional*, defaults to False):
-            Spread used in the attention pattern #TODO check what that is actually
+            Spread used in the attention pattern
         lyric_enc_width (`list`, *optional*, defaults to [128, 128, 128]):
             Width of the lyric encoder
         lyric_enc_depth (`list`, *optional*, defaults to [18, 3, 3]):
@@ -110,97 +110,96 @@ class JukeboxConfig(PretrainedConfig):
             Multiplier coefficient used to define the hidden dimension of the MLP layers. 0.25 means that 0.25*width of
             the model will be used.
         lyric_enc_blocks (`int`, *optional*, defaults to 32):
-
+            Sequence of length seq_len is factored as [blocks, seq_len // blocks] in the `JukeboxAttention` layer.
         lyric_enc_init_scale (`list`, *optional*, defaults to [0.1, 0.4, 0.4]):
-
+            Initialisation scales for the lyric encoder modules.
         lyric_enc_loss_fraction (`list`, *optional*, defaults to [0.4, 0.0, 0.0]):
-
+            Multiplication factor used in front of the lyric encoder loss. Each value is for a particular level.
         lyric_enc_attn_order (`list`, *optional*, defaults to [2, 0, 0]):
-            Which attention pattern to use for the lyric encoder
+            Which attention pattern to use for the lyric encoder.
         lyric_enc_attn_dropout (`float`, *optional*, defaults to 0.0):
-
+            Dropout probability for the post-attention layer dropout in the lyric encoder.
         lyric_enc_resid_dropout (`float`, *optional*, defaults to 0.0):
-
+            Residual dropout used in the attention pattern of the lyric encoder.
         lyric_enc_emb_dropout (`float`, *optional*, defaults to 0.0):
-
+            Embedding dropout used in the lyric encoder.
         lyric_enc_zero_out (`bool`, *optional*, defaults to False):
-
+            Whether or not to set to zeros the weights the MLPs in the lyric encoder.
         lyric_enc_res_scale (`bool`, *optional*, defaults to False):
-
-        lyric_enc_pos_init (`bool`, *optional*, defaults to False):
-
+            Residual scaling factor used in the lyric encoder attention patterns.
         lyric_enc_n_vocab (`int`, *optional*, defaults to 79):
-
+            Defines the number of different tokens that can be represented by the `inputs_ids` passed to the
+            `lyric_encoder`
         prior_init_scale (`list`, *optional*, defaults to [0.2, 1, 1]):
-
+            Initialisation scales for the prior modules.
         prior_spread (`bool`, *optional*, defaults to False):
-
+            Spread used in the attention pattern
         prior_zero_out (`bool`, *optional*, defaults to False):
-
+             Whether or not to set to zeros the weights the MLPs of the priors.
         prior_res_scale (`bool`, *optional*, defaults to False):
-
-        prior_pos_init (`bool`, *optional*, defaults to False):
-
+            Residual scaling factor used in every prior's attention layer.
         prior_n_ctx (`tuple`, *optional*, defaults to (6144, 8192, 8192)):
             Number of context tokens for each prior. The context tokens are the music tokens that are attended to when
             generating music tokens.
         prior_latent_dim (`int`, *optional*, defaults to 2048):
             Dimension of the latent music token space. Default value match the `vqvae_codebook_dimension`.
         prior_width (`list`, *optional*, defaults to [2048, 1920, 1920]):
-
+            Input and output dimension of the attention layers of each prior.
+        prior_m_attn (`float`, *optional*, defaults to 0.25):
+            Multiplier coefficient used to define the hidden dimension of the attention layers. 0.25 means that
+            0.25*prior_width of the model will be used.
         prior_depth (`list`, *optional*, defaults to [72, 72, 72]):
-
+            Depth of each prior. Defines the number of `attn_block`.
         prior_n_heads (`list`, *optional*, defaults to [2, 1, 1]):
-
+            Number of attention heads per prior.
         prior_attn_order (`list`, *optional*, defaults to [12, 2, 2]):
             Attention patterns to use in each prior. Depending on the value, cross attention, block attention and
             sparse attention blocks are stacked.
         prior_blocks (`int`, *optional*, defaults to 64):
-
+            Sequence of length seq_len is factored as [blocks, seq_len // blocks] in the `JukeboxAttention` layer.
         prior_alignment_layer (`list`, *optional*, defaults to [68, None, None]):
             Layer corresponding to the alignemnt between the lyrics and the audio.
         prior_alignment_head (`list`, *optional*, defaults to [2, None, None]):
             Index of the attention head which takes care of the alignemnt between the lyrics and the audio.
-        prior_m_attn (`float`, *optional*, defaults to 0.25):
-
         prior_attn_dropout (`int`, *optional*, defaults to 0):
-
+            Dropout probability for the post-attention layer dropout of the prior models.
         prior_resid_dropout (`int`, *optional*, defaults to 0):
-
+            Residual dropout probability used in the attention layers of the prior models.
         prior_emb_dropout (`int`, *optional*, defaults to 0):
-
+            Dropout applied to the embedding layer of the priors.
         vqvae_levels (`int`, *optional*, defaults to 3):
             Number of hierachical levels that used in the VQVAE.
         vqvae_downs_t (`tuple`, *optional*, defaults to (3, 2, 2)):
-
+            Downsampling rate for each level of the hierachical VQ-VAE.
         vqvae_strides_t (`tuple`, *optional*, defaults to (2, 2, 2)):
-
+            Stride used for each level of the hierachical VQ-VAE.
         vqvae_emmbedding_width (`int`, *optional*, defaults to 64):
             Dimension of the codebook vectors.
         vqvae_codebook_dimension (`int`, *optional*, defaults to 2048):
             Number of codes to use in each of the VQVAE.
-        vqvae_width (`int`, *optional*, defaults to 32):
-
-        vqvae_depth (`int`, *optional*, defaults to 4):
-
         vqvae_m_conv (`int`, *optional*, defaults to 1):
-
+            Projection factor used in the `JukeboxResConv1DBlock`.
         vqvae_dilation_growth_rate (`int`, *optional*, defaults to 3):
-
-        vqvae_dilation_cycle (`bool`, *optional*, defaults to False):
-
+            Resnet dilation growth rate used in the VQVAE (dilation_growth_rate ** depth)
+        vqvae_dilation_cycle (`int`, *optional*, defaults to None):
+            Dilation cycle value used in the `JukeboxResnet`. If an int is used, each new Conv1 block will have a depth
+            of reduced by a power of `vqvae_dilation_cycle`.
         vqvae_multipliers (`tuple`, *optional*, defaults to (2, 1, 1)):
-
+            Depth and width multipliers used for each level. Used on the `vqvae_conv_block_width` and
+            `vqvae_conv_block_depth`
         vqvae_lmu (`float`, *optional*, defaults to 0.99):
-
+            Used in the codebook update, exponential moving average coefficient. For more detail refer to Appendix A.1
+            of the original [VQVAE paper](https://arxiv.org/pdf/1711.00937v2.pdf)
         vqvae_commit (`float`, *optional*, defaults to 0.02):
-
+            Commit loss multiplier.
         vqvae_conv_block_depth (`int`, *optional*, defaults to 4):
-
+            Depth of the encoder and decoder block. If no `vqvae_multipliers` are used, this is the same for each
+            level.
         vqvae_conv_block_width (`int`, *optional*, defaults to 32):
-
+            Width of the encoder and decoder block. If no `vqvae_multipliers` are used, this is the same for each
+            level.
         vqvae_reverse_decoder_dilation (`int`, *optional*, defaults to 1):
-
+            Whether or not to reverse the dilation rate for the decoder.
     Example:
 
     ```python
@@ -219,10 +218,9 @@ class JukeboxConfig(PretrainedConfig):
 
     model_type = "jukebox"
     attribute_map = {
-        "hidden_size": "n_embd",
+        "hidden_size": "vqvae_codebook_dimension",
         "max_position_embeddings": "n_positions",
         "num_attention_heads": "n_head",
-        "num_hidden_layers": "n_layer",
     }
 
     def __init__(
@@ -265,13 +263,11 @@ class JukeboxConfig(PretrainedConfig):
         lyric_enc_emb_dropout=0.0,
         lyric_enc_zero_out=False,
         lyric_enc_res_scale=False,
-        lyric_enc_pos_init=False,
         lyric_enc_n_vocab=79,
         prior_init_scale=[0.2, 1, 1],
         prior_spread=None,
         prior_zero_out=False,
         prior_res_scale=False,
-        prior_pos_init=False,
         prior_n_ctx=(6144, 8192, 8192),
         prior_latent_dim=2048,
         prior_width=[2048, 1920, 1920],
@@ -319,7 +315,6 @@ class JukeboxConfig(PretrainedConfig):
         self.prior_emb_dropout = prior_emb_dropout
         self.prior_zero_out = prior_zero_out
         self.prior_res_scale = prior_res_scale
-        self.prior_pos_init = prior_pos_init
         self.prior_blocks = prior_blocks
         self.prior_m_attn = prior_m_attn
         self.prior_spread = prior_spread
@@ -363,7 +358,6 @@ class JukeboxConfig(PretrainedConfig):
         self.lyric_enc_loss_fraction = lyric_enc_loss_fraction
         self.lyric_enc_m_attn = lyric_enc_m_attn
         self.lyric_enc_m_mlp = lyric_enc_m_mlp
-        self.lyric_enc_pos_init = lyric_enc_pos_init
         self.lyric_enc_resid_dropout = lyric_enc_resid_dropout
         self.lyric_enc_res_scale = lyric_enc_res_scale
         self.lyric_enc_spread = lyric_enc_spread

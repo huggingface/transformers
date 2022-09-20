@@ -18,23 +18,18 @@
 import json
 import os
 from json.encoder import INFINITY
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
 import regex as re
 from tokenizers import normalizers
-from transformers.testing_utils import require_torch
 from transformers.utils.generic import _is_jax, _is_numpy
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, is_flax_available, is_tf_available, is_torch_available, logging
 
-
-if TYPE_CHECKING:
-    if is_torch_available():
-        import torch
 
 logger = logging.get_logger(__name__)
 
@@ -66,40 +61,6 @@ PRETRAINED_LYRIC_TOKENS_SIZES = {
 
 
 """
-
-
-@require_torch
-def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, offset, duration):
-    """
-    Extract only the relevant tokens based on the character position. A total of `max_n_lyric_tokens` tokens will be
-    returned. If the provided token sequence is smaller, it will be padded, othewise, only characters ranging from the
-    midpoint - `max_n_lyric_tokens//2` to the midpoint + `max_n_lyric_tokens//2` will be returned. This *focuses* on
-    the most relevant tokens (in time) for the sequence.
-
-    Args:
-        full_tokens (`List[int]`):
-            List containing the ids of the entire lyrics.
-        total_length (`int`):
-            Total expected length of the music (not all of it is generated, see duration), in samples.
-        offset (`int`):
-            Starting sample in the music. If the offset is greater than 0, the lyrics will be shifted take that into
-            account
-        duration (`int`):
-            Expected duration of the generated music, in samples. The duration has to be smaller than the total lenght,
-            which represent the overall length of the signal,
-    """
-    import torch
-
-    full_tokens = full_tokens[0]
-    if len(full_tokens) < max_n_lyric_tokens:
-        tokens = torch.cat([torch.zeros(max_n_lyric_tokens - len(full_tokens)), full_tokens])
-        indices = [-1] * (max_n_lyric_tokens - len(full_tokens)) + list(range(0, len(full_tokens)))
-    else:
-        midpoint = int(len(full_tokens) * (offset + duration / 2.0) / total_length)
-        midpoint = min(max(midpoint, max_n_lyric_tokens // 2), len(full_tokens) - max_n_lyric_tokens // 2)
-        tokens = full_tokens[midpoint - max_n_lyric_tokens // 2 : midpoint + max_n_lyric_tokens // 2]
-        indices = list(range(midpoint - max_n_lyric_tokens // 2, midpoint + max_n_lyric_tokens // 2))
-    return tokens.unsqueeze(dim=0), indices
 
 
 class JukeboxTokenizer(PreTrainedTokenizer):
@@ -467,7 +428,9 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         return (artists_file, genres_file, lyrics_file)
 
     def _convert_id_to_token(self, artists_index, genres_index, lyric_index):
-        """Converts an index (integer) in a token (str) using the vocab.
+        """
+        Converts an index (integer) in a token (str) using the vocab.
+
         Args:
             artists_index (`int`):
                 Index of the artist in its corresponding dictionnary.
