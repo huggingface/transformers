@@ -261,7 +261,7 @@ class BeitFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 resized = self.resize(image=semantic_segmentation[idx], size=target_sizes[idx])
                 resized_maps.append(resized)
 
-            semantic_segmentation = [torch.Tensor(np.array(image)).to(torch.int64) for image in resized_maps]
+            semantic_segmentation = [torch.Tensor(np.array(image)).long() for image in resized_maps]
         else:
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
