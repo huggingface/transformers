@@ -16,6 +16,7 @@
 
 
 import math
+import warnings
 from copy import deepcopy
 from dataclasses import dataclass
 from itertools import repeat
@@ -188,7 +189,7 @@ class TimeSformerEmbeddings(nn.Module):
             other_pos_embed = pos_embed[0, 1:, :].unsqueeze(0).transpose(1, 2)
             P = int(other_pos_embed.size(2) ** 0.5)
             H = embeddings.size(1) // image_width
-            other_pos_embed = other_pos_embed.reshape(1, x.size(2), P, P)
+            other_pos_embed = other_pos_embed.reshape(1, embeddings.size(2), P, P)
             new_pos_embed = F.interpolate(other_pos_embed, size=(H, image_width), mode="nearest")
             new_pos_embed = new_pos_embed.flatten(2)
             new_pos_embed = new_pos_embed.transpose(1, 2)
@@ -259,7 +260,7 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
 
 # Copied from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit_utils.py#L64
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
-    # type: (Tensor, float, float, float, float) -> Tensor
+    # type: (tensor, float, float, float, float) -> tensor
     r"""Fills the input Tensor with values drawn from a truncated
     normal distribution. The values are effectively drawn from the
     normal distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`
@@ -457,11 +458,8 @@ class TimeSformerLayer(nn.Module):
         super().__init__()
 
         dim = config.hidden_size
-        num_heads = config.num_attention_heads
-        qkv_bias = config.qkv_bias
         attention_type = config.attention_type
-        drop = config.hidden_dropout_prob
-        attn_drop = config.attention_probs_dropout_prob
+
         dpr = [
             x.item() for x in torch.linspace(0, config.drop_path_prob, config.num_hidden_layers)
         ]  # stochastic depth decay rule
@@ -492,7 +490,7 @@ class TimeSformerLayer(nn.Module):
             x = x + self.drop_path(self.intermediate(self.layernorm_after(x)))
             return x
         elif self.attention_type == "divided_space_time":
-            ## Temporal
+            # Temporal
             xt = x[:, 1:, :]
             xt = rearrange(xt, "b (h w t) m -> (b h w) t m", b=B, h=H, w=W, t=T)
             res_temporal = self.drop_path(self.temporal_attn(self.temporal_norm1(xt)))
@@ -500,7 +498,7 @@ class TimeSformerLayer(nn.Module):
             res_temporal = self.temporal_fc(res_temporal)
             xt = x[:, 1:, :] + res_temporal
 
-            ## Spatial
+            # Spatial
             init_cls_token = x[:, 0, :].unsqueeze(1)
             cls_token = init_cls_token.repeat(1, T, 1)
             cls_token = rearrange(cls_token, "b t m -> (b t) m", b=B, t=T).unsqueeze(1)
@@ -509,16 +507,16 @@ class TimeSformerLayer(nn.Module):
             xs = torch.cat((cls_token, xs), 1)
             res_spatial = self.drop_path(self.attention(self.layernorm_before(xs)))
 
-            ### Taking care of CLS token
+            # Taking care of CLS token
             cls_token = res_spatial[:, 0, :]
             cls_token = rearrange(cls_token, "(b t) m -> b t m", b=B, t=T)
-            cls_token = torch.mean(cls_token, 1, True)  ## averaging for every frame
+            cls_token = torch.mean(cls_token, 1, True)  # averaging for every frame
             res_spatial = res_spatial[:, 1:, :]
             res_spatial = rearrange(res_spatial, "(b t) (h w) m -> b (h w t) m", b=B, h=H, w=W, t=T)
             res = res_spatial
             x = xt
 
-            ## Mlp
+            # Mlp
             x = torch.cat((init_cls_token, x), 1) + torch.cat((cls_token, res), 1)
             x = x + self.drop_path(self.intermediate(self.layernorm_after(x)))
             return x
@@ -580,22 +578,6 @@ class TimeSformerEncoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
-
-
-# Copied from transformers.models.vit.modeling_vit.ViTOutput ViT->TimeSformer
-class TimeSformerOutput(nn.Module):
-    def __init__(self, config: TimeSformerConfig) -> None:
-        super().__init__()
-        self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        hidden_states = hidden_states + input_tensor
-
-        return hidden_states
 
 
 # Copied from transformers.models.videomae.modeling_videomae.VideoMAEPreTrainedModel with VideoMAE->TimeSformer,videomae->timesformer
