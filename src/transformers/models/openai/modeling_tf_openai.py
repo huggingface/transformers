@@ -315,7 +315,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
             # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
             # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
             tf.debugging.assert_less(
-                input_ids,
+                token_type_ids,
                 tf.cast(self.vocab_size, dtype=input_ids.dtype),
                 message=(
                     "input_ids must be smaller than the embedding layer's input dimension (got"
