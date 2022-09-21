@@ -502,6 +502,35 @@ def _numpy_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] 
     return result
 
 
+def _token_type_ids_with_pad(examples, tokenizer, pad_to_multiple_of: int):
+    import torch
+    """
+    Create "token_type_ids" for Bert-like models
+    used when input_ids_a & input_ids_b already in the same chunk separated by [SEP] token id
+    (for those not in the same chunk, use "tokenizer.create_token_type_ids_from_sequences(token_a, token_b)")
+    """
+    if isinstance(examples, torch.Tensor):
+        examples = examples.tolist()
+        
+    # Calculate target max sequence length to fill in pad token id with
+    if max([len(example) for example in examples]) % pad_to_multiple_of == 0:
+        max_seq_len = max([len(example) for example in examples])
+    else:
+        max_seq_len = pad_to_multiple_of + (max([len(example) for example in examples]) // pad_to_multiple_of) * pad_to_multiple_of
+    
+    # Fill in token type id to the right side of given input ids until max sequence length
+    token_type_ids_with_padding = []
+    for example in examples:
+        for idx in range(len(example)):
+            if example[idx] == tokenizer.sep_token_id and idx != len(example) - 1:
+                token_type_ids_with_padding.append([0] * (idx + 1) + [1] * (max_seq_len-idx-1))
+                break
+            if idx == len(example) - 1:
+                token_type_ids_with_padding.append([0 for _ in range(max_seq_len)])
+                
+    return torch.tensor(token_type_ids_with_padding).long()
+
+
 def tolist(x):
     if isinstance(x, list):
         return x
