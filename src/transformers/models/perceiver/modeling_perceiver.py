@@ -1269,6 +1269,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        Predicted class: tabby, tabby cat
         ```"""
         if inputs is not None and pixel_values is not None:
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
@@ -1406,6 +1407,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        Predicted class: tabby, tabby cat
         ```"""
         if inputs is not None and pixel_values is not None:
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
@@ -1543,6 +1545,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        Predicted class: tabby, tabby cat
         ```"""
         if inputs is not None and pixel_values is not None:
             raise ValueError("You cannot use both `inputs` and `pixel_values`")
