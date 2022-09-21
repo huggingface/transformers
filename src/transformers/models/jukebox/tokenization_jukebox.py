@@ -52,7 +52,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_LYRIC_TOKENS_SIZES = {
-    "jukebox": 512,  # corresonds to the dummy-model ?
+    "jukebox": 512, 
 }
 
 """" batch_outputs = BatchEncoding(
