@@ -205,8 +205,7 @@ class DPTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
-        Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps. Only supports
-        PyTorch.
+        Converts the output of [`DPTForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
         Args:
             outputs ([`DPTForSemanticSegmentation`]):

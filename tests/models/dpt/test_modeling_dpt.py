@@ -298,7 +298,7 @@ class DPTModelIntegrationTest(unittest.TestCase):
         ).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4))
-    
+
     def test_post_processing_semantic_segmentation(self):
         feature_extractor = DPTFeatureExtractor.from_pretrained("Intel/dpt-large-ade")
         model = DPTForSemanticSegmentation.from_pretrained("Intel/dpt-large-ade").to(torch_device)
