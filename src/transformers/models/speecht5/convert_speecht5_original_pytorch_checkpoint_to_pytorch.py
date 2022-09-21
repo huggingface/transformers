@@ -34,55 +34,179 @@ from transformers import (
 
 
 logging.set_verbosity_info()
-logger = logging.get_logger(__name__)
+logger = logging.get_logger("transformers.models.speecht5")
+
+MAPPING = {
+    "speech_encoder_prenet.layer_norm": "speech_encoder_prenet.feature_projection.layer_norm",
+    "speech_encoder_prenet.post_extract_proj": "speech_encoder_prenet.feature_projection.projection",
+    "speech_encoder_prenet.pos_conv.0": "speech_encoder_prenet.pos_conv_embed.conv",
+    "speech_encoder_prenet.mask_emb": "speech_encoder_prenet.masked_spec_embed",
+    "encoder.layers.*.self_attn.k_proj": "speecht5.encoder.layers.*.attention.k_proj",
+    "encoder.layers.*.self_attn.v_proj": "speecht5.encoder.layers.*.attention.v_proj",
+    "encoder.layers.*.self_attn.q_proj": "speecht5.encoder.layers.*.attention.q_proj",
+    "encoder.layers.*.self_attn.out_proj": "speecht5.encoder.layers.*.attention.out_proj",
+    "encoder.layers.*.self_attn_layer_norm": "speecht5.encoder.layers.*.layer_norm",
+    "encoder.layers.*.fc1": "speecht5.encoder.layers.*.feed_forward.intermediate_dense",
+    "encoder.layers.*.fc2": "speecht5.encoder.layers.*.feed_forward.output_dense",
+    "encoder.layers.*.final_layer_norm": "speecht5.encoder.layers.*.final_layer_norm",
+    "encoder.layer_norm": "speecht5.encoder.layer_norm",
+    # "quantizer.weight_proj": "quantizer.weight_proj",
+    # "quantizer.vars": "quantizer.codevectors",
+    # "project_q": "project_q",
+    # "final_proj": "project_hid",
+    # "w2v_encoder.proj": "lm_head",
+}
+TOP_LEVEL_KEYS = [
+    # "lm_head",
+    # "quantizer.weight_proj",
+    # "quantizer.codevectors",
+    # "project_q",
+    # "project_hid",
+    #"speech_encoder_prenet",
+]
+IGNORE_KEYS = [
+    "encoder.version",
+    "encoder.layers.*.norm_k.weight",
+    "encoder.layers.*.norm_k.bias",
+    "speech_encoder_prenet.embed_positions._float_tensor",
+    "decoder.version",
+]
 
 
-def rename_key(name):
-    if "speech_encoder_prenet.feature_extractor." in name:
-        name = name.replace("speech_encoder_prenet.feature_extractor.", "speech_encoder_prenet.feature_encoder.")
-        name = name.replace(".0.0.", ".0.conv.")
-        name = name.replace(".0.2.weight", ".0.layer_norm.weight")
-        name = name.replace(".0.2.bias", ".0.layer_norm.bias")
-        name = name.replace(".0.weight", ".conv.weight")
+def set_recursively(hf_pointer, key, value, full_name, weight_type):
+    for attribute in key.split("."):
+        hf_pointer = getattr(hf_pointer, attribute)
 
-    if "speech_encoder_prenet." in name:
-        name = name.replace("speech_encoder_prenet.post_extract_proj.", "speech_encoder_prenet.feature_projection.projection.")
-        name = name.replace("speech_encoder_prenet.layer_norm.", "speech_encoder_prenet.feature_projection.layer_norm.")
-        name = name.replace("speech_encoder_prenet.pos_conv.0.", "speech_encoder_prenet.pos_conv_embed.conv.")
+    if weight_type is not None:
+        hf_shape = getattr(hf_pointer, weight_type).shape
+    else:
+        hf_shape = hf_pointer.shape
 
-    # Can ignore the following keys:
-    # "speech_encoder_prenet.embed_positions._float_tensor"
-    # "speech_encoder_prenet.mask_emb"
+    if hf_shape != value.shape:
+        raise ValueError(
+            f"Shape of hf {key + '.' + weight_type if weight_type is not None else ''} is {hf_shape}, but should be"
+            f" {value.shape} for {full_name}"
+        )
 
-    return name
+    if weight_type == "weight":
+        hf_pointer.weight.data = value
+    elif weight_type == "weight_g":
+        hf_pointer.weight_g.data = value
+    elif weight_type == "weight_v":
+        hf_pointer.weight_v.data = value
+    elif weight_type == "bias":
+        hf_pointer.bias.data = value
+    else:
+        hf_pointer.data = value
+
+    logger.info(f"{key + ('.' + weight_type if weight_type is not None else '')} was initialized from {full_name}.")
 
 
-def convert_state_dict(orig_state_dict, model):
-    for key in orig_state_dict.copy().keys():
-        val = orig_state_dict.pop(key)
+def should_ignore(name):
+    for key in IGNORE_KEYS:
+        if "*" in key:
+            prefix, suffix = key.split(".*.")
+            if prefix in name and suffix in name:
+                return True
+        elif key in name:
+            return True
+    return False
 
-        if "qkv" in key:
-            # key_split = key.split(".")
-            # layer_num = int(key_split[0][6:]) - 1
-            # transformer_num = int(key_split[3])
-            # layer = model.get_submodule(f"{model_prefix}encoder.layer.{layer_num}")
-            # dim = layer.transformer.layer[transformer_num].attention.attention.all_head_size
-            # prefix = (
-            #     f"{model_prefix}encoder.layer.{layer_num}.transformer.layer.{transformer_num}.attention.attention."
-            # )
-            # if "weight" in key:
-            #     orig_state_dict[prefix + "query.weight"] = val[:dim, :]
-            #     orig_state_dict[prefix + "key.weight"] = val[dim : dim * 2, :]
-            #     orig_state_dict[prefix + "value.weight"] = val[-dim:, :]
-            # else:
-            #     orig_state_dict[prefix + "query.bias"] = val[:dim]
-            #     orig_state_dict[prefix + "key.bias"] = val[dim : dim * 2]
-            #     orig_state_dict[prefix + "value.bias"] = val[-dim:]
-            pass
+
+def recursively_load_weights(fairseq_dict, hf_model):
+    unused_weights = []
+
+    for name, value in fairseq_dict.items():
+        if should_ignore(name):
+            logger.info(f"{name} was ignored")
+            continue
+
+        is_used = False
+        if "conv_layers" in name:
+            load_conv_layer(
+                name,
+                value,
+                hf_model.speech_encoder_prenet.feature_encoder,
+                unused_weights,
+                hf_model.config.feat_extract_norm == "group",
+            )
+            is_used = True
         else:
-            orig_state_dict[rename_key(key)] = val
+            for key, mapped_key in MAPPING.items():
+                # mapped_key = "speecht5." + mapped_key if mapped_key not in TOP_LEVEL_KEYS else mapped_key
 
-    return orig_state_dict
+                if "*" in key:
+                    prefix, suffix = key.split(".*.")
+                    if prefix in name and suffix in name:
+                        key = suffix
+
+                # if key in name or key.split("w2v_model.")[-1] == name.split(".")[0]:
+                if key in name:
+                    is_used = True
+                    if "*" in mapped_key:
+                        layer_index = name.split(key)[0].split(".")[-2]
+                        mapped_key = mapped_key.replace("*", layer_index)
+                    if "weight_g" in name:
+                        weight_type = "weight_g"
+                    elif "weight_v" in name:
+                        weight_type = "weight_v"
+                    elif "bias" in name:
+                        weight_type = "bias"
+                    elif "weight" in name:
+                        # TODO: don't match quantizer.weight_proj
+                        weight_type = "weight"
+                    else:
+                        weight_type = None
+                    set_recursively(hf_model, mapped_key, value, name, weight_type)
+                continue
+        if not is_used:
+            unused_weights.append(name)
+
+    logger.warning(f"Unused weights: {unused_weights}")
+
+
+def load_conv_layer(full_name, value, feature_extractor, unused_weights, use_group_norm):
+    name = full_name.split("conv_layers.")[-1]
+    items = name.split(".")
+    layer_id = int(items[0])
+    type_id = int(items[1])
+
+    if type_id == 0:
+        if "bias" in name:
+            if value.shape != feature_extractor.conv_layers[layer_id].conv.bias.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but"
+                    f" {feature_extractor.conv_layers[layer_id].conv.bias.data.shape} was found."
+                )
+            feature_extractor.conv_layers[layer_id].conv.bias.data = value
+            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
+        elif "weight" in name:
+            if value.shape != feature_extractor.conv_layers[layer_id].conv.weight.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but"
+                    f" {feature_extractor.conv_layers[layer_id].conv.weight.data.shape} was found."
+                )
+            feature_extractor.conv_layers[layer_id].conv.weight.data = value
+            logger.info(f"Feat extract conv layer {layer_id} was initialized from {full_name}.")
+    elif (type_id == 2 and not use_group_norm) or (type_id == 2 and layer_id == 0 and use_group_norm):
+        if "bias" in name:
+            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but"
+                    f" {feature_extractor.conv_layers[layer_id].layer_norm.bias.data.shape} was found."
+                )
+            feature_extractor.conv_layers[layer_id].layer_norm.bias.data = value
+            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
+        elif "weight" in name:
+            if value.shape != feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape:
+                raise ValueError(
+                    f"{full_name} has size {value.shape}, but"
+                    f" {feature_extractor.conv_layers[layer_id].layer_norm.weight.data.shape} was found."
+                )
+            feature_extractor.conv_layers[layer_id].layer_norm.weight.data = value
+            logger.info(f"Feat extract layer norm weight of layer {layer_id} was initialized from {full_name}.")
+    else:
+        unused_weights.append(full_name)
 
 
 @torch.no_grad()
@@ -146,8 +270,7 @@ def convert_speecht5_checkpoint(
         raise ValueError(f"Unknown model name: {task}")
 
     fairseq_checkpoint = torch.load(checkpoint_path)
-    new_state_dict = convert_state_dict(fairseq_checkpoint["model"], model)
-    model.load_state_dict(new_state_dict, strict=False)  # TODO: remove strict=False for final model
+    recursively_load_weights(fairseq_checkpoint["model"], model)
 
     model.save_pretrained(pytorch_dump_folder_path)
 
