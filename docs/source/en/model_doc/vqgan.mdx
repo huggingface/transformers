@@ -1,0 +1,68 @@
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
+
+http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+-->
+
+# VQGAN
+
+## Overview
+
+The VQGAN model was proposed in [Taming Transformers for High-Resolution Image Synthesis](https://arxiv.org/abs/2012.09841)  by Patrick Esser, Robin Rombach, Björn Ommer.
+
+The abstract from the paper is the following:
+
+*Designed to learn long-range interactions on sequential data, transformers continue to show state-of-the-art results on a wide variety of tasks. In contrast to CNNs, they contain no inductive bias that prioritizes local interactions. This makes them expressive, but also computationally infeasible for long sequences, such as high-resolution images. We demonstrate how combining the effectiveness of the inductive bias of CNNs with the expressivity of transformers enables them to model and thereby synthesize high-resolution images. We show how to (i) use CNNs to learn a context-rich vocabulary of image constituents, and in turn (ii) utilize transformers to efficiently model their composition within high-resolution images. Our approach is readily applied to conditional synthesis tasks, where both non-spatial information, such as object classes, and spatial information, such as segmentations, can control the generated image. In particular, we present the first results on semantically-guided synthesis of megapixel images with transformers and obtain the state of the art among autoregressive models on class-conditional ImageNet.*
+
+
+## Usage
+
+TODO (patil-suraj): add some tips here
+
+```python
+>>> from PIL import Image
+>>> import requests
+>>> from transformers import VQGANFeatureExtractor, VQGANModel
+
+>>> model = VQGANModel.from_pretrained("CompVis/vqgan-imagenet-f16-1024")
+>>> feature_extractor = VQGANFeatureExtractor.from_pretrained("CompVis/vqgan-imagenet-f16-1024")
+
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> inputs = feature_extractor(image, return_tensors="pt")
+
+>>> output = model(**inputs)
+>>> reconstructed_pixel_values = output.reconstructed_pixel_values  # this is the reconstructed image
+>>> codebook_loss = output.codebook_loss  # this is the codebook loss to be optimized
+
+>>> # convert the tensor to PIL image
+>>> reconstructed_pixel_values = torch.clamp(reconstructed_pixel_values.detach(), -1.0, 1.0)
+>>> reconstructed_pixel_values = (reconstructed_pixel_values + 1.0) / 2.0
+>>> reconstructed_pixel_values = reconstructed_pixel_values.transpose(1, 2, 0).cpu().numpy()
+>>> reconstructed_pixel_values = (reconstructed_pixel_values * 255.0).astype(np.uint8)
+>>> reconstructed_image = Image.fromarray(reconstructed_pixel_values)
+```
+
+This model was contributed by [valhalla](<https://huggingface.co/valhalla). The original code can be found [here](https://github.com/CompVis/taming-transformers).
+
+## VQGANConfig
+
+[[autodoc]] VQGANConfig
+
+
+## VQGANFeatureExtractor
+
+[[autodoc]] VQGANFeatureExtractor
+
+
+## VQGANModel
+
+[[autodoc]] VQGANModel
+    - forward

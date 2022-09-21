@@ -358,6 +358,7 @@ _import_structure = {
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
+    "models.vqgan": ["VQGAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "VQGANConfig"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2Config",
@@ -678,6 +679,7 @@ else:
     _import_structure["models.vilt"].append("ViltFeatureExtractor")
     _import_structure["models.vilt"].append("ViltProcessor")
     _import_structure["models.vit"].append("ViTFeatureExtractor")
+    _import_structure["models.vqgan"].append("VQGANFeatureExtractor")
     _import_structure["models.yolos"].append("YolosFeatureExtractor")
 
 # Timm-backed objects
@@ -792,6 +794,14 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.vqgan"].extend(
+        [
+            "VQGAN_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "VQGANModel",
+            "VQGANPreTrainedModel",
+        ]
+    )
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3238,6 +3248,7 @@ if TYPE_CHECKING:
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
+    from .models.vqgan import VQGAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VQGANConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,
@@ -3518,6 +3529,7 @@ if TYPE_CHECKING:
         from .models.videomae import VideoMAEFeatureExtractor
         from .models.vilt import ViltFeatureExtractor, ViltProcessor
         from .models.vit import ViTFeatureExtractor
+        from .models.vqgan import VQGANFeatureExtractor
         from .models.yolos import YolosFeatureExtractor
 
     # Modeling
@@ -4564,6 +4576,7 @@ if TYPE_CHECKING:
             ViTMAEModel,
             ViTMAEPreTrainedModel,
         )
+        from .models.vqgan import VQGAN_PRETRAINED_MODEL_ARCHIVE_LIST, VQGANModel, VQGANPreTrainedModel
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
             Wav2Vec2ForAudioFrameClassification,

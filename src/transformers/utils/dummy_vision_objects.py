@@ -178,6 +178,13 @@ class ViTFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class VQGANFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class YolosFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 

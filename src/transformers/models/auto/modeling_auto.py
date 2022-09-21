@@ -138,6 +138,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("visual_bert", "VisualBertModel"),
         ("vit", "ViTModel"),
         ("vit_mae", "ViTMAEModel"),
+        ("vqgan", "VQGANModel"),
         ("wav2vec2", "Wav2Vec2Model"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
         ("wavlm", "WavLMModel"),
