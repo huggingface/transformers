@@ -51,6 +51,7 @@ from .utils import (
     logging,
     requires_backends,
     torch_required,
+    torch_version,
 )
 
 
@@ -1345,6 +1346,11 @@ class TrainingArguments:
                 if self.xpu_backend == "ccl":
                     requires_backends(self, "oneccl_bind_pt")
                     if ccl_version >= "1.12":
+                        if "1.12.0" in ccl_version and torch_version == version.parse("1.12.1"):
+                            raise ValueError(
+                                "oneccl_bindings_for_pytorch 1.12.0 prebuilt wheel does not work with PyTorch 1.12.1. "
+                                "Please use torch 1.12.0 to work with oneccl_bindings_for_pytorch 1.12.0."
+                            )
                         import oneccl_bindings_for_pytorch  # noqa: F401
                     else:
                         import torch_ccl  # noqa: F401
@@ -1353,7 +1359,6 @@ class TrainingArguments:
                             "CPU distributed training backend is ccl. but CCL_WORKER_COUNT is not correctly set. "
                             "Please use like 'export CCL_WORKER_COUNT = 1' to set."
                         )
-
                 # Try to get launch configuration from environment variables set by MPI launcher - works for Intel MPI, OpenMPI and MVAPICH
                 rank = get_int_from_env(["RANK", "PMI_RANK", "OMPI_COMM_WORLD_RANK", "MV2_COMM_WORLD_RANK"], 0)
                 size = get_int_from_env(["WORLD_SIZE", "PMI_SIZE", "OMPI_COMM_WORLD_SIZE", "MV2_COMM_WORLD_SIZE"], 1)
