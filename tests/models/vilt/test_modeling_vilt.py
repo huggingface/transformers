@@ -519,29 +519,17 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
     @require_accelerate
     @require_torch_gpu
     def test_cpu_offload(self):
-        r"""
-        We have to customly call the method from the superclass using the attribute `reset_seed_before_every_forward`
-        since a seed needs to be fixed before each forward pass due to model stochasticity.
-        """
-        super().test_cpu_offload(reset_seed_before_every_forward=True)
+        super().test_cpu_offload()
 
     @require_accelerate
     @require_torch_gpu
     def test_disk_offload(self):
-        r"""
-        We have to customly call the method from the superclass using the attribute `reset_seed_before_every_forward`
-        since a seed needs to be fixed before each forward pass due to model stochasticity.
-        """
-        super().test_disk_offload(reset_seed_before_every_forward=True)
+        super().test_disk_offload()
 
     @require_accelerate
     @require_torch_multi_gpu
     def test_model_parallelism(self):
-        r"""
-        We have to customly call the method from the superclass using the attribute `reset_seed_before_every_forward`
-        since a seed needs to be fixed before each forward pass due to model stochasticity.
-        """
-        super().test_model_parallelism(reset_seed_before_every_forward=True)
+        super().test_model_parallelism()
 
 
 @require_torch
