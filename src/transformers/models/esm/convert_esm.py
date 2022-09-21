@@ -48,6 +48,9 @@ logger = logging.get_logger(__name__)
 
 SAMPLE_DATA = [
     ("protein1", "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLAGG"),
+    ("protein2", "MKTVRQERLKSIVRILERSKEPVSGAQLAEELSVSRQVIVQDIAYLRSLGYNIVATPRGYVLA"),
+    ("protein3", "MKTVRQERLKSI<mask>RILERSKEPVSGAQLAEELS<mask>SRQVIVQDIAYLRSLGYN<mask>VATPRGYVLAGG"),
+    ("protein4", "MKTVRQERLKSI<mask>RILERSKEPVSGAQLAEELS<mask>SRQVIVQDIAYLRSLGYN<mask>VATPRGYVLA"),
 ]
 
 MODEL_MAPPING = {
@@ -69,17 +72,18 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
     esm_sent_encoder = esm
     config = ESMConfig(
         vocab_size=esm_sent_encoder.embed_tokens.num_embeddings,
+        mask_token_id=alphabet.mask_idx,
         hidden_size=esm.args.embed_dim,
         num_hidden_layers=esm.args.layers,
         num_attention_heads=esm.args.attention_heads,
         intermediate_size=esm.args.ffn_embed_dim,
         max_position_embeddings=1026,
-        type_vocab_size=1,
         layer_norm_eps=1e-5,  # PyTorch default used in fairseq
         attention_probs_dropout_prob=0.0,
         hidden_dropout_prob=0.,
         pad_token_id=esm.padding_idx,
-        emb_layer_norm_before=esm.emb_layer_norm_before,
+        emb_layer_norm_before=True if esm.emb_layer_norm_before else False,
+        token_dropout=esm.args.token_dropout,
     )
     if classification_head:
         config.num_labels = esm.classification_heads["mnli"].out_proj.weight.shape[0]
@@ -92,13 +96,10 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
     # Embeddings
     model.esm.embeddings.word_embeddings.weight = esm_sent_encoder.embed_tokens.weight
     model.esm.embeddings.position_embeddings.weight = esm_sent_encoder.embed_positions.weight
-    model.esm.embeddings.token_type_embeddings.weight.data = torch.zeros_like(
-        model.esm.embeddings.token_type_embeddings.weight
-    )  # just zero them out b/c ESM doesn't use them.
 
     if config.emb_layer_norm_before:
-        model.esm.embeddings.LayerNorm.weight = esm_sent_encoder.emb_layer_norm_before.weight
-        model.esm.embeddings.LayerNorm.bias = esm_sent_encoder.emb_layer_norm_before.bias
+        model.esm.embeddings.layer_norm.weight = esm_sent_encoder.emb_layer_norm_before.weight
+        model.esm.embeddings.layer_norm.bias = esm_sent_encoder.emb_layer_norm_before.bias
 
     model.esm.encoder.emb_layer_norm_after.weight = esm_sent_encoder.emb_layer_norm_after.weight
     model.esm.encoder.emb_layer_norm_after.bias = esm_sent_encoder.emb_layer_norm_after.bias
@@ -178,21 +179,21 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
         vocab_file.write_text(vocab)
         hf_tokenizer = ESMTokenizer(vocab_file=str(vocab_file))
 
-    hf_tokens = hf_tokenizer(SAMPLE_DATA[0][1], return_tensors="pt")
+    hf_tokens = hf_tokenizer([row[1] for row in SAMPLE_DATA], return_tensors="pt", padding=True)
     success = torch.all(hf_tokens["input_ids"] == batch_tokens)
     print("Do both models tokenizers output the same tokens?", "🔥" if success else "💩")
     if not success:
         raise Exception("Tokenization does not match!")
 
-    input_ids = batch_tokens
-
     with torch.no_grad():
-        our_output = model(input_ids, output_hidden_states=True)
+        our_output = model(**hf_tokens, output_hidden_states=True)
+        our_hiddens = our_output.hidden_states
         our_output = our_output["logits"]
         if classification_head:
-            their_output = esm.model.classification_heads["mnli"](esm.extract_features(input_ids))
+            their_output = esm.model.classification_heads["mnli"](esm.extract_features(batch_tokens))
         else:
-            their_output = esm(input_ids)
+            their_output = esm(batch_tokens, repr_layers=list(range(999)))
+            their_hiddens = their_output["representations"]
             their_output = their_output["logits"]
     print(our_output.shape, their_output.shape)
     max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()

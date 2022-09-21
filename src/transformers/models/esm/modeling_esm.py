@@ -20,7 +20,6 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -144,7 +143,6 @@ class ESMEmbeddings(nn.Module):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-        self.token_type_embeddings = nn.Embedding(config.type_vocab_size, config.hidden_size)
 
         if config.emb_layer_norm_before:
             self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -154,21 +152,16 @@ class ESMEmbeddings(nn.Module):
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        if version.parse(torch.__version__) > version.parse("1.6.0"):
-            self.register_buffer(
-                "token_type_ids",
-                torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
-                persistent=False,
-            )
 
-        self.encoder_keep_prob = config.encoder_keep_prob
         self.padding_idx = config.pad_token_id
         self.position_embeddings = nn.Embedding(
             config.max_position_embeddings, config.hidden_size, padding_idx=self.padding_idx
         )
+        self.token_dropout = config.token_dropout
+        self.mask_token_id = config.mask_token_id
 
     def forward(
-        self, input_ids=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
+        self, input_ids=None, attention_mask=None, position_ids=None, inputs_embeds=None, past_key_values_length=0
     ):
         if position_ids is None:
             if input_ids is not None:
@@ -177,37 +170,43 @@ class ESMEmbeddings(nn.Module):
             else:
                 position_ids = self.create_position_ids_from_inputs_embeds(inputs_embeds)
 
-        if input_ids is not None:
-            input_shape = input_ids.size()
-        else:
-            input_shape = inputs_embeds.size()[:-1]
-
-        seq_length = input_shape[1]
-
-        # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
-        # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
-        # issue #5664
-        if token_type_ids is None:
-            if hasattr(self, "token_type_ids"):
-                buffered_token_type_ids = self.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(input_shape[0], seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
-            else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=self.position_ids.device)
-
         if inputs_embeds is None:
             inputs_embeds = self.word_embeddings(input_ids)
-        token_type_embeddings = self.token_type_embeddings(token_type_ids)
 
-        embeddings = inputs_embeds + token_type_embeddings
-        embeddings *= self.encoder_keep_prob
+        # Note that if we want to support ESM-1 (not 1b!) in future then we need to support an
+        # embedding_scale factor here.
+        embeddings = inputs_embeds
+        torch.save(embeddings, "hf_embeds.pt")
+
+        # Matt: ESM has the option to handle masking in MLM in a slightly unusual way. If the token_dropout
+        # flag is False then it is handled in the same was as BERT/RoBERTa. If it is set to True, however,
+        # masked tokens are treated as if they were selected for input dropout and zeroed out.
+        # This "mask-dropout" is compensated for when masked tokens are not present, by scaling embeddings by
+        # a factor of (fraction of unmasked tokens during training) / (fraction of unmasked tokens in sample).
+        # This is analogous to the way that dropout layers scale down outputs during evaluation when not
+        # actually dropping out values (or, equivalently, scale up their un-dropped outputs in training).
+        if self.token_dropout:
+            embeddings.masked_fill_((input_ids == self.mask_token_id).unsqueeze(-1), 0.0)
+            mask_ratio_train = 0.15 * 0.8  # Hardcoded as the ratio used in all ESM model training runs
+            src_lengths = attention_mask.sum(-1)
+            mask_ratio_observed = (input_ids == self.mask_token_id).sum(-1).float() / src_lengths
+            embeddings = embeddings * (1 - mask_ratio_train) / (1 - mask_ratio_observed)[:, None, None]
+
+        torch.save(embeddings, "hf_embeds_after_scaling.pt")
 
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
+
+        torch.save(embeddings, "hf_after_position_embeds.pt")
+
         if self.layer_norm is not None:
             embeddings = self.layer_norm(embeddings)
-        embeddings = self.dropout(embeddings)
+            if attention_mask is not None:
+                embeddings = embeddings * attention_mask.unsqueeze(-1)
+        torch.save(embeddings, "hf_after_layernorm.pt")
+        # Matt: I think this line was copied incorrectly from BERT, disabling it for now.
+        # embeddings = self.dropout(embeddings)
         return embeddings
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
@@ -722,14 +721,7 @@ ESM_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        token_type_ids (`torch.LongTensor` of shape `({0})`, *optional*):
-            Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,
-            1]`:
-
-            - 0 corresponds to a *sentence A* token,
-            - 1 corresponds to a *sentence B* token.
-
-            [What are token type IDs?](../glossary#token-type-ids)
+            
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
@@ -823,7 +815,6 @@ class ESMModel(ESMPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
@@ -884,14 +875,6 @@ class ESMModel(ESMPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 
-        if token_type_ids is None:
-            if hasattr(self.embeddings, "token_type_ids"):
-                buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
-            else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
@@ -917,7 +900,7 @@ class ESMModel(ESMPreTrainedModel):
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
-            token_type_ids=token_type_ids,
+            attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
             past_key_values_length=past_key_values_length,
         )
@@ -981,7 +964,6 @@ class ESMForCausalLM(ESMPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1048,7 +1030,6 @@ class ESMForCausalLM(ESMPreTrainedModel):
         outputs = self.esm(
             input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1145,7 +1126,6 @@ class ESMForMaskedLM(ESMPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1169,7 +1149,6 @@ class ESMForMaskedLM(ESMPreTrainedModel):
         outputs = self.esm(
             input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1255,7 +1234,6 @@ class ESMForSequenceClassification(ESMPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1275,7 +1253,6 @@ class ESMForSequenceClassification(ESMPreTrainedModel):
         outputs = self.esm(
             input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -1353,7 +1330,6 @@ class ESMForTokenClassification(ESMPreTrainedModel):
         self,
         input_ids=None,
         attention_mask=None,
-        token_type_ids=None,
         position_ids=None,
         head_mask=None,
         inputs_embeds=None,
@@ -1371,7 +1347,6 @@ class ESMForTokenClassification(ESMPreTrainedModel):
         outputs = self.esm(
             input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
