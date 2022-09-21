@@ -671,7 +671,6 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                         "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from those "
                         "weights."
                     )
-                # At this stage we don't have a weight file so we will raise an error.
                 else:
                     raise EnvironmentError(
                         f"Error no file named {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME} found in directory "
