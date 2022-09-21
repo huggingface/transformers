@@ -57,7 +57,7 @@ try:
 
     print("Using apex FusedLayerNorm")
 except ImportError:
-    from torch.nn import LayerNorm as FusedLayerNorm
+from torch.nn import LayerNorm as FusedLayerNorm
 
 
 def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, offset, duration):
@@ -156,11 +156,12 @@ class JukeboxResnet1D(nn.Module):
 
         blocks = []
         for depth in range(n_depth):
+            block_depth = depth if dilation_cycle is None else depth % dilation_cycle
             blocks.append(
                 JukeboxResConv1DBlock(
                     n_in,
                     int(m_conv * n_in),
-                    dilation=dilation_growth_rate ** _get_depth(depth),
+                    dilation=dilation_growth_rate**block_depth,
                     zero_out=zero_out,
                     res_scale=1.0 if not res_scale else 1.0 / math.sqrt(n_depth),
                 )
@@ -193,7 +194,8 @@ class JukeboxEncoderConvBlock(nn.Module):
     ):
         super().__init__()
         blocks = []
-        filter_t, pad_t = stride_t * 2, stride_t // 2
+        filter_t = stride_t * 2
+        pad_t = stride_t // 2
         if down_t > 0:
             for i in range(down_t):
                 blocks.append(nn.Conv1d(input_emb_width if i == 0 else width, width, filter_t, stride_t, pad_t))
@@ -591,7 +593,8 @@ class JukeboxVQVAE(PreTrainedModel):
         self.commit = config.vqvae_commit
 
         self.sample_length = input_shape[0]
-        x_shape, x_channels = input_shape[:-1], input_shape[-1]
+        x_shape = input_shape[:-1]
+        x_channels = input_shape[-1]
         self.x_shape = x_shape
 
         self.downsamples = [stride**down for stride, down in zip(strides_t, downs_t)]
