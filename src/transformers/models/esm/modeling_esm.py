@@ -176,7 +176,6 @@ class ESMEmbeddings(nn.Module):
         # Note that if we want to support ESM-1 (not 1b!) in future then we need to support an
         # embedding_scale factor here.
         embeddings = inputs_embeds
-        torch.save(embeddings, "hf_embeds.pt")
 
         # Matt: ESM has the option to handle masking in MLM in a slightly unusual way. If the token_dropout
         # flag is False then it is handled in the same was as BERT/RoBERTa. If it is set to True, however,
@@ -192,19 +191,14 @@ class ESMEmbeddings(nn.Module):
             mask_ratio_observed = (input_ids == self.mask_token_id).sum(-1).float() / src_lengths
             embeddings = embeddings * (1 - mask_ratio_train) / (1 - mask_ratio_observed)[:, None, None]
 
-        torch.save(embeddings, "hf_embeds_after_scaling.pt")
-
         if self.position_embedding_type == "absolute":
             position_embeddings = self.position_embeddings(position_ids)
             embeddings += position_embeddings
 
-        torch.save(embeddings, "hf_after_position_embeds.pt")
-
         if self.layer_norm is not None:
             embeddings = self.layer_norm(embeddings)
-            if attention_mask is not None:
-                embeddings = embeddings * attention_mask.unsqueeze(-1)
-        torch.save(embeddings, "hf_after_layernorm.pt")
+        if attention_mask is not None:
+            embeddings = embeddings * attention_mask.unsqueeze(-1)
         # Matt: I think this line was copied incorrectly from BERT, disabling it for now.
         # embeddings = self.dropout(embeddings)
         return embeddings
