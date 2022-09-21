@@ -810,7 +810,6 @@ class ESMModel(ESMPreTrainedModel):
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.bert.modeling_bert.BertModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
