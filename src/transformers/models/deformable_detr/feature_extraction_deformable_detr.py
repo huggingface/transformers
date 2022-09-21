@@ -37,12 +37,6 @@ logger = logging.get_logger(__name__)
 ImageInput = Union[Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]]
 
 
-def box_cxcywh_to_xyxy(x):
-    x_c, y_c, w, h = x.unbind(-1)
-    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
-    return torch.stack(b, dim=-1)
-
-
 # Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
 def center_to_corners_format(x):
     """
@@ -144,7 +138,7 @@ class DeformableDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtract
             sequence like `(width, height)`, output size will be matched to this. If size is an int, smaller edge of
             the image will be matched to this number. i.e, if `height > width`, then image will be rescaled to `(size *
             height / width, size)`.
-        max_size (`int`, *optional*, defaults to `1333`):
+        max_size (`int`, *optional*, defaults to 1333):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if `do_resize` is
             set to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
@@ -697,9 +691,9 @@ class DeformableDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtract
             outputs ([`DeformableDetrObjectDetectionOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
-                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
-                image size (before any data augmentation). For visualization, this should be the image size after data
-                augment, but before padding.
+                Tensor containing the size (height, width) of each image of the batch. For evaluation, this must be the
+                original image size (before any data augmentation). For visualization, this should be the image size
+                after data augment, but before padding.
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
@@ -716,7 +710,7 @@ class DeformableDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtract
         scores = topk_values
         topk_boxes = topk_indexes // out_logits.shape[2]
         labels = topk_indexes % out_logits.shape[2]
-        boxes = box_cxcywh_to_xyxy(out_bbox)
+        boxes = center_to_corners_format(out_bbox)
         boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
 
         # and from relative [0, 1] to absolute [0, height] coordinates
