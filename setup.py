@@ -102,7 +102,7 @@ _deps = [
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
-    "datasets",
+    "datasets!=2.5.0",
     "deepspeed>=0.6.5",
     "dill<0.3.5",
     "evaluate>=0.2.0",
@@ -160,7 +160,7 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "timm",
-    "tokenizers>=0.11.1,!=0.11.3,<0.13",
+    "tokenizers>=0.11.1,!=0.11.3,<0.14",
     "torch>=1.7,!=1.12.0",
     "torchaudio",
     "pyctcdecode>=0.3.0",
@@ -177,7 +177,7 @@ _deps = [
 # packaging: "packaging"
 #
 # some of the values are versioned whereas others aren't.
-deps = {b: a for a, b in (re.findall(r"^(([^!=<>~]+)(?:[!=<>~].*)?$)", x)[0] for x in _deps)}
+deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] for x in _deps)}
 
 # since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
 # anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
