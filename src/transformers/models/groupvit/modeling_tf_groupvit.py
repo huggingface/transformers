@@ -173,7 +173,9 @@ def resize_attention_map(attentions: tf.Tensor, height: int, width: int, align_c
     attentions = tf.transpose(attentions, perm=(0, 2, 3, 1))
     if align_corners:
         attentions = tf.compat.v1.image.resize(
-            attentions, size=(height, width), method="bilinear",
+            attentions,
+            size=(height, width),
+            method="bilinear",
             align_corners=align_corners,
         )
     else:
