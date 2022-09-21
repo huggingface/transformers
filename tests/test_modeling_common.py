@@ -2297,7 +2297,7 @@ class ModelTesterMixin:
 
     @require_accelerate
     @require_torch_gpu
-    def test_disk_offload(self, reset_seed_before_every_forward=False):
+    def test_disk_offload(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -2307,8 +2307,7 @@ class ModelTesterMixin:
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
-            if reset_seed_before_every_forward:
-                torch.manual_seed(0)
+            torch.manual_seed(0)
             base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
@@ -2326,8 +2325,7 @@ class ModelTesterMixin:
                 )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
-                if reset_seed_before_every_forward:
-                    torch.manual_seed(0)
+                torch.manual_seed(0)
                 new_output = new_model(**inputs_dict)
 
                 self.assertTrue(torch.allclose(base_output[0], new_output[0]))
