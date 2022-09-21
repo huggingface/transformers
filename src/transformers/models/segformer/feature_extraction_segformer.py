@@ -215,7 +215,6 @@ class SegformerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
 
         return encoded_inputs
 
-    # Copied from transformers.models.beit.feature_extraction_beit.BeitFeatureExtractor.post_process_semantic_segmentation
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
         """
         Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps. Only supports
