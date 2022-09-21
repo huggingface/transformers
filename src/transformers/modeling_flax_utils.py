@@ -664,13 +664,14 @@ class FlaxPreTrainedModel(PushToHubMixin, FlaxGenerationMixin):
                     # Load from a sharded Flax checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, FLAX_WEIGHTS_INDEX_NAME)
                     is_sharded = True
-                # At this stage we don't have a weight file so we will raise an error.
-                elif os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME):
+                # Check if pytorch weights exist instead
+                elif os.path.isfile(os.path.join(pretrained_model_name_or_path, WEIGHTS_NAME)):
                     raise EnvironmentError(
                         f"Error no file named {FLAX_WEIGHTS_NAME} found in directory {pretrained_model_name_or_path} "
                         "but there is a file for PyTorch weights. Use `from_pt=True` to load this model from those "
                         "weights."
                     )
+                # At this stage we don't have a weight file so we will raise an error.
                 else:
                     raise EnvironmentError(
                         f"Error no file named {FLAX_WEIGHTS_NAME} or {WEIGHTS_NAME} found in directory "
