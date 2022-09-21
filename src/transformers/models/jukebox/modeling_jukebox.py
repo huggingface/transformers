@@ -51,12 +51,6 @@ def get_range(list):
     )
 
 
-# Import FusedLayerNorm if we have apex, otherwise use regular LayerNorm
-try:
-    from apex.normalization import FusedLayerNorm
-
-    print("Using apex FusedLayerNorm")
-except ImportError:
 from torch.nn import LayerNorm as FusedLayerNorm
 
 
@@ -147,12 +141,6 @@ class JukeboxResnet1D(nn.Module):
         reverse_dilation=False,
     ):
         super().__init__()
-
-        def _get_depth(depth):
-            if dilation_cycle is None:
-                return depth
-            else:
-                return depth % dilation_cycle
 
         blocks = []
         for depth in range(n_depth):
