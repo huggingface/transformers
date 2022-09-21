@@ -17,13 +17,13 @@
 
 import json
 import os
+import unicodedata
 from json.encoder import INFINITY
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
 import regex as re
-from tokenizers import normalizers
 from transformers.utils.generic import _is_jax, _is_numpy
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -52,15 +52,8 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 PRETRAINED_LYRIC_TOKENS_SIZES = {
-    "jukebox": 512, 
+    "jukebox": 512,
 }
-
-"""" batch_outputs = BatchEncoding(
-    encoded_inputs, tensor_type=return_tensors, prepend_batch_axis=prepend_batch_axis
-)
-
-
-"""
 
 
 class JukeboxTokenizer(PreTrainedTokenizer):
@@ -249,11 +242,21 @@ class JukeboxTokenizer(PreTrainedTokenizer):
         else:
             self.out_of_vocab = re.compile("[^A-Za-z0-9.,:;!?\-+'\"()\[\] \t\n]+")
 
-        normalizer = normalizers.Sequence([normalizers.NFD(), normalizers.StripAccents()])
-        lyrics = normalizer.normalize_str(lyrics)
+        lyrics = self._run_strip_accents(lyrics)
         lyrics = lyrics.replace("\\", "\n")
         lyrics = [], [], self.out_of_vocab.sub("", lyrics)
         return artists, genres, lyrics
+
+    def _run_strip_accents(self, text):
+        """Strips accents from a piece of text."""
+        text = unicodedata.normalize("NFD", text)
+        output = []
+        for char in text:
+            cat = unicodedata.category(char)
+            if cat == "Mn":
+                continue
+            output.append(char)
+        return "".join(output)
 
     def _normalize(self, text: str) -> str:
         """Normalizes the input text. This process is for the genres and the artit

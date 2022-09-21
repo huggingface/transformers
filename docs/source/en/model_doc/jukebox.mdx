@@ -30,7 +30,7 @@ The metadata such as *artist, genre and timing* are passed to each prior, in the
 
 Tips:
 - This model is very slow, and takes 8h to generate a minute long audio using the 5b top prior on a V100 GPU.
-- Primed sampling requires more memory than ancestral sampling and should be used with `fp16` set to `True`. 
+- Primed sampling (conditionning the sampling on raw audio) requires more memory than ancestral sampling and should be used with `fp16` set to `True`. 
 
 This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ).
 The original code can be found [here](https://github.com/openai/jukebox).

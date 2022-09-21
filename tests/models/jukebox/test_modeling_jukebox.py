@@ -333,8 +333,3 @@ class Jukebox5bModelTester(unittest.TestCase):
         set_seed(0)
         zs = model._sample(zs, labels, [0], sample_length=60 * model.priors[-3].raw_to_tokens, save_results=False)
         assert torch.allclose(zs[0][0].cpu(), torch.tensor(self.EXPECTED_GPU_OUTPUTS_0))
-
-
-if __name__ == "__main__":
-    tester = Jukebox1bModelTester()
-    tester.test_vqvae()
