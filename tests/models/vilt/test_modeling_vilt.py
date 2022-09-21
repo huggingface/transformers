@@ -21,15 +21,7 @@ from packaging import version
 
 from transformers import ViltConfig, is_torch_available, is_vision_available
 from transformers.models.auto import get_values
-from transformers.testing_utils import (
-    require_accelerate,
-    require_torch,
-    require_torch_gpu,
-    require_torch_multi_gpu,
-    require_vision,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -515,21 +507,6 @@ class ViltModelTest(ModelTesterMixin, unittest.TestCase):
         for model_name in VILT_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
             model = ViltModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
-
-    @require_accelerate
-    @require_torch_gpu
-    def test_cpu_offload(self):
-        super().test_cpu_offload()
-
-    @require_accelerate
-    @require_torch_gpu
-    def test_disk_offload(self):
-        super().test_disk_offload()
-
-    @require_accelerate
-    @require_torch_multi_gpu
-    def test_model_parallelism(self):
-        super().test_model_parallelism()
 
 
 @require_torch
