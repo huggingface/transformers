@@ -408,6 +408,8 @@
         title: Vision Transformer (ViT)
       - local: model_doc/vit_mae
         title: ViTMAE
+      - local: model_doc/vit_msn
+        title: ViTMSN
       - local: model_doc/yolos
         title: YOLOS
       title: Vision models
