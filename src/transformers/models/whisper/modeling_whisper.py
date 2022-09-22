@@ -111,7 +111,7 @@ class Conv1dSubsampler(nn.Module):
         self.kernel_sizes = config.conv_kernel_sizes
 
         self.conv_layers = nn.ModuleList(
-            nn.nn.Conv1d(
+            nn.Conv1d(
                 self.in_channels if i == 0 else self.mid_channels // 2,
                 self.mid_channels if i < self.num_layers - 1 else self.out_channels * 2,
                 kernel_size=k,
@@ -236,10 +236,10 @@ class WhisperAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = nn.nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
@@ -464,16 +464,16 @@ class WhisperDecoderLayer(nn.Module):
         )
         self.activation_fn = ACT2FN[config.activation_function]
 
-        self.self_attn_layer_norm = nn.nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.encoder_attn = WhisperAttention(
             self.embed_dim,
             config.decoder_attention_heads,
             is_decoder=True,
         )
-        self.encoder_attn_layer_norm = nn.nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.nn.Linear(self.embed_dim, 4 * self.embed_dim)
-        self.fc2 = nn.nn.Linear(4 * self.embed_dim, self.embed_dim)
-        self.final_layer_norm = nn.nn.LayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.fc1 = nn.Linear(self.embed_dim, 4 * self.embed_dim)
+        self.fc2 = nn.Linear(4 * self.embed_dim, self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(
         self,
@@ -571,7 +571,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.init_std
-        if isinstance(module, (nn.nn.Linear, nn.nn.Conv1d)):
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -732,11 +732,12 @@ class WhisperEncoder(WhisperPreTrainedModel):
         super().__init__(config)
 
         embed_dim = config.d_model
+        self.num_mel_bins = config.num_mel_bins
         self.padding_idx = config.pad_token_id
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        self.conv1 = nn.Conv1d(self.n_mels, embed_dim, kernel_size=3, padding=1)
+        self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1)
         self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
 
         self.embed_positions = WhisperSinusoidalPositionalEmbedding(
@@ -745,7 +746,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
             self.padding_idx,
         )
         self.layers = nn.ModuleList([WhisperEncoderLayer(config) for _ in range(config.encoder_layers)])
-        self.layer_norm = nn.nn.LayerNorm(config.d_model)
+        self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -893,13 +894,13 @@ class WhisperDecoder(WhisperPreTrainedModel):
         self.max_target_positions = config.max_target_positions
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        self.embed_tokens = nn.Linear(config.vocab_size, config.d_model, self.padding_idx, bias=False)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = WhisperPositionalEmbedding(self.max_target_positions, config.d_model)
 
         self.layers = nn.ModuleList([WhisperDecoderLayer(config) for _ in range(config.decoder_layers)])
 
-        self.layer_norm = nn.nn.LayerNorm(config.d_model)
+        self.layer_norm = nn.LayerNorm(config.d_model)
 
         self.gradient_checkpointing = False
         # Initialize weights and apply final processing
@@ -1157,7 +1158,7 @@ class WhisperModel(WhisperPreTrainedModel):
 
         self.encoder = WhisperEncoder(config)
         self.decoder = WhisperDecoder(config)
-
+        self.proj_out = nn.Linear(config.d_model, config.vocab_size,bias=False)
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1168,10 +1169,10 @@ class WhisperModel(WhisperPreTrainedModel):
         self.decoder.embed_tokens = value
 
     def set_output_embeddings(self, new_embeddings):
-        self.decoder.embed_tokens = new_embeddings
+        self.proj_out = new_embeddings
 
     def get_output_embeddings(self):
-        return self.decoder.embed_tokens
+        return self.proj_out
 
     def get_encoder(self):
         return self.encoder
@@ -1306,7 +1307,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
         self.model = WhisperModel(config)
-        self.lm_head = nn.nn.Linear(config.d_model, self.config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.d_model, self.config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
