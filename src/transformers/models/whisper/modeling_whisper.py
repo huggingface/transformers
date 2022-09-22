@@ -357,35 +357,7 @@ class WhisperAttention(nn.Module):
 
         return attn_output, attn_weights_reshaped, past_key_value
 
-
-class WhisperResidualAttentionBlock(nn.Module):
-    def __init__(self, n_state: int, n_head: int, cross_attention: bool = False):
-        super().__init__()
-
-        self.attn = WhisperAttention(n_state, n_head)
-        self.attn_ln = nn.LayerNorm(n_state)
-
-        self.cross_attn = WhisperAttention(n_state, n_head) if cross_attention else None
-        self.cross_attn_ln = nn.LayerNorm(n_state) if cross_attention else None
-
-        n_mlp = n_state * 4
-        self.mlp = nn.Sequential(nn.Linear(n_state, n_mlp), nn.GELU(), nn.Linear(n_mlp, n_state))
-        self.mlp_ln = nn.LayerNorm(n_state)
-
-    def forward(
-        self,
-        x: Tensor,
-        xa: Optional[Tensor] = None,
-        mask: Optional[Tensor] = None,
-        kv_cache: Optional[dict] = None,
-    ):
-        x = x + self.attn(self.attn_ln(x), mask=mask, kv_cache=kv_cache)
-        if self.cross_attn:
-            x = x + self.cross_attn(self.cross_attn_ln(x), xa, kv_cache=kv_cache)
-        x = x + self.mlp(self.mlp_ln(x))
-        return x
-
-
+# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextEncoderLayer with Speech2Text->Whisper
 class WhisperEncoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
@@ -396,8 +368,9 @@ class WhisperEncoderLayer(nn.Module):
             dropout=config.attention_dropout,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
-
+        self.activation_dropout = config.activation_dropout
         self.fc1 = nn.Linear(self.embed_dim, 4 * self.embed_dim)
         self.fc2 = nn.Linear(4 * self.embed_dim, self.embed_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -428,12 +401,14 @@ class WhisperEncoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         residual = hidden_states
-
         hidden_states = self.final_layer_norm(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
 
         hidden_states = residual + hidden_states
@@ -451,7 +426,7 @@ class WhisperEncoderLayer(nn.Module):
 
         return outputs
 
-
+# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextDecoderLayer with Speech2Text->Whisper
 class WhisperDecoderLayer(nn.Module):
     def __init__(self, config: WhisperConfig):
         super().__init__()
@@ -460,14 +435,18 @@ class WhisperDecoderLayer(nn.Module):
         self.self_attn = WhisperAttention(
             embed_dim=self.embed_dim,
             num_heads=config.decoder_attention_heads,
+            dropout=config.attention_dropout,
             is_decoder=True,
         )
+        self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
 
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.encoder_attn = WhisperAttention(
             self.embed_dim,
             config.decoder_attention_heads,
+            dropout=config.attention_dropout,
             is_decoder=True,
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
@@ -519,6 +498,7 @@ class WhisperDecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         # Cross-Attention Block
@@ -537,6 +517,7 @@ class WhisperDecoderLayer(nn.Module):
                 past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
             )
+            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
 
             # add cross-attn to positions 3,4 of present_key_value tuple
@@ -544,11 +525,11 @@ class WhisperDecoderLayer(nn.Module):
 
         # Fully Connected
         residual = hidden_states
-
         hidden_states = self.final_layer_norm(hidden_states)
         hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
         hidden_states = self.fc2(hidden_states)
-
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
@@ -717,7 +698,6 @@ WHISPER_INPUTS_DOCSTRING = r"""
 """
 
 
-# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextEncoder with Speech2Text->Whisper
 class WhisperEncoder(WhisperPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -813,9 +793,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         embed_pos = self.embed_positions(padding_mask)
 
         hidden_states = inputs_embeds + embed_pos
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )  # TODO should we remove all dropout?
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
         if attention_mask is not None:
@@ -895,7 +873,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
-
         self.embed_positions = WhisperPositionalEmbedding(self.max_target_positions, config.d_model)
 
         self.layers = nn.ModuleList([WhisperDecoderLayer(config) for _ in range(config.decoder_layers)])
@@ -1047,9 +1024,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
 
         hidden_states = inputs_embeds + positions
-        hidden_states = nn.functional.dropout(
-            hidden_states, p=self.dropout, training=self.training
-        )  # TODO should we remove all of em?
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1269,7 +1244,7 @@ class WhisperModel(WhisperPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        decoder_outputs = self.decoder.embed_tokens(decoder_outputs)
+        decoder_outputs = self.proj_out(decoder_outputs)
 
         if not return_dict:
             return decoder_outputs + encoder_outputs

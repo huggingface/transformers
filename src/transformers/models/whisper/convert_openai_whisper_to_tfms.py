@@ -35,6 +35,20 @@ def remove_ignore_keys_(state_dict):
         state_dict.pop(k, None)
 
 
+WHISPER_MAPPING = {
+    "blocks" : "layers",
+    "mlp.0":"fc1",
+    "mlp:2":"fc2",
+    "attn_ln":"self_attn_layer_norm",
+    "attn.out":"self_attn.out_proj",
+    "mlp_ln":"final_layer_norm",
+    "blocks":"layers",
+    "attn.query":"self_attn.q_proj",
+    "attn.key":"self_attn.k_proj",
+    "attn.value":"self_attn.v_proj"
+
+}
+
 def rename_keys(s_dict):
     keys = list(s_dict.keys())
     for key in keys:
@@ -44,11 +58,7 @@ def rename_keys(s_dict):
             s_dict[key.replace("attn.key", "self_k.q_proj")] = s_dict.pop(key)
             s_dict[key.replace("attn.value", "self_attn.v_proj")] = s_dict.pop(key)
 
-            "mlp.0":"fc1"
-            "mlp:2":"fc2"
-            "attn_ln":"self_attn_layer_norm"
-            "attn.out":"self_attn.out_proj"
-            "mlp_ln":"final_layer_norm"
+
 
 
         elif "subsample" in key:
