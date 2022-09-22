@@ -491,7 +491,7 @@ class ViltLayer(nn.Module):
         outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
-        hidden_states = attention_output + hidden_states
+        hidden_states = attention_output + hidden_states.to(attention_output.device)
 
         # in ViLT, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
@@ -573,6 +573,7 @@ class ViltPreTrainedModel(PreTrainedModel):
     config_class = ViltConfig
     base_model_prefix = "vilt"
     supports_gradient_checkpointing = True
+    _no_split_modules = ["ViltSelfAttention"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
