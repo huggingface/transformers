@@ -236,7 +236,7 @@ class WhisperAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.is_decoder = is_decoder
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
+        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=False) # no bias in the k_proj in original code 
         self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
@@ -1126,8 +1126,9 @@ class WhisperDecoder(WhisperPreTrainedModel):
     "The bare Whisper Model outputting raw hidden-states without any specific head on top.",
     WHISPER_START_DOCSTRING,
 )
-# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextModel with Speech2Text->Whisper,SPEECH_TO_TEXT->WHISPER,facebook/s2t-small-librispeech-asr->openai/whisper-base
 class WhisperModel(WhisperPreTrainedModel):
+    _keys_to_ignore_on_load_missing = [r"proj_out.weight"]
+
     def __init__(self, config: WhisperConfig):
         super().__init__(config)
 

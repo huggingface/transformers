@@ -99,10 +99,10 @@ class WhisperConfig(PretrainedConfig):
     ```python
     >>> from transformers import WhisperModel, WhisperConfig
 
-    >>> # Initializing a Whisper s2t_transformer_s style configuration
+    >>> # Initializing a Whisper tiny style configuration
     >>> configuration = WhisperConfig()
 
-    >>> # Initializing a model from the s2t_transformer_s style configuration
+    >>> # Initializing a model from the tiny style configuration
     >>> model = WhisperModel(configuration)
 
     >>> # Accessing the model configuration
@@ -132,6 +132,8 @@ class WhisperConfig(PretrainedConfig):
         init_std=0.02,
         decoder_start_token_id=2,
         scale_embedding=False,
+        max_source_positions=1498,
+        max_target_positions=448,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
@@ -160,7 +162,8 @@ class WhisperConfig(PretrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         self.input_feat_per_channel = input_feat_per_channel
         self.input_channels = input_channels
-
+        self.max_source_positions=max_source_positions
+        self.max_target_positions=max_target_positions
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
