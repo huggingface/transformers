@@ -13,33 +13,56 @@
 # limitations under the License.
 
 import unittest
+from pathlib import Path
+from shutil import copyfile
 
+from transformers import SPIECE_UNDERLINE, is_sentencepiece_available
 from transformers.models.whisper import WhisperTokenizer
-from transformers.testing_utils import slow
+from transformers.models.whisper.tokenization_whisper import VOCAB_FILES_NAMES, save_json
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-EN_CODE = 50258
-ES_CODE = 50256
+SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
+
+if is_sentencepiece_available():
+    import sentencepiece as sp
 
 
-class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+FR_CODE = 5
+ES_CODE = 10
+
+
+@require_sentencepiece
+@require_tokenizers
+class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = WhisperTokenizer
     test_rust_tokenizer = False
-    test_sentencepiece = False
+    test_sentencepiece = True
 
     def setUp(self):
         super().setUp()
-        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
-        tokenizer.pad_token_id = 50256
-        tokenizer.pad_token = "<|endoftext|>"
+
+        spm_model = sp.SentencePieceProcessor()
+        spm_model.Load(SAMPLE_SP)
+        vocab = ["<s>", "<pad>", "</s>", "<unk>"]
+
+        vocab += [spm_model.IdToPiece(id_) for id_ in range(len(spm_model))]
+        vocab_tokens = dict(zip(vocab, range(len(vocab))))
+
+        save_dir = Path(self.tmpdirname)
+        save_json(vocab_tokens, save_dir / VOCAB_FILES_NAMES["vocab_file"])
+        if not (save_dir / VOCAB_FILES_NAMES["spm_file"]).exists():
+            copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["spm_file"])
+
+        tokenizer = WhisperTokenizer.from_pretrained(self.tmpdirname)
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_convert_token_and_id(self):
         """Test ``_convert_token_to_id`` and ``_convert_id_to_token``."""
-        token = "Where"
-        token_id = 14436
+        token = "<pad>"
+        token_id = 1
 
         self.assertEqual(self.get_tokenizer()._convert_token_to_id(token), token_id)
         self.assertEqual(self.get_tokenizer()._convert_id_to_token(token_id), token)
@@ -47,125 +70,76 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def test_get_vocab(self):
         vocab_keys = list(self.get_tokenizer().get_vocab().keys())
 
-        self.assertEqual(vocab_keys[0], "!")
-        self.assertEqual(vocab_keys[1], '"')
-        self.assertEqual(vocab_keys[-1], "<|notimestamps|>")
-        self.assertEqual(len(vocab_keys), 50364)
+        self.assertEqual(vocab_keys[0], "<s>")
+        self.assertEqual(vocab_keys[1], "<pad>")
+        self.assertEqual(vocab_keys[-1], "j")
+        self.assertEqual(len(vocab_keys), 1_001)
 
     def test_vocab_size(self):
-        self.assertEqual(self.get_tokenizer().vocab_size, 50257)
+        self.assertEqual(self.get_tokenizer().vocab_size, 1_001)
 
     def test_full_tokenizer(self):
         tokenizer = WhisperTokenizer.from_pretrained(self.tmpdirname)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ["This", "Ġis", "Ġa", "Ġ", "test"])
+        self.assertListEqual(tokens, ["▁This", "▁is", "▁a", "▁t", "est"])
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),
-            [5723, 307, 257, 220, 31636],
+            [289, 50, 14, 174, 386],
         )
 
         tokens = tokenizer.tokenize("I was born in 92000, and this is falsé.")
         self.assertListEqual(
             tokens,
             # fmt: off
-            ['I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ9', '2000', ',', 'Ġand', 'Ġ', 'this', 'Ġis', 'Ġfals', 'Ã©', '.'],
+            [SPIECE_UNDERLINE + "I", SPIECE_UNDERLINE + "was", SPIECE_UNDERLINE + "b", "or", "n", SPIECE_UNDERLINE + "in", SPIECE_UNDERLINE + "", "9", "2", "0", "0", "0", ",", SPIECE_UNDERLINE + "and", SPIECE_UNDERLINE + "this", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "f", "al", "s", "é", "."],
             # fmt: on
         )
         ids = tokenizer.convert_tokens_to_ids(tokens)
-        self.assertListEqual(ids, [40, 390, 4232, 294, 1722, 25743, 11, 293, 220, 11176, 307, 16720, 526, 13])
+        self.assertListEqual(ids, [12, 25, 88, 59, 28, 23, 11, 4, 606, 351, 351, 351, 7, 16, 70, 50, 76, 84, 10, 4, 8])
 
         back_tokens = tokenizer.convert_ids_to_tokens(ids)
         self.assertListEqual(
             back_tokens,
             # fmt: off
-            ['I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ9', '2000', ',', 'Ġand', 'Ġ', 'this', 'Ġis', 'Ġfals', 'Ã©', '.'],
+            [SPIECE_UNDERLINE + "I", SPIECE_UNDERLINE + "was", SPIECE_UNDERLINE + "b", "or", "n", SPIECE_UNDERLINE + "in", SPIECE_UNDERLINE + "", "<unk>", "2", "0", "0", "0", ",", SPIECE_UNDERLINE + "and", SPIECE_UNDERLINE + "this", SPIECE_UNDERLINE + "is", SPIECE_UNDERLINE + "f", "al", "s", "<unk>", "."],
             # fmt: on
         )
-
-    def test_tokenizer_slow_store_full_signature(self):
-        pass
 
     @slow
     def test_tokenizer_integration(self):
         # fmt: off
-        expected_encoding = {'input_ids': [[41762, 364, 357, 36234, 1900, 355, 12972, 13165, 354, 12, 35636, 364, 290, 12972, 13165, 354, 12, 5310, 13363, 12, 4835, 8, 3769, 2276, 12, 29983, 45619, 357, 13246, 51, 11, 402, 11571, 12, 17, 11, 5564, 13246, 38586, 11, 16276, 44, 11, 4307, 346, 33, 861, 11, 16276, 7934, 23029, 329, 12068, 15417, 28491, 357, 32572, 52, 8, 290, 12068, 15417, 16588, 357, 32572, 38, 8, 351, 625, 3933, 10, 2181, 13363, 4981, 287, 1802, 10, 8950, 290, 2769, 48817, 1799, 1022, 449, 897, 11, 9485, 15884, 354, 290, 309, 22854, 37535, 13], [13246, 51, 318, 3562, 284, 662, 12, 27432, 2769, 8406, 4154, 282, 24612, 422, 9642, 9608, 276, 2420, 416, 26913, 21143, 319, 1111, 1364, 290, 826, 4732, 287, 477, 11685, 13], [464, 2068, 7586, 21831, 18045, 625, 262, 16931, 3290, 13]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # noqa: E501
+        expected_encoding = {'input_ids': [[3791, 797, 31, 11, 64, 797, 31, 2429, 433, 12, 1176, 12, 20, 786, 915, 142, 2413, 240, 37, 3238, 797, 31, 11, 35, 93, 915, 142, 2413, 240, 37, 5540, 567, 1276, 93, 37, 610, 40, 62, 455, 657, 1042, 123, 780, 177, 37, 309, 241, 1298, 514, 20, 292, 2737, 114, 2469, 241, 85, 64, 302, 548, 528, 423, 4, 509, 406, 423, 37, 601, 4, 777, 302, 548, 528, 423, 284, 4, 3388, 511, 459, 4, 3555, 40, 321, 302, 705, 4, 3388, 511, 583, 326, 5, 5, 5, 62, 3310, 560, 177, 2680, 217, 1508, 32, 31, 853, 418, 64, 583, 511, 1605, 62, 35, 93, 560, 177, 2680, 217, 1508, 1521, 64, 583, 511, 519, 62, 20, 1515, 764, 20, 149, 261, 5625, 7972, 20, 5540, 567, 1276, 93, 3925, 1675, 11, 15, 802, 7972, 576, 217, 1508, 11, 35, 93, 1253, 2441, 15, 289, 652, 31, 416, 321, 3842, 115, 40, 911, 8, 476, 619, 4, 380, 142, 423, 335, 240, 35, 93, 264, 8, 11, 335, 569, 420, 163, 5, 2], [260, 548, 528, 423, 20, 451, 20, 2681, 1153, 3434, 20, 5540, 37, 567, 126, 1253, 2441, 3376, 449, 210, 431, 1563, 177, 767, 5540, 11, 1203, 472, 11, 2953, 685, 285, 364, 706, 1153, 20, 6799, 20, 2869, 20, 4464, 126, 40, 2429, 20, 1040, 866, 2664, 418, 20, 318, 20, 1726, 186, 20, 265, 522, 35, 93, 2191, 4634, 20, 1040, 12, 6799, 15, 228, 2356, 142, 31, 11, 5, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [2575, 2666, 684, 1582, 1176, 12, 627, 149, 619, 20, 4902, 563, 11, 20, 149, 261, 3420, 2356, 174, 142, 4714, 131, 5, 2, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]]}  # noqa: E501
         # fmt: on
 
         self.tokenizer_integration_test_util(
-            expected_encoding=expected_encoding, model_name="openai/whisper-tiny.en", padding=False
+            expected_encoding=expected_encoding,
+            model_name="facebook/s2t-small-mustc-en-de-st",
+            revision="a14f04cf0776c02f62a8cb800cf7909e15ea23ad",
         )
 
 
+@require_sentencepiece
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
-    checkpoint_name = "openai/whisper-small.en"
+    checkpoint_name = "valhalla/s2t_mustc_multilinguial_medium"
 
-    transcript = (
-        "'<|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>  Nor is Mr. Quilters manner less interesting"
-        " than his matter.<|endoftext|>'"
-    )
-    clean_transcript = "  Nor is Mr. Quilters manner less interesting than his matter."
-    french_text = "Bonjour! Il me semble que Mrs Quilters n'était pas présente"
+    french_text = "C'est trop cool"
+    spanish_text = "Esto es genial"
 
     @classmethod
     def setUpClass(cls):
         cls.tokenizer: WhisperTokenizer = WhisperTokenizer.from_pretrained(cls.checkpoint_name)
         return cls
 
-    def test_tokenizer_equivalence(self):
-        text = "다람쥐 헌 쳇바퀴에 타고파"
-        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny", language="ko")
-        gpt2_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny.en")
-
-        gpt2_tokens = gpt2_tokenizer.encode(text)
-        multilingual_tokens = multilingual_tokenizer.encode(text)
-
-        assert gpt2_tokenizer.decode(gpt2_tokens) == text
-        assert multilingual_tokenizer.decode(multilingual_tokens) == text
-        assert len(gpt2_tokens) > len(multilingual_tokens)
-
-        # fmt: off
-        EXPECTED_ENG = [
-            46695, 97, 167, 252, 234, 168, 98, 238, 220, 169,
-            245, 234, 23821, 111, 229, 167, 108, 242, 169, 222,
-            112, 168, 245, 238, 220, 169, 225, 222, 166, 111,
-            254, 169, 234, 234
-        ]
-        EXPECTED_MULTI = [
-            9835, 22855, 168, 98, 238, 13431, 234, 43517, 229, 47053,
-            169, 222, 19086, 19840, 1313, 17974
-        ]
-        # fmt: on
-
-        self.assertListEqual(gpt2_tokens, EXPECTED_ENG)
-        self.assertListEqual(multilingual_tokens, EXPECTED_MULTI)
-
-    def test_tokenizer_special(self):
-        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny.en")
-        text = "<|startoftranscript|>Hey! How are you feeling? J'ai l'impression que 郷さん est prêt<|endoftext|>"
-
-        multilingual_tokens = multilingual_tokenizer.encode(text)
-
-        # fmt: off
-        EXPECTED_MULTI = [
-            50257, 10814, 0, 1374, 389, 345, 4203, 30, 449, 6,
-            1872, 300, 6, 11011, 2234, 8358, 16268, 225, 115, 43357,
-            22174, 1556, 778, 25792, 83, 50256
-        ]
-        # fmt: on
-
-        self.assertListEqual(multilingual_tokens, EXPECTED_MULTI)
-
-        self.assertEqual(text, multilingual_tokenizer.decode(multilingual_tokens))
-
-        transcript = multilingual_tokenizer.decode(multilingual_tokens, skip_special_tokens=True)
-
-        EXPECTED_JAP = "Hey! How are you feeling? J'ai l'impression que 郷さん est prêt"
-        self.assertEqual(transcript, EXPECTED_JAP)
+    def check_language_codes(self):
+        self.assertEqual(self.tokenizer.lang_code_to_id["pt"], 4)
+        self.assertEqual(self.tokenizer.lang_code_to_id["ru"], 6)
+        self.assertEqual(self.tokenizer.lang_code_to_id["it"], 9)
+        self.assertEqual(self.tokenizer.lang_code_to_id["de"], 11)
 
     def test_vocab_size(self):
-        self.assertEqual(self.tokenizer.vocab_size, 50257)
+        self.assertEqual(self.tokenizer.vocab_size, 10_000)
 
     def test_tokenizer_decode_ignores_language_codes(self):
         self.assertIn(ES_CODE, self.tokenizer.all_special_ids)
@@ -175,16 +149,15 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         self.assertEqual(result, expected_spanish)
         self.assertNotIn(self.tokenizer.eos_token, result)
 
-    def test_batch_encoding(self):
-        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny.en")
-        batch = ["<|en|><|notimestamps|>", "<|en|><|notimestamps|>I am sure that"]
-        batch_output = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
+    def test_tokenizer_adds_special_tokens(self):
+        self.tokenizer.tgt_lang = "fr"
+        encoded = self.tokenizer(self.french_text).input_ids
+        self.assertEqual(encoded[0], FR_CODE)
+        self.assertEqual(encoded[-1], self.tokenizer.eos_token_id)
 
-        # fmt: off
-        EXPECTED_MULTI = [
-            [50258, 50362, 50256, 50256, 50256, 50256],
-            [50258, 50362, 40, 716, 1654, 326]
-        ]
-        # fmt: on
+    def test_tgt_lang_setter(self):
+        self.tokenizer.tgt_lang = "fr"
+        self.assertListEqual(self.tokenizer.prefix_tokens, [FR_CODE])
 
-        self.assertListEqual(batch_output, EXPECTED_MULTI)
+        self.tokenizer.tgt_lang = "es"
+        self.assertListEqual(self.tokenizer.prefix_tokens, [ES_CODE])

@@ -14,21 +14,19 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The Whisper model was proposed in [Robust Speech Recognition via Large-Scale Weak Supervision](https://cdn.openai.com/papers/whisper.pdf) by Alec Radford, Jong Wook Kim, Tao Xu, Greg Brockman, Christine McLeavey, Ilya Sutskever.
+The Whisper model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+<INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
 
-*We study the capabilities of speech processing systems trained simply to predict large amounts of transcripts of audio on the internet. When scaled to 680,000 hours of multilingual and multitask supervision, the resulting models generalize well to standard benchmarks and are often competitive with prior fully supervised results but in a zeroshot transfer setting without the need for any finetuning. When compared to humans, the models approach their accuracy and robustness. We are releasing models and inference code to serve as a foundation for further work on robust speech processing.*
-
+*<INSERT PAPER ABSTRACT HERE>*
 
 Tips:
 
-- The model usually performs well without requiring any finetuning. 
-- The architecture follows a classic encoder-decoder architecture, which means that it relies on the [`~generation_utils.GenerationMixin.generate`] function for inference.
-- One can use [`WhisperProcessor`] to prepare audio for the model, and decode the predicted ID's back into text.
+<INSERT TIPS ABOUT MODEL HERE>
 
-This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ).
-The original code can be found [here](https://github.com/openai/whisper).
+This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
+The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 
 ## WhisperConfig

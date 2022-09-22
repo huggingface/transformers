@@ -15,9 +15,13 @@
 import shutil
 import tempfile
 import unittest
+from pathlib import Path
+from shutil import copyfile
 
 from transformers import WhisperTokenizer, is_speech_available
-from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
+from transformers.models.whisper.tokenization_whisper import VOCAB_FILES_NAMES, save_json
+from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_torch, require_torchaudio
+from transformers.utils import FEATURE_EXTRACTOR_NAME
 
 from .test_feature_extraction_whisper import floats_list
 
@@ -26,19 +30,41 @@ if is_speech_available():
     from transformers import WhisperFeatureExtractor, WhisperProcessor
 
 
+SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
+
+
 @require_torch
 @require_torchaudio
 @require_sentencepiece
 class WhisperProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "openai/whisper-small.en"
         self.tmpdirname = tempfile.mkdtemp()
 
+        vocab = ["<s>", "<pad>", "</s>", "<unk>", "▁This", "▁is", "▁a", "▁t", "est"]
+        vocab_tokens = dict(zip(vocab, range(len(vocab))))
+        save_dir = Path(self.tmpdirname)
+        save_json(vocab_tokens, save_dir / VOCAB_FILES_NAMES["vocab_file"])
+        if not (save_dir / VOCAB_FILES_NAMES["spm_file"]).exists():
+            copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["spm_file"])
+
+        tokenizer = WhisperTokenizer.from_pretrained(self.tmpdirname)
+        tokenizer.save_pretrained(self.tmpdirname)
+
+        feature_extractor_map = {
+            "feature_size": 24,
+            "num_mel_bins": 24,
+            "padding_value": 0.0,
+            "sampling_rate": 16000,
+            "return_attention_mask": False,
+            "do_normalize": True,
+        }
+        save_json(feature_extractor_map, save_dir / FEATURE_EXTRACTOR_NAME)
+
     def get_tokenizer(self, **kwargs):
-        return WhisperTokenizer.from_pretrained(self.checkpoint, **kwargs)
+        return WhisperTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_feature_extractor(self, **kwargs):
-        return WhisperFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+        return WhisperFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)

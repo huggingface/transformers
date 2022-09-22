@@ -15,25 +15,19 @@
 
 
 import itertools
-import os
 import random
-import tempfile
 import unittest
 
 import numpy as np
 
 from transformers import is_speech_available
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
-from transformers.utils.import_utils import is_torch_available
+from transformers.testing_utils import require_torch, require_torchaudio
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
 
 if is_speech_available():
     from transformers import WhisperFeatureExtractor
-
-if is_torch_available():
-    import torch
 
 global_rng = random.Random()
 
@@ -61,11 +55,10 @@ class WhisperFeatureExtractionTester(unittest.TestCase):
         batch_size=7,
         min_seq_length=400,
         max_seq_length=2000,
-        feature_size=10,
-        hop_length=160,
-        chunk_length=8,
+        feature_size=24,
+        num_mel_bins=24,
         padding_value=0.0,
-        sampling_rate=4_000,
+        sampling_rate=16_000,
         return_attention_mask=True,
         do_normalize=True,
     ):
@@ -74,19 +67,17 @@ class WhisperFeatureExtractionTester(unittest.TestCase):
         self.min_seq_length = min_seq_length
         self.max_seq_length = max_seq_length
         self.seq_length_diff = (self.max_seq_length - self.min_seq_length) // (self.batch_size - 1)
+        self.feature_size = feature_size
+        self.num_mel_bins = num_mel_bins
         self.padding_value = padding_value
         self.sampling_rate = sampling_rate
         self.return_attention_mask = return_attention_mask
         self.do_normalize = do_normalize
-        self.feature_size = feature_size
-        self.chunk_length = chunk_length
-        self.hop_length = hop_length
 
     def prepare_feat_extract_dict(self):
         return {
             "feature_size": self.feature_size,
-            "hop_length": self.hop_length,
-            "chunk_length": self.chunk_length,
+            "num_mel_bins": self.num_mel_bins,
             "padding_value": self.padding_value,
             "sampling_rate": self.sampling_rate,
             "return_attention_mask": self.return_attention_mask,
@@ -119,35 +110,9 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
     def setUp(self):
         self.feat_extract_tester = WhisperFeatureExtractionTester(self)
 
-    def test_feat_extract_from_and_save_pretrained(self):
-        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            saved_file = feat_extract_first.save_pretrained(tmpdirname)[0]
-            check_json_file_has_correct_format(saved_file)
-            feat_extract_second = self.feature_extraction_class.from_pretrained(tmpdirname)
-
-        dict_first = feat_extract_first.to_dict()
-        dict_second = feat_extract_second.to_dict()
-        mel_1 = dict_first.pop("mel_filters")
-        mel_2 = dict_second.pop("mel_filters")
-        self.assertTrue(np.allclose(mel_1, mel_2))
-        self.assertEqual(dict_first, dict_second)
-
-    def test_feat_extract_to_json_file(self):
-        feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            json_file_path = os.path.join(tmpdirname, "feat_extract.json")
-            feat_extract_first.to_json_file(json_file_path)
-            feat_extract_second = self.feature_extraction_class.from_json_file(json_file_path)
-
-        dict_first = feat_extract_first.to_dict()
-        dict_second = feat_extract_second.to_dict()
-        mel_1 = dict_first.pop("mel_filters")
-        mel_2 = dict_second.pop("mel_filters")
-        self.assertTrue(np.allclose(mel_1, mel_2))
-        self.assertEqual(dict_first, dict_second)
+    def _check_zero_mean_unit_variance(self, input_vector):
+        self.assertTrue(np.all(np.mean(input_vector, axis=0) < 1e-3))
+        self.assertTrue(np.all(np.abs(np.var(input_vector, axis=0) - 1) < 1e-3))
 
     def test_call(self):
         # Tests that all call wrap to encode_plus and batch_encode_plus
@@ -157,10 +122,9 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
         # Test feature size
-        input_features = feature_extractor(np_speech_inputs, padding="max_length", return_tensors="np").input_features
+        input_features = feature_extractor(np_speech_inputs, padding=True, return_tensors="np").input_features
         self.assertTrue(input_features.ndim == 3)
-        self.assertTrue(input_features.shape[-1] == feature_extractor.nb_max_frames)
-        self.assertTrue(input_features.shape[-2] == feature_extractor.feature_size)
+        self.assertTrue(input_features.shape[-1] == feature_extractor.feature_size)
 
         # Test not batched input
         encoded_sequences_1 = feature_extractor(speech_inputs[0], return_tensors="np").input_features
@@ -173,17 +137,104 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
-        # Test truncation required
-        speech_inputs = [floats_list((1, x))[0] for x in range(200, (feature_extractor.n_samples + 500), 200)]
-        np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
+    def test_cepstral_mean_and_variance_normalization(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
 
-        speech_inputs_truncated = [x[: feature_extractor.n_samples] for x in speech_inputs]
-        np_speech_inputs_truncated = [np.asarray(speech_input) for speech_input in speech_inputs_truncated]
+        paddings = ["longest", "max_length", "do_not_pad"]
+        max_lengths = [None, 16, None]
+        for max_length, padding in zip(max_lengths, paddings):
+            inputs = feature_extractor(
+                speech_inputs, padding=padding, max_length=max_length, return_attention_mask=True
+            )
+            input_features = inputs.input_features
+            attention_mask = inputs.attention_mask
+            fbank_feat_lengths = [np.sum(x) for x in attention_mask]
 
-        encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
-        encoded_sequences_2 = feature_extractor(np_speech_inputs_truncated, return_tensors="np").input_features
-        for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
-            self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
+            self._check_zero_mean_unit_variance(input_features[0][: fbank_feat_lengths[0]])
+            self._check_zero_mean_unit_variance(input_features[1][: fbank_feat_lengths[1]])
+            self._check_zero_mean_unit_variance(input_features[2][: fbank_feat_lengths[2]])
+
+    def test_cepstral_mean_and_variance_normalization_np(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+
+        paddings = ["longest", "max_length", "do_not_pad"]
+        max_lengths = [None, 16, None]
+        for max_length, padding in zip(max_lengths, paddings):
+            inputs = feature_extractor(
+                speech_inputs, max_length=max_length, padding=padding, return_tensors="np", return_attention_mask=True
+            )
+            input_features = inputs.input_features
+            attention_mask = inputs.attention_mask
+            fbank_feat_lengths = [np.sum(x) for x in attention_mask]
+
+            self._check_zero_mean_unit_variance(input_features[0][: fbank_feat_lengths[0]])
+            self.assertTrue(input_features[0][fbank_feat_lengths[0] :].sum() < 1e-6)
+            self._check_zero_mean_unit_variance(input_features[1][: fbank_feat_lengths[1]])
+            self.assertTrue(input_features[0][fbank_feat_lengths[1] :].sum() < 1e-6)
+            self._check_zero_mean_unit_variance(input_features[2][: fbank_feat_lengths[2]])
+
+    def test_cepstral_mean_and_variance_normalization_trunc_max_length(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        inputs = feature_extractor(
+            speech_inputs,
+            padding="max_length",
+            max_length=4,
+            truncation=True,
+            return_tensors="np",
+            return_attention_mask=True,
+        )
+        input_features = inputs.input_features
+        attention_mask = inputs.attention_mask
+        fbank_feat_lengths = np.sum(attention_mask == 1, axis=1)
+
+        self._check_zero_mean_unit_variance(input_features[0, : fbank_feat_lengths[0]])
+        self._check_zero_mean_unit_variance(input_features[1])
+        self._check_zero_mean_unit_variance(input_features[2])
+
+    def test_cepstral_mean_and_variance_normalization_trunc_longest(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        inputs = feature_extractor(
+            speech_inputs,
+            padding="longest",
+            max_length=4,
+            truncation=True,
+            return_tensors="np",
+            return_attention_mask=True,
+        )
+        input_features = inputs.input_features
+        attention_mask = inputs.attention_mask
+        fbank_feat_lengths = np.sum(attention_mask == 1, axis=1)
+
+        self._check_zero_mean_unit_variance(input_features[0, : fbank_feat_lengths[0]])
+        self._check_zero_mean_unit_variance(input_features[1, : fbank_feat_lengths[1]])
+        self._check_zero_mean_unit_variance(input_features[2])
+
+        # make sure that if max_length < longest -> then pad to max_length
+        self.assertEqual(input_features.shape, (3, 4, 24))
+
+        speech_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
+        inputs = feature_extractor(
+            speech_inputs,
+            padding="longest",
+            max_length=16,
+            truncation=True,
+            return_tensors="np",
+            return_attention_mask=True,
+        )
+        input_features = inputs.input_features
+        attention_mask = inputs.attention_mask
+        fbank_feat_lengths = np.sum(attention_mask == 1, axis=1)
+
+        self._check_zero_mean_unit_variance(input_features[0, : fbank_feat_lengths[0]])
+        self._check_zero_mean_unit_variance(input_features[1, : fbank_feat_lengths[1]])
+        self._check_zero_mean_unit_variance(input_features[2])
+
+        # make sure that if max_length < longest -> then pad to max_length
+        self.assertEqual(input_features.shape, (3, 6, 24))
 
     def test_double_precision_pad(self):
         import torch
@@ -197,29 +248,3 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             self.assertTrue(np_processed.input_features.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
-
-    def _load_datasamples(self, num_samples):
-        from datasets import load_dataset
-
-        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        # automatic decoding with librispeech
-        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
-
-        return [x["array"] for x in speech_samples]
-
-    def test_integration(self):
-        # fmt: off
-        EXPECTED_INPUT_FEATURES = torch.tensor(
-            [
-                0.1193, -0.0946, -0.1098, -0.0196, 0.0225, -0.0690, -0.1736, 0.0951,
-                0.0971, -0.0817, -0.0702, 0.0162, 0.0260, 0.0017, -0.0192, -0.1678,
-                0.0709, -0.1867, -0.0655, -0.0274, -0.0234, -0.1884, -0.0516, -0.0554,
-                -0.0274, -0.1425, -0.1423, 0.0837, 0.0377, -0.0854
-            ]
-        )
-        # fmt: on
-
-        input_speech = self._load_datasamples(1)
-        feaure_extractor = WhisperFeatureExtractor()
-        input_features = feaure_extractor(input_speech, return_tensors="pt").input_features
-        self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))

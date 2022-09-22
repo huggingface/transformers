@@ -393,9 +393,6 @@ _import_structure = {
     "models.whisper": [
         "WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "WhisperConfig",
-        "WhisperFeatureExtractor",
-        "WhisperProcessor",
-        "WhisperTokenizer",
     ],
     "models.x_clip": [
         "XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -540,6 +537,7 @@ else:
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
+    _import_structure["models.whisper"].append("WhisperTokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
@@ -641,6 +639,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["models.mctct"].append("MCTCTFeatureExtractor")
     _import_structure["models.speech_to_text"].append("Speech2TextFeatureExtractor")
+    _import_structure["models.whisper"].append("WhisperFeatureExtractor")
 
 # Tensorflow-text-specific objects
 try:
@@ -666,6 +665,7 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["models.speech_to_text"].append("Speech2TextProcessor")
+    _import_structure["models.whisper"].append("WhisperProcessor")
 
 # Vision-specific objects
 try:
@@ -3358,13 +3358,7 @@ if TYPE_CHECKING:
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
-    from .models.whisper import (
-        WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        WhisperConfig,
-        WhisperFeatureExtractor,
-        WhisperProcessor,
-        WhisperTokenizer,
-    )
+    from .models.whisper import WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP, WhisperConfig
     from .models.x_clip import (
         XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XCLIPConfig,
@@ -3507,6 +3501,7 @@ if TYPE_CHECKING:
         from .models.rembert import RemBertTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.t5 import T5Tokenizer
+        from .models.whisper import WhisperTokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
@@ -3590,6 +3585,7 @@ if TYPE_CHECKING:
     else:
         from .models.mctct import MCTCTFeatureExtractor
         from .models.speech_to_text import Speech2TextFeatureExtractor
+        from .models.whisper import WhisperFeatureExtractor
 
     try:
         if not is_tensorflow_text_available():
@@ -3606,6 +3602,7 @@ if TYPE_CHECKING:
         from .utils.dummy_sentencepiece_and_speech_objects import *
     else:
         from .models.speech_to_text import Speech2TextProcessor
+        from .models.whisper import WhisperProcessor
 
     try:
         if not is_vision_available():
