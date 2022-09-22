@@ -598,7 +598,6 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.bart.modeling_bart.BartAttention with Bart->SpeechT5
 class SpeechT5Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -639,6 +638,7 @@ class SpeechT5Attention(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         layer_head_mask: Optional[torch.Tensor] = None,
+        position_bias: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
@@ -694,6 +694,13 @@ class SpeechT5Attention(nn.Module):
                 f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
                 f" {attn_weights.size()}"
             )
+
+        # relative attention bias
+        if position_bias is not None:
+            reshape_q = query_states.contiguous().view(bsz * self.num_heads, -1, self.head_dim).transpose(0, 1)
+            B = torch.matmul(reshape_q, position_bias.transpose(-2, -1))
+            B = B.transpose(0, 1).view(bsz * self.num_heads, position_bias.size(0), position_bias.size(1))
+            attn_weights += B
 
         if attention_mask is not None:
             if attention_mask.size() != (bsz, 1, tgt_len, src_len):
@@ -771,7 +778,6 @@ class SpeechT5FeedForward(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2EncoderLayer with Wav2Vec2->SpeechT5
 class SpeechT5EncoderLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -786,12 +792,14 @@ class SpeechT5EncoderLayer(nn.Module):
         self.feed_forward = SpeechT5FeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    def forward(self, hidden_states, attention_mask=None, position_bias=None, output_attentions=False):
         attn_residual = hidden_states
         hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+            hidden_states,
+            attention_mask=attention_mask,
+            position_bias=position_bias,
+            output_attentions=output_attentions
         )
-        # return (hidden_states,)  #MIH
 
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
@@ -808,6 +816,25 @@ class SpeechT5EncoderLayer(nn.Module):
         return outputs
 
 
+class SpeechT5RelativePositionalEncoding(torch.nn.Module):
+    def __init__(self, dim, max_length=1000):
+        super().__init__()
+        self.dim = dim
+        self.max_length = max_length
+        self.pe_k = torch.nn.Embedding(2*max_length, dim)
+
+    def forward(self, hidden_states):
+        seq_len = hidden_states.shape[1]
+        pos_seq = torch.arange(0, seq_len).long().to(hidden_states.device)
+        pos_seq = pos_seq[:, None] - pos_seq[None, :]
+
+        pos_seq[pos_seq < -self.max_length] = -self.max_length
+        pos_seq[pos_seq >= self.max_length] = self.max_length - 1
+        pos_seq = pos_seq + self.max_length
+
+        return self.pe_k(pos_seq)
+
+
 class SpeechT5Encoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -815,6 +842,9 @@ class SpeechT5Encoder(nn.Module):
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([SpeechT5EncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.pos_emb = SpeechT5RelativePositionalEncoding(
+            config.hidden_size // config.num_attention_heads, config.encoder_max_relative_position
+        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -844,20 +874,7 @@ class SpeechT5Encoder(nn.Module):
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        # TODO: original model transposes for some reason?
-        # # B x T x C -> T x B x C
-        # x = encoder_in.transpose(0, 1)
-
-        # TODO: original model does this
-        # ## relative position embedding
-        # if self.args.relative_position_embedding:
-        #     print("> relative_position_embedding")
-        #     x_len = x.shape[0]
-        #     pos_seq = torch.arange(0, x_len).long().to(x.device)
-        #     pos_seq = pos_seq[:, None] - pos_seq[None, :]
-        #     pos_k, pos_v = self.pos_emb(pos_seq)
-        # else:
-        #     pos_k = None
+        position_bias = self.pos_emb(hidden_states)
 
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
@@ -883,10 +900,14 @@ class SpeechT5Encoder(nn.Module):
                         create_custom_forward(layer),
                         hidden_states,
                         attention_mask,
+                        position_bias,
                     )
                 else:
                     layer_outputs = layer(
-                        hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                        hidden_states,
+                        attention_mask=attention_mask,
+                        position_bias=position_bias,
+                        output_attentions=output_attentions,
                     )
                 hidden_states = layer_outputs[0]
 
