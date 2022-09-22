@@ -15,4 +15,6 @@
     title: Vorverarbeiten
   - local: training
     title: Optimierung eines vortrainierten Modells
+  - local: accelerate
+    title: Verteiltes Training mit 🤗 Accelerate
   title: Tutorials
