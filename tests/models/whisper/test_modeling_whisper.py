@@ -749,9 +749,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(1)
 
-        feaure_extractor = WhisperFeatureExtractor(
-            "/home/arthur_huggingface_co/whisper/whisper/assets/mel_filters.npz"
-        )
+        feaure_extractor = WhisperFeatureExtractor()
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
         tokenizer.pad_token = 0
 
@@ -799,9 +797,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_speech = self._load_datasamples(1)
 
-        feaure_extractor = WhisperFeatureExtractor(
-            "/home/arthur_huggingface_co/whisper/whisper/assets/mel_filters.npz"
-        )
+        feaure_extractor = WhisperFeatureExtractor()
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
         tokenizer.pad_token = 0
 
