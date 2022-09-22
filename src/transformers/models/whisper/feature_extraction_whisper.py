@@ -77,9 +77,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self.return_attention_mask = True
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frame = self.n_samples // hop_length
-        
-        self.mel_filters = self.get_mel_filters(sampling_rate,n_fft,n_mels = num_mel_bins )
-    
+
+        self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=num_mel_bins)
+
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
         # Initialize the weights
         n_mels = int(n_mels)
@@ -118,13 +118,13 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         for i in range(n_mels):
             # lower and upper slopes for all bins
             lower = -ramps[i] / fdiff[i]
-            upper = ramps[i+2] / fdiff[i+1]
+            upper = ramps[i + 2] / fdiff[i + 1]
 
             # .. then intersect them with each other and zero
             weights[i] = np.maximum(0, np.minimum(lower, upper))
 
         # Slaney-style mel is scaled to be approx constant energy per channel
-        enorm = 2.0 / (mel_f[2:n_mels+2] - mel_f[:n_mels])
+        enorm = 2.0 / (mel_f[2 : n_mels + 2] - mel_f[:n_mels])
         weights *= enorm[:, np.newaxis]
 
         return torch.from_numpy(weights)
