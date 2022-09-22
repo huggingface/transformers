@@ -9,4 +9,8 @@
 - sections:
   - local: pipeline_tutorial
     title: Pipelines für Inferenzen
+  - local: autoclass_tutorial
+    title: Laden von vortrainierten Instanzen mit einer AutoClass
+  - local: preprocessing
+    title: Vorverarbeiten
   title: Tutorials
