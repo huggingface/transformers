@@ -1275,7 +1275,7 @@ class GenerationMixin:
 
         if min_length is not None and min_length > max_length:
             raise ValueError(
-                f"Unfeasable length constraints: the minimum length ({min_length}) is larger than the maximum "
+                f"Unfeasible length constraints: the minimum length ({min_length}) is larger than the maximum "
                 f"length ({max_length})"
             )
         if input_ids_seq_length >= max_length:
