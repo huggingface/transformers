@@ -36,9 +36,9 @@ logger = logging.get_logger(__name__)
 
 
 _CONFIG_FOR_DOC = "ViTMSNConfig"
-_CHECKPOINT_FOR_DOC = "sayakpaul/vit-msn-small"
+_CHECKPOINT_FOR_DOC = "facebook/vit-msn-small"
 VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "sayakpaul/vit-msn-small",
+    "facebook/vit-msn-small",
     # See all ViTMSN models at https://huggingface.co/models?filter=vit_msn
 ]
 
