@@ -1343,16 +1343,6 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
     TIME_SERIES_TRANSFORMER_START_DOCSTRING,
 )
 class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
-    @property
-    def _number_of_features(self) -> int:
-        return (
-            sum(self.config.embedding_dimension)
-            + self.config.num_feat_dynamic_real
-            + self.config.num_time_features
-            + max(1, self.config.num_feat_static_real)  # there is at least one dummy static real feature
-            + 1  # the log(scale)
-        )
-
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
 
@@ -1365,8 +1355,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             cardinalities=config.cardinality,
             embedding_dims=config.embedding_dimension,
         )
-
-        config.d_model = config.input_size * len(config.lags_seq) + self._number_of_features
 
         # transformer enc-decoder and mask initializer
         self.encoder = TimeSeriesTransformerEncoder(config)

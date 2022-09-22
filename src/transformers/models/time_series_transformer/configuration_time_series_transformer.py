@@ -112,6 +112,11 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
     model_type = "time_series_transformer"
+    attribute_map = {
+        "hidden_size": "d_model",
+        "num_attention_heads": "encoder_attention_heads",
+        "num_hidden_layers": "encoder_layers",
+    }
 
     def __init__(
         self,
@@ -163,6 +168,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.num_parallel_samples = num_parallel_samples
 
         # Transformer architecture configuration
+        self.d_model = input_size * len(lags_seq) + self._number_of_features
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_attention_heads = decoder_attention_heads
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -185,3 +191,13 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.use_cache = use_cache
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+
+    @property
+    def _number_of_features(self) -> int:
+        return (
+            sum(self.embedding_dimension)
+            + self.num_feat_dynamic_real
+            + self.num_time_features
+            + max(1, self.num_feat_static_real)  # there is at least one dummy static real feature
+            + 1  # the log(scale)
+        )
