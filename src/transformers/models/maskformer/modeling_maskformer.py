@@ -267,11 +267,11 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
         loss (`torch.Tensor`, *optional*):
             The computed loss, returned when labels are present.
         class_queries_logits (`torch.FloatTensor`):
-            A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
-            query.
-        masks_queries_logits (`torch.FloatTensor`):
             A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
             query. Note the `+ 1` is needed because we incorporate the null class.
+        masks_queries_logits (`torch.FloatTensor`):
+            A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
+            query.
         encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Last hidden states (final feature map) of the last stage of the encoder model (backbone).
         pixel_decoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):

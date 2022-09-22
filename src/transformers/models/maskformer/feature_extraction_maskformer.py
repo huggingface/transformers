@@ -508,9 +508,41 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         # where $ softmax(p) \in R^{q, c} $ is the mask classes
         # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
         # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
+
         segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
         return segmentation
+
+    def post_process_instance_segmentation(
+        self, outputs, target_sizes: List[Tuple] = None):
+        """
+        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into instance segmentation predictions. Only
+        supports PyTorch.
+
+        Args:
+            outputs ([`MaskFormerForInstanceSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested final size (height, width) of each prediction. If left to
+                None, predictions will not be resized.
+
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and masks for an image in the batch as predicted by the model.
+        """
+        class_queries_logits = outputs.class_queries_logits # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.masks_queries_logits # [batch_size, num_queries, height, width]
+
+        if target_size is not None:
+            masks_queries_logits = interpolate(
+                masks_queries_logits, size=target_size, mode="bilinear", align_corners=False,
+            )
+
+        # remove the null class `[..., :-1]`
+        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
+        masks_probs = masks_queries_logits.sigmoid() # [batch_size, num_queries, height, width]
+
+        results = [{"scores": None, "labels": None, "boxes": None} for i in range(len(outputs))]
+        return results
 
     def remove_low_and_no_objects(self, masks, scores, labels, object_mask_threshold, num_labels):
         """
@@ -541,22 +573,36 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         return masks[to_keep], scores[to_keep], labels[to_keep]
 
-    def post_process_semantic_segmentation(
-        self, outputs: "MaskFormerForInstanceSegmentationOutput", target_size: Tuple[int, int] = None
-    ) -> "torch.Tensor":
+    def post_process_semantic_segmentation(self, outputs, target_size: Tuple[int, int] = None):
         """
-        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into semantic segmentation predictions. Only
-        supports PyTorch.
+        Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
+        PyTorch.
 
         Args:
-            outputs ([`MaskFormerForInstanceSegmentationOutput`]):
-                The outputs from [`MaskFormerForInstanceSegmentation`].
-
+            outputs ([`MaskFormerForInstanceSegmentation`]):
+                Raw outputs of the model.
+            target_size (`Tuple[int, int]`, of *optional*):
+                Target (height, width) to resize predictions to. If left to None, predictions will not be resized.
         Returns:
-            `torch.Tensor`: A tensor of shape `batch_size, height, width`.
+            semantic_segmentation (`torch.Tensor`): Semantic segmentation maps of shape (batch_size, height, width). Each `torch.Tensor` value corresponds to a semantic class id.
         """
-        segmentation = self.post_process_segmentation(outputs, target_size)
-        semantic_segmentation = segmentation.argmax(dim=1)
+        class_queries_logits = outputs.class_queries_logits # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.masks_queries_logits # [batch_size, num_queries, height, width]
+
+        # remove the null class `[..., :-1]`
+        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
+        masks_probs = masks_queries_logits.sigmoid() # [batch_size, num_queries, height, width]
+
+        # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
+        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+
+        if target_size is not None:
+            segmentation = interpolate(
+                segmentation, size=target_size, mode="bilinear", align_corners=False
+            )
+
+        # Get semantic segmentation map of shape (batch_size, height, width)
+        semantic_segmentation = segmentation.argmax(dim=1) 
         return semantic_segmentation
 
     def post_process_panoptic_segmentation(
