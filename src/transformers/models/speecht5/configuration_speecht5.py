@@ -56,6 +56,20 @@ class SpeechT5Config(PretrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
+
+        encoder_layers (`int`, *optional*, defaults to 12):
+            Number of encoder layers.
+        decoder_layers (`int`, *optional*, defaults to 12):
+            Number of decoder layers.
+        encoder_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        decoder_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        decoder_ffn_dim (`int`, *optional*, defaults to 4096):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        encoder_ffn_dim (`int`, *optional*, defaults to 4096):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
@@ -176,6 +190,14 @@ class SpeechT5Config(PretrainedConfig):
             TODO: they're not actually log-mel features in this model!
         encoder_max_relative_position (`int`, *optional*, defaults to 160):
             Maximum distance for relative position embedding in the encoder.
+        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
+        decoder_layerdrop (`float`, *optional*, defaults to 0.1):
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models).
 
     Example:
 
@@ -197,6 +219,13 @@ class SpeechT5Config(PretrainedConfig):
         self,
         vocab_size=81,
         hidden_size=768,
+
+#TODO: rename to
+        # encoder_layers
+        # encoder_ffn_dim
+        # encoder_attention_heads
+        # encoder_layerdrop
+
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,
@@ -208,6 +237,12 @@ class SpeechT5Config(PretrainedConfig):
         # feat_quantizer_dropout=0.0,
         final_dropout=0.1,
         layerdrop=0.1,
+
+        decoder_layers=6,
+        decoder_ffn_dim=3072,
+        decoder_attention_heads=12,
+        decoder_layerdrop=0.1,
+
         # initializer_range=0.02,
         layer_norm_eps=1e-5,
         feat_extract_norm="group",
@@ -246,6 +281,7 @@ class SpeechT5Config(PretrainedConfig):
         eos_token_id=2,
         max_source_positions=4000,
         encoder_max_relative_position=160,
+        use_cache=True,
         **kwargs
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -276,6 +312,12 @@ class SpeechT5Config(PretrainedConfig):
         # self.use_weighted_layer_sum = use_weighted_layer_sum
         self.max_source_positions = max_source_positions
         self.encoder_max_relative_position = encoder_max_relative_position
+        self.use_cache = use_cache
+
+        self.decoder_layers = decoder_layers
+        self.decoder_ffn_dim = decoder_ffn_dim
+        self.decoder_attention_heads = decoder_attention_heads
+        self.decoder_layerdrop = decoder_layerdrop
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
