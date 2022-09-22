@@ -154,6 +154,7 @@ from . import (
     wav2vec2_phoneme,
     wav2vec2_with_lm,
     wavlm,
+    whisper,
     x_clip,
     xglm,
     xlm,
