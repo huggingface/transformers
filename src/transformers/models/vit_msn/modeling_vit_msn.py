@@ -544,7 +544,7 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         >>> model = ViTMSNModel.from_pretrained("facebook/vit-msn-small")
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
         >>> with torch.no_grad():
-        >>>     outputs = model(**inputs)
+        ...     outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
