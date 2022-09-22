@@ -119,7 +119,6 @@ class OptimizerNames(ExplicitEnum):
 
 @dataclass
 class TrainingArguments:
-    framework = "pt"
     """
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
     itself**.
@@ -500,6 +499,7 @@ class TrainingArguments:
             Whether to use Apple Silicon chip based `mps` device.
     """
 
+    framework = "pt"
     output_dir: str = field(
         metadata={"help": "The output directory where the model predictions and checkpoints will be written."},
     )
