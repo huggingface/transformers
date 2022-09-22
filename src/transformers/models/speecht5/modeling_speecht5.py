@@ -695,6 +695,7 @@ class SpeechT5Attention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
+        # TODO: maybe rewrite this like position_embedding_type as in BertSelfAttention
         # relative attention bias
         if position_bias is not None:
             reshape_q = query_states.contiguous().view(bsz * self.num_heads, -1, self.head_dim).transpose(0, 1)
@@ -1048,14 +1049,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     # def get_decoder(self):
     #     return self.decoder
 
-    # def _prune_heads(self, heads_to_prune):
-    #     """
-    #     Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-    #     class PreTrainedModel
-    #     """
-    #     for layer, heads in heads_to_prune.items():
-    #         self.encoder.layer[layer].attention.prune_heads(heads)
-
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1102,35 +1095,33 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        return encoder_outputs  #TODO: just for testing
-
         hidden_states = encoder_outputs[0]
 
         # Decode
-        decoder_outputs = self.decoder(
-            input_ids=decoder_input_ids,
-            attention_mask=decoder_attention_mask,
-            inputs_embeds=decoder_inputs_embeds,
-            past_key_values=past_key_values,
-            encoder_hidden_states=hidden_states,
-            encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        # decoder_outputs = self.decoder(
+        #     input_ids=decoder_input_ids,
+        #     attention_mask=decoder_attention_mask,
+        #     inputs_embeds=decoder_inputs_embeds,
+        #     past_key_values=past_key_values,
+        #     encoder_hidden_states=hidden_states,
+        #     encoder_attention_mask=attention_mask,
+        #     head_mask=decoder_head_mask,
+        #     cross_attn_head_mask=cross_attn_head_mask,
+        #     use_cache=use_cache,
+        #     output_attentions=output_attentions,
+        #     output_hidden_states=output_hidden_states,
+        #     return_dict=return_dict,
+        # )
 
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
+        # if not return_dict:
+        #     return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            past_key_values=decoder_outputs.past_key_values,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
+            last_hidden_state=None, #decoder_outputs.last_hidden_state,
+            past_key_values=None, #decoder_outputs.past_key_values,
+            decoder_hidden_states=None, #decoder_outputs.hidden_states,
+            decoder_attentions=None, #decoder_outputs.attentions,
+            cross_attentions=None, #decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
@@ -1156,15 +1147,18 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         self.speech_encoder_prenet = SpeechT5SpeechEncoderPrenet(config)
 
         self.speecht5 = SpeechT5Model(config)
-        # self.dropout = nn.Dropout(config.final_dropout)
+        self.dropout = nn.Dropout(config.final_dropout)
 
-        # if config.vocab_size is None:
-        #     raise ValueError(
-        #         f"You are trying to instantiate {self.__class__} with a configuration that "
-        #         "does not define the vocabulary size of the language model head. Please "
-        #         "instantiate the model as follows: `SpeechT5ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
-        #         "or define `vocab_size` of your model's configuration."
-        #     )
+        if config.vocab_size is None:
+            raise ValueError(
+                f"You are trying to instantiate {self.__class__} with a configuration that "
+                "does not define the vocabulary size of the language model head. Please "
+                "instantiate the model as follows: `SpeechT5ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
+                "or define `vocab_size` of your model's configuration."
+            )
+
+        self.encoder_ctc_proj = nn.Linear(config.hidden_size, config.vocab_size)
+
         # output_hidden_size = (
         #     config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
         # )
@@ -1212,13 +1206,19 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         # TODO: not sure if speech_encoder_prenet needs to return extract_features
         hidden_states, extract_features, attention_mask = self.speech_encoder_prenet(input_values, attention_mask)
 
-        # outputs = self.speecht5(
-        #     input_values,
-        #     attention_mask=attention_mask,
-        #     output_attentions=output_attentions,
-        #     output_hidden_states=output_hidden_states,
-        #     return_dict=return_dict,
-        # )
+        outputs = self.speecht5(
+            inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+        )
+
+        # TODO: not sure yet if this is the best place for it
+        encoder_ctc = self.encoder_ctc_proj(self.dropout(outputs["encoder_last_hidden_state"]))
+        print("encoder_ctc", encoder_ctc.shape, encoder_ctc)
+
+        return (encoder_ctc,)  #TODO: for testing
 
         # hidden_states = outputs[0]
         # hidden_states = self.dropout(hidden_states)

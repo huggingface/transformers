@@ -51,6 +51,7 @@ MAPPING = {
     "encoder.layers.*.final_layer_norm": "speecht5.encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "speecht5.encoder.layer_norm",
     "encoder.pos_emb.pe_k": "speecht5.encoder.pos_emb.pe_k",
+    "encoder.proj": "encoder_ctc_proj",
     # "quantizer.weight_proj": "quantizer.weight_proj",
     # "quantizer.vars": "quantizer.codevectors",
     # "project_q": "project_q",

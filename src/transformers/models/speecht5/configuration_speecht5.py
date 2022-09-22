@@ -32,6 +32,8 @@ class SpeechT5Config(PretrainedConfig):
     r"""
     TODO: where it says "feature encoder", replace this by "speech encoder pre-net"
 
+    TODO: fix up the descriptions because they are not always correct
+
 
     This is the configuration class to store the configuration of a [`SpeechT5Model`]. It is used to instantiate an
     SpeechT5 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -43,7 +45,7 @@ class SpeechT5Config(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 32):
+        vocab_size (`int`, *optional*, defaults to 81):
             Vocabulary size of the SpeechT5 model. Defines the number of different tokens that can be represented by
             the `inputs_ids` passed when calling [`SpeechT5Model`] or [`TFSpeechT5Model`]. Vocabulary size of the
             model. Defines the different tokens that can be represented by the *inputs_ids* passed to the forward
@@ -173,7 +175,7 @@ class SpeechT5Config(PretrainedConfig):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
             TODO: they're not actually log-mel features in this model!
         encoder_max_relative_position (`int`, *optional*, defaults to 160):
-            TODO
+            Maximum distance for relative position embedding in the encoder.
 
     Example:
 
@@ -193,7 +195,7 @@ class SpeechT5Config(PretrainedConfig):
 
     def __init__(
         self,
-        # vocab_size=32,
+        vocab_size=81,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -204,8 +206,8 @@ class SpeechT5Config(PretrainedConfig):
         attention_dropout=0.1,
         feat_proj_dropout=0.0,
         # feat_quantizer_dropout=0.0,
-        # final_dropout=0.1,
-        # layerdrop=0.1,
+        final_dropout=0.1,
+        layerdrop=0.1,
         # initializer_range=0.02,
         layer_norm_eps=1e-5,
         feat_extract_norm="group",
@@ -265,11 +267,11 @@ class SpeechT5Config(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.feat_proj_dropout = feat_proj_dropout
-        # self.final_dropout = final_dropout
-        # self.layerdrop = layerdrop
+        self.final_dropout = final_dropout
+        self.layerdrop = layerdrop
         self.layer_norm_eps = layer_norm_eps
         # self.initializer_range = initializer_range
-        # self.vocab_size = vocab_size
+        self.vocab_size = vocab_size
         # self.do_stable_layer_norm = do_stable_layer_norm
         # self.use_weighted_layer_sum = use_weighted_layer_sum
         self.max_source_positions = max_source_positions
