@@ -60,7 +60,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
     def __init__(
         self,
-        mel_filter_file,
         feature_size=80,
         sampling_rate=16000,
         num_mel_bins=80,
@@ -78,9 +77,57 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self.return_attention_mask = True
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frame = self.n_samples // hop_length
+        
+        self.mel_filters = self.get_mel_filters(sampling_rate,n_fft,n_mels = num_mel_bins )
+    
+    def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
+        # Initialize the weights
+        n_mels = int(n_mels)
+        weights = np.zeros((n_mels, int(1 + n_fft // 2)), dtype=dtype)
 
-        with np.load(mel_filter_file) as f:
-            self.mel_filters = torch.from_numpy(f[f"mel_{self.num_mel_bins}"])
+        # Center freqs of each FFT bin
+        fftfreqs = np.fft.rfftfreq(n=n_fft, d=1.0 / sr)
+
+        # 'Center freqs' of mel bands - uniformly spaced between limits
+        min_mel = 0.0
+        max_mel = 45.245640471924965
+
+        mels = np.linspace(min_mel, max_mel, n_mels + 2)
+
+        mels = np.asanyarray(mels)
+
+        # Fill in the linear scale
+        f_min = 0.0
+        f_sp = 200.0 / 3
+        freqs = f_min + f_sp * mels
+
+        # And now the nonlinear scale
+        min_log_hz = 1000.0  # beginning of log region (Hz)
+        min_log_mel = (min_log_hz - f_min) / f_sp  # same (Mels)
+        logstep = np.log(6.4) / 27.0  # step size for log region
+
+        # If we have vector data, vectorize
+        log_t = mels >= min_log_mel
+        freqs[log_t] = min_log_hz * np.exp(logstep * (mels[log_t] - min_log_mel))
+
+        mel_f = freqs
+
+        fdiff = np.diff(mel_f)
+        ramps = np.subtract.outer(mel_f, fftfreqs)
+
+        for i in range(n_mels):
+            # lower and upper slopes for all bins
+            lower = -ramps[i] / fdiff[i]
+            upper = ramps[i+2] / fdiff[i+1]
+
+            # .. then intersect them with each other and zero
+            weights[i] = np.maximum(0, np.minimum(lower, upper))
+
+        # Slaney-style mel is scaled to be approx constant energy per channel
+        enorm = 2.0 / (mel_f[2:n_mels+2] - mel_f[:n_mels])
+        weights *= enorm[:, np.newaxis]
+
+        return torch.from_numpy(weights)
 
     def _extract_fbank_features(
         self,
@@ -225,7 +272,3 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         return padded_inputs
-
-    def save_pretrained(self, pretrained_model_name_or_path, **kwargs):
-        super().save_pretrained(pretrained_model_name_or_path)
-        np.savez_compressed("mel_filters.npz", mel_80=self.mel_filters)
