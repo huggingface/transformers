@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -20,7 +20,7 @@ from torch.utils.data import Dataset
 
 from .deepspeed import is_deepspeed_zero3_enabled
 from .trainer import Trainer
-from .trainer_utils import PredictionOutput
+from .trainer_utils import EvalPrediction, PredictionOutput
 from .utils import logging
 
 
@@ -33,6 +33,7 @@ class Seq2SeqTrainer(Trainer):
         eval_dataset: Optional[Dataset] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
+        compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         **gen_kwargs
     ) -> Dict[str, float]:
         """
@@ -75,7 +76,7 @@ class Seq2SeqTrainer(Trainer):
         )
         self._gen_kwargs = gen_kwargs
 
-        return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
+        return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix, compute_metrics=compute_metrics)
 
     def predict(
         self,
