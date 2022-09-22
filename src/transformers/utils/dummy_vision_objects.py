@@ -38,6 +38,13 @@ class ConvNextFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class DeformableDetrFeatureExtractor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class DeiTFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
