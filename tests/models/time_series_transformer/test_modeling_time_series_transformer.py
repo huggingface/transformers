@@ -20,12 +20,11 @@ import tempfile
 import unittest
 
 from transformers import is_torch_available
+from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import cached_property
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...generation.test_generation_utils import GenerationTesterMixin
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_torch_available():
@@ -42,35 +41,18 @@ if is_torch_available():
     )
 
 
-def prepare_time_series_transformer_inputs_dict(
-    config,
-    input_ids,
-    decoder_input_ids,
-    attention_mask=None,
-    decoder_attention_mask=None,
-):
-    if attention_mask is None:
-        attention_mask = input_ids.ne(config.pad_token_id)
-    if decoder_attention_mask is None:
-        decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
-    return {
-        "input_ids": input_ids,
-        "decoder_input_ids": decoder_input_ids,
-        "attention_mask": attention_mask,
-        "decoder_attention_mask": attention_mask,
-    }
-
-
 @require_torch
 class TimeSeriesTransformerModelTester:
     def __init__(
         self,
         parent,
         batch_size=13,
-        seq_length=7,
+        prediction_length=7,
+        context_length=14,
+        cardinality=19,
+        embedding_dimension=5,
+        num_time_features=4,
         is_training=True,
-        use_labels=False,
-        vocab_size=99,
         hidden_size=16,
         num_hidden_layers=2,
         num_attention_heads=4,
@@ -78,17 +60,17 @@ class TimeSeriesTransformerModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
-        eos_token_id=2,
-        pad_token_id=1,
-        bos_token_id=0,
+        lags_seq=[1, 2, 3, 4, 5],
     ):
         self.parent = parent
         self.batch_size = batch_size
-        self.seq_length = seq_length
+        self.prediction_length = prediction_length
+        self.context_length = context_length
+        self.cardinality = cardinality
+        self.num_time_features = num_time_features
+        self.lags_seq = lags_seq
+        self.embedding_dimension = embedding_dimension
         self.is_training = is_training
-        self.use_labels = use_labels
-        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -96,23 +78,26 @@ class TimeSeriesTransformerModelTester:
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.max_position_embeddings = max_position_embeddings
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
+
+        self.encoder_seq_length = context_length
+        self.key_length = context_length
 
     def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
-        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
-            3,
-        )
-        input_ids[:, -1] = self.eos_token_id  # Eos Token
+        _past_length = self.context_length + max(self.lags_seq)
 
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        feat_static_cat = ids_tensor([self.batch_size, 1], self.cardinality)
+        feat_static_real = floats_tensor([self.batch_size, 1])
+
+        past_time_feat = floats_tensor([self.batch_size, _past_length, self.num_time_features])
+        past_target = floats_tensor([self.batch_size, _past_length])
+        past_observed_values = floats_tensor([self.batch_size, _past_length])
+
+        # decoder inputs
+        future_time_feat = floats_tensor([self.batch_size, self.prediction_length, self.num_time_features])
+        future_target = floats_tensor([self.batch_size, self.prediction_length])
+        future_observed_values = floats_tensor([self.batch_size, self.prediction_length])
 
         config = TimeSeriesTransformerConfig(
-            vocab_size=self.vocab_size,
-            d_model=self.hidden_size,
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
             encoder_attention_heads=self.num_attention_heads,
@@ -121,12 +106,24 @@ class TimeSeriesTransformerModelTester:
             decoder_ffn_dim=self.intermediate_size,
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
-            max_position_embeddings=self.max_position_embeddings,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.bos_token_id,
-            pad_token_id=self.pad_token_id,
+            prediction_length=self.prediction_length,
+            context_length=self.context_length,
+            lags_seq=self.lags_seq,
+            num_time_features=self.num_time_features,
+            num_feat_static_cat=1,
+            cardinality=[self.cardinality],
+            embedding_dimension=[self.embedding_dimension],
         )
-        inputs_dict = prepare_time_series_transformer_inputs_dict(config, input_ids, decoder_input_ids)
+
+        inputs_dict = {
+            "feat_static_cat": feat_static_cat,
+            "feat_static_real": feat_static_real,
+            "past_time_feat": past_time_feat,
+            "past_target": past_target,
+            "future_time_feat": future_time_feat,
+            "past_observed_values": past_observed_values,
+            "future_target": future_target,
+        }
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -178,9 +175,11 @@ class TimeSeriesTransformerModelTester:
             encoder.save_pretrained(tmpdirname)
             encoder = TimeSeriesTransformerEncoder.from_pretrained(tmpdirname).to(torch_device)
 
-        encoder_last_hidden_state_2 = encoder(inputs_dict["input_ids"], attention_mask=inputs_dict["attention_mask"])[
-            0
-        ]
+        transformer_inputs, _, _ = model.create_network_inputs(**inputs_dict)
+        enc_input = transformer_inputs[:, : config.context_length, ...]
+        dec_input = transformer_inputs[:, config.context_length :, ...]
+
+        encoder_last_hidden_state_2 = encoder(input_ids=enc_input)[0]
 
         self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
 
@@ -190,33 +189,29 @@ class TimeSeriesTransformerModelTester:
             decoder = TimeSeriesTransformerDecoder.from_pretrained(tmpdirname).to(torch_device)
 
         last_hidden_state_2 = decoder(
-            input_ids=inputs_dict["decoder_input_ids"],
-            attention_mask=inputs_dict["decoder_attention_mask"],
+            input_ids=dec_input,
             encoder_hidden_states=encoder_last_hidden_state,
-            encoder_attention_mask=inputs_dict["attention_mask"],
         )[0]
 
         self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
 
 
 @require_torch
-class TimeSeriesTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             TimeSeriesTransformerModel,
             TimeSeriesTransformerForPrediction,
-            TimeSeriesTransformerForConditionalGeneration,
-            TimeSeriesTransformerForSequenceClassification,
-            TimeSeriesTransformerForQuestionAnswering,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (TimeSeriesTransformerForConditionalGeneration,) if is_torch_available() else ()
+    all_generative_model_classes = (TimeSeriesTransformerForPrediction,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_head_masking = False
     test_missing_keys = False
+    test_torchscript = False
 
     def setUp(self):
         self.model_tester = TimeSeriesTransformerModelTester(self)
@@ -235,57 +230,19 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, GenerationTesterMixin, un
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
             self.assertEqual(info["missing_keys"], [])
 
-    def test_decoder_model_past_with_large_inputs(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past_large_inputs(*config_and_inputs)
-
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
 
-    # TimeSeriesTransformerForSequenceClassification does not support inputs_embeds
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in (
-            TimeSeriesTransformerModel,
-            TimeSeriesTransformerForConditionalGeneration,
-            TimeSeriesTransformerForQuestionAnswering,
-        ):
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-
-            if not self.is_encoder_decoder:
-                input_ids = inputs["input_ids"]
-                del inputs["input_ids"]
-            else:
-                encoder_input_ids = inputs["input_ids"]
-                decoder_input_ids = inputs.get("decoder_input_ids", encoder_input_ids)
-                del inputs["input_ids"]
-                inputs.pop("decoder_input_ids", None)
-
-            wte = model.get_input_embeddings()
-            if not self.is_encoder_decoder:
-                inputs["inputs_embeds"] = wte(input_ids)
-            else:
-                inputs["inputs_embeds"] = wte(encoder_input_ids)
-                inputs["decoder_inputs_embeds"] = wte(decoder_input_ids)
-
-            with torch.no_grad():
-                model(**inputs)[0]
-
-    def test_generate_fp16(self):
-        config, input_dict = self.model_tester.prepare_config_and_inputs()
-        input_ids = input_dict["input_ids"]
-        attention_mask = input_ids.ne(1).to(torch_device)
-        model = TimeSeriesTransformerForConditionalGeneration(config).eval().to(torch_device)
-        if torch_device == "cuda":
-            model.half()
-        model.generate(input_ids, attention_mask=attention_mask)
-        model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+    # def test_generate_fp16(self):
+    #     config, input_dict = self.model_tester.prepare_config_and_inputs()
+    #     input_ids = input_dict["input_ids"]
+    #     attention_mask = input_ids.ne(1).to(torch_device)
+    #     model = TimeSeriesTransformerForPrediction(config).eval().to(torch_device)
+    #     if torch_device == "cuda":
+    #         model.half()
+    #     model.generate(input_ids, attention_mask=attention_mask)
+    #     model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
@@ -315,13 +272,11 @@ TOLERANCE = 1e-4
 
 
 @require_torch
-@require_sentencepiece
-@require_tokenizers
 @slow
 class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
-    @cached_property
-    def default_tokenizer(self):
-        return TimeSeriesTransformerTokenizer.from_pretrained("huggingface/tst-ett")
+    # @cached_property
+    # def default_tokenizer(self):
+    #     return TimeSeriesTransformerTokenizer.from_pretrained("huggingface/tst-ett")
 
     def test_inference_no_head(self):
         model = TimeSeriesTransformerModel.from_pretrained("huggingface/tst-ett").to(torch_device)
@@ -339,7 +294,7 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
-        model = TimeSeriesTransformerForConditionalGeneration.from_pretrained("huggingface/tst-ett").to(torch_device)
+        model = TimeSeriesTransformerForPrediction.from_pretrained("huggingface/tst-ett").to(torch_device)
 
         # change to intended input
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
@@ -356,258 +311,4 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_seq_to_seq_generation(self):
-        hf = TimeSeriesTransformerForConditionalGeneration.from_pretrained("huggingface/tst-ett").to(torch_device)
-        tok = TimeSeriesTransformerTokenizer.from_pretrained("huggingface/tst-ett")
-
-        batch_input = [
-            # string 1,
-            # string 2,
-            # string 3,
-            # string 4,
-        ]
-
-        # The below article tests that we don't add any hypotheses outside of the top n_beams
-        dct = tok.batch_encode_plus(
-            batch_input,
-            max_length=512,
-            padding="max_length",
-            truncation_strategy="only_first",
-            truncation=True,
-            return_tensors="pt",
-        )
-
-        hypotheses_batch = hf.generate(
-            input_ids=dct["input_ids"].to(torch_device),
-            attention_mask=dct["attention_mask"].to(torch_device),
-            num_beams=2,
-        )
-
-        EXPECTED = [
-            # here expected 1,
-            # here expected 2,
-            # here expected 3,
-            # here expected 4,
-        ]
-
-        generated = tok.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
-        assert generated == EXPECTED
-
-
-class TimeSeriesTransformerStandaloneDecoderModelTester:
-    def __init__(
-        self,
-        parent,
-        vocab_size=99,
-        batch_size=13,
-        d_model=16,
-        decoder_seq_length=7,
-        is_training=True,
-        is_decoder=True,
-        use_attention_mask=True,
-        use_cache=False,
-        use_labels=True,
-        decoder_start_token_id=2,
-        decoder_ffn_dim=32,
-        decoder_layers=4,
-        encoder_attention_heads=4,
-        decoder_attention_heads=4,
-        max_position_embeddings=30,
-        is_encoder_decoder=False,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        scope=None,
-    ):
-        self.parent = parent
-        self.batch_size = batch_size
-        self.decoder_seq_length = decoder_seq_length
-        # For common tests
-        self.seq_length = self.decoder_seq_length
-        self.is_training = is_training
-        self.use_attention_mask = use_attention_mask
-        self.use_labels = use_labels
-
-        self.vocab_size = vocab_size
-        self.d_model = d_model
-        self.hidden_size = d_model
-        self.num_hidden_layers = decoder_layers
-        self.decoder_layers = decoder_layers
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.encoder_attention_heads = encoder_attention_heads
-        self.decoder_attention_heads = decoder_attention_heads
-        self.num_attention_heads = decoder_attention_heads
-        self.eos_token_id = eos_token_id
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.decoder_start_token_id = decoder_start_token_id
-        self.use_cache = use_cache
-        self.max_position_embeddings = max_position_embeddings
-        self.is_encoder_decoder = is_encoder_decoder
-
-        self.scope = None
-        self.decoder_key_length = decoder_seq_length
-        self.base_model_out_len = 2
-        self.decoder_attention_idx = 1
-
-    def prepare_config_and_inputs(self):
-        input_ids = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
-
-        attention_mask = None
-        if self.use_attention_mask:
-            attention_mask = ids_tensor([self.batch_size, self.decoder_seq_length], vocab_size=2)
-
-        lm_labels = None
-        if self.use_labels:
-            lm_labels = ids_tensor([self.batch_size, self.decoder_seq_length], self.vocab_size)
-
-        config = TimeSeriesTransformerConfig(
-            vocab_size=self.vocab_size,
-            d_model=self.d_model,
-            decoder_layers=self.decoder_layers,
-            decoder_ffn_dim=self.decoder_ffn_dim,
-            encoder_attention_heads=self.encoder_attention_heads,
-            decoder_attention_heads=self.decoder_attention_heads,
-            eos_token_id=self.eos_token_id,
-            bos_token_id=self.bos_token_id,
-            use_cache=self.use_cache,
-            pad_token_id=self.pad_token_id,
-            decoder_start_token_id=self.decoder_start_token_id,
-            max_position_embeddings=self.max_position_embeddings,
-            is_encoder_decoder=self.is_encoder_decoder,
-        )
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        )
-
-    def create_and_check_decoder_model_past(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        lm_labels,
-    ):
-        config.use_cache = True
-        model = TimeSeriesTransformerDecoder(config=config).to(torch_device).eval()
-        # first forward pass
-        outputs = model(input_ids, use_cache=True)
-        outputs_use_cache_conf = model(input_ids)
-        outputs_no_past = model(input_ids, use_cache=False)
-
-        self.parent.assertTrue(len(outputs) == len(outputs_use_cache_conf))
-        self.parent.assertTrue(len(outputs) == len(outputs_no_past) + 1)
-
-        past_key_values = outputs["past_key_values"]
-
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-
-        output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
-
-        # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3)
-
-    def create_and_check_decoder_model_attention_mask_past(
-        self,
-        config,
-        input_ids,
-        attention_mask,
-        lm_labels,
-    ):
-        model = TimeSeriesTransformerDecoder(config=config).to(torch_device).eval()
-
-        # create attention mask
-        attn_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
-
-        half_seq_length = input_ids.shape[-1] // 2
-        attn_mask[:, half_seq_length:] = 0
-
-        # first forward pass
-        past_key_values = model(input_ids, attention_mask=attn_mask, use_cache=True)["past_key_values"]
-
-        # create hypothetical next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
-
-        # change a random masked slice from input_ids
-        random_seq_idx_to_change = ids_tensor((1,), half_seq_length).item() + 1
-        random_other_next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size).squeeze(-1)
-        input_ids[:, -random_seq_idx_to_change] = random_other_next_tokens
-
-        # append to next input_ids and attn_mask
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        attn_mask = torch.cat(
-            [attn_mask, torch.ones((attn_mask.shape[0], 1), dtype=torch.long, device=torch_device)],
-            dim=1,
-        )
-
-        # get two different outputs
-        output_from_no_past = model(next_input_ids)["last_hidden_state"]
-        output_from_past = model(next_tokens, past_key_values=past_key_values)["last_hidden_state"]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, next_input_ids.shape[-1] - 1, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, 0, random_slice_idx].detach()
-
-        # test that outputs are equal for slice
-        assert torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2)
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            attention_mask,
-            lm_labels,
-        ) = config_and_inputs
-
-        inputs_dict = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
-
-
-@require_torch
-class TimeSeriesTransformerStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (TimeSeriesTransformerDecoder, TimeSeriesTransformerForCausalLM) if is_torch_available() else ()
-    )
-    all_generative_model_classes = (TimeSeriesTransformerForCausalLM,) if is_torch_available() else ()
-    test_pruning = False
-    is_encoder_decoder = False
-
-    def setUp(
-        self,
-    ):
-        self.model_tester = TimeSeriesTransformerStandaloneDecoderModelTester(self, is_training=False)
-        self.config_tester = ConfigTester(self, config_class=TimeSeriesTransformerConfig)
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_decoder_model_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_past(*config_and_inputs)
-
-    def test_decoder_model_attn_mask_past(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_decoder_model_attention_mask_past(*config_and_inputs)
-
-    def test_retain_grad_hidden_states_attentions(self):
-        # decoder cannot keep gradients
-        return
+        raise NotImplementedError("Generation not implemented yet")
