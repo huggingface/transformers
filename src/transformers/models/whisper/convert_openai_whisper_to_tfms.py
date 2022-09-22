@@ -21,44 +21,41 @@ from transformers import WhisperConfig, WhisperModel
 
 
 def remove_ignore_keys_(state_dict):
-    ignore_keys = [
-        "layers",
-        "blocks",
-        "proj_out.weight"
-    ]
+    ignore_keys = ["layers", "blocks", "proj_out.weight"]
     for k in ignore_keys:
         state_dict.pop(k, None)
 
 
 WHISPER_MAPPING = {
-    "blocks" : "layers",
-    "mlp.0":"fc1",
-    "mlp.2":"fc2",
-    "mlp_ln":"final_layer_norm",
-    "blocks":"layers",
-    ".attn.query":".self_attn.q_proj",
-    ".attn.key":".self_attn.k_proj",
-    ".attn.value":".self_attn.v_proj",
-    ".attn_ln":".self_attn_layer_norm",
-    ".attn.out":".self_attn.out_proj",
-    ".cross_attn.query":".encoder_attn.q_proj",
-    ".cross_attn.key":".encoder_attn.k_proj",
-    ".cross_attn.value":".encoder_attn.v_proj",
-    ".cross_attn_ln":".encoder_attn_layer_norm",
-    ".cross_attn.out":".encoder_attn.out_proj",
-    "decoder.ln.":"decoder.layer_norm.",
-    "encoder.ln.":"encoder.layer_norm.",
-    "token_embedding":"embed_tokens",
-    "encoder.positional_embedding":"encoder.embed_positions.weights",
-    "decoder.positional_embedding":"decoder.embed_positions.weight",
-    "ln_post":"layer_norm"
+    "blocks": "layers",
+    "mlp.0": "fc1",
+    "mlp.2": "fc2",
+    "mlp_ln": "final_layer_norm",
+    "blocks": "layers",
+    ".attn.query": ".self_attn.q_proj",
+    ".attn.key": ".self_attn.k_proj",
+    ".attn.value": ".self_attn.v_proj",
+    ".attn_ln": ".self_attn_layer_norm",
+    ".attn.out": ".self_attn.out_proj",
+    ".cross_attn.query": ".encoder_attn.q_proj",
+    ".cross_attn.key": ".encoder_attn.k_proj",
+    ".cross_attn.value": ".encoder_attn.v_proj",
+    ".cross_attn_ln": ".encoder_attn_layer_norm",
+    ".cross_attn.out": ".encoder_attn.out_proj",
+    "decoder.ln.": "decoder.layer_norm.",
+    "encoder.ln.": "encoder.layer_norm.",
+    "token_embedding": "embed_tokens",
+    "encoder.positional_embedding": "encoder.embed_positions.weight",
+    "decoder.positional_embedding": "decoder.embed_positions.weight",
+    "ln_post": "layer_norm",
 }
+
 
 def rename_keys(s_dict):
     keys = list(s_dict.keys())
     for key in keys:
-        new_key = key 
-        for k,v in WHISPER_MAPPING.items():
+        new_key = key
+        for k, v in WHISPER_MAPPING.items():
             if k in key:
                 new_key = new_key.replace(k, v)
 
@@ -66,6 +63,7 @@ def rename_keys(s_dict):
 
         s_dict[new_key] = s_dict.pop(key)
     return s_dict
+
 
 def make_linear_from_emb(emb):
     vocab_size, emb_size = emb.weight.shape
@@ -136,6 +134,7 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
 
     model.save_pretrained(pytorch_dump_folder_path)
 
+
 _MODELS = {
     "tiny.en": "https://openaipublic.azureedge.net/main/whisper/models/d3dd57d32accea0b295c96e26691aa14d8822fac7d9d27d5dc00b4ca2826dd03/tiny.en.pt",
     "tiny": "https://openaipublic.azureedge.net/main/whisper/models/65147644a518d12f04e32d6f3b26facc3f8dd46e5390956a9424a650c0ce22b9/tiny.pt",
@@ -153,7 +152,9 @@ import io
 import os
 import urllib
 import warnings
+
 from tqdm import tqdm
+
 
 def _download(url: str, root: str) -> bytes:
     os.makedirs(root, exist_ok=True)
@@ -173,7 +174,9 @@ def _download(url: str, root: str) -> bytes:
             warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
 
     with urllib.request.urlopen(url) as source, open(download_target, "wb") as output:
-        with tqdm(total=int(source.info().get("Content-Length")), ncols=80, unit='iB', unit_scale=True, unit_divisor=1024) as loop:
+        with tqdm(
+            total=int(source.info().get("Content-Length")), ncols=80, unit="iB", unit_scale=True, unit_divisor=1024
+        ) as loop:
             while True:
                 buffer = source.read(8192)
                 if not buffer:
@@ -184,7 +187,9 @@ def _download(url: str, root: str) -> bytes:
 
     model_bytes = open(download_target, "rb").read()
     if hashlib.sha256(model_bytes).hexdigest() != expected_sha256:
-        raise RuntimeError("Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model.")
+        raise RuntimeError(
+            "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
+        )
 
     return model_bytes
 
@@ -195,25 +200,24 @@ if __name__ == "__main__":
     # parser.add_argument("--fairseq_path", type=str, help="Path to the fairseq model (.pt) file.")
     # parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     # args = parser.parse_args()
+    import torch
+
     from transformers import WhisperConfig, WhisperModel
-    import torch 
 
-
-    layers = [4,6,12,24,32]
-    width = [384,512,768,1024,1280]
+    layers = [4, 6, 12, 24, 32]
+    width = [384, 512, 768, 1024, 1280]
     heads = [6, 8, 12, 16, 20]
-    name = ["tiny","base", "small","medium","large"]
-    for l,w,h,n in zip(layers, width, heads, name):
+    name = ["tiny", "base", "small", "medium", "large"]
+    for l, w, h, n in zip(layers, width, heads, name):
         config = WhisperConfig(
-            vocab_size = 51865,
-            encoder_layers =l, 
-            encoder_attention_heads = h,
-            decoder_attention_heads = h,
-            decoder_layers = l,
-            d_model = w, 
+            vocab_size=51865,
+            encoder_layers=l,
+            encoder_attention_heads=h,
+            decoder_attention_heads=h,
+            decoder_layers=l,
+            d_model=w,
         )
         model = WhisperModel(config)
-
 
         model_bytes = _download(_MODELS[n], "weights")
         with io.BytesIO(model_bytes) as fp:
@@ -222,13 +226,7 @@ if __name__ == "__main__":
         # original = torch.load(f"/home/arthur_huggingface_co/whisper/tiny.pt")
         new = rename_keys(original.copy())
 
-
-        missing, unexpected = model.load_state_dict(new, strict = False)
-        if missing == ["proj_out.weight"]: 
+        missing, unexpected = model.load_state_dict(new, strict=False)
+        if missing == []:
             print("succesfully loaded")
-
-
-
-
-
-
+            model.save_pretrained(f"whisper/{n}")

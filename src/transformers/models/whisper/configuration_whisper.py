@@ -132,12 +132,11 @@ class WhisperConfig(PretrainedConfig):
         init_std=0.02,
         decoder_start_token_id=2,
         scale_embedding=False,
-        max_source_positions=1498,
+        max_source_positions=1500,
         max_target_positions=448,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        input_feat_per_channel=80,
         input_channels=1,
         tie_word_embeddings=True,
         **kwargs
@@ -160,10 +159,9 @@ class WhisperConfig(PretrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.tie_word_embeddings = tie_word_embeddings
-        self.input_feat_per_channel = input_feat_per_channel
         self.input_channels = input_channels
-        self.max_source_positions=max_source_positions
-        self.max_target_positions=max_target_positions
+        self.max_source_positions = max_source_positions
+        self.max_target_positions = max_target_positions
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

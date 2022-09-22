@@ -76,6 +76,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self.hop_length = hop_length
         self.chunk_length = chunk_length
         self.return_attention_mask = True
+        self.n_samples = chunk_length * sampling_rate
+        self.nb_max_frame = self.n_samples // hop_length
 
         with np.load(mel_filter_file) as f:
             self.mel_filters = torch.from_numpy(f[f"mel_{self.num_mel_bins}"])
@@ -98,9 +100,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
-        
-        return log_spec
 
+        return log_spec
 
     def __call__(
         self,
@@ -197,23 +198,23 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             raw_speech = [raw_speech]
 
         # extract fbank features
-        features = [self._extract_fbank_features(waveform).permute(1,0) for waveform in raw_speech]
+        features = [self._extract_fbank_features(waveform).permute(1, 0) for waveform in raw_speech]
 
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_features": features})
 
         padded_inputs = self.pad(
             encoded_inputs,
-            padding=padding,
-            max_length=max_length,
+            padding="max_length",
+            max_length=self.nb_max_frame,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
             **kwargs,
         )
-
+        padded_inputs["input_features"] = padded_inputs["input_features"].permute(0, 2, 1)
         # make sure list is in array format
-        input_features = padded_inputs.get("input_features").permute(0,2,1)
+        input_features = padded_inputs.get("input_features")
         if isinstance(input_features[0], list):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
 

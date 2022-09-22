@@ -736,45 +736,152 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         return [x["array"] for x in speech_samples]
 
-    def test_generation_librispeech(self):
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-base")
+    def test_tiny_logits_librispeech(self):
+
+        from transformers import GPT2Tokenizer, WhisperFeatureExtractor, set_seed
+
+        torch_device = "cpu"
+        set_seed(0)
+        model = WhisperModel.from_pretrained("whisper/tiny")
         model.to(torch_device)
-        processor = self.default_processor
+
+        # processor = self.default_processor
 
         input_speech = self._load_datasamples(1)
 
-        input_features = processor(input_speech, return_tensors="pt").input_features.to(torch_device)
+        feaure_extractor = WhisperFeatureExtractor(
+            "/home/arthur_huggingface_co/whisper/whisper/assets/mel_filters.npz"
+        )
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        tokenizer.pad_token = 0
 
-        generated_ids = model.generate(input_features)
-        generated_transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        processor = WhisperProcessor(feaure_extractor, tokenizer)
 
-        EXPECTED_TRANSCRIPTIONS = [
-            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel"
-        ]
-        self.assertListEqual(generated_transcript, EXPECTED_TRANSCRIPTIONS)
+        input_features = processor(
+            audio=input_speech, text="This part of the speech", return_tensors="pt"
+        ).input_features.to(torch_device)
+        labels = processor(audio=input_speech, text="This part of the speech", return_tensors="pt").labels.to(
+            torch_device
+        )
+        with torch.no_grad():
+            logits = model(
+                input_features,
+                decoder_input_ids=labels,
+                output_hidden_states=False,
+                output_attentions=False,
+                use_cache=False,
+            )
 
-    def test_generation_librispeech_batched(self):
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-base")
+        logits = logits.last_hidden_state @ model.decoder.embed_tokens.weight.T
+
+        EXPECTED_LOGITS = torch.tensor(
+            [
+                8.8958,
+                4.0423,
+                9.8841,
+                9.8493,
+                10.0628,
+                4.8472,
+                9.0100,
+                5.7364,
+                5.9165,
+                7.6322,
+                3.1579,
+                10.7269,
+                6.9586,
+                10.1852,
+                5.4714,
+                8.2995,
+                4.7507,
+                6.6723,
+                7.2764,
+                7.1831,
+                7.0388,
+                7.2191,
+                6.2364,
+                6.2117,
+                5.8797,
+                2.8099,
+                6.8319,
+                5.7094,
+                0.6999,
+                6.8444,
+            ]
+        )
+
+        self.assertTrue(torch.allclose(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+
+    def test_large_logits_librispeech(self):
+
+        from transformers import GPT2Tokenizer, WhisperFeatureExtractor, set_seed
+
+        torch_device = "cpu"
+        set_seed(0)
+        model = WhisperModel.from_pretrained("whisper/large")
         model.to(torch_device)
-        processor = self.default_processor
 
-        input_speech = self._load_datasamples(4)
+        # processor = self.default_processor
 
-        inputs = processor(input_speech, return_tensors="pt", padding=True)
+        input_speech = self._load_datasamples(1)
 
-        input_features = inputs.input_features.to(torch_device)
-        attention_mask = inputs.attention_mask.to(torch_device)
+        feaure_extractor = WhisperFeatureExtractor(
+            "/home/arthur_huggingface_co/whisper/whisper/assets/mel_filters.npz"
+        )
+        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        tokenizer.pad_token = 0
 
-        generated_ids = model.generate(input_features, attention_mask=attention_mask)
-        generated_transcripts = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        processor = WhisperProcessor(feaure_extractor, tokenizer)
 
-        EXPECTED_TRANSCRIPTIONS = [
-            "mister quilter is the apostle of the middle classes and we are glad to welcome his gospel",
-            "nor is mister cultar's manner less interesting than his matter",
-            "he tells us that at this festive season of the year with christmas and roast beef looming before us"
-            " similes drawn from eating and its results occur most readily to the mind",
-            "he has grave doubts whether sir frederick leyton's work is really greek after all and can discover in it"
-            " but little of rocky ithaca",
-        ]
+        input_features = processor(
+            audio=input_speech, text="This part of the speech", return_tensors="pt"
+        ).input_features.to(torch_device)
+        labels = processor(audio=input_speech, text="This part of the speech", return_tensors="pt").labels.to(
+            torch_device
+        )
+        with torch.no_grad():
+            logits = model(
+                input_features,
+                decoder_input_ids=labels,
+                output_hidden_states=False,
+                output_attentions=False,
+                use_cache=False,
+            )
 
-        self.assertListEqual(generated_transcripts, EXPECTED_TRANSCRIPTIONS)
+        logits = logits.last_hidden_state @ model.decoder.embed_tokens.weight.T
+
+        EXPECTED_LOGITS = torch.tensor(
+            [
+                2.1807,
+                1.1505,
+                4.8049,
+                3.9549,
+                2.7182,
+                4.1885,
+                -0.4179,
+                2.8316,
+                2.0155,
+                2.2740,
+                2.6727,
+                1.3789,
+                0.5620,
+                2.2096,
+                1.6781,
+                2.8227,
+                1.4421,
+                0.9057,
+                1.3358,
+                2.2104,
+                2.7468,
+                2.0021,
+                2.6960,
+                1.5925,
+                2.2239,
+                1.9396,
+                4.0580,
+                5.7722,
+                4.8056,
+                4.2416,
+            ]
+        )
+
+        self.assertTrue(torch.allclose(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))

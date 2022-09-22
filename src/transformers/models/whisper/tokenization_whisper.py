@@ -15,78 +15,41 @@
 """Tokenization classes for Whisper."""
 import json
 import os
-from typing import List, Optional, Tuple, Union
+from pathlib import Path
+from shutil import copyfile
+from typing import Any, Dict, List, Optional, Tuple, Union
 
-import regex as re
+import sentencepiece
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer
 from ...utils import logging
-from .english_normalizer import EnglishTextNormalizer
 
+
+logger = logging.get_logger(__name__)
+
+SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
-    "tokenizer_file": "tokenizer.json",
-    "merges_file": "merges.txt",
-    "normalizer_file": "normalizer.json",
+    "spm_file": "sentencepiece.bpe.model",
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/vocab.json",
     },
-    "merges_file": {"openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/merges_file.txt"},
-    "normalizer_file": {
-        "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/normalizer.json"
+    "spm_file": {
+        "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/sentencepiece.bpe.model"
     },
 }
 
 MAX_MODEL_INPUT_SIZES = {
-    "openai/whisper-base": 448,
+    "openai/whisper-base": 1024,
 }
 
+MUSTC_LANGS = ["pt", "fr", "ru", "nl", "ro", "it", "es", "de"]
 
-# Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
-def bytes_to_unicode():
-    """
-    Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
-    characters the bpe code barfs on.
-
-    The reversible bpe codes work on unicode strings. This means you need a large # of unicode characters in your vocab
-    if you want to avoid UNKs. When you're at something like a 10B token dataset you end up needing around 5K for
-    decent coverage. This is a significant percentage of your normal, say, 32K bpe vocab. To avoid that, we want lookup
-    tables between utf-8 bytes and unicode strings.
-    """
-    bs = (
-        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
-    )
-    cs = bs[:]
-    n = 0
-    for b in range(2**8):
-        if b not in bs:
-            bs.append(b)
-            cs.append(2**8 + n)
-            n += 1
-    cs = [chr(n) for n in cs]
-    return dict(zip(bs, cs))
-
-
-logger = logging.get_logger(__name__)
-
-
-# Copied from transformers.models.gpt2.tokenization_gpt2.get_pairs
-def get_pairs(word):
-    """
-    Return set of symbol pairs in a word.
-
-    Word is represented as tuple of symbols (symbols being variable-length strings).
-    """
-    pairs = set()
-    prev_char = word[0]
-    for char in word[1:]:
-        pairs.add((prev_char, char))
-        prev_char = char
-    return pairs
+LANGUAGES = {"mustc": MUSTC_LANGS}
 
 
 class WhisperTokenizer(PreTrainedTokenizer):
@@ -96,29 +59,44 @@ class WhisperTokenizer(PreTrainedTokenizer):
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods. Users should refer to
     the superclass for more information regarding such methods.
 
-     Args:
+    Args:
         vocab_file (`str`):
-            Path to the vocabulary file.
-        merges_file (`str`):
-            Path to the merges file.
-        normalizer_file (`str`, *optional*, defaults to `None`):
-            Path to the normalizer_file file.
-        errors (`str`, *optional*, defaults to `"replace"`):
-            Paradigm to follow when decoding bytes to UTF-8. See
-            [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
-        unk_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
+            File containing the vocabulary.
+        spm_file (`str`):
+            Path to the [SentencePiece](https://github.com/google/sentencepiece) model file
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
+            The beginning of sentence token.
+        eos_token (`str`, *optional*, defaults to `"</s>"`):
+            The end of sentence token.
+        unk_token (`str`, *optional*, defaults to `"<unk>"`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        bos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
-            The beginning of sequence token.
-        eos_token (`str`, *optional*, defaults to `"<|endoftext|>"`):
-            The end of sequence token.
-        add_prefix_space (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word.
-        add_bos_token (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an initial <|endoftext|> to the input. This allows to treat the leading word just as
-            any other word.
+        pad_token (`str`, *optional*, defaults to `"<pad>"`):
+            The token used for padding, for example when batching sequences of different lengths.
+        do_upper_case (`bool`, *optional*, defaults to `False`):
+           Whether or not to uppercase the output when decoding.
+        do_lower_case (`bool`, *optional*, defaults to `False`):
+            Whether or not to lowercase the input when tokenizing.
+        tgt_lang (`str`, *optional*):
+            A string representing the target language.
+        sp_model_kwargs (`dict`, *optional*):
+            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
+            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
+            to set:
+
+            - `enable_sampling`: Enable subword regularization.
+            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
+
+              - `nbest_size = {0,1}`: No sampling is performed.
+              - `nbest_size > 1`: samples from the nbest_size results.
+              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
+                using forward-filtering-and-backward-sampling algorithm.
+
+            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
+              BPE-dropout.
+
+        **kwargs
+            Additional keyword arguments passed along to [`PreTrainedTokenizer`]
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -126,132 +104,107 @@ class WhisperTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = MAX_MODEL_INPUT_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
+    prefix_tokens: List[int] = []
+
     def __init__(
         self,
         vocab_file,
-        merges_file,
-        normalizer_file=None,
-        errors="replace",
-        unk_token="<|endoftext|>",
-        bos_token="<|endoftext|>",
-        eos_token="<|endoftext|>",
-        pad_token=None,
-        add_prefix_space=False,
-        add_bos_token=False,
-        **kwargs
-    ):
+        spm_file,
+        bos_token="<s>",
+        eos_token="</s>",
+        pad_token="<pad>",
+        unk_token="<unk>",
+        do_upper_case=False,
+        do_lower_case=False,
+        tgt_lang=None,
+        lang_codes=None,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
+        **kwargs,
+    ) -> None:
+        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
 
-        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
         super().__init__(
-            errors=errors,
-            unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
+            unk_token=unk_token,
             pad_token=pad_token,
-            add_prefix_space=add_prefix_space,
-            add_bos_token=add_bos_token,
+            do_upper_case=do_upper_case,
+            do_lower_case=do_lower_case,
+            tgt_lang=tgt_lang,
+            lang_codes=lang_codes,
+            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
-        self.add_bos_token = add_bos_token
+        self.do_upper_case = do_upper_case
+        self.do_lower_case = do_lower_case
 
-        with open(vocab_file, encoding="utf-8") as vocab_handle:
-            self.encoder = json.load(vocab_handle)
+        self.encoder = load_json(vocab_file)
         self.decoder = {v: k for k, v in self.encoder.items()}
-        self.errors = errors  # how to handle errors in decoding
-        self.byte_encoder = bytes_to_unicode()
-        self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
-        with open(merges_file, encoding="utf-8") as merges_handle:
-            bpe_merges = merges_handle.read().split("\n")[1:-1]
-        bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
-        self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
-        self.cache = {}
-        self.add_prefix_space = add_prefix_space
+        self.spm_file = spm_file
+        self.sp_model = load_spm(spm_file, self.sp_model_kwargs)
 
-        if normalizer_file is not None:
-            with open(normalizer_file, encoding="utf-8") as vocab_handle:
-                self.english_spelling_normalizer = json.load(vocab_handle)
+        if lang_codes is not None:
+            self.lang_codes = lang_codes
+            self.langs = LANGUAGES[lang_codes]
+            self.lang_tokens = [f"<lang:{lang}>" for lang in self.langs]
+            self.lang_code_to_id = {lang: self.sp_model.PieceToId(f"<lang:{lang}>") for lang in self.langs}
+
+            self._additional_special_tokens = self.lang_tokens
+            self._tgt_lang = tgt_lang if tgt_lang is not None else self.langs[0]
+
+            self.set_tgt_lang_special_tokens(self._tgt_lang)
         else:
-            self.english_spelling_normalizer = None
-
-        # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
-        self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
-
-    def get_vocab(self):
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
+            self.lang_code_to_id = {}
 
     @property
     def vocab_size(self) -> int:
         return len(self.encoder)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.bpe with GPT2 -> Whisper
-    def bpe(self, token):
-        if token in self.cache:
-            return self.cache[token]
-        word = tuple(token)
-        pairs = get_pairs(word)
+    @property
+    def tgt_lang(self) -> str:
+        return self._tgt_lang
 
-        if not pairs:
-            return token
+    @tgt_lang.setter
+    def tgt_lang(self, new_tgt_lang) -> None:
+        self._tgt_lang = new_tgt_lang
+        self.set_tgt_lang_special_tokens(new_tgt_lang)
 
-        while True:
-            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
-            if bigram not in self.bpe_ranks:
-                break
-            first, second = bigram
-            new_word = []
-            i = 0
-            while i < len(word):
-                try:
-                    j = word.index(first, i)
-                except ValueError:
-                    new_word.extend(word[i:])
-                    break
-                else:
-                    new_word.extend(word[i:j])
-                    i = j
+    def set_tgt_lang_special_tokens(self, tgt_lang: str) -> None:
+        """Reset the special tokens to the target language setting. prefix=[eos, tgt_lang_code] and suffix=[eos]."""
+        lang_code_id = self.lang_code_to_id[tgt_lang]
+        self.prefix_tokens = [lang_code_id]
 
-                if word[i] == first and i < len(word) - 1 and word[i + 1] == second:
-                    new_word.append(first + second)
-                    i += 2
-                else:
-                    new_word.append(word[i])
-                    i += 1
-            new_word = tuple(new_word)
-            word = new_word
-            if len(word) == 1:
-                break
-            else:
-                pairs = get_pairs(word)
-        word = " ".join(word)
-        self.cache[token] = word
-        return word
+    def _tokenize(self, text: str) -> List[str]:
+        return self.sp_model.encode(text, out_type=str)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.build_inputs_with_special_tokens with GPT2 -> Whisper
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        if self.add_bos_token:
-            bos_token_ids = [self.bos_token_id]
-        else:
-            bos_token_ids = []
+    def _convert_token_to_id(self, token):
+        return self.encoder.get(token, self.encoder[self.unk_token])
 
-        output = bos_token_ids + token_ids_0
+    def _convert_id_to_token(self, index: int) -> str:
+        """Converts an index (integer) in a token (str) using the decoder."""
+        return self.decoder.get(index, self.unk_token)
 
+    def convert_tokens_to_string(self, tokens: List[str]) -> str:
+        """Converts a sequence of tokens (strings for sub-words) in a single string."""
+        out_string = self.sp_model.decode(tokens)
+
+        if self.do_upper_case:
+            out_string = out_string.upper()
+        return out_string
+
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
+        """Build model inputs from a sequence by appending eos_token_id."""
         if token_ids_1 is None:
-            return output
+            return self.prefix_tokens + token_ids_0 + [self.eos_token_id]
+        # We don't expect to process pairs, but leave the pair logic for API consistency
+        return self.prefix_tokens + token_ids_0 + token_ids_1 + [self.eos_token_id]
 
-        return output + bos_token_ids + token_ids_1
-
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.get_special_tokens_mask with GPT2 -> Whisper
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
-        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
+        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer `prepare_for_model` method.
 
         Args:
             token_ids_0 (`List[int]`):
@@ -269,133 +222,64 @@ class WhisperTokenizer(PreTrainedTokenizer):
                 token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
             )
 
-        if not self.add_bos_token:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=False
-            )
-
+        prefix_ones = [1] * len(self.prefix_tokens)
+        suffix_ones = [1]
         if token_ids_1 is None:
-            return [1] + ([0] * len(token_ids_0))
-        return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
+            return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
+        return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._tokenize with GPT2 -> Whisper
-    def _tokenize(self, text):
-        """Tokenize a string."""
-        bpe_tokens = []
-        for token in re.findall(self.pat, text):
-            token = "".join(
-                self.byte_encoder[b] for b in token.encode("utf-8")
-            )  # Maps all our bytes to unicode strings, avoiding control tokens of the BPE (spaces in our case)
-            bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
-        return bpe_tokens
+    def get_vocab(self) -> Dict:
+        vocab = self.encoder.copy()
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_token_to_id with GPT2 -> Whisper
-    def _convert_token_to_id(self, token):
-        """Converts a token (str) in an id using the vocab."""
-        return self.encoder.get(token, self.encoder.get(self.unk_token))
+    def __getstate__(self) -> Dict:
+        state = self.__dict__.copy()
+        state["sp_model"] = None
+        return state
 
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        return self.decoder.get(index, self.decoder.get(self.unk_token_id))
+    def __setstate__(self, d: Dict) -> None:
+        self.__dict__ = d
 
-    def _normalize(self, text):
-        """
-        Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
-        english text.
-        """
-        normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
-        return normalizer(text)
+        # for backward compatibility
+        if not hasattr(self, "sp_model_kwargs"):
+            self.sp_model_kwargs = {}
 
-    def _decode(
-        self, token_ids: Union[int, List[int]], skip_special_tokens: bool = False, normalize: bool = False, **kwargs
-    ) -> str:
-        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
-
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-
-        # To avoid mixing byte-level and unicode for byte-level BPT
-        # we need to build string separately for added tokens and byte-level tokens
-        # cf. https://github.com/huggingface/transformers/issues/1133
-        sub_texts = []
-        current_sub_text = []
-        for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
-                continue
-            if token in self.added_tokens_encoder:
-                if current_sub_text:
-                    sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-                    current_sub_text = []
-                sub_texts.append(token)
-            else:
-                current_sub_text.append(token)
-        if current_sub_text:
-            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-
-        text = "".join(sub_texts)
-
-        if normalize:
-            clean_text = self._normalize(text)
-            return clean_text
-        else:
-            return text
-
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.convert_tokens_to_string with GPT2 -> Whisper
-    def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (string) in a single string."""
-        text = "".join(tokens)
-        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
-        return text
+        self.sp_model = load_spm(self.spm_file, self.sp_model_kwargs)
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
+        save_dir = Path(save_directory)
+        assert save_dir.is_dir(), f"{save_directory} should be a directory"
+        vocab_save_path = save_dir / (
+            (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["vocab_file"]
         )
-        merge_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
-        )
-        normalizer_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["normalizer_file"]
+        spm_save_path = save_dir / (
+            (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["spm_file"]
         )
 
-        with open(vocab_file, "w", encoding="utf-8") as f:
-            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
+        save_json(self.encoder, vocab_save_path)
 
-        index = 0
-        with open(merge_file, "w", encoding="utf-8") as writer:
-            writer.write("#version: 0.2\n")
-            for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
-                if index != token_index:
-                    logger.warning(
-                        f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
-                        " Please check that the tokenizer is not corrupted!"
-                    )
-                    index = token_index
-                writer.write(" ".join(bpe_tokens) + "\n")
-                index += 1
+        if os.path.abspath(self.spm_file) != os.path.abspath(spm_save_path) and os.path.isfile(self.spm_file):
+            copyfile(self.spm_file, spm_save_path)
+        elif not os.path.isfile(self.spm_file):
+            with open(spm_save_path, "wb") as fi:
+                content_spiece_model = self.sp_model.serialized_model_proto()
+                fi.write(content_spiece_model)
 
-        if self.english_spelling_normalizer is not None:
-            with open(normalizer_file, "w", encoding="utf-8") as f:
-                f.write(
-                    json.dumps(self.english_spelling_normalizer, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
-                )
+        return (str(vocab_save_path), str(spm_save_path))
 
-        return vocab_file, merge_file, normalizer_file
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.prepare_for_tokenization with GPT2 -> Whisper
-    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
-        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
-        if is_split_into_words or add_prefix_space:
-            text = " " + text
-        return (text, kwargs)
+def load_spm(path: str, sp_model_kwargs: Dict[str, Any]) -> sentencepiece.SentencePieceProcessor:
+    spm = sentencepiece.SentencePieceProcessor(**sp_model_kwargs)
+    spm.Load(str(path))
+    return spm
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._build_conversation_input_ids with GPT2 -> Whisper
-    def _build_conversation_input_ids(self, conversation) -> List[int]:
-        input_ids = []
-        for is_user, text in conversation.iter_texts():
-            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
-        if len(input_ids) > self.model_max_length:
-            input_ids = input_ids[-self.model_max_length :]
-        return input_ids
+
+def load_json(path: str) -> Union[Dict, List]:
+    with open(path, "r") as f:
+        return json.load(f)
+
+
+def save_json(data, path: str) -> None:
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
