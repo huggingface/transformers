@@ -26,15 +26,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import (
-    BaseModelOutputWithPastAndCrossAttentions,
-    CausalLMOutputWithCrossAttentions,
-    MaskedLMOutput,
-    MultipleChoiceModelOutput,
-    QuestionAnsweringModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-)
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions
 from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...pytorch_utils import (
     apply_chunking_to_forward,
@@ -1117,6 +1109,211 @@ FAN_INPUTS_DOCSTRING = r"""
 """
 
 
+class FANEmbeddings(FANPreTrainedModel):
+    def __init__(self, config: FANConfig):
+        super().__init__(config)
+
+        img_size = to_2tuple(config.img_size)
+        self.use_checkpoint = config.use_checkpoint
+        assert (img_size[0] % config.patch_size == 0) and (
+            img_size[0] % config.patch_size == 0
+        ), "`patch_size` should divide image dimensions evenly"
+
+        act_layer = config.act_layer or nn.GELU
+
+        if config.backbone == None:
+            self.patch_embed = ConvPatchEmbed(
+                img_size=img_size,
+                patch_size=config.patch_size,
+                in_chans=config.in_chans,
+                embed_dim=config.embed_dim,
+                act_layer=act_layer,
+            )
+        else:
+            self.patch_embed = HybridEmbed(
+                backbone=config.backbone, patch_size=config.hybrid_patch_size, embed_dim=config.embed_dim
+            )
+
+        if config.use_pos_embed:
+            self.pos_embed = PositionalEncodingFourier(dim=config.embed_dim)
+        self.pos_drop = nn.Dropout(p=config.drop_rate)
+
+    def forward(
+        self,
+        pixel_values=None,
+        attention_mask=None,
+        position_embeddings=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        B = pixel_values.shape[0]
+        inputs_embeds, (Hp, Wp) = self.patch_embed(pixel_values)
+        hidden_states = inputs_embeds
+
+        if self.use_pos_embed:
+            pos_encoding = self.pos_embed(B, Hp, Wp).reshape(B, -1, hidden_states.shape[1]).permute(0, 2, 1)
+            hidden_states = hidden_states + pos_encoding
+
+        hidden_states = self.pos_drop(hidden_states)
+        H, W = Hp, Wp
+        return hidden_states
+
+
+class FANEncoder(FANPreTrainedModel):
+    """
+    Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
+    [`DetrEncoderLayer`].
+
+    The encoder updates the flattened feature map through multiple self-attention layers.
+
+    Small tweak for DETR:
+
+    - position_embeddings are added to the forward pass.
+
+    Args:
+        config: DetrConfig
+    """
+
+    def __init__(self, config: FANConfig):
+        super().__init__(config)
+
+        img_size = to_2tuple(config.img_size)
+        self.use_checkpoint = config.use_checkpoint
+        assert (img_size[0] % config.patch_size == 0) and (
+            img_size[0] % config.patch_size == 0
+        ), "`patch_size` should divide image dimensions evenly"
+
+        num_heads = [config.num_heads] * config.depth if not isinstance(config.num_heads, list) else config.num_heads
+        channel_dims = [config.embed_dim] * config.depth if config.channel_dims is None else config.channel_dims
+        norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
+        act_layer = config.act_layer or nn.GELU
+
+        if config.backbone == None:
+            self.patch_embed = ConvPatchEmbed(
+                img_size=img_size,
+                patch_size=config.patch_size,
+                in_chans=config.in_chans,
+                embed_dim=config.embed_dim,
+                act_layer=act_layer,
+            )
+        else:
+            self.patch_embed = HybridEmbed(
+                backbone=config.backbone, patch_size=config.hybrid_patch_size, embed_dim=config.embed_dim
+            )
+
+        if config.use_pos_embed:
+            self.pos_embed = PositionalEncodingFourier(dim=config.embed_dim)
+        self.pos_drop = nn.Dropout(p=config.drop_rate)
+
+        if config.se_mlp:
+            build_block = FANBlock_SE
+        else:
+            build_block = FANBlock
+        self.blocks = nn.ModuleList([])
+        for i in range(config.depth):
+            if i < config.depth - 1 and channel_dims[i] != channel_dims[i + 1]:
+                downsample = OverlapPatchEmbed(
+                    img_size=img_size,
+                    patch_size=3,
+                    stride=2,
+                    in_chans=channel_dims[i],
+                    embed_dim=channel_dims[i + 1],
+                )
+            else:
+                downsample = None
+            self.blocks.append(
+                build_block(
+                    dim=channel_dims[i],
+                    num_heads=num_heads[i],
+                    mlp_ratio=config.mlp_ratio,
+                    qkv_bias=config.qkv_bias,
+                    drop=config.drop_rate,
+                    sr_ratio=config.sr_ratio[i],
+                    attn_drop=config.attn_drop_rate,
+                    drop_path=config.drop_path_rate,
+                    act_layer=act_layer,
+                    norm_layer=norm_layer,
+                    eta=config.eta,
+                    downsample=downsample,
+                    c_head_num=config.c_head_num[i] if config.c_head_num is not None else None,
+                )
+            )
+        self.num_features = self.embed_dim = channel_dims[i]
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, channel_dims[i]))
+        self.cls_attn_blocks = nn.ModuleList(
+            [
+                ClassAttentionBlock(
+                    dim=channel_dims[-1],
+                    num_heads=num_heads[-1],
+                    mlp_ratio=config.mlp_ratio,
+                    qkv_bias=config.qkv_bias,
+                    drop=config.drop_rate,
+                    attn_drop=config.attn_drop_rate,
+                    act_layer=act_layer,
+                    norm_layer=norm_layer,
+                    eta=config.eta,
+                    tokens_norm=config.tokens_norm,
+                )
+                for _ in range(config.cls_attn_layers)
+            ]
+        )
+
+        # in the original DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        inputs_embeds=None,
+        attention_mask=None,
+        position_embeddings=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        B = inputs_embeds.shape[0]
+        inputs_embeds, (Hp, Wp) = self.patch_embed(inputs_embeds)
+        hidden_states = inputs_embeds
+
+        if self.config.use_pos_embed:
+            pos_encoding = self.pos_embed(B, Hp, Wp).reshape(B, -1, hidden_states.shape[1]).permute(0, 2, 1)
+            hidden_states = hidden_states + pos_encoding
+
+        hidden_states = self.pos_drop(hidden_states)
+        H, W = Hp, Wp
+
+        for blk in self.blocks:
+            blk.H, blk.W = H, W
+
+            if self.use_checkpoint:
+                hidden_states = torch.utils.checkpoint.checkpoint(blk, hidden_states)
+            else:
+                hidden_states = blk(hidden_states)
+            H, W = blk.H, blk.W
+
+        cls_tokens = self.cls_token.expand(B, -1, -1)
+        hidden_states = torch.cat((cls_tokens, hidden_states), dim=1)
+
+        encoder_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+
+        for blk in self.cls_attn_blocks:
+            if output_hidden_states:
+                encoder_states = encoder_states + (hidden_states,)
+            hidden_states = blk(hidden_states)
+
+        if output_hidden_states:
+            encoder_states = encoder_states + (hidden_states,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
+        )
+
+
 @add_start_docstrings(
     "The bare FAN Model transformer outputting raw hidden-states without any specific head on top.",
     FAN_START_DOCSTRING,
@@ -1141,103 +1338,8 @@ class FANModel(FANPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        img_size = to_2tuple(self.config.img_size)
-        self.use_checkpoint = self.config.use_checkpoint
-        assert (img_size[0] % self.config.patch_size == 0) and (
-            img_size[0] % self.config.patch_size == 0
-        ), "`patch_size` should divide image dimensions evenly"
-
-        self.num_classes = self.config.num_classes
-        num_heads = (
-            [self.config.num_heads] * self.config.depth
-            if not isinstance(self.config.num_heads, list)
-            else self.config.num_heads
-        )
-
-        channel_dims = (
-            [self.config.embed_dim] * self.config.depth
-            if self.config.channel_dims is None
-            else self.config.channel_dims
-        )
-        norm_layer = self.config.norm_layer or partial(nn.LayerNorm, eps=1e-6)  # TODO : Add NORM2FUN
-        act_layer = self.config.act_layer or nn.GELU  # TODO : Add ACT2FUN
-        if self.config.backbone == None:
-            self.patch_embed = ConvPatchEmbed(
-                img_size=img_size,
-                patch_size=self.config.patch_size,
-                in_chans=self.config.in_chans,
-                embed_dim=self.config.embed_dim,
-                act_layer=act_layer,
-            )
-        else:
-            self.patch_embed = HybridEmbed(
-                backbone=self.config.backbone,
-                patch_size=self.config.hybrid_patch_size,
-                embed_dim=self.config.embed_dim,
-            )
-
-        if self.config.use_pos_embed:
-            self.pos_embed = PositionalEncodingFourier(dim=self.config.embed_dim)
-        self.pos_drop = nn.Dropout(p=self.config.drop_rate)
-
-        if self.config.se_mlp:
-            build_block = FANBlock_SE
-        else:
-            build_block = FANBlock
-        self.blocks = nn.ModuleList([])
-        for i in range(self.config.depth):
-            if i < self.config.depth - 1 and channel_dims[i] != channel_dims[i + 1]:
-                downsample = OverlapPatchEmbed(
-                    img_size=img_size,
-                    patch_size=3,
-                    stride=2,
-                    in_chans=channel_dims[i],
-                    embed_dim=channel_dims[i + 1],
-                )
-            else:
-                downsample = None
-            self.blocks.append(
-                build_block(
-                    dim=channel_dims[i],
-                    num_heads=num_heads[i],
-                    mlp_ratio=self.config.mlp_ratio,
-                    qkv_bias=self.config.qkv_bias,
-                    drop=self.config.drop_rate,
-                    sr_ratio=self.config.sr_ratio[i],
-                    attn_drop=self.config.attn_drop_rate,
-                    drop_path=self.config.drop_path_rate,
-                    act_layer=act_layer,
-                    norm_layer=norm_layer,
-                    eta=self.config.eta,
-                    downsample=downsample,
-                    c_head_num=self.config.c_head_num[i] if self.config.c_head_num is not None else None,
-                )
-            )
-        self.num_features = self.embed_dim = channel_dims[i]
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, channel_dims[i]))
-        self.cls_attn_blocks = nn.ModuleList(
-            [
-                ClassAttentionBlock(
-                    dim=channel_dims[-1],
-                    num_heads=num_heads[-1],
-                    mlp_ratio=self.config.mlp_ratio,
-                    qkv_bias=self.config.qkv_bias,
-                    drop=self.config.drop_rate,
-                    attn_drop=self.config.attn_drop_rate,
-                    act_layer=act_layer,
-                    norm_layer=norm_layer,
-                    eta=self.config.eta,
-                    tokens_norm=self.config.tokens_norm,
-                )
-                for _ in range(self.config.cls_attn_layers)
-            ]
-        )
-
-        # Classifier head
-        self.norm = norm_layer(channel_dims[i])
-        self.head = (
-            nn.Linear(self.num_features, self.config.num_classes) if self.config.num_classes > 0 else nn.Identity()
-        )
+        # self.embeddings = FANEmbeddings(config)
+        self.encoder = FANEncoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1265,16 +1367,8 @@ class FANModel(FANPreTrainedModel):
     )
     def forward(
         self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        past_key_values=None,
-        use_cache=None,
+        pixel_values,
+        pixel_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -1305,74 +1399,14 @@ class FANModel(FANPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
-            use_cache = False
-
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
-        elif input_ids is not None:
-            input_shape = input_ids.size()
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-        else:
-            raise ValueError("You have to specify either input_ids or inputs_embeds")
-
-        batch_size, seq_length = input_shape
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
-
-        if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
-
-        if token_type_ids is None:
-            if hasattr(self.embeddings, "token_type_ids"):
-                buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
-                buffered_token_type_ids_expanded = buffered_token_type_ids.expand(batch_size, seq_length)
-                token_type_ids = buffered_token_type_ids_expanded
-            else:
-                token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
-
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
-
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
-        else:
-            encoder_extended_attention_mask = None
+        batch_size, num_channels, height, width = pixel_values.shape
+        device = pixel_values.device
 
         # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
-        )
+        # embedding_output = self.embeddings(pixel_values=pixel_values)
         encoder_outputs = self.encoder(
-            embedding_output,
-            attention_mask=extended_attention_mask,
-            head_mask=head_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_extended_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
+            pixel_values,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1384,651 +1418,6 @@ class FANModel(FANPreTrainedModel):
 
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=sequence_output,
-            past_key_values=encoder_outputs.past_key_values,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
-            cross_attentions=encoder_outputs.cross_attentions,
-        )
-
-
-@add_start_docstrings("""FAN Model with a `language modeling` head on top. """, FAN_START_DOCSTRING)
-class FANForMaskedLM(FANPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        if config.is_decoder:
-            logger.warning(
-                "If you want to use `FANForMaskedLM` make sure `config.is_decoder=False` for "
-                "bi-directional self-attention."
-            )
-
-        self.fan = FANModel(config)
-        self.cls = FANOnlyMLMHead(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_output_embeddings(self):
-        return self.cls.predictions.decoder
-
-    def set_output_embeddings(self, new_embeddings):
-        self.cls.predictions.decoder = new_embeddings
-
-    @add_start_docstrings_to_model_forward(FAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MaskedLMOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the masked language modeling loss.
-            Indices should be in `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring)
-            Tokens with indices set to `-100` are ignored (masked), the loss is only computed for the tokens with labels
-            in `[0, ..., config.vocab_size]`.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.fan(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
-
-        masked_lm_loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()  # -100 index = padding token
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
-            return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
-
-        return MaskedLMOutput(
-            loss=masked_lm_loss,
-            logits=prediction_scores,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-        effective_batch_size = input_shape[0]
-
-        #  add a dummy token
-        assert self.config.pad_token_id is not None, "The PAD token should be defined for generation"
-        attention_mask = torch.cat([attention_mask, attention_mask.new_zeros((attention_mask.shape[0], 1))], dim=-1)
-        dummy_token = torch.full(
-            (effective_batch_size, 1), self.config.pad_token_id, dtype=torch.long, device=input_ids.device
-        )
-        input_ids = torch.cat([input_ids, dummy_token], dim=1)
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
-
-
-@add_start_docstrings(
-    """FAN Model with a `language modeling` head on top for CLM fine-tuning. """, FAN_START_DOCSTRING
-)
-class FANForCausalLM(FANPreTrainedModel):
-
-    _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
-
-    def __init__(self, config):
-        super().__init__(config)
-
-        if not config.is_decoder:
-            logger.warning("If you want to use `FANForCausalLM` as a standalone, add `is_decoder=True.`")
-
-        self.fan = FANModel(config)
-        self.cls = FANOnlyMLMHead(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_output_embeddings(self):
-        return self.cls.predictions.decoder
-
-    def set_output_embeddings(self, new_embeddings):
-        self.cls.predictions.decoder = new_embeddings
-
-    @add_start_docstrings_to_model_forward(FAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=CausalLMOutputWithCrossAttentions, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        labels=None,
-        use_cache=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2
-            tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
-            tensors of shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`. The two
-            additional tensors are only required when the model is used as a decoder in a Sequence to Sequence
-            model.
-
-            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-            cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential
-            decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
-            `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-            ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import FANTokenizer, FANForCausalLM, FANConfig
-        >>> import torch
-
-        >>> tokenizer = FANTokenizer.from_pretrained('nvidia/fan')
-        >>> config = FANConfig.from_pretrained("nvidia/fan")
-        >>> config.is_decoder = True
-        >>> model = FANForCausalLM.from_pretrained('nvidia/fan', config=config)
-
-        >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
-        >>> outputs = model(**inputs)
-
-        >>> prediction_logits = outputs.logits
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.fan(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-        prediction_scores = self.cls(sequence_output)
-
-        lm_loss = None
-        if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
-            loss_fct = CrossEntropyLoss()
-            lm_loss = loss_fct(shifted_prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
-
-        if not return_dict:
-            output = (prediction_scores,) + outputs[1:]
-            return ((lm_loss,) + output) if lm_loss is not None else output
-
-        return CausalLMOutputWithCrossAttentions(
-            loss=lm_loss,
-            logits=prediction_scores,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-            cross_attentions=outputs.cross_attentions,
-        )
-
-    def prepare_inputs_for_generation(self, input_ids, past=None, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # cut decoder_input_ids if past is used
-        if past is not None:
-            input_ids = input_ids[:, -1:]
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past}
-
-    def _reorder_cache(self, past, beam_idx):
-        reordered_past = ()
-        for layer_past in past:
-            reordered_past += (
-                tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
-            )
-        return reordered_past
-
-
-class FANClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
-
-        self.config = config
-
-    def forward(self, features, **kwargs):
-        x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
-        x = self.dropout(x)
-        x = self.dense(x)
-        x = ACT2FN[self.config.hidden_act](x)
-        x = self.dropout(x)
-        x = self.out_proj(x)
-        return x
-
-
-@add_start_docstrings(
-    """FAN Model transformer with a sequence classification/regression head on top (a linear layer on top of
-    the pooled output) e.g. for GLUE tasks. """,
-    FAN_START_DOCSTRING,
-)
-class FANForSequenceClassification(FANPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-        self.fan = FANModel(config)
-        self.classifier = FANClassificationHead(config)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(FAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss.
-            Indices should be in `[0, ..., config.num_labels - 1]`.
-            If `config.num_labels == 1` a regression loss is computed (Mean-Square loss),
-            If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.fan(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-        logits = self.classifier(sequence_output)
-
-        loss = None
-        if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return SequenceClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """FAN Model with a multiple choice classification head on top (a linear layer on top of
-    the pooled output and a softmax) e.g. for RocStories/SWAG tasks. """,
-    FAN_START_DOCSTRING,
-)
-class FANForMultipleChoice(FANPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        self.fan = FANModel(config)
-        self.sequence_summary = SequenceSummary(config)
-        self.classifier = nn.Linear(config.hidden_size, 1)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(FAN_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MultipleChoiceModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the multiple choice classification loss.
-            Indices should be in `[0, ..., num_choices-1]` where `num_choices` is the size of the second dimension
-            of the input tensors. (See `input_ids` above)
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
-
-        input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
-        attention_mask = attention_mask.view(-1, attention_mask.size(-1)) if attention_mask is not None else None
-        token_type_ids = token_type_ids.view(-1, token_type_ids.size(-1)) if token_type_ids is not None else None
-        position_ids = position_ids.view(-1, position_ids.size(-1)) if position_ids is not None else None
-        inputs_embeds = (
-            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
-            if inputs_embeds is not None
-            else None
-        )
-
-        outputs = self.fan(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        pooled_output = self.sequence_summary(sequence_output)
-        logits = self.classifier(pooled_output)
-        reshaped_logits = logits.view(-1, num_choices)
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return MultipleChoiceModelOutput(
-            loss=loss,
-            logits=reshaped_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """FAN Model with a token classification head on top (a linear layer on top of
-    the hidden-states output) e.g. for Named-Entity-Recognition (NER) tasks. """,
-    FAN_START_DOCSTRING,
-)
-class FANForTokenClassification(FANPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_labels = config.num_labels
-
-        self.fan = FANModel(config)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(FAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Labels for computing the token classification loss.
-            Indices should be in `[0, ..., config.num_labels - 1]`.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.fan(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        sequence_output = self.dropout(sequence_output)
-        logits = self.classifier(sequence_output)
-
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return TokenClassifierOutput(
-            loss=loss,
-            logits=logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
-@add_start_docstrings(
-    """FAN Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
-    layers on top of the hidden-states output to compute `span start logits` and `span end logits`). """,
-    FAN_START_DOCSTRING,
-)
-class FANForQuestionAnswering(FANPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        config.num_labels = 2
-        self.num_labels = config.num_labels
-
-        self.fan = FANModel(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(FAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=QuestionAnsweringModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
-        self,
-        input_ids=None,
-        attention_mask=None,
-        token_type_ids=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        start_positions=None,
-        end_positions=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
-        r"""
-        start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the start of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
-        end_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for position (index) of the end of the labelled span for computing the token classification loss.
-            Positions are clamped to the length of the sequence (`sequence_length`).
-            Position outside of the sequence are not taken into account for computing the loss.
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.fan(
-            input_ids,
-            attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
-            position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        logits = self.qa_outputs(sequence_output)
-        start_logits, end_logits = logits.split(1, dim=-1)
-        start_logits = start_logits.squeeze(-1)
-        end_logits = end_logits.squeeze(-1)
-
-        total_loss = None
-        if start_positions is not None and end_positions is not None:
-            # If we are on multi-GPU, split add a dimension
-            if len(start_positions.size()) > 1:
-                start_positions = start_positions.squeeze(-1)
-            if len(end_positions.size()) > 1:
-                end_positions = end_positions.squeeze(-1)
-            # sometimes the start/end positions are outside our model inputs, we ignore these terms
-            ignored_index = start_logits.size(1)
-            start_positions = start_positions.clamp(0, ignored_index)
-            end_positions = end_positions.clamp(0, ignored_index)
-
-            loss_fct = CrossEntropyLoss(ignore_index=ignored_index)
-            start_loss = loss_fct(start_logits, start_positions)
-            end_loss = loss_fct(end_logits, end_positions)
-            total_loss = (start_loss + end_loss) / 2
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
-            return ((total_loss,) + output) if total_loss is not None else output
-
-        return QuestionAnsweringModelOutput(
-            loss=total_loss,
-            start_logits=start_logits,
-            end_logits=end_logits,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
         )
