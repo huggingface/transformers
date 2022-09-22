@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 HuggingFace Inc.
+# Copyright 2022 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -32,10 +32,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import YolosFeatureExtractor
+    from transformers import DeformableDetrFeatureExtractor
 
 
-class YolosFeatureExtractionTester(unittest.TestCase):
+class DeformableDetrFeatureExtractionTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -74,7 +74,7 @@ class YolosFeatureExtractionTester(unittest.TestCase):
 
     def get_expected_values(self, image_inputs, batched=False):
         """
-        This function computes the expected height and width when providing images to YolosFeatureExtractor,
+        This function computes the expected height and width when providing images to DeformableDetrFeatureExtractor,
         assuming do_resize is set to True with a scalar size.
         """
         if not batched:
@@ -106,12 +106,12 @@ class YolosFeatureExtractionTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class YolosFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+class DeformableDetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
 
-    feature_extraction_class = YolosFeatureExtractor if is_vision_available() else None
+    feature_extraction_class = DeformableDetrFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
-        self.feature_extract_tester = YolosFeatureExtractionTester(self)
+        self.feature_extract_tester = DeformableDetrFeatureExtractionTester(self)
 
     @property
     def feat_extract_dict(self):
@@ -227,7 +227,7 @@ class YolosFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
             ),
         )
 
-    def test_equivalence_padding(self):
+    def test_equivalence_pad_and_create_pixel_mask(self):
         # Initialize feature_extractors
         feature_extractor_1 = self.feature_extraction_class(**self.feat_extract_dict)
         feature_extractor_2 = self.feature_extraction_class(do_resize=False, do_normalize=False)
@@ -236,12 +236,15 @@ class YolosFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         for image in image_inputs:
             self.assertIsInstance(image, torch.Tensor)
 
-        # Test whether the method "pad" and calling the feature extractor return the same tensors
-        encoded_images_with_method = feature_extractor_1.pad(image_inputs, return_tensors="pt")
+        # Test whether the method "pad_and_return_pixel_mask" and calling the feature extractor return the same tensors
+        encoded_images_with_method = feature_extractor_1.pad_and_create_pixel_mask(image_inputs, return_tensors="pt")
         encoded_images = feature_extractor_2(image_inputs, return_tensors="pt")
 
         self.assertTrue(
             torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
+        )
+        self.assertTrue(
+            torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4)
         )
 
     @slow
@@ -254,7 +257,7 @@ class YolosFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         target = {"image_id": 39769, "annotations": target}
 
         # encode them
-        feature_extractor = YolosFeatureExtractor.from_pretrained("hustvl/yolos-small")
+        feature_extractor = DeformableDetrFeatureExtractor()
         encoding = feature_extractor(images=image, annotations=target, return_tensors="pt")
 
         # verify pixel values
@@ -300,7 +303,7 @@ class YolosFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.Test
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
         # encode them
-        feature_extractor = YolosFeatureExtractor(format="coco_panoptic")
+        feature_extractor = DeformableDetrFeatureExtractor(format="coco_panoptic")
         encoding = feature_extractor(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
 
         # verify pixel values

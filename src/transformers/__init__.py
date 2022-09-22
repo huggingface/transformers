@@ -659,6 +659,7 @@ else:
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
     _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
+    _import_structure["models.deformable_detr"].append("DeformableDetrFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
     _import_structure["models.conditional_detr"].append("ConditionalDetrFeatureExtractor")
@@ -3512,6 +3513,7 @@ if TYPE_CHECKING:
         from .models.clip import CLIPFeatureExtractor
         from .models.conditional_detr import ConditionalDetrFeatureExtractor
         from .models.convnext import ConvNextFeatureExtractor
+        from .models.deformable_detr import DeformableDetrFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
         from .models.donut import DonutFeatureExtractor
