@@ -98,7 +98,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
+        
         return log_spec
+
 
     def __call__(
         self,
@@ -194,7 +196,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             raw_speech = [raw_speech]
 
         # extract fbank features
-        features = [self._extract_fbank_features(waveform) for waveform in raw_speech]
+        features = [self._extract_fbank_features(waveform).permute(1,0) for waveform in raw_speech]
 
         # convert into correct format for padding
         encoded_inputs = BatchFeature({"input_features": features})
@@ -210,7 +212,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         )
 
         # make sure list is in array format
-        input_features = padded_inputs.get("input_features")
+        input_features = padded_inputs.get("input_features").permute(0,2,1)
         if isinstance(input_features[0], list):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
 
