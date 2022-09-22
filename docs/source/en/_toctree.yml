@@ -362,6 +362,8 @@
       sections:
       - local: model_doc/beit
         title: BEiT
+      - local: model_doc/conditional_detr
+        title: Conditional DETR
       - local: model_doc/convnext
         title: ConvNeXT
       - local: model_doc/cvt

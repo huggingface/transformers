@@ -38,6 +38,7 @@ from . import (
     canine,
     clip,
     codegen,
+    conditional_detr,
     convbert,
     convnext,
     cpm,
