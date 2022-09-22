@@ -81,6 +81,7 @@ class TimeSeriesTransformerModelTester:
 
         self.encoder_seq_length = context_length
         self.key_length = context_length
+        self.decoder_seq_length = prediction_length
 
     def prepare_config_and_inputs(self):
         _past_length = self.context_length + max(self.lags_seq)

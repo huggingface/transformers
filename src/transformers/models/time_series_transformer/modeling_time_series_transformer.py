@@ -1583,7 +1583,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
-        self.config = config
         self.model = TimeSeriesTransformerModel(config)
         if config.distribution_output == "student_t":
             self.distribution_output = StudentTOutput()
