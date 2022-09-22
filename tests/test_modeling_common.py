@@ -32,7 +32,8 @@ from typing import Dict, List, Tuple
 import numpy as np
 
 import transformers
-from huggingface_hub import HfFolder, Repository, delete_repo, set_access_token
+from huggingface_hub import HfFolder, delete_repo, set_access_token
+from huggingface_hub.file_download import http_get
 from requests.exceptions import HTTPError
 from transformers import (
     AutoConfig,
@@ -89,6 +90,7 @@ if is_torch_available():
         MODEL_FOR_AUDIO_XVECTOR_MAPPING,
         MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING,
         MODEL_FOR_CAUSAL_LM_MAPPING,
+        MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING,
         MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING,
         MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING,
         MODEL_FOR_MASKED_LM_MAPPING,
@@ -99,6 +101,7 @@ if is_torch_available():
         MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
         MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
         MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING,
+        MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
         MODEL_MAPPING,
         AdaptiveEmbedding,
         AutoModelForCausalLM,
@@ -171,7 +174,10 @@ class ModelTesterMixin:
         if return_labels:
             if model_class in get_values(MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
                 inputs_dict["labels"] = torch.ones(self.model_tester.batch_size, dtype=torch.long, device=torch_device)
-            elif model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
+            elif model_class in [
+                *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING),
+                *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING),
+            ]:
                 inputs_dict["start_positions"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
                 )
@@ -182,6 +188,7 @@ class ModelTesterMixin:
                 *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
                 *get_values(MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING),
                 *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
+                *get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING),
             ]:
                 inputs_dict["labels"] = torch.zeros(
                     self.model_tester.batch_size, dtype=torch.long, device=torch_device
@@ -540,7 +547,10 @@ class ModelTesterMixin:
                 if "labels" in inputs_dict:
                     correct_outlen += 1  # loss is added to beginning
                 # Question Answering model returns start_logits and end_logits
-                if model_class in get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING):
+                if model_class in [
+                    *get_values(MODEL_FOR_QUESTION_ANSWERING_MAPPING),
+                    *get_values(MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING),
+                ]:
                     correct_outlen += 1  # start_logits and end_logits instead of only 1 output
                 if "past_key_values" in outputs:
                     correct_outlen += 1  # past_key_values have been returned
@@ -648,6 +658,13 @@ class ModelTesterMixin:
                     traced_model = torch.jit.trace(
                         model, (main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
                     )
+                elif "bbox" in inputs and "image" in inputs:  # LayoutLMv2 requires additional inputs
+                    input_ids = inputs["input_ids"]
+                    bbox = inputs["bbox"]
+                    image = inputs["image"].tensor
+                    traced_model = torch.jit.trace(
+                        model, (input_ids, bbox, image), check_trace=False
+                    )  # when traced model is checked, an error is produced due to name mangling
                 else:
                     main_input = inputs[main_input_name]
                     traced_model = torch.jit.trace(model, main_input)
@@ -849,6 +866,10 @@ class ModelTesterMixin:
                         torch.allclose(model_output[i], loaded_output[i]),
                         f"serialized model {i}th output doesn't match model {i}th output for {model_class}",
                     )
+
+            # Avoid memory leak. Without this, each call increase RAM usage by ~20MB.
+            # (Even with this call, there are still memory leak by ~0.04MB)
+            self.clear_torch_jit_class_registry()
 
     def test_headmasking(self):
         if not self.test_head_masking:
@@ -1616,7 +1637,7 @@ class ModelTesterMixin:
 
     # Copied from tests.test_modeling_tf_common.TFModelTesterMixin.check_pt_tf_outputs
     def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
-        """Check the outputs from PyTorch and TensorFlow models are closed enough. Checks are done in a recursive way.
+        """Check the outputs from PyTorch and TensorFlow models are close enough. Checks are done in a recursive way.
 
         Args:
             model_class: The class of the model that is currently testing. For example, `TFBertModel`,
@@ -1642,8 +1663,8 @@ class ModelTesterMixin:
             # TODO: remove this method and this line after issues are fixed
             tf_outputs, pt_outputs = self._postprocessing_to_ignore_test_cases(tf_outputs, pt_outputs, model_class)
 
-            tf_keys = tuple([k for k, v in tf_outputs.items() if v is not None])
-            pt_keys = tuple([k for k, v in pt_outputs.items() if v is not None])
+            tf_keys = [k for k, v in tf_outputs.items() if v is not None]
+            pt_keys = [k for k, v in pt_outputs.items() if v is not None]
 
             self.assertEqual(tf_keys, pt_keys, f"{name}: Output keys differ between TF and PyTorch")
 
@@ -2286,6 +2307,7 @@ class ModelTesterMixin:
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
+            torch.manual_seed(0)
             base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
@@ -2303,6 +2325,7 @@ class ModelTesterMixin:
                 )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                torch.manual_seed(0)
                 new_output = new_model(**inputs_dict)
 
                 self.assertTrue(torch.allclose(base_output[0], new_output[0]))
@@ -2319,6 +2342,8 @@ class ModelTesterMixin:
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
+
+            torch.manual_seed(0)
             base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
@@ -2334,6 +2359,8 @@ class ModelTesterMixin:
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, "cpu"})
 
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+
+                    torch.manual_seed(0)
                     new_output = new_model(**inputs_dict)
 
                     self.assertTrue(torch.allclose(base_output[0], new_output[0]))
@@ -2350,6 +2377,8 @@ class ModelTesterMixin:
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
+
+            torch.manual_seed(0)
             base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
@@ -2365,6 +2394,8 @@ class ModelTesterMixin:
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
 
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+
+                    torch.manual_seed(0)
                     new_output = new_model(**inputs_dict)
 
                     self.assertTrue(torch.allclose(base_output[0], new_output[0]))
@@ -2503,6 +2534,15 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
     return torch.tensor(data=values, dtype=torch.float, device=torch_device).view(shape).contiguous()
 
 
+def check_models_equal(model1, model2):
+    models_are_equal = True
+    for model1_p, model2_p in zip(model1.parameters(), model2.parameters()):
+        if model1_p.data.ne(model2_p.data).sum() > 0:
+            models_are_equal = False
+
+    return models_are_equal
+
+
 @require_torch
 class ModelUtilsTest(TestCasePlus):
     @slow
@@ -2530,6 +2570,56 @@ class ModelUtilsTest(TestCasePlus):
             model = BertModel.from_pretrained(model_name, output_attentions=True, output_hidden_states=True)
             self.assertEqual(model.config.output_hidden_states, True)
             self.assertEqual(model.config, config)
+
+    def test_model_from_pretrained_subfolder(self):
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model = BertModel(config)
+
+        subfolder = "bert"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(os.path.join(tmp_dir, subfolder))
+
+            with self.assertRaises(OSError):
+                _ = BertModel.from_pretrained(tmp_dir)
+
+            model_loaded = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
+
+        self.assertTrue(check_models_equal(model, model_loaded))
+
+    def test_model_from_pretrained_subfolder_sharded(self):
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        model = BertModel(config)
+
+        subfolder = "bert"
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(os.path.join(tmp_dir, subfolder), max_shard_size="10KB")
+
+            with self.assertRaises(OSError):
+                _ = BertModel.from_pretrained(tmp_dir)
+
+            model_loaded = BertModel.from_pretrained(tmp_dir, subfolder=subfolder)
+
+        self.assertTrue(check_models_equal(model, model_loaded))
+
+    def test_model_from_pretrained_hub_subfolder(self):
+        subfolder = "bert"
+        model_id = "hf-internal-testing/tiny-random-bert-subfolder"
+        with self.assertRaises(OSError):
+            _ = BertModel.from_pretrained(model_id)
+
+        model = BertModel.from_pretrained(model_id, subfolder=subfolder)
+
+        self.assertIsNotNone(model)
+
+    def test_model_from_pretrained_hub_subfolder_sharded(self):
+        subfolder = "bert"
+        model_id = "hf-internal-testing/tiny-random-bert-sharded-subfolder"
+        with self.assertRaises(OSError):
+            _ = BertModel.from_pretrained(model_id)
+
+        model = BertModel.from_pretrained(model_id, subfolder=subfolder)
+
+        self.assertIsNotNone(model)
 
     def test_model_from_pretrained_with_different_pretrained_model_name(self):
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
@@ -2857,17 +2947,38 @@ class ModelUtilsTest(TestCasePlus):
         # A mock response for an HTTP head request to emulate server down
         response_mock = mock.Mock()
         response_mock.status_code = 500
-        response_mock.headers = []
+        response_mock.headers = {}
         response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.json.return_value = {}
 
         # Download this model to make sure it's in the cache.
         _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
         # Under the mock environment we get a 500 error when trying to reach the model.
-        with mock.patch("transformers.utils.hub.requests.head", return_value=response_mock) as mock_head:
+        with mock.patch("requests.request", return_value=response_mock) as mock_head:
             _ = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
+
+    def test_load_from_one_file(self):
+        try:
+            tmp_file = tempfile.mktemp()
+            with open(tmp_file, "wb") as f:
+                http_get(
+                    "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/pytorch_model.bin", f
+                )
+
+            config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+            _ = BertModel.from_pretrained(tmp_file, config=config)
+        finally:
+            os.remove(tmp_file)
+
+    def test_legacy_load_from_url(self):
+        # This test is for deprecated behavior and can be removed in v5
+        config = BertConfig.from_pretrained("hf-internal-testing/tiny-random-bert")
+        _ = BertModel.from_pretrained(
+            "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/pytorch_model.bin", config=config
+        )
 
 
 @require_torch
@@ -2896,39 +3007,51 @@ class ModelPushToHubTester(unittest.TestCase):
         except HTTPError:
             pass
 
-        try:
-            delete_repo(token=cls._token, repo_id="test-dynamic-model-config")
-        except HTTPError:
-            pass
-
     def test_push_to_hub(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         model = BertModel(config)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(os.path.join(tmp_dir, "test-model"), push_to_hub=True, use_auth_token=self._token)
+        model.push_to_hub("test-model", use_auth_token=self._token)
 
-            new_model = BertModel.from_pretrained(f"{USER}/test-model")
-            for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                self.assertTrue(torch.equal(p1, p2))
+        new_model = BertModel.from_pretrained(f"{USER}/test-model")
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="test-model")
+
+        # Push to hub via save_pretrained
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, repo_id="test-model", push_to_hub=True, use_auth_token=self._token)
+
+        new_model = BertModel.from_pretrained(f"{USER}/test-model")
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
 
     def test_push_to_hub_in_organization(self):
         config = BertConfig(
             vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
         )
         model = BertModel(config)
+        model.push_to_hub("valid_org/test-model-org", use_auth_token=self._token)
+
+        new_model = BertModel.from_pretrained("valid_org/test-model-org")
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
+
+        # Reset repo
+        delete_repo(token=self._token, repo_id="valid_org/test-model-org")
+
+        # Push to hub via save_pretrained
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(
-                os.path.join(tmp_dir, "test-model-org"),
-                push_to_hub=True,
-                use_auth_token=self._token,
-                organization="valid_org",
+                tmp_dir, push_to_hub=True, use_auth_token=self._token, repo_id="valid_org/test-model-org"
             )
 
-            new_model = BertModel.from_pretrained("valid_org/test-model-org")
-            for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                self.assertTrue(torch.equal(p1, p2))
+        new_model = BertModel.from_pretrained("valid_org/test-model-org")
+        for p1, p2 in zip(model.parameters(), new_model.parameters()):
+            self.assertTrue(torch.equal(p1, p2))
 
     def test_push_to_hub_dynamic_model(self):
         CustomConfig.register_for_auto_class()
@@ -2937,16 +3060,12 @@ class ModelPushToHubTester(unittest.TestCase):
         config = CustomConfig(hidden_size=32)
         model = CustomModel(config)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            repo = Repository(tmp_dir, clone_from=f"{USER}/test-dynamic-model", use_auth_token=self._token)
-            model.save_pretrained(tmp_dir)
-            # checks
-            self.assertDictEqual(
-                config.auto_map,
-                {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
-            )
-
-            repo.push_to_hub()
+        model.push_to_hub("test-dynamic-model", use_auth_token=self._token)
+        # checks
+        self.assertDictEqual(
+            config.auto_map,
+            {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
+        )
 
         new_model = AutoModel.from_pretrained(f"{USER}/test-dynamic-model", trust_remote_code=True)
         # Can't make an isinstance check because the new_model is from the CustomModel class of a dynamic module

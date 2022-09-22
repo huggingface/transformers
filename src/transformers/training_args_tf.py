@@ -28,6 +28,7 @@ if is_tf_available():
 
 @dataclass
 class TFTrainingArguments(TrainingArguments):
+    framework = "tf"
     """
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
     itself**.
@@ -187,9 +188,6 @@ class TFTrainingArguments(TrainingArguments):
     @tf_required
     def _setup_strategy(self) -> Tuple["tf.distribute.Strategy", int]:
         logger.info("Tensorflow: setting up strategy")
-
-        if self.xla:
-            tf.config.optimizer.set_jit(True)
 
         gpus = tf.config.list_physical_devices("GPU")
 

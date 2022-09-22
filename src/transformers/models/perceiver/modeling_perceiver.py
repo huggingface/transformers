@@ -1960,7 +1960,6 @@ def build_position_encoding(
     Builds the position encoding.
 
     Args:
-
     - out_channels: refers to the number of channels of the position encodings.
     - project_pos_dim: if specified, will project the position encodings to this dimension.
 
@@ -2181,7 +2180,7 @@ class PerceiverBasicDecoder(PerceiverAbstractDecoder):
         if self.concat_preprocessed_input:
             if inputs_without_pos is None:
                 raise ValueError("Value is required for inputs_without_pos if concat_preprocessed_input is True")
-            pos_emb = torch.cat([inputs_without_pos, pos_emb], div=-1)
+            pos_emb = torch.cat([inputs_without_pos, pos_emb], dim=-1)
 
         return pos_emb
 

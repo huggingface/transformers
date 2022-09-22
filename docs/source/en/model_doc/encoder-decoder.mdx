@@ -27,9 +27,9 @@ any other models (see the examples for more information).
 An application of this architecture could be to leverage two pretrained [`BertModel`] as the encoder
 and decoder for a summarization model as was shown in: [Text Summarization with Pretrained Encoders](https://arxiv.org/abs/1908.08345) by Yang Liu and Mirella Lapata.
 
-## Randomly initializing [`EncoderDecoderModel`] from model configurations.
+## Randomly initializing `EncoderDecoderModel` from model configurations.
 
-[`EncoderDecoderModel`] can be randomly initialized from an encoder and a decoder config. In the following example, we show how to do this using the default [`BertModel`] configuration for both the encoder and the decoder.
+[`EncoderDecoderModel`] can be randomly initialized from an encoder and a decoder config. In the following example, we show how to do this using the default [`BertModel`] configuration for the encoder and the default [`BertForCausalLM`] configuration for the decoder.
 
 ```python
 >>> from transformers import BertConfig, EncoderDecoderConfig, EncoderDecoderModel
@@ -41,7 +41,7 @@ and decoder for a summarization model as was shown in: [Text Summarization with 
 >>> model = EncoderDecoderModel(config=config)
 ```
 
-## Initialising [`EncoderDecoderModel`] from a pretrained encoder and a pretrained decoder.
+## Initialising `EncoderDecoderModel` from a pretrained encoder and a pretrained decoder.
 
 [`EncoderDecoderModel`] can be initialized from a pretrained encoder checkpoint and a pretrained decoder checkpoint. Note that any pretrained auto-encoding model, *e.g.* BERT, can serve as the encoder and both pretrained auto-encoding models, *e.g.* BERT, pretrained causal language models, *e.g.* GPT2, as well as the pretrained decoder part of sequence-to-sequence models, *e.g.* decoder of BART, can be used as the decoder.
 Depending on which architecture you choose as the decoder, the cross-attention layers might be randomly initialized.
@@ -55,14 +55,32 @@ To do so, the `EncoderDecoderModel` class provides a [`EncoderDecoderModel.from_
 >>> model = EncoderDecoderModel.from_encoder_decoder_pretrained("bert-base-uncased", "bert-base-uncased")
 ```
 
-## Loading an existing [`EncoderDecoderModel`] checkpoint.
+## Loading an existing `EncoderDecoderModel` checkpoint and perform inference.
 
-To load fine-tuned checkpoints of the `EncoderDecoderModel` class, ['EncoderDecoderModel`] provides the `from_pretrained(...)` method just like any other model architecture in Transformers.
+To load fine-tuned checkpoints of the `EncoderDecoderModel` class, [`EncoderDecoderModel`] provides the `from_pretrained(...)` method just like any other model architecture in Transformers.
+
+To perform inference, one uses the [`generate`] method, which allows to autoregressively generate text. This method supports various forms of decoding, such as greedy, beam search and multinomial sampling.
 
 ```python
->>> from transformers import EncoderDecoderModel
+>>> from transformers import AutoTokenizer, EncoderDecoderModel
 
+>>> # load a fine-tuned seq2seq model and corresponding tokenizer
 >>> model = EncoderDecoderModel.from_pretrained("patrickvonplaten/bert2bert_cnn_daily_mail")
+>>> tokenizer = AutoTokenizer.from_pretrained("patrickvonplaten/bert2bert_cnn_daily_mail")
+
+>>> # let's perform inference on a long piece of text
+>>> ARTICLE_TO_SUMMARIZE = (
+...     "PG&E stated it scheduled the blackouts in response to forecasts for high winds "
+...     "amid dry conditions. The aim is to reduce the risk of wildfires. Nearly 800 thousand customers were "
+...     "scheduled to be affected by the shutoffs which were expected to last through at least midday tomorrow."
+... )
+>>> input_ids = tokenizer(ARTICLE_TO_SUMMARIZE, return_tensors="pt").input_ids
+
+>>> # autoregressively generate summary (uses greedy decoding by default)
+>>> generated_ids = model.generate(input_ids)
+>>> generated_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+>>> print(generated_text)
+nearly 800 thousand customers were affected by the shutoffs. the aim is to reduce the risk of wildfires. nearly 800, 000 customers were expected to be affected by high winds amid dry conditions. pg & e said it scheduled the blackouts to last through at least midday tomorrow.
 ```
 
 ## Loading a PyTorch checkpoint into `TFEncoderDecoderModel`.
@@ -116,6 +134,7 @@ target sequence).
 >>> # the forward function automatically creates the correct decoder_input_ids
 >>> loss = model(input_ids=input_ids, labels=labels).loss
 ```
+
 Detailed [colab](https://colab.research.google.com/drive/1WIk2bxglElfZewOHboPFNj8H44_VAyKE?usp=sharing#scrollTo=ZwQIEhKOrJpl) for training.
 
 This model was contributed by [thomwolf](https://github.com/thomwolf). This model's TensorFlow and Flax versions

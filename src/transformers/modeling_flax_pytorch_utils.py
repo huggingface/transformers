@@ -38,7 +38,9 @@ logger = logging.get_logger(__name__)
 #####################
 
 
-def load_pytorch_checkpoint_in_flax_state_dict(flax_model, pytorch_checkpoint_path, allow_missing_keys=False):
+def load_pytorch_checkpoint_in_flax_state_dict(
+    flax_model, pytorch_checkpoint_path, is_sharded, allow_missing_keys=False
+):
     """Load pytorch checkpoints in a flax model"""
     try:
         import torch  # noqa: F401
@@ -50,14 +52,17 @@ def load_pytorch_checkpoint_in_flax_state_dict(flax_model, pytorch_checkpoint_pa
         )
         raise
 
-    pt_path = os.path.abspath(pytorch_checkpoint_path)
-    logger.info(f"Loading PyTorch weights from {pt_path}")
+    if not is_sharded:
+        pt_path = os.path.abspath(pytorch_checkpoint_path)
+        logger.info(f"Loading PyTorch weights from {pt_path}")
 
-    pt_state_dict = torch.load(pt_path, map_location="cpu")
-    logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters.")
+        pt_state_dict = torch.load(pt_path, map_location="cpu")
+        logger.info(f"PyTorch checkpoint contains {sum(t.numel() for t in pt_state_dict.values()):,} parameters.")
 
-    flax_state_dict = convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)
-
+        flax_state_dict = convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model)
+    else:
+        # model is sharded and pytorch_checkpoint_path already contains the list of .pt shard files
+        flax_state_dict = convert_pytorch_sharded_state_dict_to_flax(pytorch_checkpoint_path, flax_model)
     return flax_state_dict
 
 
@@ -156,6 +161,61 @@ def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
     return unflatten_dict(flax_state_dict)
 
 
+############################
+# Sharded Pytorch => Flax #
+############################
+
+
+def convert_pytorch_sharded_state_dict_to_flax(shard_filenames, flax_model):
+    import torch
+
+    # Load the index
+    flax_state_dict = {}
+    for shard_file in shard_filenames:
+        # load using msgpack utils
+        pt_state_dict = torch.load(shard_file)
+        pt_state_dict = {k: v.numpy() for k, v in pt_state_dict.items()}
+
+        model_prefix = flax_model.base_model_prefix
+        random_flax_state_dict = flatten_dict(flax_model.params)
+
+        load_model_with_head_into_base_model = (model_prefix not in flax_model.params) and (
+            model_prefix in set([k.split(".")[0] for k in pt_state_dict.keys()])
+        )
+        load_base_model_into_model_with_head = (model_prefix in flax_model.params) and (
+            model_prefix not in set([k.split(".")[0] for k in pt_state_dict.keys()])
+        )
+        # Need to change some parameters name to match Flax names
+        for pt_key, pt_tensor in pt_state_dict.items():
+
+            pt_tuple_key = tuple(pt_key.split("."))
+
+            # remove base model prefix if necessary
+            has_base_model_prefix = pt_tuple_key[0] == model_prefix
+            if load_model_with_head_into_base_model and has_base_model_prefix:
+                pt_tuple_key = pt_tuple_key[1:]
+
+            # Correctly rename weight parameters
+            flax_key, flax_tensor = rename_key_and_reshape_tensor(
+                pt_tuple_key, pt_tensor, random_flax_state_dict, model_prefix
+            )
+            # add model prefix if necessary
+            require_base_model_prefix = (model_prefix,) + flax_key in random_flax_state_dict
+            if load_base_model_into_model_with_head and require_base_model_prefix:
+                flax_key = (model_prefix,) + flax_key
+
+            if flax_key in random_flax_state_dict:
+                if flax_tensor.shape != random_flax_state_dict[flax_key].shape:
+                    raise ValueError(
+                        f"PyTorch checkpoint seems to be incorrect. Weight {pt_key} was expected to be of shape "
+                        f"{random_flax_state_dict[flax_key].shape}, but is {flax_tensor.shape}."
+                    )
+
+            # also add unexpected weight so that warning is thrown
+            flax_state_dict[flax_key] = jnp.asarray(flax_tensor)
+    return unflatten_dict(flax_state_dict)
+
+
 #####################
 # Flax => PyTorch #
 #####################
@@ -193,7 +253,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
         raise
 
     # check if we have bf16 weights
-    is_type_bf16 = flatten_dict(jax.tree_map(lambda x: x.dtype == jnp.bfloat16, flax_state)).values()
+    is_type_bf16 = flatten_dict(jax.tree_util.tree_map(lambda x: x.dtype == jnp.bfloat16, flax_state)).values()
     if any(is_type_bf16):
         # convert all weights to fp32 if the are bf16 since torch.from_numpy can-not handle bf16
         # and bf16 is not fully supported in PT yet.
@@ -201,7 +261,7 @@ def load_flax_weights_in_pytorch_model(pt_model, flax_state):
             "Found ``bfloat16`` weights in Flax model. Casting all ``bfloat16`` weights to ``float32`` "
             "before loading those in PyTorch model."
         )
-        flax_state = jax.tree_map(
+        flax_state = jax.tree_util.tree_map(
             lambda params: params.astype(np.float32) if params.dtype == jnp.bfloat16 else params, flax_state
         )
 

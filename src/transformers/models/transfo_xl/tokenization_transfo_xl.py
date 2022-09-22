@@ -27,10 +27,19 @@ from typing import List, Optional, Tuple
 
 import numpy as np
 
-import sacremoses as sm
-
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import cached_path, is_torch_available, logging, torch_only_method
+from ...utils import (
+    cached_file,
+    is_sacremoses_available,
+    is_torch_available,
+    logging,
+    requires_backends,
+    torch_only_method,
+)
+
+
+if is_sacremoses_available():
+    import sacremoses as sm
 
 
 if is_torch_available():
@@ -187,6 +196,7 @@ class TransfoXLTokenizer(PreTrainedTokenizer):
             language=language,
             **kwargs,
         )
+        requires_backends(self, "sacremoses")
 
         if never_split is None:
             never_split = self.all_special_tokens
@@ -671,24 +681,21 @@ class TransfoXLCorpus(object):
         Instantiate a pre-processed corpus.
         """
         vocab = TransfoXLTokenizer.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        if pretrained_model_name_or_path in PRETRAINED_CORPUS_ARCHIVE_MAP:
-            corpus_file = PRETRAINED_CORPUS_ARCHIVE_MAP[pretrained_model_name_or_path]
-        else:
-            corpus_file = os.path.join(pretrained_model_name_or_path, CORPUS_NAME)
+        is_local = os.path.isdir(pretrained_model_name_or_path)
         # redirect to the cache, if necessary
         try:
-            resolved_corpus_file = cached_path(corpus_file, cache_dir=cache_dir)
+            resolved_corpus_file = cached_file(pretrained_model_name_or_path, CORPUS_NAME, cache_dir=cache_dir)
         except EnvironmentError:
             logger.error(
                 f"Corpus '{pretrained_model_name_or_path}' was not found in corpus list"
                 f" ({', '.join(PRETRAINED_CORPUS_ARCHIVE_MAP.keys())}. We assumed '{pretrained_model_name_or_path}'"
-                f" was a path or url but couldn't find files {corpus_file} at this path or url."
+                f" was a path or url but couldn't find files {CORPUS_NAME} at this path or url."
             )
             return None
-        if resolved_corpus_file == corpus_file:
-            logger.info(f"loading corpus file {corpus_file}")
+        if is_local:
+            logger.info(f"loading corpus file {resolved_corpus_file}")
         else:
-            logger.info(f"loading corpus file {corpus_file} from cache at {resolved_corpus_file}")
+            logger.info(f"loading corpus file {CORPUS_NAME} from cache at {resolved_corpus_file}")
 
         # Instantiate tokenizer.
         corpus = cls(*inputs, **kwargs)

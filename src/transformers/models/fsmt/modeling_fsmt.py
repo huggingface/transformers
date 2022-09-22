@@ -220,7 +220,7 @@ FSMT_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
 
-            IIndices can be obtained using [`FSTMTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`FSTMTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -372,6 +372,10 @@ def _check_shapes(shape_1, shape2):
 
 def shift_tokens_right(input_ids, pad_token_id):
     """Shift input ids one token to the right, and wrap the last non pad token (usually <eos>)."""
+
+    # replace possible -100 values in labels by `pad_token_id`
+    input_ids.masked_fill_(input_ids == -100, pad_token_id)
+
     prev_output_tokens = input_ids.clone()
     index_of_eos = (input_ids.ne(pad_token_id).sum(dim=1) - 1).unsqueeze(-1)
     prev_output_tokens[:, 0] = input_ids.gather(1, index_of_eos).squeeze()
@@ -464,12 +468,12 @@ class FSMTEncoder(nn.Module):
 
     def forward(
         self,
-        input_ids,
-        attention_mask=None,
-        head_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        input_ids: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         """
         Args:
@@ -665,18 +669,18 @@ class FSMTDecoder(nn.Module):
 
     def forward(
         self,
-        input_ids,
-        encoder_hidden_states,
-        encoder_padding_mask,
-        decoder_padding_mask,
-        decoder_causal_mask,
-        head_mask=None,
-        cross_attn_head_mask=None,
-        past_key_values=None,
-        use_cache=False,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        input_ids: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        encoder_padding_mask: torch.Tensor,
+        decoder_padding_mask: torch.Tensor,
+        decoder_causal_mask: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        use_cache: bool = False,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         """
         Includes several features from "Jointly Learning to Align and Translate with Transformer Models" (Garg et al.,

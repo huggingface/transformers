@@ -16,6 +16,7 @@
 Speech processor class for Wav2Vec2
 """
 import os
+import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from multiprocessing import get_context
@@ -99,6 +100,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
         self.decoder = decoder
         self.current_processor = self.feature_extractor
+        self._in_target_context_manager = False
 
     def save_pretrained(self, save_directory):
         super().save_pretrained(save_directory)
@@ -214,7 +216,35 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         Wav2Vec2CTCTokenizer's [`~Wav2Vec2CTCTokenizer.__call__`]. Please refer to the docstring of the above two
         methods for more information.
         """
-        return self.current_processor(*args, **kwargs)
+        # For backward compatibility
+        if self._in_target_context_manager:
+            return self.current_processor(*args, **kwargs)
+
+        if "raw_speech" in kwargs:
+            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
+            audio = kwargs.pop("raw_speech")
+        else:
+            audio = kwargs.pop("audio", None)
+        text = kwargs.pop("text", None)
+        if len(args) > 0:
+            audio = args[0]
+            args = args[1:]
+
+        if audio is None and text is None:
+            raise ValueError("You need to specify either an `audio` or `text` input to process.")
+
+        if audio is not None:
+            inputs = self.feature_extractor(audio, *args, **kwargs)
+        if text is not None:
+            encodings = self.tokenizer(text, **kwargs)
+
+        if text is None:
+            return inputs
+        elif audio is None:
+            return encodings
+        else:
+            inputs["labels"] = encodings["input_ids"]
+            return inputs
 
     def pad(self, *args, **kwargs):
         """
@@ -224,7 +254,28 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
         Wav2Vec2CTCTokenizer's [`~Wav2Vec2CTCTokenizer.pad`]. Please refer to the docstring of the above two methods
         for more information.
         """
-        return self.current_processor.pad(*args, **kwargs)
+        # For backward compatibility
+        if self._in_target_context_manager:
+            return self.current_processor.pad(*args, **kwargs)
+
+        input_features = kwargs.pop("input_features", None)
+        labels = kwargs.pop("labels", None)
+        if len(args) > 0:
+            input_features = args[0]
+            args = args[1:]
+
+        if input_features is not None:
+            input_features = self.feature_extractor.pad(input_features, *args, **kwargs)
+        if labels is not None:
+            labels = self.tokenizer.pad(labels, **kwargs)
+
+        if labels is None:
+            return input_features
+        elif input_features is None:
+            return labels
+        else:
+            input_features["labels"] = labels["input_ids"]
+            return input_features
 
     def batch_decode(
         self,
@@ -486,9 +537,16 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
     @contextmanager
     def as_target_processor(self):
         """
-        Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning
+        Temporarily sets the processor for processing the target. Useful for encoding the labels when fine-tuning
         Wav2Vec2.
         """
+        warnings.warn(
+            "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
+            "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
+            "your audio inputs, or in a separate call."
+        )
+        self._in_target_context_manager = True
         self.current_processor = self.tokenizer
         yield
         self.current_processor = self.feature_extractor
+        self._in_target_context_manager = False

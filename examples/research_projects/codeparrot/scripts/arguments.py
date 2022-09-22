@@ -9,16 +9,16 @@ class TrainingArguments:
     """
 
     model_ckpt: Optional[str] = field(
-        default="lvwerra/codeparrot", metadata={"help": "Model name or path of model to be trained."}
+        default="codeparrot/codeparrot", metadata={"help": "Model name or path of model to be trained."}
     )
     save_dir: Optional[str] = field(
         default="./", metadata={"help": "Save dir where model repo is cloned and models updates are saved to."}
     )
     dataset_name_train: Optional[str] = field(
-        default="lvwerra/codeparrot-clean-train", metadata={"help": "Name or path of training dataset."}
+        default="codeparrot/codeparrot-clean-train", metadata={"help": "Name or path of training dataset."}
     )
     dataset_name_valid: Optional[str] = field(
-        default="lvwerra/codeparrot-clean-valid", metadata={"help": "Name or path of validation dataset."}
+        default="codeparrot/codeparrot-clean-valid", metadata={"help": "Name or path of validation dataset."}
     )
     train_batch_size: Optional[int] = field(default=2, metadata={"help": "Batch size for training."})
     valid_batch_size: Optional[int] = field(default=2, metadata={"help": "Batch size for evaluation."})
@@ -60,10 +60,10 @@ class EvaluationArguments:
     """
 
     model_ckpt: Optional[str] = field(
-        default="lvwerra/codeparrot", metadata={"help": "Model name or path of model to be evaluated."}
+        default="codeparrot/codeparrot", metadata={"help": "Model name or path of model to be evaluated."}
     )
     dataset_name: Optional[str] = field(
-        default="lvwerra/codeparrot-clean-valid", metadata={"help": "Name or path of validation dataset."}
+        default="codeparrot/codeparrot-clean-valid", metadata={"help": "Name or path of validation dataset."}
     )
     batch_size: Optional[int] = field(default=2, metadata={"help": "Batch size used for evaluation."})
     max_eval_steps: Optional[int] = field(
@@ -80,7 +80,7 @@ class HumanEvalArguments:
     """
 
     model_ckpt: Optional[str] = field(
-        default="lvwerra/codeparrot", metadata={"help": "Model name or path of model to be evaluated."}
+        default="codeparrot/codeparrot", metadata={"help": "Model name or path of model to be evaluated."}
     )
     num_workers: Optional[int] = field(default=None, metadata={"help": "Number of workers used for code evaluation."})
     num_tasks: Optional[int] = field(
@@ -154,7 +154,7 @@ class PreprocessingArguments:
         default=0.7, metadata={"help": "Probability for filtering config, test and uncommon files."}
     )
     tokenizer: Optional[str] = field(
-        default="lvwerra/codeparrot",
+        default="codeparrot/codeparrot",
         metadata={"help": "Name or path to the tokenizer."},
     )
     near_deduplication: Optional[bool] = field(
@@ -193,10 +193,10 @@ class PretokenizationArguments:
     """
 
     tokenizer_dir: Optional[str] = field(
-        default="lvwerra/codeparrot", metadata={"help": "Name or path to the tokenizer."}
+        default="codeparrot/codeparrot", metadata={"help": "Name or path to the tokenizer."}
     )
     dataset_name: Optional[str] = field(
-        default="lvwerra/codeparrot-clean-train", metadata={"help": "Name or path to the dataset to pretokenize."}
+        default="codeparrot/codeparrot-clean-train", metadata={"help": "Name or path to the dataset to pretokenize."}
     )
     tokenized_data_repo: Optional[str] = field(
         default="tokenized-codeparrot-train", metadata={"help": "Repo name of the pretokenized data."}
@@ -214,7 +214,7 @@ class InitializationArguments:
         default="gpt2-large", metadata={"help": "Configuration to use for model initialization."}
     )
     tokenizer_name: Optional[str] = field(
-        default="lvwerra/codeparrot", metadata={"help": "Tokenizer attached to model."}
+        default="codeparrot/codeparrot", metadata={"help": "Tokenizer attached to model."}
     )
     model_name: Optional[str] = field(default="codeparrot", metadata={"help": "Name of the created model."})
     push_to_hub: Optional[bool] = field(default=True, metadata={"help": "Push saved tokenizer to the hub."})

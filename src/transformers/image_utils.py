@@ -23,13 +23,14 @@ import PIL.ImageOps
 import requests
 
 from .utils import is_torch_available
+from .utils.constants import (  # noqa: F401
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
+    IMAGENET_STANDARD_MEAN,
+    IMAGENET_STANDARD_STD,
+)
 from .utils.generic import _is_torch
 
-
-IMAGENET_DEFAULT_MEAN = [0.485, 0.456, 0.406]
-IMAGENET_DEFAULT_STD = [0.229, 0.224, 0.225]
-IMAGENET_STANDARD_MEAN = [0.5, 0.5, 0.5]
-IMAGENET_STANDARD_STD = [0.5, 0.5, 0.5]
 
 ImageInput = Union[
     PIL.Image.Image, np.ndarray, "torch.Tensor", List[PIL.Image.Image], List[np.ndarray], List["torch.Tensor"]  # noqa
@@ -130,6 +131,13 @@ class ImageFeatureExtractionMixin:
 
         return image.convert("RGB")
 
+    def rescale(self, image: np.ndarray, scale: Union[float, int]) -> np.ndarray:
+        """
+        Rescale a numpy image by scale amount
+        """
+        self._ensure_format_supported(image)
+        return image * scale
+
     def to_numpy_array(self, image, rescale=None, channel_first=True):
         """
         Converts `image` to a numpy array. Optionally rescales it and puts the channel dimension as the first
@@ -152,11 +160,10 @@ class ImageFeatureExtractionMixin:
         if is_torch_tensor(image):
             image = image.numpy()
 
-        if rescale is None:
-            rescale = isinstance(image.flat[0], np.integer)
+        rescale = isinstance(image.flat[0], np.integer) if rescale is None else rescale
 
         if rescale:
-            image = image.astype(np.float32) / 255.0
+            image = self.rescale(image.astype(np.float32), 1 / 255.0)
 
         if channel_first and image.ndim == 3:
             image = image.transpose(2, 0, 1)
@@ -183,7 +190,7 @@ class ImageFeatureExtractionMixin:
             image = np.expand_dims(image, axis=0)
         return image
 
-    def normalize(self, image, mean, std):
+    def normalize(self, image, mean, std, rescale=False):
         """
         Normalizes `image` with `mean` and `std`. Note that this will trigger a conversion of `image` to a NumPy array
         if it's a PIL Image.
@@ -195,11 +202,21 @@ class ImageFeatureExtractionMixin:
                 The mean (per channel) to use for normalization.
             std (`List[float]` or `np.ndarray` or `torch.Tensor`):
                 The standard deviation (per channel) to use for normalization.
+            rescale (`bool`, *optional*, defaults to `False`):
+                Whether or not to rescale the image to be between 0 and 1. If a PIL image is provided, scaling will
+                happen automatically.
         """
         self._ensure_format_supported(image)
 
         if isinstance(image, PIL.Image.Image):
-            image = self.to_numpy_array(image)
+            image = self.to_numpy_array(image, rescale=True)
+        # If the input image is a PIL image, it automatically gets rescaled. If it's another
+        # type it may need rescaling.
+        elif rescale:
+            if isinstance(image, np.ndarray):
+                image = self.rescale(image.astype(np.float32), 1 / 255.0)
+            elif is_torch_tensor(image):
+                image = self.rescale(image.float(), 1 / 255.0)
 
         if isinstance(image, np.ndarray):
             if not isinstance(mean, np.ndarray):
@@ -375,3 +392,25 @@ class ImageFeatureExtractionMixin:
             image = self.to_numpy_array(image)
 
         return image[::-1, :, :]
+
+    def rotate(self, image, angle, resample=PIL.Image.NEAREST, expand=0, center=None, translate=None, fillcolor=None):
+        """
+        Returns a rotated copy of `image`. This method returns a copy of `image`, rotated the given number of degrees
+        counter clockwise around its centre.
+
+        Args:
+            image (`PIL.Image.Image` or `np.ndarray` or `torch.Tensor`):
+                The image to rotate. If `np.ndarray` or `torch.Tensor`, will be converted to `PIL.Image.Image` before
+                rotating.
+
+        Returns:
+            image: A rotated `PIL.Image.Image`.
+        """
+        self._ensure_format_supported(image)
+
+        if not isinstance(image, PIL.Image.Image):
+            image = self.to_pil_image(image)
+
+        return image.rotate(
+            angle, resample=resample, expand=expand, center=center, translate=translate, fillcolor=fillcolor
+        )

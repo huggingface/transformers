@@ -25,16 +25,24 @@
     title: Usa tokenizadores de 🤗 Tokenizers
   - local: create_a_model
     title: Crea una arquitectura personalizada
+  - local: custom_models
+    title: Compartir modelos personalizados
   - sections:
     - local: tasks/language_modeling
       title: Modelado de lenguaje
+    - local: tasks/summarization
+      title: Generación de resúmenes
     - local: tasks/image_classification
       title: Clasificación de imágenes
     title: Fine-tuning para tareas posteriores
+  - local: run_scripts
+    title: Entrenamiento con scripts
   - local: sagemaker
     title: Ejecutar el entrenamiento en Amazon SageMaker
   - local: multilingual
     title: Modelos multilingües para inferencia
+  - local: converting_tensorflow_models
+    title: Convertir checkpoints de TensorFlow
   title: Guías prácticas
 - sections:
   - local: philosophy

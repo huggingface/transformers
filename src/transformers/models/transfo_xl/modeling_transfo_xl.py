@@ -523,7 +523,6 @@ class TransfoXLPreTrainedModel(PreTrainedModel):
         weights embeddings afterwards if the model class has a *tie_weights()* method.
 
         Arguments:
-
             new_num_tokens: (*optional*) int:
                 New number of tokens in the embedding matrix. Increasing the size will add newly initialized vectors at
                 the end. Reducing the size will remove vectors from the end. If not provided or None: does nothing and

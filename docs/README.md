@@ -43,18 +43,39 @@ Once you have setup the `doc-builder` and additional packages, you can generate 
 typing the following command:
 
 ```bash
-doc-builder build transformers docs/source/ --build_dir ~/tmp/test-build
+doc-builder build transformers docs/source/en/ --build_dir ~/tmp/test-build
 ```
 
 You can adapt the `--build_dir` to set any temporary folder that you prefer. This command will create it and generate
 the MDX files that will be rendered as the documentation on the main website. You can inspect them in your favorite
 Markdown editor.
 
+## Previewing the documentation
+
+To preview the docs, first install the `watchdog` module with:
+
+```bash
+pip install watchdog
+```
+
+Then run the following command:
+
+```bash
+doc-builder preview {package_name} {path_to_docs}
+```
+
+For example:
+
+```bash
+doc-builder preview transformers docs/source/en/
+```
+
+The docs will be viewable at [http://localhost:3000](http://localhost:3000). You can also preview the docs once you have opened a PR. You will see a bot add a comment to a link where the documentation with your changes lives.
+
 ---
 **NOTE**
 
-It's not possible to see locally how the final documentation will look like for now. Once you have opened a PR, you
-will see a bot add a comment to a link where the documentation with your changes lives.
+The `preview` command only works with existing doc files. When you add a completely new file, you need to update `_toctree.yml` & restart `preview` command (`ctrl-c` to stop it & call `doc-builder preview ...` again).
 
 ---
 
@@ -291,13 +312,13 @@ easily.
 
 # Testing documentation examples
 
-Good documentation oftens comes with an example of how a specific function or class should be used. 
+Good documentation often comes with an example of how a specific function or class should be used. 
 Each model class should contain at least one example showcasing
 how to use this model class in inference. *E.g.* the class [Wav2Vec2ForCTC](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2ForCTC) 
 includes an example of how to transcribe speech to text in the 
 [docstring of its forward function](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2ForCTC.forward).
 
-## Writing documenation examples
+## Writing documentation examples
 
 The syntax for Example docstrings can look as follows:
 

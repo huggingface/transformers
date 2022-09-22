@@ -1110,7 +1110,7 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
 
     def get_qa_logit_layer(self) -> nn.Module:
         """
-        Returns the the linear layer that produces question answering logits.
+        Returns the linear layer that produces question answering logits.
 
         Returns:
             `nn.Module`: A torch module mapping the question answering prediction hidden states or `None` if LXMERT
@@ -1341,7 +1341,7 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
 
     def get_qa_logit_layer(self) -> nn.Module:
         """
-        Returns the the linear layer that produces question answering logits
+        Returns the linear layer that produces question answering logits
 
         Returns:
             `nn.Module`: A torch module mapping the question answering prediction hidden states. `None`: A NoneType

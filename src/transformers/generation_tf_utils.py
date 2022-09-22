@@ -15,6 +15,7 @@
 # limitations under the License.
 
 import inspect
+import warnings
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -33,6 +34,12 @@ from .generation_tf_logits_process import (
     TFTemperatureLogitsWarper,
     TFTopKLogitsWarper,
     TFTopPLogitsWarper,
+)
+from .models.auto import (
+    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+    TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
 )
 from .tf_utils import shape_list, stable_softmax
 from .utils import ModelOutput, logging
@@ -53,8 +60,8 @@ class TFGreedySearchDecoderOnlyOutput(ModelOutput):
             if all batches finished early due to the `eos_token_id`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. `(max_length-input_ids.shape[-1],)`-shaped tuple of `tf.Tensor` with each tensor
-            of shape `(batch_size, config.vocab_size)`).
+            at each generation step. Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each
+            generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
         attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `tf.Tensor` of shape `(batch_size, num_heads, generated_length, sequence_length)`.
@@ -83,8 +90,8 @@ class TFGreedySearchEncoderDecoderOutput(ModelOutput):
             if all batches finished early due to the `eos_token_id`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. `(max_length-1,)`-shaped tuple of `tf.Tensor` with each tensor of shape
-            `(batch_size, config.vocab_size)`).
+            at each generation step. Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each
+            generated token), with each tensor of shape `(batch_size, config.vocab_size)`.
         encoder_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -123,8 +130,8 @@ class TFSampleDecoderOnlyOutput(ModelOutput):
             if all batches finished early due to the `eos_token_id`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. `(max_length-input_ids.shape[-1],)`-shaped tuple of `tf.Tensor` with each tensor
-            of shape `(batch_size*num_return_sequences, config.vocab_size)`).
+            at each generation step. Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each
+            generated token), with each tensor of shape `(batch_size*num_return_sequences, config.vocab_size)`.
         attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `tf.Tensor` of shape `(num_return_sequences*batch_size, num_heads, generated_length, sequence_length)`.
@@ -153,8 +160,8 @@ class TFSampleEncoderDecoderOutput(ModelOutput):
             if all batches finished early due to the `eos_token_id`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed prediction scores of the language modeling head (scores for each vocabulary token before SoftMax)
-            at each generation step. `(max_length-1,)`-shaped tuple of `tf.Tensor` with each tensor of shape
-            `(batch_size*num_return_sequences, config.vocab_size)`).
+            at each generation step. Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each
+            generated token), with each tensor of shape `(batch_size*num_return_sequences, config.vocab_size)`.
         encoder_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer of the decoder) of shape `(batch_size*num_return_sequences,
             num_heads, sequence_length, sequence_length)`.
@@ -194,9 +201,9 @@ class TFBeamSearchDecoderOnlyOutput(ModelOutput):
             Final beam scores of the generated `sequences`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
-            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . `(max_length-input_ids.shape[-1],)`-shaped tuple of `tf.Tensor` with each tensor of shape
-            `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
+            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this
+            beam. Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each generated token),
+            with each tensor of shape `(batch_size*num_beams*num_return_sequences, config.vocab_size)`.
         attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `tf.Tensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -227,9 +234,9 @@ class TFBeamSearchEncoderDecoderOutput(ModelOutput):
             Final beam scores of the generated `sequences`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
-            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . `(max_length-1,)`-shaped tuple of `tf.Tensor` with each tensor of shape `(batch_size*num_beams,
-            config.vocab_size)`).
+            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this
+            beam. `Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each generated token),
+            with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
         attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
         encoder_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length,
@@ -272,9 +279,9 @@ class TFBeamSampleDecoderOnlyOutput(ModelOutput):
             Final beam scores of the generated `sequences`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
-            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . `(max_length-input_ids.shape[-1],)`-shaped tuple of `tf.Tensor` with each tensor of shape
-            `(batch_size*num_beams*num_return_sequences, config.vocab_size)`).
+            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this
+            beam. Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each generated token),
+            with each tensor of shape `(batch_size*num_beams*num_return_sequences, config.vocab_size)`.
         attentions (`tuple(tuple(tf.Tensor))`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple (one element for each generated token) of tuples (one element for each layer of the decoder) of
             `tf.Tensor` of shape `(batch_size*num_beams, num_heads, generated_length, sequence_length)`.
@@ -305,9 +312,9 @@ class TFBeamSampleEncoderDecoderOutput(ModelOutput):
             Final beam scores of the generated `sequences`.
         scores (`tuple(tf.Tensor)` *optional*, returned when `output_scores=True` is passed or when `config.output_scores=True`):
             Processed beam scores for each vocabulary token at each generation step. Beam scores consisting of log
-            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this beam
-            . `(max_length-1,)`-shaped tuple of `tf.Tensor` with each tensor of shape `(batch_size*num_beams,
-            config.vocab_size)`).
+            softmax scores for each vocabulary token and sum of log softmax of previously generated tokens in this
+            beam. Tuple of `tf.Tensor` with up to `max_new_tokens` elements (one element for each generated token),
+            with each tensor of shape `(batch_size*num_beams, config.vocab_size)`.
         encoder_attentions (`tuple(tf.Tensor)`, *optional*, returned when `output_attentions=True` is passed or `config.output_attentions=True`):
             Tuple of `tf.Tensor` (one for each layer of the decoder) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
@@ -346,14 +353,15 @@ class TFGenerationMixin:
     A class containing all of the functions supporting generation, to be used as a mixin in [`TFPreTrainedModel`].
     """
 
-    seed_generator = tf.random.Generator.from_non_deterministic_state()
-    supports_xla_generation = True
+    _seed_generator = None
 
-    def prepare_inputs_for_generation(self, inputs, **kwargs):
-        """
-        Implement in subclasses of [`TFPreTrainedModel`] for custom behavior to prepare inputs in the generate method.
-        """
-        return {"input_ids": inputs}
+    @property
+    def seed_generator(self):
+        if self._seed_generator is None:
+            self._seed_generator = tf.random.Generator.from_non_deterministic_state()
+        return self._seed_generator
+
+    supports_xla_generation = True
 
     def _use_cache(self, outputs, use_cache):
         """During generation, decide whether to pass the `past` variable to the next forward pass."""
@@ -368,6 +376,7 @@ class TFGenerationMixin:
         self,
         input_ids=None,
         max_length=None,
+        max_new_tokens=None,
         min_length=None,
         do_sample=None,
         early_stopping=None,
@@ -409,15 +418,18 @@ class TFGenerationMixin:
         post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, `(batch_size, sequence_length,
             feature_dim)` or `(batch_size, num_channels, height, width)`, *optional*):
                 The sequence used as a prompt for the generation or as model inputs to the encoder. If `None` the
                 method initializes it with `bos_token_id` and a batch size of 1. For decoder-only models `inputs`
                 should of in the format of `input_ids`. For encoder-decoder models *inputs* can represent any of
                 `input_ids`, `input_values`, `input_features`, or `pixel_values`.
-            max_length (`int`, *optional*, defaults to 20):
-                The maximum length of the sequence to be generated.
+            max_length (`int`, *optional*, defaults to `model.config.max_length`):
+                The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
+                `max_new_tokens`. In general, prefer the use of `max_new_tokens`, which ignores the number of tokens in
+                the prompt.
+            max_new_tokens (`int`, *optional*):
+                The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
             min_length (`int`, *optional*, defaults to 10):
                 The minimum length of the sequence to be generated.
             do_sample (`bool`, *optional*, defaults to `False`):
@@ -443,10 +455,10 @@ class TFGenerationMixin:
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to 1.0):
-                Exponential penalty to the length. 1.0 means no penalty.
-
-                Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
-                order to encourage the model to produce longer sequences.
+                Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
+                to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
+                the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
+                while `length_penalty` < 0.0 encourages shorter sequences.
             no_repeat_ngram_size (`int`, *optional*, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
             bad_words_ids(`List[int]`, *optional*):
@@ -567,9 +579,11 @@ class TFGenerationMixin:
         do_sample = do_sample if do_sample is not None else self.config.do_sample
 
         if do_sample is False or num_beams == 1:
+            seed = model_kwargs.pop("seed", None)
             return self._generate(
                 input_ids=input_ids,
                 max_length=max_length,
+                max_new_tokens=max_new_tokens,
                 min_length=min_length,
                 do_sample=do_sample,
                 early_stopping=early_stopping,
@@ -588,13 +602,14 @@ class TFGenerationMixin:
                 attention_mask=attention_mask,
                 decoder_start_token_id=decoder_start_token_id,
                 use_cache=use_cache,
-                seed=model_kwargs.pop("seed", None),
+                seed=seed,
                 output_scores=output_scores,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 forced_bos_token_id=forced_bos_token_id,
                 forced_eos_token_id=forced_eos_token_id,
+                **model_kwargs,
             )
 
         # We cannot generate if the model does not have a LM head
@@ -1275,10 +1290,59 @@ class TFGenerationMixin:
         else:
             return logits
 
+    def _validate_model_class(self):
+        """
+        Confirms that the model class is compatible with generation. If not, raises an exception that points to the
+        right class to use.
+        """
+        if not hasattr(self, "prepare_inputs_for_generation"):
+            generate_compatible_mappings = [
+                TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+                TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
+                TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+                TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+            ]
+            generate_compatible_classes = set()
+            for model_mapping in generate_compatible_mappings:
+                supported_models = model_mapping.get(type(self.config), default=None)
+                if supported_models is not None:
+                    generate_compatible_classes.add(supported_models.__name__)
+            exception_message = (
+                f"The current model class ({self.__class__.__name__}) is not compatible with `.generate()`, as "
+                "it doesn't have a language model head."
+            )
+            if generate_compatible_classes:
+                exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
+            raise TypeError(exception_message)
+
+    def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
+        """Validates model kwargs for generation. Generate argument typos will also be caught here."""
+        # Excludes arguments that are handled before calling any model function
+        if self.config.is_encoder_decoder:
+            for key in ["decoder_input_ids"]:
+                model_kwargs.pop(key, None)
+
+        unused_model_args = []
+        model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)
+        # `kwargs` if often used to handle optional forward pass inputs like `attention_mask`. If
+        # `prepare_inputs_for_generation` doesn't accept `kwargs`, then a stricter check can be made ;)
+        if "kwargs" in model_args:
+            model_args |= set(inspect.signature(self.call).parameters)
+        for key, value in model_kwargs.items():
+            if value is not None and key not in model_args:
+                unused_model_args.append(key)
+
+        if unused_model_args:
+            raise ValueError(
+                f"The following `model_kwargs` are not used by the model: {unused_model_args} (note: typos in the"
+                " generate arguments will also show up in this list)"
+            )
+
     def _generate(
         self,
         input_ids=None,
         max_length=None,
+        max_new_tokens=None,
         min_length=None,
         do_sample=None,
         early_stopping=None,
@@ -1321,12 +1385,15 @@ class TFGenerationMixin:
         post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
-
             input_ids (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
                 The sequence used as a prompt for the generation. If `None` the method initializes it with
                 `bos_token_id` and a batch size of 1.
-            max_length (`int`, *optional*, defaults to 20):
-                The maximum length of the sequence to be generated.
+            max_length (`int`, *optional*, defaults to `model.config.max_length`):
+                The maximum length the generated tokens can have. Corresponds to the length of the input prompt +
+                `max_new_tokens`. In general, prefer the use of `max_new_tokens`, which ignores the number of tokens in
+                the prompt.
+            max_new_tokens (`int`, *optional*):
+                The maximum numbers of tokens to generate, ignoring the number of tokens in the prompt.
             min_length (`int`, *optional*, defaults to 10):
                 The minimum length of the sequence to be generated.
             do_sample (`bool`, *optional*, defaults to `False`):
@@ -1352,10 +1419,10 @@ class TFGenerationMixin:
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to 1.0):
-                Exponential penalty to the length. 1.0 means no penalty.
-
-                Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
-                order to encourage the model to produce longer sequences.
+                Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
+                to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
+                the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
+                while `length_penalty` < 0.0 encourages shorter sequences.
             no_repeat_ngram_size (`int`, *optional*, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
             bad_words_ids(`List[int]`, *optional*):
@@ -1466,9 +1533,11 @@ class TFGenerationMixin:
         # generate sequences without allowing bad_words to be generated
         outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)
         ```"""
+        # 0. Validate the `.generate()` call
+        self._validate_model_class()
+        self._validate_model_kwargs(model_kwargs.copy())
+
         # 1. Set generation parameters if not already defined
-        max_length = max_length if max_length is not None else self.config.max_length
-        min_length = min_length if min_length is not None else self.config.min_length
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
 
@@ -1507,12 +1576,6 @@ class TFGenerationMixin:
             logger.warning(f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence")
             pad_token_id = eos_token_id
 
-        if min_length is not None and min_length > max_length:
-            raise ValueError(
-                f"Unfeasable length constraints: the minimum length ({min_length}) is larger than the maximum "
-                f"length ({max_length})"
-            )
-
         use_xla = not tf.executing_eagerly()
         if use_xla and not self.supports_xla_generation:
             raise ValueError(
@@ -1522,7 +1585,7 @@ class TFGenerationMixin:
         # 2. Define model inputs
         input_ids = self._prepare_model_inputs(input_ids, bos_token_id)
         # inputs_ids now has to be defined and cannot be None anymore
-        batch_size = input_ids.shape[0]
+        batch_size = shape_list(input_ids)[0]
 
         # 3. Prepare other model kwargs
         if output_attentions is not None:
@@ -1554,21 +1617,49 @@ class TFGenerationMixin:
                 model_kwargs=model_kwargs,
             )
 
-        if input_ids.shape[-1] >= max_length:
+        # 5. Prepare `max_length` depending on other stopping criteria.
+        input_ids_seq_length = input_ids.shape[-1]
+        if max_length is None and max_new_tokens is None:
+            warnings.warn(
+                "Neither `max_length` nor `max_new_tokens` have been set, `max_length` will default to "
+                f"{self.config.max_length} (`self.config.max_length`). Controlling `max_length` via the config is "
+                "deprecated and `max_length` will be removed from the config in v5 of Transformers -- we recommend "
+                "using `max_new_tokens` to control the maximum length of the generation.",
+                UserWarning,
+            )
+        elif max_length is None and max_new_tokens is not None:
+            max_length = max_new_tokens + input_ids_seq_length
+        elif max_length is not None and max_new_tokens is not None:
             raise ValueError(
-                f"The context has {input_ids.shape[-1]} number of tokens, "
-                f"but `max_length` is only {max_length}. "
-                "Please make sure that `max_length` is bigger than the number of tokens, "
-                "by setting either `generate(max_length=...,...)` or `config.max_length = ...`"
+                "Both `max_new_tokens` and `max_length` have been set but they serve the same purpose -- setting a"
+                " limit to the generated output length. Remove one of those arguments. Please refer to the"
+                " documentation for more information. "
+                "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
+            )
+        # default to config if still None
+        max_length = max_length if max_length is not None else self.config.max_length
+        min_length = min_length if min_length is not None else self.config.min_length
+
+        if min_length is not None and min_length > max_length:
+            raise ValueError(
+                f"Unfeasable length constraints: the minimum length ({min_length}) is larger than the maximum "
+                f"length ({max_length})"
+            )
+        if input_ids_seq_length >= max_length:
+            input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
+            logger.warning(
+                f"Input length of {input_ids_string} is {input_ids_seq_length}, but `max_length` is set to"
+                f" {max_length}. This can lead to unexpected behavior. You should consider increasing"
+                "`max_new_tokens`."
             )
 
-        # 5. determine generation mode
+        # 6. determine generation mode
         # TODO(Matt, Joao, Patrick) - add more use cases here
         is_greedy_gen_mode = (num_beams == 1) and do_sample is False
         is_sample_gen_mode = (num_beams == 1) and do_sample is True
         is_beam_gen_mode = (num_beams > 1) and do_sample is False
 
-        # 6. prepare distribution pre_processing samplers
+        # 7. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
@@ -1580,13 +1671,13 @@ class TFGenerationMixin:
             forced_eos_token_id=forced_eos_token_id,
         )
 
-        # 7. go into different generation modes
+        # 8. go into different generation modes
         if is_greedy_gen_mode:
             if num_return_sequences > 1:
                 raise ValueError(
                     f"num_return_sequences has to be 1, but is {num_return_sequences} when doing greedy search."
                 )
-            # 8. run greedy search
+            # 9. run greedy search
             return self.greedy_search(
                 input_ids,
                 max_length=max_length,
@@ -1598,10 +1689,10 @@ class TFGenerationMixin:
                 **model_kwargs,
             )
         elif is_sample_gen_mode:
-            # 8. prepare logits warper
+            # 9. prepare logits warper
             logits_warper = self._get_logits_warper(top_k=top_k, top_p=top_p, temperature=temperature)
 
-            # 9. expand input_ids with `num_return_sequences` additional sequences per batch
+            # 10. expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids,
                 expand_size=num_return_sequences,
@@ -1609,7 +1700,7 @@ class TFGenerationMixin:
                 **model_kwargs,
             )
 
-            # 10. run sample
+            # 11. run sample
             return self.sample(
                 input_ids,
                 logits_processor=logits_processor,
@@ -1630,7 +1721,7 @@ class TFGenerationMixin:
                     f"num_beams >= num_return_sequences, got {num_beams} and {num_return_sequences} (respectivelly)"
                 )
 
-            # 8. broadcast inputs to the desired number of beams
+            # 9. broadcast inputs to the desired number of beams
             input_ids = self._expand_to_num_beams(input_ids, num_beams=num_beams)
 
             if "encoder_outputs" in model_kwargs:
@@ -1643,7 +1734,7 @@ class TFGenerationMixin:
                     model_kwargs["attention_mask"], num_beams=num_beams
                 )
 
-            # 9. run beam search
+            # 10. run beam search
             return self.beam_search(
                 input_ids,
                 max_length=max_length,
@@ -1663,7 +1754,8 @@ class TFGenerationMixin:
 
     @staticmethod
     def _expand_to_num_beams(tensor: tf.Tensor, num_beams: int) -> tf.Tensor:
-        return tf.broadcast_to(tensor[:, None], (tensor.shape[0], num_beams) + tensor.shape[1:])
+        shape = shape_list(tensor)
+        return tf.broadcast_to(tensor[:, None], (shape[0], num_beams) + tuple(shape[1:]))
 
     def _prepare_attention_mask_for_generation(
         self,
@@ -1673,9 +1765,7 @@ class TFGenerationMixin:
     ) -> tf.Tensor:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in (tf.int32, tf.int64)
         is_pad_token_in_inputs = (pad_token_id is not None) and tf.math.reduce_any(inputs == pad_token_id)
-        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
-            (eos_token_id is not None) and (pad_token_id != eos_token_id)
-        )
+        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id != eos_token_id)
 
         # Check if input is input_ids and padded -> only then is attention_mask defined
         if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
@@ -2030,7 +2120,6 @@ class TFGenerationMixin:
         Generates sequences for models with a language modeling head using greedy decoding.
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             logits_processor (`TFLogitsProcessorList`, *optional*):
@@ -2076,7 +2165,7 @@ class TFGenerationMixin:
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
         >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
 
-        >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
+        >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
         >>> model.config.pad_token_id = model.config.eos_token_id
 
         >>> input_prompt = "Today is a beautiful day, and"
@@ -2123,7 +2212,7 @@ class TFGenerationMixin:
         decoder_hidden_states = [] if (return_dict_in_generate and output_hidden_states) else None
 
         # 3. init tensors to use for "xla-compileable" generate function
-        batch_size, cur_len = input_ids.shape
+        batch_size, cur_len = shape_list(input_ids)
 
         # initialize `generated` (`input_ids` padded with `pad_token_id`), `finished_sequences`
         input_ids_padding = tf.ones((batch_size, max_length - cur_len), dtype=tf.int32) * (pad_token_id or 0)
@@ -2283,7 +2372,6 @@ class TFGenerationMixin:
         Generates sequences for models with a language modeling head using multinomial sampling.
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             logits_processor (`TFLogitsProcessorList`, *optional*):
@@ -2393,7 +2481,7 @@ class TFGenerationMixin:
         decoder_hidden_states = [] if (return_dict_in_generate and output_hidden_states) else None
 
         # 3. init tensors to use for "xla-compileable" generate function
-        batch_size, cur_len = input_ids.shape
+        batch_size, cur_len = shape_list(input_ids)
 
         # initialize `generated` (pre-populated with `pad_token_id`), `finished_sequences`
         input_ids_padding = tf.ones((batch_size, max_length - cur_len), dtype=tf.int32) * (pad_token_id or 0)
@@ -2560,7 +2648,6 @@ class TFGenerationMixin:
         Generates sequences for models with a language modeling head using beam search with multinomial sampling.
 
         Parameters:
-
             input_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`):
                 The sequence used as a prompt for the generation.
             max_length (`int`, *optional*, defaults to 20):
@@ -2570,7 +2657,10 @@ class TFGenerationMixin:
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to 1.0):
-                Exponential penalty to the length. 1.0 means no penalty.
+                Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
+                to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
+                the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
+                while `length_penalty` < 0.0 encourages shorter sequences.
             early_stopping (`bool`, *optional*, defaults to `False`):
                 Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
             logits_processor (`[TFLogitsProcessorList]`, *optional*):
@@ -2639,18 +2729,16 @@ class TFGenerationMixin:
 
         def flatten_beam_dim(tensor, batch_axis=0):
             """Flattens the first two dimensions of a non-scalar array."""
+            shape = shape_list(tensor)
             return tf.reshape(
                 tensor,
-                tensor.shape[:batch_axis]
-                + [tensor.shape[batch_axis] * tensor.shape[batch_axis + 1]]
-                + tensor.shape[batch_axis + 2 :],
+                shape[:batch_axis] + [shape[batch_axis] * shape[batch_axis + 1]] + shape[batch_axis + 2 :],
             )
 
         def unflatten_beam_dim(tensor, batch_size, num_beams, batch_axis=0):
             """Unflattens the first, flat batch*beam dimension of a non-scalar array."""
-            return tf.reshape(
-                tensor, tensor.shape[:batch_axis] + [batch_size, num_beams] + tensor.shape[batch_axis + 1 :]
-            )
+            shape = shape_list(tensor)
+            return tf.reshape(tensor, shape[:batch_axis] + [batch_size, num_beams] + shape[batch_axis + 1 :])
 
         def gather_beams(nested, beam_indices, batch_axis=0):
             """Gathers the beam slices indexed by beam_indices into new beam array."""
@@ -2709,7 +2797,7 @@ class TFGenerationMixin:
         decoder_hidden_states = [] if (return_dict_in_generate and output_hidden_states) else None
 
         # 3. init tensors to use for "xla-compileable" generate function
-        batch_size, num_beams, cur_len = input_ids.shape
+        batch_size, num_beams, cur_len = shape_list(input_ids)
 
         # per batch, beam-item holding current token in loop, pre-populated with `pad_token_id`
         input_ids_padding = tf.ones((batch_size, num_beams, max_length - cur_len), dtype=tf.int32) * (
@@ -2855,7 +2943,7 @@ class TFGenerationMixin:
                 eos_in_next_token = tf.broadcast_to(eos_in_next_token, topk_sequences[:, :, cur_len].shape)
             did_topk_just_finished = eos_in_next_token & tf.broadcast_to(
                 tf.concat((tf.ones((num_beams), dtype=tf.bool), tf.zeros((num_beams), dtype=tf.bool)), axis=0),
-                eos_in_next_token.shape,
+                shape_list(eos_in_next_token),
             )
 
             # non-top `num_beams` eos tokens can't be used to finish a beam, but the others can't be used in the next
@@ -2878,7 +2966,7 @@ class TFGenerationMixin:
             topk_log_probs = topk_log_probs / (tf.cast(cur_len, dtype=tf.float32) ** length_penalty)
             beams_in_batch_are_full = (
                 tf.broadcast_to(
-                    tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), did_topk_just_finished.shape
+                    tf.math.reduce_all(is_sent_finished, axis=-1, keepdims=True), shape_list(did_topk_just_finished)
                 )
                 & early_stopping
             )

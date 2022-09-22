@@ -146,10 +146,9 @@ class PerceiverTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Summary of the text.",
             "Another summary.",
         ]
-        with tokenizer.as_target_tokenizer():
-            targets = tokenizer(
-                tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
-            )
+        targets = tokenizer(
+            text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
+        )
         self.assertEqual(32, targets["input_ids"].shape[1])
 
     # cannot use default save_and_load_tokenzier test method because tokenzier has no vocab

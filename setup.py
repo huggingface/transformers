@@ -98,24 +98,25 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow",
     "accelerate>=0.10.0",
-    "black==22.3",
+    "black==22.3",  # after updating to black 2023, also update Python version in pyproject.toml to 3.7
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
-    "datasets",
+    "datasets!=2.5.0",
     "deepspeed>=0.6.5",
     "dill<0.3.5",
+    "evaluate>=0.2.0",
     "fairscale>0.3",
     "faiss-cpu",
     "fastapi",
     "filelock",
     "flake8>=3.8.3",
-    "flax>=0.3.5",
+    "flax>=0.4.1",
     "ftfy",
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.1.0,<1.0",
+    "huggingface-hub>=0.9.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -144,7 +145,7 @@ _deps = [
     "regex!=2019.12.17",
     "requests",
     "rjieba",
-    "rouge-score",
+    "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
     "sagemaker>=2.31.0",
@@ -154,13 +155,13 @@ _deps = [
     "librosa",
     "starlette",
     "tensorflow-cpu>=2.3",
-    "tensorflow>=2.3",
+    "tensorflow>=2.4",
     "tensorflow-text",
     "tf2onnx",
     "timeout-decorator",
     "timm",
-    "tokenizers>=0.11.1,!=0.11.3,<0.13",
-    "torch>=1.0,<1.12",
+    "tokenizers>=0.11.1,!=0.11.3,<0.14",
+    "torch>=1.7,!=1.12.0",
     "torchaudio",
     "pyctcdecode>=0.3.0",
     "tqdm>=4.27",
@@ -176,7 +177,7 @@ _deps = [
 # packaging: "packaging"
 #
 # some of the values are versioned whereas others aren't.
-deps = {b: a for a, b in (re.findall(r"^(([^!=<>~]+)(?:[!=<>~].*)?$)", x)[0] for x in _deps)}
+deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] for x in _deps)}
 
 # since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
 # anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
@@ -289,6 +290,7 @@ extras["testing"] = (
         "psutil",
         "datasets",
         "dill",
+        "evaluate",
         "pytest-timeout",
         "black",
         "sacrebleu",
@@ -306,7 +308,7 @@ extras["testing"] = (
 
 extras["deepspeed-testing"] = extras["deepspeed"] + extras["testing"] + extras["optuna"]
 
-extras["quality"] = deps_list("black", "isort", "flake8", "GitPython", "hf-doc-builder")
+extras["quality"] = deps_list("black", "datasets", "isort", "flake8", "GitPython", "hf-doc-builder")
 
 extras["all"] = (
     extras["tf"]
@@ -399,7 +401,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.21.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.23.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
@@ -410,7 +412,7 @@ setup(
     url="https://github.com/huggingface/transformers",
     package_dir={"": "src"},
     packages=find_packages("src"),
-    package_data={"transformers": ["py.typed"]},
+    package_data={"transformers": ["py.typed", "*.cu", "*.cpp", "*.cuh", "*.h"]},
     zip_safe=False,
     extras_require=extras,
     entry_points={"console_scripts": ["transformers-cli=transformers.commands.transformers_cli:main"]},

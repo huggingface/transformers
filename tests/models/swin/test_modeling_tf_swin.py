@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 
 from transformers import SwinConfig
-from transformers.testing_utils import require_tf, require_vision, slow, to_2tuple
+from transformers.testing_utils import require_tf, require_vision, slow, to_2tuple, tooslow
 from transformers.utils import cached_property, is_tf_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -223,6 +223,10 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Swin does not use inputs_embeds")
     def test_inputs_embeds(self):
+        pass
+
+    @tooslow
+    def test_saved_model_creation(self):
         pass
 
     def test_model_common_attributes(self):

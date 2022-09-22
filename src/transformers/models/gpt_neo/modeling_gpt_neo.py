@@ -547,7 +547,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         else:
             past_length = past_key_values[0][0].size(-2)
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])

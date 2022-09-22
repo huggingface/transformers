@@ -16,6 +16,7 @@
  Tokenization classes for fast tokenizers (provided by HuggingFace's tokenizers library). For slow (python) tokenizers
  see tokenization_utils.py
 """
+import copy
 import json
 import os
 from collections import defaultdict
@@ -104,7 +105,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             )
 
         if tokenizer_object is not None:
-            fast_tokenizer = tokenizer_object
+            fast_tokenizer = copy.deepcopy(tokenizer_object)
         elif fast_tokenizer_file is not None and not from_slow:
             # We have a serialization from tokenizers which let us directly build the backend
             fast_tokenizer = TokenizerFast.from_file(fast_tokenizer_file)

@@ -54,7 +54,7 @@ Then pass your sentence to the tokenizer:
  'attention_mask': [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]}
 ```
 
-The tokenizer returns a dictionary with three important itmes:
+The tokenizer returns a dictionary with three important items:
 
 * [input_ids](glossary#input-ids) are the indices corresponding to each token in the sentence.
 * [attention_mask](glossary#attention-mask) indicates whether a token should be attended to or not.
@@ -244,7 +244,7 @@ For example, the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) data
  'sampling_rate': 8000}
 ```
 
-1. Use 🤗 Datasets' [`cast_column`](https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.cast_column) method to upsample the sampling rate to 16kHz:
+1. Use 🤗 Datasets' [`~datasets.Dataset.cast_column`] method to upsample the sampling rate to 16kHz:
 
 ```py
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=16_000))
@@ -486,10 +486,8 @@ A processor combines a feature extractor and tokenizer. Load a processor with [`
 >>> def prepare_dataset(example):
 ...     audio = example["audio"]
 
-...     example["input_values"] = processor(audio["array"], sampling_rate=16000)
+...     example.update(processor(audio=audio["array"], text=example["text"], sampling_rate=16000))
 
-...     with processor.as_target_processor():
-...         example["labels"] = processor(example["text"]).input_ids
 ...     return example
 ```
 

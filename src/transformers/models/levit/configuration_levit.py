@@ -14,7 +14,13 @@
 # limitations under the License.
 """ LeViT model configuration"""
 
+from collections import OrderedDict
+from typing import Mapping
+
+from packaging import version
+
 from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -31,7 +37,7 @@ class LevitConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`LevitModel`]. It is used to instantiate a LeViT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LeViT
-    [facebook/levit-base-192](https://huggingface.co/facebook/levit-base-192) architecture.
+    [facebook/levit-128S](https://huggingface.co/facebook/levit-128S) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -72,10 +78,10 @@ class LevitConfig(PretrainedConfig):
     ```python
     >>> from transformers import LevitModel, LevitConfig
 
-    >>> # Initializing a LeViT levit-base-192 style configuration
+    >>> # Initializing a LeViT levit-128S style configuration
     >>> configuration = LevitConfig()
 
-    >>> # Initializing a model from the levit-base-192 style configuration
+    >>> # Initializing a model from the levit-128S style configuration
     >>> model = LevitModel(configuration)
 
     >>> # Accessing the model configuration
@@ -120,3 +126,21 @@ class LevitConfig(PretrainedConfig):
             ["Subsample", key_dim[0], hidden_sizes[0] // key_dim[0], 4, 2, 2],
             ["Subsample", key_dim[0], hidden_sizes[1] // key_dim[0], 4, 2, 2],
         ]
+
+
+# Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
+class LevitOnnxConfig(OnnxConfig):
+
+    torch_onnx_minimum_version = version.parse("1.11")
+
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        return OrderedDict(
+            [
+                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
+            ]
+        )
+
+    @property
+    def atol_for_validation(self) -> float:
+        return 1e-4

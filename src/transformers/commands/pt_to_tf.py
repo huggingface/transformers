@@ -59,7 +59,7 @@ def convert_command_factory(args: Namespace):
     return PTtoTFCommand(
         args.model_name,
         args.local_dir,
-        args.max_hidden_error,
+        args.max_error,
         args.new_weights,
         args.no_pr,
         args.push,
@@ -96,12 +96,11 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             help="Optional local directory of the model repository. Defaults to /tmp/{model_name}",
         )
         train_parser.add_argument(
-            "--max-hidden-error",
+            "--max-error",
             type=float,
             default=MAX_ERROR,
             help=(
-                f"Maximum error tolerance for hidden layer outputs. Defaults to {MAX_ERROR}. If you suspect the hidden"
-                " layers outputs will be used for downstream applications, avoid increasing this tolerance."
+                f"Maximum error tolerance. Defaults to {MAX_ERROR}. This flag should be avoided, use at your own risk."
             ),
         )
         train_parser.add_argument(
@@ -168,7 +167,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         self,
         model_name: str,
         local_dir: str,
-        max_hidden_error: float,
+        max_error: float,
         new_weights: bool,
         no_pr: bool,
         push: bool,
@@ -178,7 +177,7 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         self._logger = logging.get_logger("transformers-cli/pt_to_tf")
         self._model_name = model_name
         self._local_dir = local_dir if local_dir else os.path.join("/tmp", model_name)
-        self._max_hidden_error = max_hidden_error
+        self._max_error = max_error
         self._new_weights = new_weights
         self._no_pr = no_pr
         self._push = push
@@ -239,9 +238,10 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         return pt_input, tf_input
 
     def run(self):
-        if version.parse(huggingface_hub.__version__) < version.parse("0.8.1"):
+        # hub version 0.9.0 introduced the possibility of programmatically opening PRs with normal write tokens.
+        if version.parse(huggingface_hub.__version__) < version.parse("0.9.0"):
             raise ImportError(
-                "The huggingface_hub version must be >= 0.8.1 to use this command. Please update your huggingface_hub"
+                "The huggingface_hub version must be >= 0.9.0 to use this command. Please update your huggingface_hub"
                 " installation."
             )
         else:
@@ -257,11 +257,11 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         if architectures is None:  # No architecture defined -- use auto classes
             pt_class = getattr(import_module("transformers"), "AutoModel")
             tf_class = getattr(import_module("transformers"), "TFAutoModel")
-            self._logger.warn("No detected architecture, using AutoModel/TFAutoModel")
+            self._logger.warning("No detected architecture, using AutoModel/TFAutoModel")
         else:  # Architecture defined -- use it
             if len(architectures) > 1:
                 raise ValueError(f"More than one architecture was found, aborting. (architectures = {architectures})")
-            self._logger.warn(f"Detected architecture: {architectures[0]}")
+            self._logger.warning(f"Detected architecture: {architectures[0]}")
             pt_class = getattr(import_module("transformers"), architectures[0])
             try:
                 tf_class = getattr(import_module("transformers"), "TF" + architectures[0])
@@ -286,15 +286,20 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         crossload_differences = self.find_pt_tf_differences(pt_outputs, tf_from_pt_outputs)
         output_differences = {k: v for k, v in crossload_differences.items() if "hidden" not in k}
         hidden_differences = {k: v for k, v in crossload_differences.items() if "hidden" in k}
-        max_crossload_output_diff = max(output_differences.values())
+        if len(output_differences) == 0 and architectures is not None:
+            raise ValueError(
+                f"Something went wrong -- the config file has architectures ({architectures}), but no model head"
+                " output was found. All outputs start with 'hidden'"
+            )
+        max_crossload_output_diff = max(output_differences.values()) if output_differences else 0.0
         max_crossload_hidden_diff = max(hidden_differences.values())
-        if max_crossload_output_diff > MAX_ERROR or max_crossload_hidden_diff > self._max_hidden_error:
+        if max_crossload_output_diff > self._max_error or max_crossload_hidden_diff > self._max_error:
             raise ValueError(
                 "The cross-loaded TensorFlow model has different outputs, something went wrong!\n"
-                + f"\nList of maximum output differences above the threshold ({MAX_ERROR}):\n"
-                + "\n".join([f"{k}: {v:.3e}" for k, v in output_differences.items() if v > MAX_ERROR])
-                + f"\n\nList of maximum hidden layer differences above the threshold ({self._max_hidden_error}):\n"
-                + "\n".join([f"{k}: {v:.3e}" for k, v in hidden_differences.items() if v > self._max_hidden_error])
+                + f"\nList of maximum output differences above the threshold ({self._max_error}):\n"
+                + "\n".join([f"{k}: {v:.3e}" for k, v in output_differences.items() if v > self._max_error])
+                + f"\n\nList of maximum hidden layer differences above the threshold ({self._max_error}):\n"
+                + "\n".join([f"{k}: {v:.3e}" for k, v in hidden_differences.items() if v > self._max_error])
             )
 
         # Save the weights in a TF format (if needed) and confirms that the results are still good
@@ -310,15 +315,20 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         conversion_differences = self.find_pt_tf_differences(pt_outputs, tf_outputs)
         output_differences = {k: v for k, v in conversion_differences.items() if "hidden" not in k}
         hidden_differences = {k: v for k, v in conversion_differences.items() if "hidden" in k}
-        max_conversion_output_diff = max(output_differences.values())
+        if len(output_differences) == 0 and architectures is not None:
+            raise ValueError(
+                f"Something went wrong -- the config file has architectures ({architectures}), but no model head"
+                " output was found. All outputs start with 'hidden'"
+            )
+        max_conversion_output_diff = max(output_differences.values()) if output_differences else 0.0
         max_conversion_hidden_diff = max(hidden_differences.values())
-        if max_conversion_output_diff > MAX_ERROR or max_conversion_hidden_diff > self._max_hidden_error:
+        if max_conversion_output_diff > self._max_error or max_conversion_hidden_diff > self._max_error:
             raise ValueError(
                 "The converted TensorFlow model has different outputs, something went wrong!\n"
-                + f"\nList of maximum output differences above the threshold ({MAX_ERROR}):\n"
-                + "\n".join([f"{k}: {v:.3e}" for k, v in output_differences.items() if v > MAX_ERROR])
-                + f"\n\nList of maximum hidden layer differences above the threshold ({self._max_hidden_error}):\n"
-                + "\n".join([f"{k}: {v:.3e}" for k, v in hidden_differences.items() if v > self._max_hidden_error])
+                + f"\nList of maximum output differences above the threshold ({self._max_error}):\n"
+                + "\n".join([f"{k}: {v:.3e}" for k, v in output_differences.items() if v > self._max_error])
+                + f"\n\nList of maximum hidden layer differences above the threshold ({self._max_error}):\n"
+                + "\n".join([f"{k}: {v:.3e}" for k, v in hidden_differences.items() if v > self._max_error])
             )
 
         commit_message = "Update TF weights" if self._new_weights else "Add TF weights"
@@ -326,9 +336,9 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             repo.git_add(auto_lfs_track=True)
             repo.git_commit(commit_message)
             repo.git_push(blocking=True)  # this prints a progress bar with the upload
-            self._logger.warn(f"TF weights pushed into {self._model_name}")
+            self._logger.warning(f"TF weights pushed into {self._model_name}")
         elif not self._no_pr:
-            self._logger.warn("Uploading the weights into a new PR...")
+            self._logger.warning("Uploading the weights into a new PR...")
             commit_descrition = (
                 "Model converted by the [`transformers`' `pt_to_tf`"
                 " CLI](https://github.com/huggingface/transformers/blob/main/src/transformers/commands/pt_to_tf.py). "
@@ -338,6 +348,10 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                 f"Maximum conversion output difference={max_conversion_output_diff:.3e}; "
                 f"Maximum conversion hidden layer difference={max_conversion_hidden_diff:.3e};\n"
             )
+            if self._max_error > MAX_ERROR:
+                commit_descrition += (
+                    f"\n\nCAUTION: The maximum admissible error was manually increased to {self._max_error}!"
+                )
             if self._extra_commit_description:
                 commit_descrition += "\n\n" + self._extra_commit_description
 
@@ -361,4 +375,4 @@ class PTtoTFCommand(BaseTransformersCLICommand):
                 repo_type="model",
                 create_pr=True,
             )
-            self._logger.warn(f"PR open in {hub_pr_url}")
+            self._logger.warning(f"PR open in {hub_pr_url}")

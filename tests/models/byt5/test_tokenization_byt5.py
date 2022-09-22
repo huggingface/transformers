@@ -152,10 +152,9 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Summary of the text.",
             "Another summary.",
         ]
-        with tokenizer.as_target_tokenizer():
-            targets = tokenizer(
-                tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
-            )
+        targets = tokenizer(
+            text_target=tgt_text, max_length=32, padding="max_length", truncation=True, return_tensors=FRAMEWORK
+        )
         self.assertEqual(32, targets["input_ids"].shape[1])
 
     def test_eos_in_input(self):
@@ -167,12 +166,10 @@ class ByT5TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         expected_tgt_tokens = [86, 120, 112, 112, 100, 117, 124, 35, 114, 105, 35, 119, 107, 104, 35, 119, 104, 123, 119, 49, 35, 1]
         # fmt: on
 
-        batch = tokenizer(src_text)
-        with tokenizer.as_target_tokenizer():
-            targets = tokenizer(tgt_text)
+        batch = tokenizer(src_text, text_target=tgt_text)
 
         self.assertEqual(expected_src_tokens, batch["input_ids"][0])
-        self.assertEqual(expected_tgt_tokens, targets["input_ids"][0])
+        self.assertEqual(expected_tgt_tokens, batch["labels"][0])
 
     # cannot use default save_and_load_tokenzier test method because tokenzier has no vocab
     def test_save_and_load_tokenizer(self):

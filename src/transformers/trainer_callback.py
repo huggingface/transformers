@@ -262,6 +262,12 @@ class TrainerCallback:
         """
         pass
 
+    def on_predict(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metrics, **kwargs):
+        """
+        Event called after a successful prediction.
+        """
+        pass
+
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called after a checkpoint save.
@@ -372,6 +378,9 @@ class CallbackHandler(TrainerCallback):
         control.should_evaluate = False
         return self.call_event("on_evaluate", args, state, control, metrics=metrics)
 
+    def on_predict(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, metrics):
+        return self.call_event("on_predict", args, state, control, metrics=metrics)
+
     def on_save(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         control.should_save = False
         return self.call_event("on_save", args, state, control)
@@ -479,6 +488,12 @@ class ProgressCallback(TrainerCallback):
             self.prediction_bar.update(1)
 
     def on_evaluate(self, args, state, control, **kwargs):
+        if state.is_local_process_zero:
+            if self.prediction_bar is not None:
+                self.prediction_bar.close()
+            self.prediction_bar = None
+
+    def on_predict(self, args, state, control, **kwargs):
         if state.is_local_process_zero:
             if self.prediction_bar is not None:
                 self.prediction_bar.close()
