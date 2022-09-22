@@ -26,9 +26,9 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_trillson_efficient": [
-        "TRILLSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Trillson_efficientConfig",
+    "configuration_trillsson_efficient": [
+        "TRILLSSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Trillsson_efficientConfig",
     ],
 }
 
@@ -38,10 +38,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_trillson_efficient"] = ["Speech2TextFeatureExtractor"]
-
-    if ():
-        _import_structure["processing_trillson_efficient"] = ["Speech2TextProcessor"]
+    _import_structure["feature_extraction_trillsson_efficient"] = ["Trillsson_efficientFeatureExtractor"]
 
 try:
     if not is_torch_available():
@@ -49,16 +46,19 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_trillson_efficient"] = [
-        "TRILLSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "Trillson_efficientForConditionalGeneration",
-        "Trillson_efficientModel",
-        "Trillson_efficientPreTrainedModel",
+    _import_structure["modeling_trillsson_efficient"] = [
+        "TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "Trillsson_efficientForConditionalGeneration",
+        "Trillsson_efficientModel",
+        "Trillsson_efficientPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_trillson_efficient import TRILLSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP, Trillson_efficientConfig
+    from .configuration_trillsson_efficient import (
+        TRILLSSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Trillsson_efficientConfig
+    )
 
     try:
         if not is_speech_available():
@@ -66,8 +66,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-
-        if ():
+        from .feature_extraction_trillsson_efficient import Trillsson_efficientFeatureExtractor
 
     try:
         if not is_torch_available():
@@ -75,11 +74,10 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_trillson_efficient import (
-            TRILLSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Trillson_efficientForConditionalGeneration,
-            Trillson_efficientModel,
-            Trillson_efficientPreTrainedModel,
+        from .modeling_trillsson_efficient import (
+            TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Trillsson_efficientModel,
+            Trillsson_efficientPreTrainedModel,
         )
 
 else:

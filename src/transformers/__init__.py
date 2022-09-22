@@ -335,17 +335,10 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
-    "models.trillson_efficient": [
-        "TRILLSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Trillson_efficientConfig",
-    ],
-    "models.trillson_efficient": [
-        "TRILLSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Trillson_efficientConfig",
-    ],
-    "models.trillson_efficient": [
-        "TRILLSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "Trillson_efficientConfig",
+    "models.trillsson_efficient": [
+        "TRILLSSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "Trillsson_efficientConfig",
+        "Trillsson_efficientFeatureExtractor",
     ],
     "models.trocr": [
         "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1797,21 +1790,14 @@ else:
             "Speech2TextPreTrainedModel",
         ]
     )
-    _import_structure["models.trillson_efficient"].extend(
+    _import_structure["models.trillsson_efficient"].extend(
         [
-            "TRILLSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "Trillson_efficientForConditionalGeneration",
-            "Trillson_efficientModel",
-            "Trillson_efficientPreTrainedModel",
+            "TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "Trillsson_efficientModel",
+            "Trillsson_efficientPreTrainedModel",
         ]
     )
     _import_structure["models.speech_to_text_2"].extend(["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"])
-    _import_structure["models.trillson_efficient"].extend(
-        ["Trillson_efficientForCausalLM", "Trillson_efficientPreTrainedModel"]
-    )
-    _import_structure["models.trillson_efficient"].extend(
-        ["Trillson_efficientForCausalLM", "Trillson_efficientPreTrainedModel"]
-    )
     _import_structure["models.splinter"].extend(
         [
             "SPLINTER_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -2603,14 +2589,6 @@ else:
             "TFSpeech2TextPreTrainedModel",
         ]
     )
-    _import_structure["models.trillson_efficient"].extend(
-        [
-            "TF_TRILLSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFTrillson_efficientForConditionalGeneration",
-            "TFTrillson_efficientModel",
-            "TFTrillson_efficientPreTrainedModel",
-        ]
-    )
     _import_structure["models.swin"].extend(
         [
             "TF_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3239,7 +3217,11 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
-    from .models.trillson_efficient import TRILLSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP, Trillson_efficientConfig
+    from .models.trillsson_efficient import (
+        TRILLSSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        Trillsson_efficientConfig,
+        Trillsson_efficientFeatureExtractor,
+    )
     from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
@@ -4493,12 +4475,10 @@ if TYPE_CHECKING:
             TransfoXLPreTrainedModel,
             load_tf_weights_in_transfo_xl,
         )
-        from .models.trillson_efficient import (
-            TRILLSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            Trillson_efficientForCausalLM,
-            Trillson_efficientForConditionalGeneration,
-            Trillson_efficientModel,
-            Trillson_efficientPreTrainedModel,
+        from .models.trillsson_efficient import (
+            TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Trillsson_efficientModel,
+            Trillsson_efficientPreTrainedModel,
         )
         from .models.trocr import TROCR_PRETRAINED_MODEL_ARCHIVE_LIST, TrOCRForCausalLM, TrOCRPreTrainedModel
         from .models.unispeech import (

@@ -136,7 +136,7 @@ from . import (
     tapex,
     trajectory_transformer,
     transfo_xl,
-    trillson_efficient,
+    trillsson_efficient,
     trocr,
     unispeech,
     unispeech_sat,
