@@ -2740,9 +2740,9 @@ class Trainer:
     def evaluate(
         self,
         eval_dataset: Optional[Dataset] = None,
+        compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
-        compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
     ) -> Dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -2757,6 +2757,9 @@ class Trainer:
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is a [`~datasets.Dataset`], columns
                 not accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
                 method.
+            compute_metrics (`Callable[[EvalPrediction], Dict]`, *optional*, defaults to `None`):
+                Pass a compute_metric function if you wish to override `self.compute_metrics`. Used when 
+                `self.eval_dataset` holds multiple datasets.
             ignore_keys (`Lst[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
