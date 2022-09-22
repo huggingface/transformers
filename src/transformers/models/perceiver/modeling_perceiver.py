@@ -1278,6 +1278,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         >>> logits = outputs.logits
         >>> list(logits.shape)
         [1, 1000]
+
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
@@ -1418,6 +1419,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         >>> logits = outputs.logits
         >>> list(logits.shape)
         [1, 1000]
+
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
@@ -1558,6 +1560,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         >>> logits = outputs.logits
         >>> list(logits.shape)
         [1, 1000]
+
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_class_idx = logits.argmax(-1).item()
         >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
@@ -1937,11 +1940,13 @@ class PerceiverForMultimodalAutoencoding(PerceiverPreTrainedModel):
 
         >>> outputs = model(inputs=inputs, subsampled_output_points=subsampling)
         >>> logits = outputs.logits
-        >>> list(logits['audio'].shape)
+        >>> list(logits["audio"].shape)
         [1, 240]
-        >>> list(logits['image'].shape)
+
+        >>> list(logits["image"].shape)
         [1, 6272, 3]
-        >>> list(logits['label'].shape)
+
+        >>> list(logits["label"].shape)
         [1, 700]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
