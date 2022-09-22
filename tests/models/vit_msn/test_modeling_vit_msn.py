@@ -215,12 +215,12 @@ def prepare_img():
 class ViTMSNModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return ViTFeatureExtractor.from_pretrained("sayakpaul/vit-msn-small") if is_vision_available() else None
+        return ViTFeatureExtractor.from_pretrained("facebook/vit-msn-small") if is_vision_available() else None
 
     @slow
     def test_inference_image_classification_head(self):
         torch.manual_seed(2)
-        model = ViTMSNForImageClassification.from_pretrained("sayakpaul/vit-msn-small").to(torch_device)
+        model = ViTMSNForImageClassification.from_pretrained("facebook/vit-msn-small").to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
