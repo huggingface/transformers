@@ -14,17 +14,17 @@
 # limitations under the License.
 """ PyTorch SpeechT5 model."""
 
-import copy
+# import copy
 import math
-import warnings
-from dataclasses import dataclass
+# import warnings
+# from dataclasses import dataclass
 from typing import Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
+# from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...deepspeed import is_deepspeed_zero3_enabled
@@ -32,15 +32,15 @@ from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
     Seq2SeqModelOutput,
-    SequenceClassifierOutput,
-    TokenClassifierOutput,
-    Wav2Vec2BaseModelOutput,
-    XVectorOutput,
+    # SequenceClassifierOutput,
+    # TokenClassifierOutput,
+    # Wav2Vec2BaseModelOutput,
+    # XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import torch_int_div
 from ...utils import (
-    ModelOutput,
+    # ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -492,7 +492,8 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
         if attention_mask is not None:
             # compute reduced attention_mask corresponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(
-                extract_features.shape[1], attention_mask,
+                extract_features.shape[1],
+                attention_mask,
             )
 
         hidden_states, extract_features = self.feature_projection(extract_features)
@@ -514,9 +515,7 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
         return hidden_states, extract_features, attention_mask
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel._get_feature_vector_attention_mask
-    def _get_feature_vector_attention_mask(
-        self, feature_vector_length: int, attention_mask: torch.LongTensor
-    ):
+    def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
         # Effectively attention_mask.sum(-1), but not inplace to be able to run
         # on inference mode.
         non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
@@ -799,7 +798,7 @@ class SpeechT5EncoderLayer(nn.Module):
             hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
-            output_attentions=output_attentions
+            output_attentions=output_attentions,
         )
 
         hidden_states = self.dropout(hidden_states)
@@ -822,7 +821,7 @@ class SpeechT5RelativePositionalEncoding(torch.nn.Module):
         super().__init__()
         self.dim = dim
         self.max_length = max_length
-        self.pe_k = torch.nn.Embedding(2*max_length, dim)
+        self.pe_k = torch.nn.Embedding(2 * max_length, dim)
 
     def forward(self, hidden_states):
         seq_len = hidden_states.shape[1]
@@ -1038,7 +1037,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
 
         self.encoder = SpeechT5Encoder(config)
 
-        #self.decoder = ...
+        # self.decoder = ...
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1095,7 +1094,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        hidden_states = encoder_outputs[0]
+        # hidden_states = encoder_outputs[0]
 
         # Decode
         # decoder_outputs = self.decoder(
@@ -1117,11 +1116,11 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         #     return decoder_outputs + encoder_outputs
 
         return Seq2SeqModelOutput(
-            last_hidden_state=None, #decoder_outputs.last_hidden_state,
-            past_key_values=None, #decoder_outputs.past_key_values,
-            decoder_hidden_states=None, #decoder_outputs.hidden_states,
-            decoder_attentions=None, #decoder_outputs.attentions,
-            cross_attentions=None, #decoder_outputs.cross_attentions,
+            last_hidden_state=None,  # decoder_outputs.last_hidden_state,
+            past_key_values=None,  # decoder_outputs.past_key_values,
+            decoder_hidden_states=None,  # decoder_outputs.hidden_states,
+            decoder_attentions=None,  # decoder_outputs.attentions,
+            cross_attentions=None,  # decoder_outputs.cross_attentions,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
@@ -1218,7 +1217,7 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         encoder_ctc = self.encoder_ctc_proj(self.dropout(outputs["encoder_last_hidden_state"]))
         print("encoder_ctc", encoder_ctc.shape, encoder_ctc)
 
-        return (encoder_ctc,)  #TODO: for testing
+        return (encoder_ctc,)  # TODO: for testing
 
         # hidden_states = outputs[0]
         # hidden_states = self.dropout(hidden_states)
@@ -1263,5 +1262,8 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
 
         return CausalLMOutput(
             # loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
-            loss=None, logits=None, hidden_states=hidden_states, attentions=None
+            loss=None,
+            logits=None,
+            hidden_states=hidden_states,
+            attentions=None,
         )

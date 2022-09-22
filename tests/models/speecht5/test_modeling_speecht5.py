@@ -47,7 +47,6 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        Wav2Vec2FeatureExtractor,
         SpeechT5ForAudioFrameClassification,
         SpeechT5ForCTC,
         SpeechT5ForPreTraining,
@@ -55,6 +54,7 @@ if is_torch_available():
         SpeechT5ForXVector,
         SpeechT5Model,
         SpeechT5Processor,
+        Wav2Vec2FeatureExtractor,
     )
     from transformers.models.speecht5.modeling_speecht5 import (
         SpeechT5GumbelVectorQuantizer,

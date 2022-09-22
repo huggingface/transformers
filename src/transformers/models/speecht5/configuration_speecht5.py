@@ -14,8 +14,8 @@
 # limitations under the License.
 """ SpeechT5 model configuration"""
 
-import functools
-import operator
+# import functools
+# import operator
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
