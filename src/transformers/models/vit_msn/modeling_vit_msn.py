@@ -65,7 +65,7 @@ class ViTMSNEmbeddings(nn.Module):
         resolution images.
 
         Source:
-        https://github.com/sayakpaulresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
         """
 
         num_patches = embeddings.shape[1] - 1
@@ -75,20 +75,22 @@ class ViTMSNEmbeddings(nn.Module):
         class_pos_embed = self.position_embeddings[:, 0]
         patch_pos_embed = self.position_embeddings[:, 1:]
         dim = embeddings.shape[-1]
-        h0 = height // self.config.patch_size
-        w0 = width // self.config.patch_size
+        patch_window_height = height // self.config.patch_size
+        patch_window_width = width // self.config.patch_size
         # we add a small number to avoid floating point error in the interpolation
         # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h0, w0 = h0 + 0.1, w0 + 0.1
+        patch_window_height, patch_window_width = patch_window_height + 0.1, patch_window_width + 0.1
         patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed,
-            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
+            scale_factor=(
+                patch_window_height / math.sqrt(num_positions),
+                patch_window_width / math.sqrt(num_positions),
+            ),
             mode="bicubic",
             align_corners=False,
         )
-        assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
@@ -429,7 +431,7 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
 
-    # todo: Resort to https://github.com/sayakpaulresearch/msn/blob/main/src/deit.py#L200-#L211
+    # todo: Resort to https://github.com/facebookresearch/msn/blob/main/src/deit.py#L200-#L211
     # when creating pre-training scripts.
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
