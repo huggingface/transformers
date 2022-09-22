@@ -60,6 +60,12 @@ MODEL_MAPPING = {
     "esm1v_t33_650M_UR90S_3": esm_module.pretrained.esm1v_t33_650M_UR90S_3,
     "esm1v_t33_650M_UR90S_4": esm_module.pretrained.esm1v_t33_650M_UR90S_4,
     "esm1v_t33_650M_UR90S_5": esm_module.pretrained.esm1v_t33_650M_UR90S_5,
+    "esm2_t48_15B_UR50D": esm_module.pretrained.esm2_t48_15B_UR50D,
+    "esm2_t36_3B_UR50D": esm_module.pretrained.esm2_t36_3B_UR50D,
+    "esm2_t33_650M_UR50D": esm_module.pretrained.esm2_t33_650M_UR50D,
+    "esm2_t30_150M_UR50D": esm_module.pretrained.esm2_t30_150M_UR50D,
+    "esm2_t12_35M_UR50D": esm_module.pretrained.esm2_t12_35M_UR50D,
+    "esm2_t6_8M_UR50D": esm_module.pretrained.esm2_t6_8M_UR50D,
 }
 
 
@@ -70,20 +76,40 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
     esm, alphabet = MODEL_MAPPING[model]()
     esm.eval()  # disable dropout
     esm_sent_encoder = esm
+    if hasattr(esm, "args"):
+        # Indicates an ESM-1b or ESM-1v model
+        embed_dim = esm.args.embed_dim
+        num_layers = esm.args.layers
+        num_attention_heads = esm.args.attention_heads
+        intermediate_size = esm.args.ffn_embed_dim
+        token_dropout = esm.args.token_dropout
+        emb_layer_norm_before = True if esm.emb_layer_norm_before else False
+        position_embedding_type = "absolute"
+    else:
+        # Indicates an ESM-2 model
+        embed_dim = esm.embed_dim
+        num_layers = esm.num_layers
+        num_attention_heads = esm.attention_heads
+        intermediate_size = 4 * embed_dim  # This is hardcoded in ESM-2
+        token_dropout = esm.token_dropout
+        emb_layer_norm_before = False  # This code path does not exist in ESM-2
+        position_embedding_type = "rotary"
+
     config = ESMConfig(
         vocab_size=esm_sent_encoder.embed_tokens.num_embeddings,
         mask_token_id=alphabet.mask_idx,
-        hidden_size=esm.args.embed_dim,
-        num_hidden_layers=esm.args.layers,
-        num_attention_heads=esm.args.attention_heads,
-        intermediate_size=esm.args.ffn_embed_dim,
+        hidden_size=embed_dim,
+        num_hidden_layers=num_layers,
+        num_attention_heads=num_attention_heads,
+        intermediate_size=intermediate_size,
         max_position_embeddings=1026,
         layer_norm_eps=1e-5,  # PyTorch default used in fairseq
         attention_probs_dropout_prob=0.0,
         hidden_dropout_prob=0.,
         pad_token_id=esm.padding_idx,
-        emb_layer_norm_before=True if esm.emb_layer_norm_before else False,
-        token_dropout=esm.args.token_dropout,
+        emb_layer_norm_before=emb_layer_norm_before,
+        token_dropout=token_dropout,
+        position_embedding_type=position_embedding_type
     )
     if classification_head:
         config.num_labels = esm.classification_heads["mnli"].out_proj.weight.shape[0]
@@ -95,7 +121,8 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
     # Now let's copy all the weights.
     # Embeddings
     model.esm.embeddings.word_embeddings.weight = esm_sent_encoder.embed_tokens.weight
-    model.esm.embeddings.position_embeddings.weight = esm_sent_encoder.embed_positions.weight
+    if position_embedding_type == "absolute":
+        model.esm.embeddings.position_embeddings.weight = esm_sent_encoder.embed_positions.weight
 
     if config.emb_layer_norm_before:
         model.esm.embeddings.layer_norm.weight = esm_sent_encoder.emb_layer_norm_before.weight
@@ -200,6 +227,7 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
     print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
     success = torch.allclose(our_output, their_output, atol=3e-4)
     print("Do both models output the same tensors?", "🔥" if success else "💩")
+    breakpoint()
     if not success:
         raise Exception("Something went wRoNg")
 

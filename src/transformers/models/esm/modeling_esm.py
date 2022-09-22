@@ -134,6 +134,65 @@ def load_tf_weights_in_esm(model, config, tf_checkpoint_path):
     return model
 
 
+class RotaryEmbedding(torch.nn.Module):
+    """
+    The rotary position embeddings from RoFormer_ (Su et. al).
+    A crucial insight from the method is that the query and keys are
+    transformed by rotation matrices which depend on the relative positions.
+    Other implementations are available in the Rotary Transformer repo_ and in
+    GPT-NeoX_, GPT-NeoX was an inspiration
+    .. _RoFormer: https://arxiv.org/abs/2104.09864
+    .. _repo: https://github.com/ZhuiyiTechnology/roformer
+    .. _GPT-NeoX: https://github.com/EleutherAI/gpt-neox
+    .. warning: Please note that this embedding is not registered on purpose, as it is transformative
+        (it does not create the embedding dimension) and will likely be picked up (imported) on a ad-hoc basis
+    """
+
+    def __init__(self, dim: int, *_, **__):
+        super().__init__()
+        # Generate and save the inverse frequency buffer (non trainable)
+        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2).float() / dim))
+        self.register_buffer("inv_freq", inv_freq)
+
+        self._seq_len_cached = None
+        self._cos_cached = None
+        self._sin_cached = None
+
+    @staticmethod
+    def rotate_half(x):
+        x1, x2 = x.chunk(2, dim=-1)
+        return torch.cat((-x2, x1), dim=-1)
+
+    def apply_rotary_pos_emb(self, x, cos, sin):
+        cos = cos[:, : x.shape[-2], :]
+        sin = sin[:, : x.shape[-2], :]
+
+        return (x * cos) + (self.rotate_half(x) * sin)
+
+    def _update_cos_sin_tables(self, x, seq_dimension=1):
+        seq_len = x.shape[seq_dimension]
+
+        # Reset the tables if the sequence length has changed,
+        # or if we're on a new device (possibly due to tracing for instance)
+        if seq_len != self._seq_len_cached or self._cos_cached.device != x.device:
+            self._seq_len_cached = seq_len
+            t = torch.arange(x.shape[seq_dimension], device=x.device).type_as(self.inv_freq)
+            freqs = torch.einsum("i,j->ij", t, self.inv_freq)
+            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
+
+            self._cos_cached = emb.cos()[None, :, :]
+            self._sin_cached = emb.sin()[None, :, :]
+
+        return self._cos_cached, self._sin_cached
+
+    def forward(self, q: torch.Tensor, k: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        self._cos_cached, self._sin_cached = self._update_cos_sin_tables(k, seq_dimension=-2)
+
+        return (
+            self.apply_rotary_pos_emb(q, self._cos_cached, self._sin_cached),
+            self.apply_rotary_pos_emb(k, self._cos_cached, self._sin_cached),
+        )
+
 class ESMEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
@@ -243,9 +302,12 @@ class ESMSelfAttention(nn.Module):
         self.position_embedding_type = position_embedding_type or getattr(
             config, "position_embedding_type", "absolute"
         )
+        self.rotary_embeddings = None
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+        elif self.position_embedding_type == "rotary":
+            self.rotary_embeddings = RotaryEmbedding(dim=self.attention_head_size)
 
         self.is_decoder = config.is_decoder
 
@@ -302,6 +364,8 @@ class ESMSelfAttention(nn.Module):
             past_key_value = (key_layer, value_layer)
 
         # Take the dot product between "query" and "key" to get the raw attention scores.
+        if self.position_embedding_type == "rotary":
+            query_layer, key_layer = self.rotary_embeddings(query_layer, key_layer)
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
