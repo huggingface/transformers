@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2021 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Feature extractor class for DETR."""
+"""Feature extractor class for Deformable DETR."""
 
 import io
 import pathlib
@@ -37,7 +37,7 @@ logger = logging.get_logger(__name__)
 ImageInput = Union[Image.Image, np.ndarray, "torch.Tensor", List[Image.Image], List[np.ndarray], List["torch.Tensor"]]
 
 
-# 2 functions below inspired by https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
+# Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
 def center_to_corners_format(x):
     """
     Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
@@ -48,6 +48,7 @@ def center_to_corners_format(x):
     return torch.stack(b, dim=-1)
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.corners_to_center_format
 def corners_to_center_format(x):
     """
     Converts a NumPy array of bounding boxes of shape (number of bounding boxes, 4) of corners format (x_0, y_0, x_1,
@@ -59,6 +60,7 @@ def corners_to_center_format(x):
     return np.stack(b, axis=-1)
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.masks_to_boxes
 def masks_to_boxes(masks):
     """
     Compute the bounding boxes around the provided panoptic segmentation masks.
@@ -92,9 +94,7 @@ def masks_to_boxes(masks):
     return np.stack([x_min, y_min, x_max, y_max], 1)
 
 
-# 2 functions below copied from https://github.com/cocodataset/panopticapi/blob/master/panopticapi/utils.py
-# Copyright (c) 2018, Alexander Kirillov
-# All rights reserved.
+# Copied from transformers.models.detr.feature_extraction_detr.rgb_to_id
 def rgb_to_id(color):
     if isinstance(color, np.ndarray) and len(color.shape) == 3:
         if color.dtype == np.uint8:
@@ -103,6 +103,7 @@ def rgb_to_id(color):
     return int(color[0] + 256 * color[1] + 256 * 256 * color[2])
 
 
+# Copied from transformers.models.detr.feature_extraction_detr.id_to_rgb
 def id_to_rgb(id_map):
     if isinstance(id_map, np.ndarray):
         id_map_copy = id_map.copy()
@@ -119,13 +120,13 @@ def id_to_rgb(id_map):
     return color
 
 
-class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
+class DeformableDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
-    Constructs a DETR feature extractor.
+    Constructs a Deformable DETR feature extractor. Differs only in the postprocessing of object detection compared to
+    DETR.
 
     This feature extractor inherits from [`FeatureExtractionMixin`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
-
 
     Args:
         format (`str`, *optional*, defaults to `"coco_detection"`):
@@ -151,6 +152,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     model_input_names = ["pixel_values", "pixel_mask"]
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.__init__
     def __init__(
         self,
         format="coco_detection",
@@ -171,11 +173,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         self.image_mean = image_mean if image_mean is not None else [0.485, 0.456, 0.406]  # ImageNet mean
         self.image_std = image_std if image_std is not None else [0.229, 0.224, 0.225]  # ImageNet std
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._is_valid_format
     def _is_valid_format(self, format):
         if format not in ["coco_detection", "coco_panoptic"]:
             raise ValueError(f"Format {format} not supported")
         return format
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.prepare
     def prepare(self, image, target, return_segmentation_masks=False, masks_path=None):
         if self.format == "coco_detection":
             image, target = self.prepare_coco_detection(image, target, return_segmentation_masks)
@@ -186,7 +190,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         else:
             raise ValueError(f"Format {self.format} not supported")
 
-    # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L33
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.convert_coco_poly_to_mask
     def convert_coco_poly_to_mask(self, segmentations, height, width):
 
         try:
@@ -210,7 +214,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return masks
 
-    # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L50
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.prepare_coco_detection
     def prepare_coco_detection(self, image, target, return_segmentation_masks=False):
         """
         Convert the target in COCO format into the format expected by DETR.
@@ -275,6 +279,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return image, target
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.prepare_coco_panoptic
     def prepare_coco_panoptic(self, image, target, masks_path, return_masks=True):
         w, h = image.size
         ann_info = target.copy()
@@ -308,6 +313,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return image, target
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._resize
     def _resize(self, image, size, target=None, max_size=None):
         """
         Resize the image to the given size. Size can be min_size (scalar) or (w, h) tuple. If size is an int, smaller
@@ -378,6 +384,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return rescaled_image, target
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._normalize
     def _normalize(self, image, mean, std, target=None):
         """
         Normalize the image with a certain mean and std.
@@ -400,6 +407,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return image, target
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.__call__
     def __call__(
         self,
         images: ImageInput,
@@ -622,6 +630,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return encoded_inputs
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor._max_by_axis
     def _max_by_axis(self, the_list):
         # type: (List[List[int]]) -> List[int]
         maxes = the_list[0]
@@ -630,6 +639,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 maxes[index] = max(maxes[index], item)
         return maxes
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.pad_and_create_pixel_mask
     def pad_and_create_pixel_mask(
         self, pixel_values_list: List["torch.Tensor"], return_tensors: Optional[Union[str, TensorType]] = None
     ):
@@ -672,21 +682,18 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return encoded_inputs
 
-    # POSTPROCESSING METHODS
-    # inspired by https://github.com/facebookresearch/detr/blob/master/models/detr.py#L258
     def post_process(self, outputs, target_sizes):
         """
-        Converts the output of [`DetrForObjectDetection`] into the format expected by the COCO api. Only supports
-        PyTorch.
+        Converts the output of [`DeformableDetrForObjectDetection`] into the format expected by the COCO api. Only
+        supports PyTorch.
 
         Args:
-            outputs ([`DetrObjectDetectionOutput`]):
+            outputs ([`DeformableDetrObjectDetectionOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
                 Tensor containing the size (height, width) of each image of the batch. For evaluation, this must be the
                 original image size (before any data augmentation). For visualization, this should be the image size
                 after data augment, but before padding.
-
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
@@ -698,11 +705,14 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if target_sizes.shape[1] != 2:
             raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
 
-        prob = nn.functional.softmax(out_logits, -1)
-        scores, labels = prob[..., :-1].max(-1)
-
-        # convert to [x0, y0, x1, y1] format
+        prob = out_logits.sigmoid()
+        topk_values, topk_indexes = torch.topk(prob.view(out_logits.shape[0], -1), 100, dim=1)
+        scores = topk_values
+        topk_boxes = topk_indexes // out_logits.shape[2]
+        labels = topk_indexes % out_logits.shape[2]
         boxes = center_to_corners_format(out_bbox)
+        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
+
         # and from relative [0, 1] to absolute [0, height] coordinates
         img_h, img_w = target_sizes.unbind(1)
         scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
@@ -712,12 +722,14 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return results
 
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_segmentation with Detr->DeformableDetr
     def post_process_segmentation(self, outputs, target_sizes, threshold=0.9, mask_threshold=0.5):
         """
-        Converts the output of [`DetrForSegmentation`] into image segmentation predictions. Only supports PyTorch.
+        Converts the output of [`DeformableDetrForSegmentation`] into image segmentation predictions. Only supports
+        PyTorch.
 
         Parameters:
-            outputs ([`DetrSegmentationOutput`]):
+            outputs ([`DeformableDetrSegmentationOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
                 Torch Tensor (or list) corresponding to the requested final size (h, w) of each prediction.
@@ -753,17 +765,17 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             preds.append(predictions)
         return preds
 
-    # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L218
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_instance with Detr->DeformableDetr
     def post_process_instance(self, results, outputs, orig_target_sizes, max_target_sizes, threshold=0.5):
         """
-        Converts the output of [`DetrForSegmentation`] into actual instance segmentation predictions. Only supports
-        PyTorch.
+        Converts the output of [`DeformableDetrForSegmentation`] into actual instance segmentation predictions. Only
+        supports PyTorch.
 
         Args:
             results (`List[Dict]`):
-                Results list obtained by [`~DetrFeatureExtractor.post_process`], to which "masks" results will be
-                added.
-            outputs ([`DetrSegmentationOutput`]):
+                Results list obtained by [`~DeformableDetrFeatureExtractor.post_process`], to which "masks" results
+                will be added.
+            outputs ([`DeformableDetrSegmentationOutput`]):
                 Raw outputs of the model.
             orig_target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
                 Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
@@ -797,13 +809,14 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         return results
 
-    # inspired by https://github.com/facebookresearch/detr/blob/master/models/segmentation.py#L241
+    # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_panoptic with Detr->DeformableDetr
     def post_process_panoptic(self, outputs, processed_sizes, target_sizes=None, is_thing_map=None, threshold=0.85):
         """
-        Converts the output of [`DetrForSegmentation`] into actual panoptic predictions. Only supports PyTorch.
+        Converts the output of [`DeformableDetrForSegmentation`] into actual panoptic predictions. Only supports
+        PyTorch.
 
         Parameters:
-            outputs ([`DetrSegmentationOutput`]):
+            outputs ([`DeformableDetrSegmentationOutput`]):
                 Raw outputs of the model.
             processed_sizes (`torch.Tensor` of shape `(batch_size, 2)` or `List[Tuple]` of length `batch_size`):
                 Torch Tensor (or list) containing the size (h, w) of each image of the batch, i.e. the size after data

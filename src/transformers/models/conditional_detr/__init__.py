@@ -22,7 +22,11 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_timm_availa
 
 
 _import_structure = {
-    "configuration_deformable_detr": ["DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "DeformableDetrConfig"],
+    "configuration_conditional_detr": [
+        "CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "ConditionalDetrConfig",
+        "ConditionalDetrOnnxConfig",
+    ]
 }
 
 try:
@@ -31,7 +35,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_deformable_detr"] = ["DeformableDetrFeatureExtractor"]
+    _import_structure["feature_extraction_conditional_detr"] = ["ConditionalDetrFeatureExtractor"]
 
 try:
     if not is_timm_available():
@@ -39,16 +43,21 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_deformable_detr"] = [
-        "DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "DeformableDetrForObjectDetection",
-        "DeformableDetrModel",
-        "DeformableDetrPreTrainedModel",
+    _import_structure["modeling_conditional_detr"] = [
+        "CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
+        "ConditionalDetrForObjectDetection",
+        "ConditionalDetrForSegmentation",
+        "ConditionalDetrModel",
+        "ConditionalDetrPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_deformable_detr import DEFORMABLE_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, DeformableDetrConfig
+    from .configuration_conditional_detr import (
+        CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        ConditionalDetrConfig,
+        ConditionalDetrOnnxConfig,
+    )
 
     try:
         if not is_vision_available():
@@ -56,7 +65,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .feature_extraction_deformable_detr import DeformableDetrFeatureExtractor
+        from .feature_extraction_conditional_detr import ConditionalDetrFeatureExtractor
 
     try:
         if not is_timm_available():
@@ -64,11 +73,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_deformable_detr import (
-            DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            DeformableDetrForObjectDetection,
-            DeformableDetrModel,
-            DeformableDetrPreTrainedModel,
+        from .modeling_conditional_detr import (
+            CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
+            ConditionalDetrForObjectDetection,
+            ConditionalDetrForSegmentation,
+            ConditionalDetrModel,
+            ConditionalDetrPreTrainedModel,
         )
 
 else:
