@@ -115,6 +115,7 @@ class WhisperConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=10000,
+        feature_size=1,
         num_mel_bins=80,
         encoder_layers=12,
         encoder_attention_heads=4,
@@ -162,6 +163,7 @@ class WhisperConfig(PretrainedConfig):
         self.input_channels = input_channels
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
+        self.feature_size = feature_size
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
