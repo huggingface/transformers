@@ -134,6 +134,20 @@ def load_tf_weights_in_esm(model, config, tf_checkpoint_path):
     return model
 
 
+
+
+def rotate_half(x):
+    x1, x2 = x.chunk(2, dim=-1)
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(x, cos, sin):
+    cos = cos[:, :, : x.shape[-2], :]
+    sin = sin[:, :, : x.shape[-2], :]
+
+    return (x * cos) + (rotate_half(x) * sin)
+
+
 class RotaryEmbedding(torch.nn.Module):
     """
     The rotary position embeddings from RoFormer_ (Su et. al).
@@ -152,24 +166,15 @@ class RotaryEmbedding(torch.nn.Module):
         super().__init__()
         # Generate and save the inverse frequency buffer (non trainable)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2).float() / dim))
+        # Disgusting hack to match the ESM repo, which converts to fp16 at some point and loses this precision
+        inv_freq = inv_freq.half().float()
         self.register_buffer("inv_freq", inv_freq)
 
         self._seq_len_cached = None
         self._cos_cached = None
         self._sin_cached = None
 
-    @staticmethod
-    def rotate_half(x):
-        x1, x2 = x.chunk(2, dim=-1)
-        return torch.cat((-x2, x1), dim=-1)
-
-    def apply_rotary_pos_emb(self, x, cos, sin):
-        cos = cos[:, : x.shape[-2], :]
-        sin = sin[:, : x.shape[-2], :]
-
-        return (x * cos) + (self.rotate_half(x) * sin)
-
-    def _update_cos_sin_tables(self, x, seq_dimension=1):
+    def _update_cos_sin_tables(self, x, seq_dimension=2):
         seq_len = x.shape[seq_dimension]
 
         # Reset the tables if the sequence length has changed,
@@ -180,8 +185,8 @@ class RotaryEmbedding(torch.nn.Module):
             freqs = torch.einsum("i,j->ij", t, self.inv_freq)
             emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
 
-            self._cos_cached = emb.cos()[None, :, :]
-            self._sin_cached = emb.sin()[None, :, :]
+            self._cos_cached = emb.cos()[None, None, :, :]
+            self._sin_cached = emb.sin()[None, None, :, :]
 
         return self._cos_cached, self._sin_cached
 
@@ -189,8 +194,8 @@ class RotaryEmbedding(torch.nn.Module):
         self._cos_cached, self._sin_cached = self._update_cos_sin_tables(k, seq_dimension=-2)
 
         return (
-            self.apply_rotary_pos_emb(q, self._cos_cached, self._sin_cached),
-            self.apply_rotary_pos_emb(k, self._cos_cached, self._sin_cached),
+            apply_rotary_pos_emb(q, self._cos_cached, self._sin_cached),
+            apply_rotary_pos_emb(k, self._cos_cached, self._sin_cached),
         )
 
 class ESMEmbeddings(nn.Module):
@@ -326,6 +331,7 @@ class ESMSelfAttention(nn.Module):
         past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
+
         mixed_query_layer = self.query(hidden_states)
 
         # If this is instantiated as a cross-attention module, the keys
@@ -353,6 +359,13 @@ class ESMSelfAttention(nn.Module):
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
 
+        # Matt: Our BERT model (which this code was derived from) scales attention logits down by sqrt(head_dim).
+        # ESM scales the query down by the same factor instead. Modulo numerical stability these are equivalent,
+        # but not when rotary embeddings get involved. Therefore, we scale the query here to match the original
+        # ESM code and fix rotary embeddings.
+        query_layer = query_layer * self.attention_head_size**-0.5
+
+
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -363,9 +376,10 @@ class ESMSelfAttention(nn.Module):
             # if encoder bi-directional self-attention `past_key_value` is always `None`
             past_key_value = (key_layer, value_layer)
 
-        # Take the dot product between "query" and "key" to get the raw attention scores.
         if self.position_embedding_type == "rotary":
             query_layer, key_layer = self.rotary_embeddings(query_layer, key_layer)
+
+        # Take the dot product between "query" and "key" to get the raw attention scores.
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
@@ -384,7 +398,7 @@ class ESMSelfAttention(nn.Module):
                 relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
+
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in ESMModel forward() function)
             attention_scores = attention_scores + attention_mask

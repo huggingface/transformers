@@ -227,7 +227,7 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
     print(f"max_absolute_diff = {max_absolute_diff}")  # ~ 1e-5
     success = torch.allclose(our_output, their_output, atol=3e-4)
     print("Do both models output the same tensors?", "🔥" if success else "💩")
-    breakpoint()
+
     if not success:
         raise Exception("Something went wRoNg")
 
