@@ -51,7 +51,6 @@ TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 class AffineTransformed(TransformedDistribution):
     def __init__(self, base_distribution: Distribution, loc=None, scale=None):
-
         self.scale = 1.0 if scale is None else scale
         self.loc = 0.0 if loc is None else loc
 
@@ -1494,14 +1493,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         )
         return encoder_outputs, decoder_outputs
 
-    def get_input_embeddings(self):
-        return self.shared
-
-    def set_input_embeddings(self, value):
-        self.shared = value
-        self.encoder.embed_tokens = self.shared
-        self.decoder.embed_tokens = self.shared
-
     def get_encoder(self):
         return self.encoder
 
@@ -1526,7 +1517,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         output_hidden_states: bool = False,
         use_cache: bool = False,
-        output_attentions: bool = False,
+        output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
         transformer_inputs, scale, static_feat = self.create_network_inputs(
