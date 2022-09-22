@@ -2040,7 +2040,19 @@ class Trainer:
 
         metrics = None
         if self.control.should_evaluate:
-            metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+            if isinstance(self.eval_dataset, dict):
+                for eval_dataset_name, eval_dataset in self.eval_dataset.items():
+                    evaluate_kwargs = {}
+                    if isinstance(self.compute_metrics, dict):
+                        evaluate_kwargs["compute_metrics"] = self.compute_metrics[eval_dataset_name]
+                    metrics = self.evaluate(
+                        eval_dataset=eval_dataset,
+                        ignore_keys=ignore_keys_for_eval,
+                        metric_key_prefix=f"eval_{eval_dataset_name}",
+                        **evaluate_kwargs
+                    )
+            else:
+                metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
             self._report_to_hp_search(trial, self.state.global_step, metrics)
 
         if self.control.should_save:
@@ -2730,6 +2742,7 @@ class Trainer:
         eval_dataset: Optional[Dataset] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
+        compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
     ) -> Dict[str, float]:
         """
         Run evaluation and returns metrics.
@@ -2759,6 +2772,8 @@ class Trainer:
         self._memory_tracker.start()
 
         eval_dataloader = self.get_eval_dataloader(eval_dataset)
+        compute_metrics = compute_metrics if compute_metrics is not None else self.compute_metrics
+
         start_time = time.time()
 
         eval_loop = self.prediction_loop if self.args.use_legacy_prediction_loop else self.evaluation_loop
@@ -2767,9 +2782,10 @@ class Trainer:
             description="Evaluation",
             # No point gathering the predictions if there are no metrics, otherwise we defer to
             # self.args.prediction_loss_only
-            prediction_loss_only=True if self.compute_metrics is None else None,
+            prediction_loss_only=True if compute_metrics is None else None,
             ignore_keys=ignore_keys,
             metric_key_prefix=metric_key_prefix,
+            compute_metrics=compute_metrics,
         )
 
         total_batch_size = self.args.eval_batch_size * self.args.world_size
@@ -2861,6 +2877,7 @@ class Trainer:
         prediction_loss_only: Optional[bool] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
+        compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
     ) -> EvalLoopOutput:
         """
         Prediction/evaluation loop, shared by `Trainer.evaluate()` and `Trainer.predict()`.
@@ -3041,13 +3058,13 @@ class Trainer:
             all_inputs = nested_truncate(all_inputs, num_samples)
 
         # Metrics!
-        if self.compute_metrics is not None and all_preds is not None and all_labels is not None:
+        if compute_metrics is not None and all_preds is not None and all_labels is not None:
             if args.include_inputs_for_metrics:
-                metrics = self.compute_metrics(
+                metrics = compute_metrics(
                     EvalPrediction(predictions=all_preds, label_ids=all_labels, inputs=all_inputs)
                 )
             else:
-                metrics = self.compute_metrics(EvalPrediction(predictions=all_preds, label_ids=all_labels))
+                metrics = compute_metrics(EvalPrediction(predictions=all_preds, label_ids=all_labels))
         else:
             metrics = {}
 
