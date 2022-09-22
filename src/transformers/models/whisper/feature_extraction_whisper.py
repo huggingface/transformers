@@ -20,7 +20,6 @@ from typing import List, Optional, Union
 
 import numpy as np
 import torch
-import torchaudio.compliance.kaldi as ta_kaldi
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
