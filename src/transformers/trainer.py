@@ -255,8 +255,8 @@ class Trainer:
             inner layers, dropout probabilities etc).
         compute_metrics (`Union[Callable[[EvalPrediction], Dict], Dict[str, Callable[[EvalPrediction], Dict]]]`, *optional*):
             The function that will be used to compute metrics at evaluation. Must take a [`EvalPrediction`] and return
-            a dictionary string to metric values. If `eval_dataset` is a dict, each dataset can be evaluated with a seperate
-            compute function. The keys in `eval_dataset` and `compute_metrics` must match.
+            a dictionary string to metric values. If `eval_dataset` is a dict, each dataset can be evaluated with a
+            separate compute function. The keys in `eval_dataset` and `compute_metrics` must match.
         callbacks (List of [`TrainerCallback`], *optional*):
             A list of callbacks to customize the training loop. Will add those to the list of default callbacks
             detailed in [here](callback).
@@ -2051,7 +2051,7 @@ class Trainer:
                         eval_dataset=eval_dataset,
                         ignore_keys=ignore_keys_for_eval,
                         metric_key_prefix=f"eval_{eval_dataset_name}",
-                        **evaluate_kwargs
+                        **evaluate_kwargs,
                     )
             else:
                 metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
@@ -2760,7 +2760,7 @@ class Trainer:
                 not accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
                 method.
             compute_metrics (`Callable[[EvalPrediction], Dict]`, *optional*, defaults to `None`):
-                Pass a compute_metric function if you wish to override `self.compute_metrics`. Used when 
+                Pass a compute_metric function if you wish to override `self.compute_metrics`. Used when
                 `self.eval_dataset` holds multiple datasets.
             ignore_keys (`Lst[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when

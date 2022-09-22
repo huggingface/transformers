@@ -50,7 +50,7 @@ class Seq2SeqTrainer(Trainer):
                 not accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
                 method.
             compute_metrics (`Callable[[EvalPrediction], Dict]`, *optional*, defaults to `None`):
-                Pass a compute_metric function if you wish to override `self.compute_metrics`. Used when 
+                Pass a compute_metric function if you wish to override `self.compute_metrics`. Used when
                 `self.eval_dataset` holds multiple datasets.
             ignore_keys (`List[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
@@ -79,7 +79,9 @@ class Seq2SeqTrainer(Trainer):
         )
         self._gen_kwargs = gen_kwargs
 
-        return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix, compute_metrics=compute_metrics)
+        return super().evaluate(
+            eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix, compute_metrics=compute_metrics
+        )
 
     def predict(
         self,
