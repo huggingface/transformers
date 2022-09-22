@@ -26,7 +26,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...pytorch_utils import (
     apply_chunking_to_forward,
@@ -1048,6 +1048,7 @@ class FANPreTrainedModel(PreTrainedModel):
             module.gradient_checkpointing = value
 
 
+# TODO: Update FAN Start Docstring
 FAN_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) sub-class.
     Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general
@@ -1059,6 +1060,7 @@ FAN_START_DOCSTRING = r"""
             Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
+# TODO: Update FAN Inputs Docstring
 FAN_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `({0})`):
@@ -1319,6 +1321,7 @@ class FANEncoder(FANPreTrainedModel):
     FAN_START_DOCSTRING,
 )
 class FANModel(FANPreTrainedModel):
+    # TODO: Update  Docstring
     """
 
     The model can behave as an encoder (with only self-attention) as well
@@ -1420,4 +1423,108 @@ class FANModel(FANPreTrainedModel):
             last_hidden_state=sequence_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
+        )
+
+
+class FANClassificationHead(nn.Module):
+    """
+    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
+    height and width of a bounding box w.r.t. an image.
+
+    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+
+    """
+
+    def __init__(self, num_classes, num_features, norm_layer):
+        super().__init__()
+        norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6)
+        self.norm = norm_layer(num_features)
+        self.head = nn.Linear(num_features, num_classes) if num_classes > 0 else nn.Identity()
+
+    def forward(self, x):
+        x = self.norm(x)[:, 0]
+        x = self.head(x)
+        return x
+
+
+# TODO: Update Image Classification Docstring
+@add_start_docstrings(
+    """
+    DeiT Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
+    the [CLS] token) e.g. for ImageNet.
+    """,
+    FAN_START_DOCSTRING,
+)
+class FANForImageClassification(FANPreTrainedModel):
+    def __init__(self, config: FANConfig):
+        super().__init__(config)
+
+        # DETR encoder-decoder model
+        self.model = FANModel(config)
+
+        num_features = config.embed_dim if config.channel_dims is None else config.channel_dims[-1]
+        # Object detection heads
+        self.head = FANClassificationHead(config.num_classes, num_features, config.norm_layer)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(FAN_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=ImageClassifierOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values,
+        pixel_mask=None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+    ):
+        # TODO: Update Docstring appropiately
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import DeiTFeatureExtractor, DeiTForImageClassification
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> # note: we are loading a DeiTForImageClassificationWithTeacher from the hub here,
+        >>> # so the head will be randomly initialized, hence the predictions will be random
+        >>> feature_extractor = DeiTFeatureExtractor.from_pretrained("facebook/deit-base-distilled-patch16-224")
+        >>> model = DeiTForImageClassification.from_pretrained("facebook/deit-base-distilled-patch16-224")
+
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits
+        >>> # model predicts one of the 1000 ImageNet classes
+        >>> predicted_class_idx = logits.argmax(-1).item()
+        >>> print("Predicted class:", model.config.id2label[predicted_class_idx])
+        Predicted class: maillot
+        ```"""
+
+        outputs = self.model(
+            pixel_values, pixel_mask=None, output_attentions=None, output_hidden_states=None, return_dict=None
+        )
+        logits = self.head(outputs.last_hidden_state)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.config.num_classes), labels.view(-1))
+
+        return ImageClassifierOutput(
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )

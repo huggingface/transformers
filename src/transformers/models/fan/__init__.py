@@ -18,10 +18,7 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import  _LazyModule, OptionalDependencyNotAvailable, is_tokenizers_available
-from ...utils import is_torch_available
-
-
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
 
 
 _import_structure = {
@@ -45,19 +42,12 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_fan"] = [
         "FAN_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "FANForMaskedLM",
-        "FANForCausalLM",
-        "FANForMultipleChoice",
-        "FANForQuestionAnswering",
-        "FANForSequenceClassification",
-        "FANForTokenClassification",
+        "FANForImageClassification",
         "FANLayer",
         "FANModel",
         "FANPreTrainedModel",
         "load_tf_weights_in_fan",
     ]
-
-
 
 
 if TYPE_CHECKING:
@@ -80,18 +70,12 @@ if TYPE_CHECKING:
     else:
         from .modeling_fan import (
             FAN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FANForMaskedLM,
-            FANForCausalLM,
-            FANForMultipleChoice,
-            FANForQuestionAnswering,
-            FANForSequenceClassification,
-            FANForTokenClassification,
+            FANForImageClassification,
             FANLayer,
             FANModel,
             FANPreTrainedModel,
             load_tf_weights_in_fan,
         )
-
 
 
 else:
