@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch TimeSeriesTransformer model. """
+""" PyTorch TimeSeriesTransformer model."""
 
 import random
 from dataclasses import dataclass
@@ -145,34 +145,31 @@ class DistributionOutput(Output):
     @property
     def event_shape(self) -> Tuple:
         r"""
-        Shape of each individual event contemplated by the distributions
-        that this object constructs.
+        Shape of each individual event contemplated by the distributions that this object constructs.
         """
         raise NotImplementedError()
 
     @property
     def event_dim(self) -> int:
         r"""
-        Number of event dimensions, i.e., length of the `event_shape` tuple,
-        of the distributions that this object constructs.
+        Number of event dimensions, i.e., length of the `event_shape` tuple, of the distributions that this object
+        constructs.
         """
         return len(self.event_shape)
 
     @property
     def value_in_support(self) -> float:
         r"""
-        A float that will have a valid numeric value when computing the
-        log-loss of the corresponding distribution. By default 0.0.
-        This value will be used when padding data series.
+        A float that will have a valid numeric value when computing the log-loss of the corresponding distribution. By
+        default 0.0. This value will be used when padding data series.
         """
         return 0.0
 
     def domain_map(self, *args: torch.Tensor):
         r"""
-        Converts arguments to the right shape and domain. The domain depends
-        on the type of distribution, while the correct shape is obtained by
-        reshaping the trailing axis in such a way that the returned tensors
-        define a distribution of the right event_shape.
+        Converts arguments to the right shape and domain. The domain depends on the type of distribution, while the
+        correct shape is obtained by reshaping the trailing axis in such a way that the returned tensors define a
+        distribution of the right event_shape.
         """
         raise NotImplementedError()
 
@@ -222,18 +219,13 @@ class FeatureEmbedder(nn.Module):
 
 class MeanScaler(nn.Module):
     """
-    Computes a scaling factor as the weighted average absolute value along
-    dimension ``dim``, and scales the data accordingly.
-    Parameters
-    ----------
-    dim
+    Computes a scaling factor as the weighted average absolute value along dimension ``dim``, and scales the data
+    accordingly. Parameters ---------- dim
         dimension along which to compute the scale
     keepdim
-        controls whether to retain dimension ``dim`` (of length 1) in the
-        scale tensor, or suppress it.
+        controls whether to retain dimension ``dim`` (of length 1) in the scale tensor, or suppress it.
     minimum_scale
-        default scale that is used for elements that are constantly zero
-        along dimension ``dim``.
+        default scale that is used for elements that are constantly zero along dimension ``dim``.
     """
 
     def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-10):
@@ -277,15 +269,11 @@ class MeanScaler(nn.Module):
 
 class NOPScaler(nn.Module):
     """
-    Assigns a scaling factor equal to 1 along dimension ``dim``, and therefore
-    applies no scaling to the input data.
-    Parameters
-    ----------
-    dim
+    Assigns a scaling factor equal to 1 along dimension ``dim``, and therefore applies no scaling to the input data.
+    Parameters ---------- dim
         dimension along which to compute the scale
     keepdim
-        controls whether to retain dimension ``dim`` (of length 1) in the
-        scale tensor, or suppress it.
+        controls whether to retain dimension ``dim`` (of length 1) in the scale tensor, or suppress it.
     """
 
     def __init__(self, dim: int, keepdim: bool = False):
@@ -303,20 +291,14 @@ class NOPScaler(nn.Module):
 
 def _weighted_average(x: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
     """
-    Computes the weighted average of a given tensor across a given dim, masking
-    values associated with weight zero,
-    meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
-    Parameters
-    ----------
-    x
+    Computes the weighted average of a given tensor across a given dim, masking values associated with weight zero,
+    meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`. Parameters ---------- x
         Input tensor, of which the average must be computed.
     weights
         Weights tensor, of the same shape as `x`.
     dim
         The dim along which to average `x`
-    Returns
-    -------
-    Tensor:
+    Returns ------- Tensor:
         The tensor with values averaged along the specified `dim`.
     """
     if weights is not None:
@@ -329,14 +311,9 @@ def _weighted_average(x: torch.Tensor, weights: Optional[torch.Tensor] = None, d
 
 class NegativeLogLikelihood:
     """
-    Compute the negative log likelihood loss.
-    Parameters
-    ----------
-    beta: float in range (0, 1)
-        beta parameter from the paper: "On the Pitfalls of Heteroscedastic
-        Uncertainty Estimation with Probabilistic Neural Networks" by
-        Seitzer et al. 2022
-        https://openreview.net/forum?id=aPOpXlnV1T
+    Compute the negative log likelihood loss. Parameters ---------- beta: float in range (0, 1)
+        beta parameter from the paper: "On the Pitfalls of Heteroscedastic Uncertainty Estimation with Probabilistic
+        Neural Networks" by Seitzer et al. 2022 https://openreview.net/forum?id=aPOpXlnV1T
     """
 
     beta: float = 0.0
@@ -716,7 +693,8 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
             hidden_states (`torch.FloatTensor`): input to the layer of shape *(seq_len, batch, embed_dim)*
             attention_mask (`torch.FloatTensor`): attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
-            encoder_hidden_states (`torch.FloatTensor`): cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
+            encoder_hidden_states (`torch.FloatTensor`):
+                cross attention input to the layer of shape *(seq_len, batch, embed_dim)*
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 *(batch, 1, tgt_len, src_len)* where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -834,20 +812,19 @@ class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
 
 
 TIME_SERIES_TRANSFORMER_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic
-    methods the library implements for all its model (such as downloading or saving, resizing the input embeddings,
-    pruning heads etc.)
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module)
-    subclass. Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to
-    general usage and behavior.
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
 
     Parameters:
         config ([`~TimeSeriesTransformerConfig`]):
-            Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model
-            weights.
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 TIME_SERIES_TRANSFORMER_PREDICTION_EXAMPLE = r"""
@@ -856,13 +833,13 @@ TIME_SERIES_TRANSFORMER_PREDICTION_EXAMPLE = r"""
     ```python
     >>> from transformers import TimeSeriesTransformerForPrediction
 
-    >>> model = TimeSeriesTransformerForConditionalGeneration.from_pretrained('huggingface/tst-ett')
+    >>> model = TimeSeriesTransformerForConditionalGeneration.from_pretrained("huggingface/tst-ett")
 
     >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors='pt')
+    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="pt")
 
     >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs['input_ids'], num_beams=4, max_length=5)
+    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
     >>> print(tokenizer.decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
     ```
 """
@@ -873,9 +850,8 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`~TimeSeriesTransformerTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`~TimeSeriesTransformerTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -889,12 +865,12 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             Provide for translation and summarization training. By default, the model will create this tensor by
             shifting the `input_ids` to the right, following the paper.
         decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will
-            also be used by default.
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
 
-            If you want to change padding behavior, you should read [`modeling_time_series_transformer._prepare_decoder_attention_mask`] and
-            modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
+            If you want to change padding behavior, you should read
+            [`modeling_time_series_transformer._prepare_decoder_attention_mask`] and modify to your needs. See diagram
+            1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
         head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -914,33 +890,35 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*:
-            `attentions`) `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`,
-            *optional*) is a sequence of hidden-states at the output of the last layer of the encoder. Used in the
-            cross-attention of the decoder.
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors
-            of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
-            shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
 
             Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids`
-            (those that don't have their past key value states given to this model) of shape `(batch_size, 1)`
-            instead of all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more control over how to convert `input_ids` indices into associated
-            vectors than the model's internal embedding lookup matrix.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
+            shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids`
+            you can choose to directly pass an embedded representation. This is useful if you want more control over
+            how to convert `input_ids` indices into associated vectors than the model's internal embedding lookup
+            matrix.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds`
-            have to be input (see `past_key_values`). This is useful if you want more control over how to convert
+            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
+            input (see `past_key_values`). This is useful if you want more control over how to convert
             `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
 
-            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds`
-            takes the value of `inputs_embeds`.
+            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
+            of `inputs_embeds`.
         use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up
-            decoding (see `past_key_values`).
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -958,9 +936,8 @@ TIME_SERIES_TRANSFORMER_STANDALONE_INPUTS_DOCSTRING = r"""
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
 
-            Indices can be obtained using [`ProphetNetTokenizer`]. See
-            [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for
-            details.
+            Indices can be obtained using [`ProphetNetTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1031,9 +1008,9 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
                 - 0 indicates the head is **masked**.
 
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded
-                representation. This is useful if you want more control over how to convert `input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1115,7 +1092,8 @@ class TimeSeriesTransformerEncoder(TimeSeriesTransformerPreTrainedModel):
 
 class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TimeSeriesTransformerDecoderLayer`]
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a
+    [`TimeSeriesTransformerDecoderLayer`]
 
     Args:
         config: TimeSeriesTransformerConfig
@@ -1199,19 +1177,20 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
                 - 0 indicates the head is **masked**.
 
             past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2
-                tensors of shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional
-                tensors of shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
+                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
 
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
-                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential
-                decoding.
+                cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
 
-                If `past_key_values` are used, the user can optionally input only the last
-                `decoder_input_ids` (those that don't have their past key value states given to this model) of
-                shape `(batch_size, 1)` instead of all ``decoder_input_ids``` of shape `(batch_size,
-                sequence_length)`. inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more control over how to convert `input_ids` indices
-                into associated vectors than the model's internal embedding lookup matrix.
+                If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
+                that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
+                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor`
+                of shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
+                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
+                control over how to convert `input_ids` indices into associated vectors than the model's internal
+                embedding lookup matrix.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -1371,22 +1350,15 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
     ) -> torch.Tensor:
         """
-        Returns lagged subsequences of a given sequence.
-        Parameters
-        ----------
-        sequence : Tensor
-            the sequence from which lagged subsequences should be extracted.
-            Shape: (N, T, C).
+        Returns lagged subsequences of a given sequence. Parameters ---------- sequence : Tensor
+            the sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
         subsequences_length : int
             length of the subsequences to be extracted.
         shift: int
             shift the lags by this amount back.
-        Returns
-        --------
-        lagged : Tensor
-            a tensor of shape (N, S, C, I), where S = subsequences_length and
-            I = len(indices), containing lagged subsequences. Specifically,
-            lagged[i, j, :, k] = sequence[i, -indices[k]-S+j, :].
+        Returns -------- lagged : Tensor
+            a tensor of shape (N, S, C, I), where S = subsequences_length and I = len(indices), containing lagged
+            subsequences. Specifically, lagged[i, j, :, k] = sequence[i, -indices[k]-S+j, :].
         """
         sequence_length = sequence.shape[1]
         indices = [lag - shift for lag in self.config.lags_seq]

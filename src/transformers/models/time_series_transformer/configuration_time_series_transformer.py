@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TimeSeriesTransformer model configuration """
+""" TimeSeriesTransformer model configuration"""
 from typing import List, Optional
 
 from ...configuration_utils import PretrainedConfig
@@ -29,30 +29,32 @@ TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class TimeSeriesTransformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~TimeSeriesTransformerModel`].
-    It is used to instantiate a TimeSeriesTransformer model according to the specified arguments, defining the model
-    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of
-    the TimeSeriesTransformer [huggingface/tst-ett](https://huggingface.co/huggingface/tst-ett) architecture.
+    This is the configuration class to store the configuration of a [`~TimeSeriesTransformerModel`]. It is used to
+    instantiate a TimeSeriesTransformer model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    TimeSeriesTransformer [huggingface/tst-ett](https://huggingface.co/huggingface/tst-ett) architecture.
 
-    Configuration objects inherit from  [`PretrainedConfig`] can be used to control the model outputs.
-    Read the documentation from  [`PretrainedConfig`]  for more information.
+    Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
 
     Args:
         prediction_length (`int`):
             The prediction horizon for the model.
         context_length (`int`, *optional*):
-            The context length for the encoder. If  `None`, the context length will be the same as the
+            The context length for the encoder. If `None`, the context length will be the same as the
             `prediction_length`.
         distribution_output (`string`, *optional* defaults to `student_t`):
             The distribution emission head for the model.
         loss (`string`, *optional* defaults to `nll`):
-            The loss function for the model corresponding to the `distribution_output` head. For parametric distributions it is negative log likelihood.
+            The loss function for the model corresponding to the `distribution_output` head. For parametric
+            distributions it is negative log likelihood.
         input_size (`int`, *optional* defaults to 1):
             The size of the target variable which by default is 1 for univariate targets.
         scaling (`bool`, *optional* defaults to `True`):
             Whether to scale the input targets.
         lags_seq (`list` of `int`  *optional* defaults to `[1, 2, 3, 4, 5, 6, 7]`):
-            The lags of the input time series as covariates often dictated by the frequency. Default is `[1, 2, 3, 4, 5, 6, 7]`.
+            The lags of the input time series as covariates often dictated by the frequency. Default is `[1, 2, 3, 4,
+            5, 6, 7]`.
         num_time_features (`int`, *optional* defaults to 0):
             The number of time features in the input time series.
         num_feat_dynamic_real (`int`, *optional* defaults to `0`):
@@ -64,7 +66,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         cardinality (`list` of `int`, *optional*):
             The cardinality of the categorical features. Cannot be `None` if `num_feat_static_cat` is `> 0`.
         embedding_dimension (`list` of `int`, *optional*):
-            The dimension of the embedding for the categorical features. Cannot be `None` if `num_feat_static_cat` is `> 0`.
+            The dimension of the embedding for the categorical features. Cannot be `None` if `num_feat_static_cat` is
+            `> 0`.
         encoder_layers (`int`, *optional*, defaults to `2`):
             Number of encoder layers.
         decoder_layers (`int`, *optional*, defaults to `2`):
@@ -78,8 +81,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         decoder_ffn_dim (`int`, *optional*, defaults to `32`):
             Dimension of the "intermediate" (often named feed-forward) layer in decoder.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and decoder. If string,
-            `"gelu"` and `"relu"` are supported.
+            The non-linear activation function (function or string) in the encoder and decoder. If string, `"gelu"` and
+            `"relu"` are supported.
         dropout (`float`, *optional*, defaults to `0.1`):
             The dropout probability for all fully connected layers in the encoder, and decoder.
         encoder_layerdrop (`float`, *optional*, defaults to `0.1`):
