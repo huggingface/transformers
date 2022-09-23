@@ -167,7 +167,7 @@ class MobileViTFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMi
                 A list of length `batch_size`, where each item is a `Tuple[int, int]` corresponding to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
         Returns:
-            semantic_segmentation (`List[torch.Tensor]`):
+            `List[torch.Tensor]`:
                 A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
                 corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
                 `torch.Tensor` correspond to a semantic class id.
