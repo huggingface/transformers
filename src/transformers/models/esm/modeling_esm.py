@@ -711,9 +711,8 @@ ESM_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (:
-            obj:*torch.FloatTensor* of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*): Mask to nullify
-            selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*): 
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
