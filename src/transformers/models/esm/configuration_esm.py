@@ -38,9 +38,15 @@ class ESMConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 30522):
+        vocab_size (`int`, *optional*):
             Vocabulary size of the ESM model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`ESMModel`].
+        mask_token_id (`int`, *optional*):
+            The index of the mask token in the vocabulary. This must be included in the config because of the
+            "mask-dropout" scaling trick, which will scale the inputs depending on the number of masked tokens.
+        pad_token_id (`int`, *optional*):
+            The index of the padding token in the vocabulary. This must be included in the config because certain parts
+            of the ESM code use this instead of the attention mask.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -56,7 +62,7 @@ class ESMConfig(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
-        max_position_embeddings (`int`, *optional*, defaults to 512):
+        max_position_embeddings (`int`, *optional*, defaults to 1026):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -64,8 +70,8 @@ class ESMConfig(PretrainedConfig):
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
         position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
+            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query", "rotary"`.
+            For positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
             [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
             For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
             with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
@@ -100,7 +106,7 @@ class ESMConfig(PretrainedConfig):
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=512,
+        max_position_embeddings=1026,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         position_embedding_type="absolute",

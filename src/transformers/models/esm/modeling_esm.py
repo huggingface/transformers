@@ -72,8 +72,9 @@ def apply_rotary_pos_emb(x, cos, sin):
 
 class RotaryEmbedding(torch.nn.Module):
     """
-    Rotary position embeddings based on those in [RoFormer](https://huggingface.co/docs/transformers/model_doc/roformer).
-    Query and keys are transformed by rotation matrices which depend on their relative positions.
+    Rotary position embeddings based on those in
+    [RoFormer](https://huggingface.co/docs/transformers/model_doc/roformer). Query and keys are transformed by rotation
+    matrices which depend on their relative positions.
     """
 
     def __init__(self, dim: int):
@@ -711,7 +712,7 @@ ESM_INPUTS_DOCSTRING = r"""
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*): 
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
