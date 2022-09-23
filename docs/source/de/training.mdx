@@ -77,7 +77,7 @@ klicken Sie einfach auf die Schaltfläche oben rechts im Block des jeweiligen Fr
 
 🤗 Transformers bietet eine [`Trainer`]-Klasse, die für das Training von 🤗 Transformers-Modellen optimiert ist und es einfacher macht, mit dem Training zu beginnen, ohne manuell eine eigene Trainingsschleife zu schreiben. Die [`Trainer`]-API unterstützt eine breite Palette von Trainingsoptionen und Funktionen wie Logging, Gradientenakkumulation und gemischte Präzision.
 
-Beginnen Sie mit dem Laden Ihres Modells und geben Sie die Anzahl der erwarteten Labels an. Aus dem Yelp Review [dataset card] (https://huggingface.co/datasets/yelp_review_full#data-fields) wissen Sie, dass es fünf Labels gibt:
+Beginnen Sie mit dem Laden Ihres Modells und geben Sie die Anzahl der erwarteten Labels an. Aus dem Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields) wissen Sie, dass es fünf Labels gibt:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -94,7 +94,7 @@ initialisiert werden. Machen Sie sich keine Sorgen, das ist völlig normal! Der 
 
 ### Hyperparameter für das Training
 
-Als Nächstes erstellen Sie eine Klasse [`TrainingArguments`], die alle Hyperparameter enthält, die Sie einstellen können, sowie Flags zur Aktivierung verschiedener Trainingsoptionen. Für dieses Lernprogramm können Sie mit den Standard-[Hyperparametern] (https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments) beginnen, aber Sie können mit diesen experimentieren, um Ihre optimalen Einstellungen zu finden.
+Als Nächstes erstellen Sie eine Klasse [`TrainingArguments`], die alle Hyperparameter enthält, die Sie einstellen können, sowie Flags zur Aktivierung verschiedener Trainingsoptionen. Für dieses Lernprogramm können Sie mit den Standard- [Hyperparametern](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments) beginnen, aber Sie können mit diesen experimentieren, um Ihre optimalen Einstellungen zu finden.
 
 Geben Sie an, wo die Kontrollpunkte Ihres Trainings gespeichert werden sollen:
 
@@ -167,7 +167,7 @@ Wenn Sie ein 🤗 Transformers Modell mit der Keras API trainieren wollen, müss
 Keras versteht. Wenn Ihr Datensatz klein ist, können Sie das Ganze einfach in NumPy-Arrays konvertieren und an Keras übergeben.
 Probieren wir das zuerst aus, bevor wir etwas Komplizierteres tun.
 
-Laden Sie zunächst ein Dataset. Wir werden den CoLA-Datensatz aus dem [GLUE-Benchmark] (https://huggingface.co/datasets/glue) verwenden,
+Laden Sie zunächst ein Dataset. Wir werden den CoLA-Datensatz aus dem [GLUE-Benchmark](https://huggingface.co/datasets/glue) verwenden,
 da es sich um eine einfache Aufgabe zur Klassifizierung von binärem Text handelt, und nehmen vorerst nur den Trainingssplit.
 
 ```py
@@ -363,7 +363,7 @@ Geben Sie schließlich `device` an, um einen Grafikprozessor zu verwenden, wenn 
 
 <Tip>
 
-Holen Sie sich mit einem gehosteten Notebook wie [Colaboratory] (https://colab.research.google.com/) oder [SageMaker StudioLab] (https://studiolab.sagemaker.aws/) kostenlosen Zugang zu einem Cloud-GPU, wenn Sie noch keinen haben.
+Holen Sie sich mit einem gehosteten Notebook wie [Colaboratory](https://colab.research.google.com/) oder [SageMaker StudioLab](https://studiolab.sagemaker.aws/) kostenlosen Zugang zu einem Cloud-GPU, wenn Sie noch keinen haben.
 
 </Tip>
 

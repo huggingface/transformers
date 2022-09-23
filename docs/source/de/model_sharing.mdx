@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 Die letzten beiden Tutorials haben gezeigt, wie man ein Modell mit PyTorch, Keras und 🤗 Accelerate für verteilte Setups feinabstimmen kann. Der nächste Schritt besteht darin, Ihr Modell mit der Community zu teilen! Bei Hugging Face glauben wir an den offenen Austausch von Wissen und Ressourcen, um künstliche Intelligenz für alle zu demokratisieren. Wir ermutigen Sie, Ihr Modell mit der Community zu teilen, um anderen zu helfen, Zeit und Ressourcen zu sparen.
 
-In diesem Tutorial lernen Sie zwei Methoden kennen, wie Sie ein trainiertes oder verfeinertes Modell auf dem [Model Hub] (https://huggingface.co/models) teilen können:
+In diesem Tutorial lernen Sie zwei Methoden kennen, wie Sie ein trainiertes oder verfeinertes Modell auf dem [Model Hub](https://huggingface.co/models) teilen können:
 
 - Programmgesteuertes Übertragen Ihrer Dateien auf den Hub.
 - Ziehen Sie Ihre Dateien per Drag-and-Drop über die Weboberfläche in den Hub.
@@ -61,7 +61,7 @@ Wenn Sie ein Notebook wie Jupyter oder Colaboratory verwenden, stellen Sie siche
 pip install huggingface_hub
 ```
 
-Verwenden Sie dann `notebook_login`, um sich beim Hub anzumelden, und folgen Sie dem Link [hier] (https://huggingface.co/settings/token), um ein Token für die Anmeldung zu generieren:
+Verwenden Sie dann `notebook_login`, um sich beim Hub anzumelden, und folgen Sie dem Link [hier](https://huggingface.co/settings/token), um ein Token für die Anmeldung zu generieren:
 
 ```py
 >>> from huggingface_hub import notebook_login
@@ -114,7 +114,7 @@ Wenn ein Modell in Flax verfügbar ist, können Sie auch einen Kontrollpunkt von
 <pt>
 <Youtube id="Z1-XMy-GNLQ"/>
 
-Die Weitergabe eines Modells an den Hub ist so einfach wie das Hinzufügen eines zusätzlichen Parameters oder Rückrufs. Erinnern Sie sich an das [Feinabstimmungs-Tutorial] (Training), in der Klasse [`TrainingArguments`] geben Sie Hyperparameter und zusätzliche Trainingsoptionen an. Eine dieser Trainingsoptionen beinhaltet die Möglichkeit, ein Modell direkt an den Hub zu pushen. Setzen Sie `push_to_hub=True` in Ihrer [`TrainingArguments`]:
+Die Weitergabe eines Modells an den Hub ist so einfach wie das Hinzufügen eines zusätzlichen Parameters oder Rückrufs. Erinnern Sie sich an das [Feinabstimmungs-Tutorial](Training), in der Klasse [`TrainingArguments`] geben Sie Hyperparameter und zusätzliche Trainingsoptionen an. Eine dieser Trainingsoptionen beinhaltet die Möglichkeit, ein Modell direkt an den Hub zu pushen. Setzen Sie `push_to_hub=True` in Ihrer [`TrainingArguments`]:
 
 ```py
 >>> training_args = TrainingArguments(output_dir="my-awesome-model", push_to_hub=True)
@@ -199,7 +199,7 @@ Oder vielleicht möchten Sie die TensorFlow-Version Ihres fein abgestimmten PyTo
 
 Wenn Sie nun zu Ihrem Hugging Face-Profil navigieren, sollten Sie Ihr neu erstelltes Modell-Repository sehen. Wenn Sie auf die Registerkarte **Dateien** klicken, werden alle Dateien angezeigt, die Sie in das Repository hochgeladen haben.
 
-Weitere Einzelheiten zum Erstellen und Hochladen von Dateien in ein Repository finden Sie in der Hub-Dokumentation [hier] (https://huggingface.co/docs/hub/how-to-upstream).
+Weitere Einzelheiten zum Erstellen und Hochladen von Dateien in ein Repository finden Sie in der Hub-Dokumentation [hier](https://huggingface.co/docs/hub/how-to-upstream).
 
 ## Hochladen mit der Weboberfläche
 
@@ -225,4 +225,4 @@ Um sicherzustellen, dass die Benutzer die Fähigkeiten, Grenzen, möglichen Verz
 * Manuelles Erstellen und Hochladen einer "README.md"-Datei.
 * Klicken Sie auf die Schaltfläche **Modellkarte bearbeiten** in Ihrem Modell-Repository.
 
-Werfen Sie einen Blick auf die DistilBert [model card](https://huggingface.co/distilbert-base-uncased) als gutes Beispiel für die Art von Informationen, die eine Modellkarte enthalten sollte. Weitere Details über andere Optionen, die Sie in der Datei "README.md" einstellen können, wie z.B. den Kohlenstoff-Fußabdruck eines Modells oder Beispiele für Widgets, finden Sie in der Dokumentation [hier] (https://huggingface.co/docs/hub/models-cards).
+Werfen Sie einen Blick auf die DistilBert [model card](https://huggingface.co/distilbert-base-uncased) als gutes Beispiel für die Art von Informationen, die eine Modellkarte enthalten sollte. Weitere Details über andere Optionen, die Sie in der Datei "README.md" einstellen können, wie z.B. den Kohlenstoff-Fußabdruck eines Modells oder Beispiele für Widgets, finden Sie in der Dokumentation [hier](https://huggingface.co/docs/hub/models-cards).
