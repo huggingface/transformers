@@ -489,7 +489,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 A tensor of shape (`batch_size, num_class_labels, height, width`).
         """
         logger.warning(
-            "`post_process_segmentation` will be deprecated soon, please use `post_process_semantic_segmentation`"
+            "`post_process_segmentation` will be deprecated soon, please use `post_process_instance_segmentation`"
             " instead."
         )
 
@@ -578,14 +578,123 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         semantic_segmentation = segmentation.argmax(dim=1)
         return semantic_segmentation
 
+    def post_process_instance_segmentation(
+        self,
+        outputs,
+        object_mask_threshold: float = 0.8,
+        overlap_mask_area_threshold: float = 0.8,
+        target_sizes: List[Tuple] = None,
+        return_coco_format: Optional[bool] = False,
+    ):
+        """
+        Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into instance segmentation predictions. Only
+        supports PyTorch.
+
+        Args:
+            outputs ([`MaskFormerForInstanceSegmentation`]):
+                Raw outputs of the model.
+            object_mask_threshold (`float`, *optional*, defaults to 0.8):
+                The probability score threshold to keep predicted instance masks.
+            overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
+                The overlap mask area threshold to merge or discard small disconnected parts within each binary
+                instance mask.
+            target_sizes (`List[Tuple]`, *optional*):
+                List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
+                final size (height, width) of each prediction. If left to None, predictions will not be resized.
+            return_coco_format (`bool`, *optional*):
+                Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
+                format.
+        Returns:
+            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`.
+            - **segments** -- a dictionary with the following keys
+                - **id** -- an integer representing the `segment_id`.
+                - **label_id** -- an integer representing the segment's label / class id.
+        """
+        class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
+
+        batch_size = class_queries_logits.shape[0]
+        num_labels = class_queries_logits.shape[-1] - 1
+
+        mask_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+
+        # Predicted label and score of each query (batch_size, num_queries)
+        pred_scores, pred_labels = nn.functional.softmax(class_queries_logits, dim=-1).max(-1)
+
+        # Loop over items in batch size
+        results: List[Dict[str, Tensor]] = []
+
+        for i in range(batch_size):
+            mask_probs_item, pred_scores_item, pred_labels_item = self.remove_low_and_no_objects(
+                mask_probs[i], pred_scores[i], pred_labels[i], object_mask_threshold, num_labels
+            )
+
+            # Resize mask to corresponding target_size
+            if target_sizes is not None:
+                mask_probs_item = interpolate(
+                    mask_probs_item.unsqueeze(0),
+                    size=target_sizes[i],
+                    mode="bilinear",
+                    align_corners=False,
+                )[0]
+
+            _, height, width = mask_probs_item.shape
+            object_detected = mask_probs_item.shape[0] > 0
+
+            segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs_item.device)
+            segments: List[Dict] = []
+
+            if object_detected:
+                current_segment_id = 0
+
+                # Weigh each mask by its prediction score
+                mask_probs_item *= pred_scores_item.view(-1, 1, 1)
+                mask_labels_item = mask_probs_item.argmax(0)  # [height, width]
+
+                # Keep track of instances of each class
+                stuff_memory_list: Dict[str, int] = {}
+                for k in range(pred_labels_item.shape[0]):
+                    # Get the mask associated with the k class
+                    pred_class = pred_labels_item[k].item()
+                    mask_k = mask_labels_item == k
+                    mask_k_area = mask_k.sum()
+
+                    # Compute the area of all the stuff in query k
+                    original_area = (mask_probs_item[k] >= 0.5).sum()
+                    mask_exists = mask_k_area > 0 and original_area > 0
+
+                    if mask_exists:
+                        # Eliminate segments with mask area below threshold
+                        area_ratio = mask_k_area / original_area
+                        if not area_ratio.item() > overlap_mask_area_threshold:
+                            continue
+
+                        # Add corresponding class id
+                        if pred_class in stuff_memory_list:
+                            current_segment_id = stuff_memory_list[pred_class]
+                        else:
+                            current_segment_id += 1
+
+                        # Add current object segment to final segmentation map
+                        segmentation[mask_k] = current_segment_id
+                        segments.append(
+                            {
+                                "id": current_segment_id,
+                                "label_id": pred_class,
+                            }
+                        )
+            results.append({"segmentation": segmentation, "segments": segments})
+        return results
+
     def post_process_panoptic_segmentation(
         self,
-        outputs: "MaskFormerForInstanceSegmentationOutput",
+        outputs,
         object_mask_threshold: float = 0.8,
         overlap_mask_area_threshold: float = 0.8,
         label_ids_to_fuse: Optional[Set[int]] = None,
         target_sizes: List[Tuple] = None,
-        return_coco_format=False,
+        return_coco_format: Optional[bool] = False,
     ) -> List[Dict]:
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation
@@ -595,9 +704,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             outputs ([`MaskFormerForInstanceSegmentationOutput`]):
                 The outputs from [`MaskFormerForInstanceSegmentation`].
             object_mask_threshold (`float`, *optional*, defaults to 0.8):
-                The object mask threshold.
+                The probability score threshold to keep predicted instance masks.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
-                The overlap mask area threshold to use.
+                The overlap mask area threshold to merge or discard small disconnected parts within each binary
+                instance mask.
             label_ids_to_fuse (`Set[int]`, *optional*):
                 The labels in this state will have all their instances be fused together. For instance we could say
                 there can only be one sky in an image, but several persons, so the label ID for sky would be in that
@@ -606,6 +716,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction in batch. If left to None, predictions will not be
                 resized.
+            return_coco_format (`bool`, *optional*):
+                Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
+                format.
 
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
@@ -650,12 +763,12 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 )[0]
 
             _, height, width = mask_probs_item.shape
-            we_detect_something = mask_probs_item.shape[0] > 0
+            object_detected = mask_probs_item.shape[0] > 0
 
             segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs_item.device)
             segments: List[Dict] = []
 
-            if we_detect_something:
+            if object_detected:
                 current_segment_id = 0
 
                 # Weigh each mask by its prediction score
@@ -677,7 +790,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                     mask_exists = mask_k_area > 0 and original_area > 0
 
                     if mask_exists:
-                        # Eliminate segments with mask area below threshold
+                        # Eliminate disconnected tiny segments
                         area_ratio = mask_k_area / original_area
                         if not area_ratio.item() > overlap_mask_area_threshold:
                             continue
