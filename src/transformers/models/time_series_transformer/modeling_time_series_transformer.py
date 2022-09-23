@@ -1565,6 +1565,9 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         if config.loss == "nll":
             self.loss = NegativeLogLikelihood()
 
+        # Initialize weights of distribution_output and apply final processing
+        self.post_init()
+
     def output_params(self, dec_output):
         return self.param_proj(dec_output)
 
