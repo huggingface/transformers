@@ -37,7 +37,6 @@ else:
         "ESMForMaskedLM",
         "ESMForSequenceClassification",
         "ESMForTokenClassification",
-        "ESMLayer",
         "ESMModel",
         "ESMPreTrainedModel",
     ]
@@ -59,7 +58,6 @@ if TYPE_CHECKING:
             ESMForMaskedLM,
             ESMForSequenceClassification,
             ESMForTokenClassification,
-            ESMLayer,
             ESMModel,
             ESMPreTrainedModel,
         )
