@@ -2169,11 +2169,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                         )
                         param_dset[:] = layer.numpy()
                         layers.append(layer_name.encode("utf8"))
-                    save_attributes_to_hdf5_group(
-                        shard_file,
-                        "layer_names",
-                        layers,
-                    )
+                    save_attributes_to_hdf5_group(shard_file,"layer_names",layers)
 
         if push_to_hub:
             self._upload_modified_files(
