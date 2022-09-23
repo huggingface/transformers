@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
@@ -20,7 +20,7 @@ from torch.utils.data import Dataset
 
 from .deepspeed import is_deepspeed_zero3_enabled
 from .trainer import Trainer
-from .trainer_utils import EvalPrediction, PredictionOutput
+from .trainer_utils import PredictionOutput
 from .utils import logging
 
 
@@ -31,7 +31,6 @@ class Seq2SeqTrainer(Trainer):
     def evaluate(
         self,
         eval_dataset: Optional[Dataset] = None,
-        compute_metrics: Optional[Callable[[EvalPrediction], Dict]] = None,
         ignore_keys: Optional[List[str]] = None,
         metric_key_prefix: str = "eval",
         **gen_kwargs
@@ -49,9 +48,6 @@ class Seq2SeqTrainer(Trainer):
                 Pass a dataset if you wish to override `self.eval_dataset`. If it is an [`~datasets.Dataset`], columns
                 not accepted by the `model.forward()` method are automatically removed. It must implement the `__len__`
                 method.
-            compute_metrics (`Callable[[EvalPrediction], Dict]`, *optional*, defaults to `None`):
-                Pass a compute_metric function if you wish to override `self.compute_metrics`. Used when
-                `self.eval_dataset` holds multiple datasets.
             ignore_keys (`List[str]`, *optional*):
                 A list of keys in the output of your model (if it is a dictionary) that should be ignored when
                 gathering predictions.
@@ -79,9 +75,7 @@ class Seq2SeqTrainer(Trainer):
         )
         self._gen_kwargs = gen_kwargs
 
-        return super().evaluate(
-            eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix, compute_metrics=compute_metrics
-        )
+        return super().evaluate(eval_dataset, ignore_keys=ignore_keys, metric_key_prefix=metric_key_prefix)
 
     def predict(
         self,
