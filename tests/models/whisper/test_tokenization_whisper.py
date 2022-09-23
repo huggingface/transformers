@@ -13,8 +13,6 @@
 # limitations under the License.
 
 import unittest
-from pathlib import Path
-from shutil import copyfile
 
 from transformers import SPIECE_UNDERLINE
 from transformers.models.whisper import WhisperTokenizer

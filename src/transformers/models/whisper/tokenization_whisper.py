@@ -16,12 +16,9 @@
 import json
 import os
 from functools import lru_cache
-from pathlib import Path
-from shutil import copyfile
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple
 
 import regex as re
-import sentencepiece
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
@@ -597,7 +594,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             text = " " + text
         return (text, kwargs)
 
-    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
+    def _build_conversation_input_ids(self, conversation) -> List[int]:
         input_ids = []
         for is_user, text in conversation.iter_texts():
             input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
