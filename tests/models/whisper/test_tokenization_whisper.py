@@ -115,52 +115,154 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
     def test_tokenizer_equivalence(self):
         text = "다람쥐 헌 쳇바퀴에 타고파"
-        multilingual_tokenizer =  WhisperTokenizer.from_pretrained("/home/arthur_huggingface_co/transformers/whisper/tiny-multy")
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained(
+            "/home/arthur_huggingface_co/transformers/whisper/tiny-multy"
+        )
         gpt2_tokenizer = WhisperTokenizer.from_pretrained("/home/arthur_huggingface_co/transformers/whisper/tiny")
 
         text = "다람쥐 헌 쳇바퀴에 타고파"
         gpt2_tokens = gpt2_tokenizer.encode(text)
         multilingual_tokens = multilingual_tokenizer.encode(text)
 
-
         assert gpt2_tokenizer.decode(gpt2_tokens) == text
         assert multilingual_tokenizer.decode(multilingual_tokens) == text
         assert len(gpt2_tokens) > len(multilingual_tokens)
 
-        EXPECTED_MULTI = [ 9835, 22855,   168,    98,   238, 13431,   234, 43517,   229, 47053,
-          169,   222, 19086, 19840,  1313, 17974]
+        EXPECTED_MULTI = [
+            9835,
+            22855,
+            168,
+            98,
+            238,
+            13431,
+            234,
+            43517,
+            229,
+            47053,
+            169,
+            222,
+            19086,
+            19840,
+            1313,
+            17974,
+        ]
 
-        EXPECTED_ENG = [46695,    97,   167,   252,   234,   168,    98,   238,   220,   169,
-          245,   234, 23821,   111,   229,   167,   108,   242,   169,   222,
-          112,   168,   245,   238,   220,   169,   225,   222,   166,   111,
-          254,   169,   234,   234]
-        
+        EXPECTED_ENG = [
+            46695,
+            97,
+            167,
+            252,
+            234,
+            168,
+            98,
+            238,
+            220,
+            169,
+            245,
+            234,
+            23821,
+            111,
+            229,
+            167,
+            108,
+            242,
+            169,
+            222,
+            112,
+            168,
+            245,
+            238,
+            220,
+            169,
+            225,
+            222,
+            166,
+            111,
+            254,
+            169,
+            234,
+            234,
+        ]
+
         self.assertListEqual(gpt2_tokens, EXPECTED_ENG)
         self.assertListEqual(multilingual_tokens, EXPECTED_MULTI)
 
     def test_tokenizer_special(self):
-        multilingual_tokenizer =  WhisperTokenizer.from_pretrained("/home/arthur_huggingface_co/transformers/whisper/tiny-multy")
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained(
+            "/home/arthur_huggingface_co/transformers/whisper/tiny-multy"
+        )
         text = "[Denis] Hey! How are you feeling? J'ai l'impression que 郷さん est prêt"
         multilingual_tokens = multilingual_tokenizer.encode(text)
 
-        EXPECTED_MULTI = [   58,    35,   268,   271,    60,  1911,     0,  1012,   366,   291,
-         2633,    30,   508,     6,  1301,   287,     6, 36107,   631,   220,
-        11178,   115, 15567,   871, 44393]
+        EXPECTED_MULTI = [
+            58,
+            35,
+            268,
+            271,
+            60,
+            1911,
+            0,
+            1012,
+            366,
+            291,
+            2633,
+            30,
+            508,
+            6,
+            1301,
+            287,
+            6,
+            36107,
+            631,
+            220,
+            11178,
+            115,
+            15567,
+            871,
+            44393,
+        ]
         self.assertListEqual(multilingual_tokens, EXPECTED_MULTI)
 
-        self.assertEqual(text,multilingual_tokenizer.decode(multilingual_tokens))
+        self.assertEqual(text, multilingual_tokenizer.decode(multilingual_tokens))
 
-        jp_tokenizer =  WhisperTokenizer.from_pretrained("/home/arthur_huggingface_co/transformers/whisper/tiny-multy",multilingual=False, language = "japanese")
-        EXPECTED_JAP = [   58, 21306,   271,    60, 14690,     0,  1374,   389,   345,  4203,
-           30,   449,     6,  1872,   300,     6, 11011,  2234,  8358, 16268,
-          225,   115, 43357, 22174,  1556,   778, 25792,    83]
+        jp_tokenizer = WhisperTokenizer.from_pretrained(
+            "/home/arthur_huggingface_co/transformers/whisper/tiny-multy", multilingual=False, language="japanese"
+        )
+        EXPECTED_JAP = [
+            58,
+            21306,
+            271,
+            60,
+            14690,
+            0,
+            1374,
+            389,
+            345,
+            4203,
+            30,
+            449,
+            6,
+            1872,
+            300,
+            6,
+            11011,
+            2234,
+            8358,
+            16268,
+            225,
+            115,
+            43357,
+            22174,
+            1556,
+            778,
+            25792,
+            83,
+        ]
 
         # parameters of the original tokenizer : multilingual False, language=Japanese
         self.assertListEqual(jp_tokenizer.encode(text), EXPECTED_JAP)
-        
+
         supress_tokens = multilingual_tokenizer.non_speech_tokens
-
-
 
     def check_language_codes(self):
         self.assertEqual(self.tokenizer.lang_code_to_id["pt"], 4)

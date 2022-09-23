@@ -15,43 +15,32 @@
 """Tokenization classes for Whisper."""
 import json
 import os
+from functools import lru_cache
 from pathlib import Path
 from shutil import copyfile
-from functools import lru_cache
-
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import regex as re
-
 import sentencepiece
 
-from ...tokenization_utils import PreTrainedTokenizer, AddedToken
+from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
-
-
 
 
 SPIECE_UNDERLINE = "▁"
 
-VOCAB_FILES_NAMES = {
-    "vocab_file": "vocab.json",
-    "tokenizer_file": "tokenizer.json",
-    "merges_file":"merges.txt"
-}
+VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "tokenizer_file": "tokenizer.json", "merges_file": "merges.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/vocab.json",
     },
-    "merges_file": {
-        "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/merges_file.txt"
-    },
+    "merges_file": {"openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/merges_file.txt"},
 }
 
 MAX_MODEL_INPUT_SIZES = {
     "openai/whisper-base": 1024,
 }
-
 
 
 LANGUAGES = {
@@ -173,6 +162,7 @@ TO_LANGUAGE_CODE = {
     "castilian": "es",
 }
 
+
 @lru_cache()
 def bytes_to_unicode():
     """
@@ -197,7 +187,9 @@ def bytes_to_unicode():
     cs = [chr(n) for n in cs]
     return dict(zip(bs, cs))
 
+
 logger = logging.get_logger(__name__)
+
 
 def get_pairs(word):
     """
@@ -293,8 +285,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
-
-
         specials = [
             "<|startoftranscript|>",
             *[f"<|{lang}|>" for lang in LANGUAGES.keys()],
@@ -329,23 +319,27 @@ class WhisperTokenizer(PreTrainedTokenizer):
         transcribe = self.all_special_ids[-5]
         sot_sequence = [self.all_special_ids[1]]
 
-        if language is not None :
-            additional_tokens = dict(zip(self.additional_special_tokens,self.additional_special_tokens_ids,))
+        if language is not None:
+            additional_tokens = dict(
+                zip(
+                    self.additional_special_tokens,
+                    self.additional_special_tokens_ids,
+                )
+            )
             self.language_token = additional_tokens[f"<|{self.language}|>"]
             langs = tuple(LANGUAGES.keys())
             sot_sequence.append(self.all_special_ids[1] + 1 + langs.index(language))
-                    
+
         if task is not None:
             sot_sequence.append(transcribe if task == "transcribe" else translate)
         self.sot_sequence = sot_sequence
-    
 
     @property
     @lru_cache()
     def non_speech_tokens(self) -> Tuple[int]:
         """
-        Returns the list of tokens to suppress in order to avoid any speaker tags or non-speech
-        annotations, to prevent sampling texts that are not actually spoken in the audio, e.g.
+        Returns the list of tokens to suppress in order to avoid any speaker tags or non-speech annotations, to prevent
+        sampling texts that are not actually spoken in the audio, e.g.
 
         - ♪♪♪
         - ( SPEAKING FOREIGN LANGUAGE )
@@ -440,7 +434,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
     @property
     def tgt_lang(self) -> str:
         return self._tgt_lang
-
 
     def bpe(self, token):
         if token in self.cache:
@@ -584,8 +577,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     def decode_with_timestamps(self, tokens) -> str:
         """
-        Timestamp tokens are above the special tokens' id range and are ignored by `decode()`.
-        This method decodes given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
+        Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
+        given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
         """
         outputs = [[]]
         for token in tokens:
@@ -612,9 +605,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             input_ids = input_ids[-self.model_max_length :]
         return input_ids
 
-    
-    def _get_suppress_tokens(self, suppress_tokens = []) -> Tuple[int]:
- 
+    def _get_suppress_tokens(self, suppress_tokens=[]) -> Tuple[int]:
 
         if isinstance(suppress_tokens, str):
             suppress_tokens = [int(t) for t in suppress_tokens.split(",")]
@@ -625,9 +616,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         elif suppress_tokens is None or len(suppress_tokens) == 0:
             suppress_tokens = []  # interpret empty string as an empty list
 
-        suppress_tokens.extend(
-            [self.sot, self.sot_prev, self.sot_lm]
-        )
+        suppress_tokens.extend([self.sot, self.sot_prev, self.sot_lm])
         if self.no_captions is not None:
             # no-captions probability is collected separately
             suppress_tokens.append(self.no_captions)

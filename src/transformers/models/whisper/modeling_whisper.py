@@ -17,7 +17,7 @@
 
 import math
 import random
-from typing import Iterable, Optional, Tuple, Dict
+from typing import Dict, Iterable, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -1265,7 +1265,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         r"decoder.version",
         r"model.encoder.embed_positions.weights",
         r"model.decoder.embed_positions.weights",
-        r"proj_out.weight"
+        r"proj_out.weight",
     ]
     _keys_to_ignore_on_save = [
         r"model.encoder.embed_positions.weights",
@@ -1435,7 +1435,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         # Check if input is input_ids and padded -> only then is attention_mask defined
         if is_mel_spec and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
             return inputs.ne(pad_token_id).long()
-        else : 
+        else:
             return None
 
     def _prepare_decoder_input_ids_for_generation(
