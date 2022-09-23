@@ -555,6 +555,12 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
             if annotations is not None:
                 annotations = [annotations]
 
+        # Create deep copies to avoid editing inputs in place
+        images = [image for image in images]
+
+        if annotations is not None:
+            annotations = [annotation for annotation in annotations]
+
         # prepare (COCO annotations as a list of Dict -> ConditionalDETR target as a single Dict per image)
         if annotations is not None:
             for idx, (image, target) in enumerate(zip(images, annotations)):
@@ -587,6 +593,8 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
                 images = [
                     self._normalize(image=image, mean=self.image_mean, std=self.image_std)[0] for image in images
                 ]
+        else:
+            images = [np.array(image) for image in images]
 
         if pad_and_return_pixel_mask:
             # pad images up to largest image in batch and create pixel_mask
