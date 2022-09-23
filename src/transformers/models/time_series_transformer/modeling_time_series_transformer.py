@@ -1450,8 +1450,8 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         future_time_feat: Optional[torch.Tensor] = None,
         future_target: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-        output_hidden_states: bool = False,
-        use_cache: bool = False,
+        output_hidden_states: Optional[bool] = None,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
