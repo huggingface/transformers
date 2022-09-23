@@ -28,7 +28,7 @@ from ...utils import (
 
 _import_structure = {
     "configuration_trocr": ["TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP", "TrOCRConfig"],
-    "processing_trocr": ["TrOCRProcessor"],
+    "processing_trocr": ["TrOCRProcessor", "TrOCRProcessorWithLM"],
 }
 
 
@@ -48,6 +48,7 @@ else:
 if TYPE_CHECKING:
     from .configuration_trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig
     from .processing_trocr import TrOCRProcessor
+    from .processing_trocr_with_lm import TrOCRProcessorWithLM
 
     try:
         if not is_torch_available():
