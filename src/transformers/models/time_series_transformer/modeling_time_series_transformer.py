@@ -1732,7 +1732,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
 
         # greedy decoding
         for k in range(self.config.prediction_length):
-            lagged_sequence = self.get_lagged_subsequences(
+            lagged_sequence = self.model.get_lagged_subsequences(
                 sequence=repeated_past_target,
                 subsequences_length=1 + k,
                 shift=1,
