@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch TimeSeriesTransformer model."""
+""" PyTorch Time Series Transformer model."""
 
 import random
 from dataclasses import dataclass
@@ -26,13 +26,7 @@ from torch.distributions import AffineTransform, Distribution, StudentT, Transfo
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_time_series_transformer import TimeSeriesTransformerConfig
 
 
@@ -294,7 +288,7 @@ class NOPScaler(nn.Module):
         return data, scale
 
 
-def _weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
+def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
     """
     Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
     meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
@@ -324,8 +318,9 @@ class NegativeLogLikelihood:
 
     Args:
         beta (`float`):
-            Float in range (0, 1). The beta parameter from the paper: "On the Pitfalls of Heteroscedastic Uncertainty Estimation
-            with Probabilistic Neural Networks" by [Seitzer et al. 2022](https://openreview.net/forum?id=aPOpXlnV1T).
+            Float in range (0, 1). The beta parameter from the paper: "On the Pitfalls of Heteroscedastic Uncertainty
+            Estimation with Probabilistic Neural Networks" by [Seitzer et al.
+            2022](https://openreview.net/forum?id=aPOpXlnV1T).
     """
 
     beta: float = 0.0
@@ -846,23 +841,6 @@ TIME_SERIES_TRANSFORMER_START_DOCSTRING = r"""
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-TIME_SERIES_TRANSFORMER_PREDICTION_EXAMPLE = r"""
-    Summarization example:
-
-    ```python
-    >>> from transformers import TimeSeriesTransformerForPrediction
-
-    >>> model = TimeSeriesTransformerForConditionalGeneration.from_pretrained("huggingface/tst-ett")
-
-    >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="pt")
-
-    >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
-    >>> print(tokenizer.decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
-    ```
 """
 
 TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
@@ -1481,11 +1459,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Seq2SeqTSModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         feat_static_cat: torch.Tensor,
@@ -1501,6 +1475,47 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import TimeSeriesTransformerModel
+        >>> import torch
+
+        >>> model = TimeSeriesTransformerModel.from_pretrained("huggingface/tst-base")
+
+        >>> inputs = dict()
+        >>> batch_size = 2
+        >>> cardinality = 5
+        >>> num_time_features = 10
+        >>> content_length = 8
+        >>> prediction_length = 2
+        >>> lags_seq = [2, 3]
+        >>> past_length = context_length + max(lags_seq)
+
+        >>> # encoder inputs
+        >>> inputs["feat_static_cat"] = ids_tensor([batch_size, 1], cardinality)
+        >>> inputs["feat_static_real"] = torch.randn([batch_size, 1])
+        >>> inputs["past_time_feat"] = torch.randn([batch_size, past_length, num_time_features])
+        >>> inputs["past_target"] = torch.randn([batch_size, past_length])
+        >>> inputs["past_observed_values"] = torch.randn([batch_size, past_length])
+
+        >>> # decoder inputs
+        >>> inputs["future_time_feat"] = torch.randn([batch_size, prediction_length, num_time_features])
+        >>> inputs["future_target"] = torch.randn([batch_size, prediction_length])
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         transformer_inputs, scale, static_feat = self.create_network_inputs(
             feat_static_cat=feat_static_cat,
             feat_static_real=feat_static_real,
@@ -1510,13 +1525,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             future_time_feat=future_time_feat,
             future_target=future_target,
         )
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
             enc_input = transformer_inputs[:, : self.config.context_length, ...]
@@ -1561,6 +1569,10 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    "The Time Series Transformer Model with a distribution head on top for time-series forecasting.",
+    TIME_SERIES_TRANSFORMER_START_DOCSTRING,
+)
 class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
@@ -1589,6 +1601,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             sliced_params = [p[:, -trailing_n:] for p in params]
         return self.distribution_output.distribution(sliced_params, scale=scale)
 
+    @add_start_docstrings_to_model_forward(TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         feat_static_cat: torch.Tensor,
@@ -1604,6 +1618,41 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import TimeSeriesTransformerForPrediction
+        >>> import torch
+
+        >>> model = TimeSeriesTransformerForPrediction.from_pretrained("huggingface/tst-base")
+
+        >>> inputs = dict()
+        >>> batch_size = 2
+        >>> cardinality = 5
+        >>> num_time_features = 10
+        >>> content_length = 8
+        >>> prediction_length = 2
+        >>> lags_seq = [2, 3]
+        >>> past_length = context_length + max(lags_seq)
+
+        >>> # encoder inputs
+        >>> inputs["feat_static_cat"] = ids_tensor([batch_size, 1], cardinality)
+        >>> inputs["feat_static_real"] = torch.randn([batch_size, 1])
+        >>> inputs["past_time_feat"] = torch.randn([batch_size, past_length, num_time_features])
+        >>> inputs["past_target"] = torch.randn([batch_size, past_length])
+        >>> inputs["past_observed_values"] = torch.randn([batch_size, past_length])
+
+        >>> # decoder inputs
+        >>> inputs["future_time_feat"] = torch.randn([batch_size, prediction_length, num_time_features])
+        >>> inputs["future_target"] = torch.randn([batch_size, prediction_length])
+
+        >>> outputs = model(**inputs)
+        >>> loss = outputs.loss
+        ```"""
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if future_target is not None:
             use_cache = False
@@ -1635,7 +1684,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             else:
                 loss_weights = future_observed_values.min(dim=-1, keepdim=False)
 
-            prediction_loss = _weighted_average(loss, weights=loss_weights)
+            prediction_loss = weighted_average(loss, weights=loss_weights)
 
         if not return_dict:
             outputs = (params + outputs[1:]) if params is not None else outputs[1:]

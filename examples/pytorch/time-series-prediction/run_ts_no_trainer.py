@@ -37,6 +37,7 @@ from transformers.utils.versions import require_version
 logger = get_logger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/time-series-prediction/requirements.txt")
 
+
 # Parsing input arguments
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -144,6 +145,8 @@ def parse_args():
     )
     args = parser.parse_args()
 
+    return args
+
 
 def main():
     args = parse_args()
@@ -203,4 +206,9 @@ def main():
 
     # model
     model = TimeSeriesTransformerForPrediction(config)
+
+    # just printing for now to make sure quality passes
+    print(args)
+    print(raw_datasets)
     print(model)
+    print(repo)

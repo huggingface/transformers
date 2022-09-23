@@ -15,7 +15,7 @@
 """ Transformations Utilities for Time Series Transformers. """
 
 from functools import lru_cache
-from typing import Iterable, List, Optional
+from typing import Iterable, Optional
 
 import pandas as pd
 from torch.utils.data import DataLoader

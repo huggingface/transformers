@@ -251,9 +251,6 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-        chunk_length = getattr(self.model_tester, "chunk_length", None)
-        if chunk_length is not None and hasattr(self.model_tester, "num_hashes"):
-            encoder_seq_length = encoder_seq_length * self.model_tester.num_hashes
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -275,119 +272,74 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
             model.eval()
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
-            attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+            attentions = outputs.encoder_attentions
             self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            )
             out_len = len(outputs)
 
-            if self.is_encoder_decoder:
-                correct_outlen = 6
+            correct_outlen = 6
 
-                if "last_hidden_state" in outputs:
-                    correct_outlen += 1
+            if "last_hidden_state" in outputs:
+                correct_outlen += 1
 
-                self.assertEqual(out_len, correct_outlen)
+            self.assertEqual(out_len, correct_outlen)
 
-                # decoder attentions
-                decoder_attentions = outputs.decoder_attentions
-                self.assertIsInstance(decoder_attentions, (list, tuple))
-                self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(decoder_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
-                )
+            # decoder attentions
+            decoder_attentions = outputs.decoder_attentions
+            self.assertIsInstance(decoder_attentions, (list, tuple))
+            self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(decoder_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+            )
 
-                # cross attentions
-                cross_attentions = outputs.cross_attentions
-                self.assertIsInstance(cross_attentions, (list, tuple))
-                self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
-                self.assertListEqual(
-                    list(cross_attentions[0].shape[-3:]),
-                    [
-                        self.model_tester.num_attention_heads,
-                        decoder_seq_length,
-                        encoder_key_length,
-                    ],
-                )
+            # cross attentions
+            cross_attentions = outputs.cross_attentions
+            self.assertIsInstance(cross_attentions, (list, tuple))
+            self.assertEqual(len(cross_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(cross_attentions[0].shape[-3:]),
+                [
+                    self.model_tester.num_attention_heads,
+                    decoder_seq_length,
+                    encoder_key_length,
+                ],
+            )
 
-            # Check attention is always last and order is fine
-            inputs_dict["output_attentions"] = True
-            inputs_dict["output_hidden_states"] = True
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+        # Check attention is always last and order is fine
+        inputs_dict["output_attentions"] = True
+        inputs_dict["output_hidden_states"] = True
+        model = model_class(config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
-            if hasattr(self.model_tester, "num_hidden_states_types"):
-                added_hidden_states = self.model_tester.num_hidden_states_types
-            elif self.is_encoder_decoder:
-                added_hidden_states = 2
-            else:
-                added_hidden_states = 1
-            self.assertEqual(out_len + added_hidden_states, len(outputs))
+        self.assertEqual(out_len + 2, len(outputs))
 
-            self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
+        self_attentions = outputs.encoder_attentions if config.is_encoder_decoder else outputs.attentions
 
-            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
-            if chunk_length is not None:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-4:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, chunk_length, encoder_key_length],
-                )
-            else:
-                self.assertListEqual(
-                    list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
-                )
-
-
-def assert_tensors_close(a, b, atol=1e-12, prefix=""):
-    """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
-    if a is None and b is None:
-        return True
-    try:
-        if torch.allclose(a, b, atol=atol):
-            return True
-        raise
-    except Exception:
-        pct_different = (torch.gt((a - b).abs(), atol)).float().mean().item()
-        if a.numel() > 100:
-            msg = f"tensor values are {pct_different:.1%} percent different."
-        else:
-            msg = f"{a} != {b}"
-        if prefix:
-            msg = prefix + ": " + msg
-        raise AssertionError(msg)
-
-
-def _long_tensor(tok_lst):
-    return torch.tensor(tok_lst, dtype=torch.long, device=torch_device)
-
-
-TOLERANCE = 1e-4
+        self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+        self.assertListEqual(
+            list(self_attentions[0].shape[-3:]),
+            [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+        )
 
 
 @require_torch
 @slow
 class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
-        model = TimeSeriesTransformerModel.from_pretrained("huggingface/tst-ett").to(torch_device)
+        # model = TimeSeriesTransformerModel.from_pretrained("huggingface/tst-ett").to(torch_device)
 
         raise NotImplementedError("To do")
 
     def test_inference_head(self):
-        model = TimeSeriesTransformerForPrediction.from_pretrained("huggingface/tst-ett").to(torch_device)
+        # model = TimeSeriesTransformerForPrediction.from_pretrained("huggingface/tst-ett").to(torch_device)
 
         raise NotImplementedError("To do")
 
