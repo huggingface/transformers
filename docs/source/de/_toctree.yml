@@ -17,4 +17,6 @@
     title: Optimierung eines vortrainierten Modells
   - local: accelerate
     title: Verteiltes Training mit 🤗 Accelerate
+  - local: model_sharing
+    title: Ein Modell teilen
   title: Tutorials
