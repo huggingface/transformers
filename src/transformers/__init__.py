@@ -172,7 +172,6 @@ _import_structure = {
         "CLIPVisionConfig",
     ],
     "models.codegen": ["CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP", "CodeGenConfig", "CodeGenTokenizer"],
-    "models.conditional_detr": ["CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConditionalDetrConfig"],
     "models.convbert": ["CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvBertConfig", "ConvBertTokenizer"],
     "models.convnext": ["CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ConvNextConfig"],
     "models.cpm": [],
@@ -342,6 +341,7 @@ _import_structure = {
         "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TrOCRConfig",
         "TrOCRProcessor",
+        "TrOCRProcessorWithLM",
     ],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -359,7 +359,6 @@ _import_structure = {
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
-    "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
     "models.wav2vec2": [
         "WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Wav2Vec2Config",
@@ -660,10 +659,8 @@ else:
     _import_structure["models.beit"].append("BeitFeatureExtractor")
     _import_structure["models.clip"].append("CLIPFeatureExtractor")
     _import_structure["models.convnext"].append("ConvNextFeatureExtractor")
-    _import_structure["models.deformable_detr"].append("DeformableDetrFeatureExtractor")
     _import_structure["models.deit"].append("DeiTFeatureExtractor")
     _import_structure["models.detr"].append("DetrFeatureExtractor")
-    _import_structure["models.conditional_detr"].append("ConditionalDetrFeatureExtractor")
     _import_structure["models.donut"].append("DonutFeatureExtractor")
     _import_structure["models.dpt"].append("DPTFeatureExtractor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaProcessor"])
@@ -710,15 +707,6 @@ else:
             "DetrForSegmentation",
             "DetrModel",
             "DetrPreTrainedModel",
-        ]
-    )
-    _import_structure["models.conditional_detr"].extend(
-        [
-            "CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ConditionalDetrForObjectDetection",
-            "ConditionalDetrForSegmentation",
-            "ConditionalDetrModel",
-            "ConditionalDetrPreTrainedModel",
         ]
     )
 
@@ -1967,14 +1955,6 @@ else:
             "ViTMAEPreTrainedModel",
         ]
     )
-    _import_structure["models.vit_msn"].extend(
-        [
-            "VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "ViTMSNModel",
-            "ViTMSNForImageClassification",
-            "ViTMSNPreTrainedModel",
-        ]
-    )
     _import_structure["models.videomae"].extend(
         [
             "VIDEOMAE_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3096,7 +3076,6 @@ if TYPE_CHECKING:
         CLIPVisionConfig,
     )
     from .models.codegen import CODEGEN_PRETRAINED_CONFIG_ARCHIVE_MAP, CodeGenConfig, CodeGenTokenizer
-    from .models.conditional_detr import CONDITIONAL_DETR_PRETRAINED_CONFIG_ARCHIVE_MAP, ConditionalDetrConfig
     from .models.convbert import CONVBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvBertConfig, ConvBertTokenizer
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
@@ -3249,7 +3228,7 @@ if TYPE_CHECKING:
         TransfoXLCorpus,
         TransfoXLTokenizer,
     )
-    from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor
+    from .models.trocr import TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP, TrOCRConfig, TrOCRProcessor, TrOCRProcessorWithLM
     from .models.unispeech import UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechConfig
     from .models.unispeech_sat import UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP, UniSpeechSatConfig
     from .models.van import VAN_PRETRAINED_CONFIG_ARCHIVE_MAP, VanConfig
@@ -3260,7 +3239,6 @@ if TYPE_CHECKING:
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
-    from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
     from .models.wav2vec2 import (
         WAV_2_VEC_2_PRETRAINED_CONFIG_ARCHIVE_MAP,
         Wav2Vec2Config,
@@ -3521,9 +3499,7 @@ if TYPE_CHECKING:
         from .image_utils import ImageFeatureExtractionMixin
         from .models.beit import BeitFeatureExtractor
         from .models.clip import CLIPFeatureExtractor
-        from .models.conditional_detr import ConditionalDetrFeatureExtractor
         from .models.convnext import ConvNextFeatureExtractor
-        from .models.deformable_detr import DeformableDetrFeatureExtractor
         from .models.deit import DeiTFeatureExtractor
         from .models.detr import DetrFeatureExtractor
         from .models.donut import DonutFeatureExtractor
@@ -3552,13 +3528,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_timm_and_vision_objects import *
     else:
-        from .models.conditional_detr import (
-            CONDITIONAL_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ConditionalDetrForObjectDetection,
-            ConditionalDetrForSegmentation,
-            ConditionalDetrModel,
-            ConditionalDetrPreTrainedModel,
-        )
         from .models.deformable_detr import (
             DEFORMABLE_DETR_PRETRAINED_MODEL_ARCHIVE_LIST,
             DeformableDetrForObjectDetection,
@@ -4595,12 +4564,6 @@ if TYPE_CHECKING:
             ViTMAELayer,
             ViTMAEModel,
             ViTMAEPreTrainedModel,
-        )
-        from .models.vit_msn import (
-            VIT_MSN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ViTMSNForImageClassification,
-            ViTMSNModel,
-            ViTMSNPreTrainedModel,
         )
         from .models.wav2vec2 import (
             WAV_2_VEC_2_PRETRAINED_MODEL_ARCHIVE_LIST,
