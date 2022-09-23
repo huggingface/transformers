@@ -17,13 +17,41 @@ import json
 import os
 from pathlib import Path
 from shutil import copyfile
+from functools import lru_cache
+
 from typing import Any, Dict, List, Optional, Tuple, Union
+
+import regex as re
 
 import sentencepiece
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer, AddedToken
 from ...utils import logging
 
+
+@lru_cache()
+def bytes_to_unicode():
+    """
+    Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
+    characters the bpe code barfs on.
+
+    The reversible bpe codes work on unicode strings. This means you need a large # of unicode characters in your vocab
+    if you want to avoid UNKs. When you're at something like a 10B token dataset you end up needing around 5K for
+    decent coverage. This is a significant percentage of your normal, say, 32K bpe vocab. To avoid that, we want lookup
+    tables between utf-8 bytes and unicode strings.
+    """
+    bs = (
+        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+    )
+    cs = bs[:]
+    n = 0
+    for b in range(2**8):
+        if b not in bs:
+            bs.append(b)
+            cs.append(2**8 + n)
+            n += 1
+    cs = [chr(n) for n in cs]
+    return dict(zip(bs, cs))
 
 logger = logging.get_logger(__name__)
 
@@ -31,15 +59,16 @@ SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
-    "spm_file": "sentencepiece.bpe.model",
+    "tokenizer_file": "tokenization.json",
+    "merges_file":"merges.txt"
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/vocab.json",
     },
-    "spm_file": {
-        "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/sentencepiece.bpe.model"
+    "merges_file": {
+        "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/merges_file.txt"
     },
 }
 
@@ -47,9 +76,140 @@ MAX_MODEL_INPUT_SIZES = {
     "openai/whisper-base": 1024,
 }
 
-MUSTC_LANGS = ["pt", "fr", "ru", "nl", "ro", "it", "es", "de"]
 
-LANGUAGES = {"mustc": MUSTC_LANGS}
+
+LANGUAGES = {
+    "en": "english",
+    "zh": "chinese",
+    "de": "german",
+    "es": "spanish",
+    "ru": "russian",
+    "ko": "korean",
+    "fr": "french",
+    "ja": "japanese",
+    "pt": "portuguese",
+    "tr": "turkish",
+    "pl": "polish",
+    "ca": "catalan",
+    "nl": "dutch",
+    "ar": "arabic",
+    "sv": "swedish",
+    "it": "italian",
+    "id": "indonesian",
+    "hi": "hindi",
+    "fi": "finnish",
+    "vi": "vietnamese",
+    "iw": "hebrew",
+    "uk": "ukrainian",
+    "el": "greek",
+    "ms": "malay",
+    "cs": "czech",
+    "ro": "romanian",
+    "da": "danish",
+    "hu": "hungarian",
+    "ta": "tamil",
+    "no": "norwegian",
+    "th": "thai",
+    "ur": "urdu",
+    "hr": "croatian",
+    "bg": "bulgarian",
+    "lt": "lithuanian",
+    "la": "latin",
+    "mi": "maori",
+    "ml": "malayalam",
+    "cy": "welsh",
+    "sk": "slovak",
+    "te": "telugu",
+    "fa": "persian",
+    "lv": "latvian",
+    "bn": "bengali",
+    "sr": "serbian",
+    "az": "azerbaijani",
+    "sl": "slovenian",
+    "kn": "kannada",
+    "et": "estonian",
+    "mk": "macedonian",
+    "br": "breton",
+    "eu": "basque",
+    "is": "icelandic",
+    "hy": "armenian",
+    "ne": "nepali",
+    "mn": "mongolian",
+    "bs": "bosnian",
+    "kk": "kazakh",
+    "sq": "albanian",
+    "sw": "swahili",
+    "gl": "galician",
+    "mr": "marathi",
+    "pa": "punjabi",
+    "si": "sinhala",
+    "km": "khmer",
+    "sn": "shona",
+    "yo": "yoruba",
+    "so": "somali",
+    "af": "afrikaans",
+    "oc": "occitan",
+    "ka": "georgian",
+    "be": "belarusian",
+    "tg": "tajik",
+    "sd": "sindhi",
+    "gu": "gujarati",
+    "am": "amharic",
+    "yi": "yiddish",
+    "lo": "lao",
+    "uz": "uzbek",
+    "fo": "faroese",
+    "ht": "haitian creole",
+    "ps": "pashto",
+    "tk": "turkmen",
+    "nn": "nynorsk",
+    "mt": "maltese",
+    "sa": "sanskrit",
+    "lb": "luxembourgish",
+    "my": "myanmar",
+    "bo": "tibetan",
+    "tl": "tagalog",
+    "mg": "malagasy",
+    "as": "assamese",
+    "tt": "tatar",
+    "haw": "hawaiian",
+    "ln": "lingala",
+    "ha": "hausa",
+    "ba": "bashkir",
+    "jw": "javanese",
+    "su": "sundanese",
+}
+
+
+# language code lookup by name, with a few language aliases
+TO_LANGUAGE_CODE = {
+    **{language: code for code, language in LANGUAGES.items()},
+    "burmese": "my",
+    "valencian": "ca",
+    "flemish": "nl",
+    "haitian": "ht",
+    "letzeburgesch": "lb",
+    "pushto": "ps",
+    "panjabi": "pa",
+    "moldavian": "ro",
+    "moldovan": "ro",
+    "sinhalese": "si",
+    "castilian": "es",
+}
+
+
+def get_pairs(word):
+    """
+    Return set of symbol pairs in a word.
+
+    Word is represented as tuple of symbols (symbols being variable-length strings).
+    """
+    pairs = set()
+    prev_char = word[0]
+    for char in word[1:]:
+        pairs.add((prev_char, char))
+        prev_char = char
+    return pairs
 
 
 class WhisperTokenizer(PreTrainedTokenizer):
@@ -59,44 +219,24 @@ class WhisperTokenizer(PreTrainedTokenizer):
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains some of the main methods. Users should refer to
     the superclass for more information regarding such methods.
 
-    Args:
+     Args:
         vocab_file (`str`):
-            File containing the vocabulary.
-        spm_file (`str`):
-            Path to the [SentencePiece](https://github.com/google/sentencepiece) model file
-        bos_token (`str`, *optional*, defaults to `"<s>"`):
-            The beginning of sentence token.
-        eos_token (`str`, *optional*, defaults to `"</s>"`):
-            The end of sentence token.
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
+            Path to the vocabulary file.
+        merges_file (`str`):
+            Path to the merges file.
+        errors (`str`, *optional*, defaults to `"replace"`):
+            Paradigm to follow when decoding bytes to UTF-8. See
+            [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
+        unk_token (`str`, *optional*, defaults to `<|endoftext|>`):
             The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
             token instead.
-        pad_token (`str`, *optional*, defaults to `"<pad>"`):
-            The token used for padding, for example when batching sequences of different lengths.
-        do_upper_case (`bool`, *optional*, defaults to `False`):
-           Whether or not to uppercase the output when decoding.
-        do_lower_case (`bool`, *optional*, defaults to `False`):
-            Whether or not to lowercase the input when tokenizing.
-        tgt_lang (`str`, *optional*):
-            A string representing the target language.
-        sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
-            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
-            to set:
-
-            - `enable_sampling`: Enable subword regularization.
-            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
-
-              - `nbest_size = {0,1}`: No sampling is performed.
-              - `nbest_size > 1`: samples from the nbest_size results.
-              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
-                using forward-filtering-and-backward-sampling algorithm.
-
-            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
-              BPE-dropout.
-
-        **kwargs
-            Additional keyword arguments passed along to [`PreTrainedTokenizer`]
+        bos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+            The beginning of sequence token.
+        eos_token (`str`, *optional*, defaults to `<|endoftext|>`):
+            The end of sequence token.
+        add_prefix_space (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an initial space to the input. This allows to treat the leading word just as any
+            other word. (GPT2 tokenizer detect beginning of words by the preceding space).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -104,57 +244,142 @@ class WhisperTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = MAX_MODEL_INPUT_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
-    prefix_tokens: List[int] = []
-
     def __init__(
         self,
         vocab_file,
-        spm_file,
-        bos_token="<s>",
-        eos_token="</s>",
-        pad_token="<pad>",
-        unk_token="<unk>",
-        do_upper_case=False,
-        do_lower_case=False,
-        tgt_lang=None,
-        lang_codes=None,
-        sp_model_kwargs: Optional[Dict[str, Any]] = None,
-        **kwargs,
-    ) -> None:
-        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-
+        merges_file,
+        multilingual, 
+        task=None,
+        language=None,
+        errors="replace",
+        unk_token="<|endoftext|>",
+        bos_token="<|endoftext|>",
+        eos_token="<|endoftext|>",
+        pad_token=None,
+        add_prefix_space=False,
+        add_bos_token=False,
+        **kwargs
+    ):
+        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
+        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
         super().__init__(
+            errors=errors,
+            unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
-            unk_token=unk_token,
             pad_token=pad_token,
-            do_upper_case=do_upper_case,
-            do_lower_case=do_lower_case,
-            tgt_lang=tgt_lang,
-            lang_codes=lang_codes,
-            sp_model_kwargs=self.sp_model_kwargs,
+            add_prefix_space=add_prefix_space,
+            add_bos_token=add_bos_token,
             **kwargs,
         )
-        self.do_upper_case = do_upper_case
-        self.do_lower_case = do_lower_case
+        self.add_bos_token = add_bos_token
 
-        self.encoder = load_json(vocab_file)
+        with open(vocab_file, encoding="utf-8") as vocab_handle:
+            self.encoder = json.load(vocab_handle)
         self.decoder = {v: k for k, v in self.encoder.items()}
-        self.spm_file = spm_file
-        self.sp_model = load_spm(spm_file, self.sp_model_kwargs)
+        self.errors = errors  # how to handle errors in decoding
+        self.byte_encoder = bytes_to_unicode()
+        self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
+        with open(merges_file, encoding="utf-8") as merges_handle:
+            bpe_merges = merges_handle.read().split("\n")[1:-1]
+        bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
+        self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
+        self.cache = {}
+        self.add_prefix_space = add_prefix_space
 
-        if lang_codes is not None:
-            self.lang_codes = lang_codes
-            self.langs = LANGUAGES[lang_codes]
-            self.lang_tokens = [f"<lang:{lang}>" for lang in self.langs]
-            self.lang_code_to_id = {lang: self.sp_model.PieceToId(f"<lang:{lang}>") for lang in self.langs}
+        # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
+        self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
-            self._additional_special_tokens = self.lang_tokens
-            self._tgt_lang = tgt_lang if tgt_lang is not None else self.langs[0]
 
-            self.set_tgt_lang_special_tokens(self._tgt_lang)
-        else:
-            self.lang_code_to_id = {}
+
+        specials = [
+            "<|startoftranscript|>",
+            *[f"<|{lang}|>" for lang in LANGUAGES.keys()],
+            "<|translate|>",
+            "<|transcribe|>",
+            "<|startoflm|>",
+            "<|startofprev|>",
+            "<|nocaptions|>",
+            "<|notimestamps|>",
+        ]
+
+        self.add_special_tokens(dict(additional_special_tokens=specials))
+        self.language = language
+        if language is not None :
+            additional_tokens = dict(zip(self.additional_special_tokens,self.additional_special_tokens_ids,))
+            self.language_token = additional_tokens[f"<|{self.language}|>"]
+        
+
+        translate = self.all_special_ids[-6]
+        transcribe = self.all_special_ids[-5]
+        sot_sequence = [self.all_special_ids[1]]
+        if language is not None:
+            sot_sequence.append(self.all_special_ids[1] + 1 + LANGUAGES.keys().index(language))
+        if task is not None:
+            sot_sequence.append(transcribe if task == "transcribe" else translate)
+        self.sot_sequence = sot_sequence
+        
+
+    @property
+    @lru_cache()
+    def all_language_tokens(self) -> Tuple[int]:
+        result = []
+        for token, token_id in zip(
+            self.additional_special_tokens,
+            self.additional_special_tokens_ids,
+        ):
+            if token.strip("<|>") in LANGUAGES:
+                result.append(token_id)
+        return tuple(result)
+
+    @property
+    @lru_cache()
+    def all_language_codes(self) -> Tuple[str]:
+        return tuple(self.decode([l]).strip("<|>") for l in self.all_language_tokens)
+
+    @property
+    @lru_cache()
+    def sot_sequence_including_notimestamps(self) -> Tuple[int]:
+        return tuple(list(self.sot_sequence) + [self.no_timestamps])
+
+    @property
+    @lru_cache()
+    def non_speech_tokens(self) -> Tuple[int]:
+        """
+        Returns the list of tokens to suppress in order to avoid any speaker tags or non-speech
+        annotations, to prevent sampling texts that are not actually spoken in the audio, e.g.
+
+        - ♪♪♪
+        - ( SPEAKING FOREIGN LANGUAGE )
+        - [DAVID] Hey there,
+
+        keeping basic punctuations like commas, periods, question marks, exclamation points, etc.
+        """
+
+        result = set()
+        symbols = list("'\"#()*+-/:;<=>@[\\]^_`{|}~「」『』")
+        symbols += "<< >> <<< >>> -- --- -( -[ (' (\" (( )) ((( ))) [[ ]] {{ }} ♪♪ ♪♪♪".split()
+
+        # symbols that may be a single token or multiple tokens depending on the tokenizer.
+        # In case they're multiple tokens, suppress the first token, which is safe because:
+        # These are between U+2640 and U+267F miscellaneous symbols that are okay to suppress
+        # in generations, and in the 3-byte UTF-8 representation they share the first two bytes.
+        miscellaneous = set("♩♪♫♬♭♮♯")
+        assert all(0x2640 <= ord(c) <= 0x267F for c in miscellaneous)
+
+        for symbol in symbols + list(miscellaneous):
+            for tokens in [self.encode(symbol), self.encode(" " + symbol)]:
+                if len(tokens) == 1 or symbol in miscellaneous:
+                    result.add(tokens[0])
+
+        return tuple(sorted(result))
+
+    def _get_single_token_id(self, text) -> int:
+        tokens = self.tokenizer.encode(text)
+        assert len(tokens) == 1, f"{text} is not encoded as a single token"
+        return tokens[0]
 
     @property
     def vocab_size(self) -> int:
@@ -164,47 +389,68 @@ class WhisperTokenizer(PreTrainedTokenizer):
     def tgt_lang(self) -> str:
         return self._tgt_lang
 
-    @tgt_lang.setter
-    def tgt_lang(self, new_tgt_lang) -> None:
-        self._tgt_lang = new_tgt_lang
-        self.set_tgt_lang_special_tokens(new_tgt_lang)
 
-    def set_tgt_lang_special_tokens(self, tgt_lang: str) -> None:
-        """Reset the special tokens to the target language setting. prefix=[eos, tgt_lang_code] and suffix=[eos]."""
-        lang_code_id = self.lang_code_to_id[tgt_lang]
-        self.prefix_tokens = [lang_code_id]
+    def bpe(self, token):
+        if token in self.cache:
+            return self.cache[token]
+        word = tuple(token)
+        pairs = get_pairs(word)
 
-    def _tokenize(self, text: str) -> List[str]:
-        return self.sp_model.encode(text, out_type=str)
+        if not pairs:
+            return token
 
-    def _convert_token_to_id(self, token):
-        return self.encoder.get(token, self.encoder[self.unk_token])
+        while True:
+            bigram = min(pairs, key=lambda pair: self.bpe_ranks.get(pair, float("inf")))
+            if bigram not in self.bpe_ranks:
+                break
+            first, second = bigram
+            new_word = []
+            i = 0
+            while i < len(word):
+                try:
+                    j = word.index(first, i)
+                except ValueError:
+                    new_word.extend(word[i:])
+                    break
+                else:
+                    new_word.extend(word[i:j])
+                    i = j
 
-    def _convert_id_to_token(self, index: int) -> str:
-        """Converts an index (integer) in a token (str) using the decoder."""
-        return self.decoder.get(index, self.unk_token)
+                if word[i] == first and i < len(word) - 1 and word[i + 1] == second:
+                    new_word.append(first + second)
+                    i += 2
+                else:
+                    new_word.append(word[i])
+                    i += 1
+            new_word = tuple(new_word)
+            word = new_word
+            if len(word) == 1:
+                break
+            else:
+                pairs = get_pairs(word)
+        word = " ".join(word)
+        self.cache[token] = word
+        return word
 
-    def convert_tokens_to_string(self, tokens: List[str]) -> str:
-        """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        out_string = self.sp_model.decode(tokens)
+    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
+        if self.add_bos_token:
+            bos_token_ids = [self.bos_token_id]
+        else:
+            bos_token_ids = []
 
-        if self.do_upper_case:
-            out_string = out_string.upper()
-        return out_string
+        output = bos_token_ids + token_ids_0
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None) -> List[int]:
-        """Build model inputs from a sequence by appending eos_token_id."""
         if token_ids_1 is None:
-            return self.prefix_tokens + token_ids_0 + [self.eos_token_id]
-        # We don't expect to process pairs, but leave the pair logic for API consistency
-        return self.prefix_tokens + token_ids_0 + token_ids_1 + [self.eos_token_id]
+            return output
+
+        return output + bos_token_ids + token_ids_1
 
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
         """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` method.
+        Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding
+        special tokens using the tokenizer `prepare_for_model` or `encode_plus` methods.
 
         Args:
             token_ids_0 (`List[int]`):
@@ -217,70 +463,83 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Returns:
             `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
-
         if already_has_special_tokens:
             return super().get_special_tokens_mask(
                 token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
             )
 
-        prefix_ones = [1] * len(self.prefix_tokens)
-        suffix_ones = [1]
+        if not self.add_bos_token:
+            return super().get_special_tokens_mask(
+                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=False
+            )
+
         if token_ids_1 is None:
-            return prefix_ones + ([0] * len(token_ids_0)) + suffix_ones
-        return prefix_ones + ([0] * len(token_ids_0)) + ([0] * len(token_ids_1)) + suffix_ones
+            return [1] + ([0] * len(token_ids_0))
+        return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
 
-    def get_vocab(self) -> Dict:
-        vocab = self.encoder.copy()
-        vocab.update(self.added_tokens_encoder)
-        return vocab
+    def _tokenize(self, text):
+        """Tokenize a string."""
+        bpe_tokens = []
+        for token in re.findall(self.pat, text):
+            token = "".join(
+                self.byte_encoder[b] for b in token.encode("utf-8")
+            )  # Maps all our bytes to unicode strings, avoiding control tokens of the BPE (spaces in our case)
+            bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
+        return bpe_tokens
 
-    def __getstate__(self) -> Dict:
-        state = self.__dict__.copy()
-        state["sp_model"] = None
-        return state
+    def _convert_token_to_id(self, token):
+        """Converts a token (str) in an id using the vocab."""
+        return self.encoder.get(token, self.encoder.get(self.unk_token))
 
-    def __setstate__(self, d: Dict) -> None:
-        self.__dict__ = d
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        return self.decoder.get(index)
 
-        # for backward compatibility
-        if not hasattr(self, "sp_model_kwargs"):
-            self.sp_model_kwargs = {}
-
-        self.sp_model = load_spm(self.spm_file, self.sp_model_kwargs)
+    def convert_tokens_to_string(self, tokens):
+        """Converts a sequence of tokens (string) in a single string."""
+        text = "".join(tokens)
+        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
+        return text
 
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
-        save_dir = Path(save_directory)
-        assert save_dir.is_dir(), f"{save_directory} should be a directory"
-        vocab_save_path = save_dir / (
-            (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["vocab_file"]
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            return
+        vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
         )
-        spm_save_path = save_dir / (
-            (filename_prefix + "-" if filename_prefix else "") + self.vocab_files_names["spm_file"]
+        merge_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["merges_file"]
         )
 
-        save_json(self.encoder, vocab_save_path)
+        with open(vocab_file, "w", encoding="utf-8") as f:
+            f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
-        if os.path.abspath(self.spm_file) != os.path.abspath(spm_save_path) and os.path.isfile(self.spm_file):
-            copyfile(self.spm_file, spm_save_path)
-        elif not os.path.isfile(self.spm_file):
-            with open(spm_save_path, "wb") as fi:
-                content_spiece_model = self.sp_model.serialized_model_proto()
-                fi.write(content_spiece_model)
+        index = 0
+        with open(merge_file, "w", encoding="utf-8") as writer:
+            writer.write("#version: 0.2\n")
+            for bpe_tokens, token_index in sorted(self.bpe_ranks.items(), key=lambda kv: kv[1]):
+                if index != token_index:
+                    logger.warning(
+                        f"Saving vocabulary to {merge_file}: BPE merge indices are not consecutive."
+                        " Please check that the tokenizer is not corrupted!"
+                    )
+                    index = token_index
+                writer.write(" ".join(bpe_tokens) + "\n")
+                index += 1
 
-        return (str(vocab_save_path), str(spm_save_path))
+        return vocab_file, merge_file
 
+    def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
+        add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
+        if is_split_into_words or add_prefix_space:
+            text = " " + text
+        return (text, kwargs)
 
-def load_spm(path: str, sp_model_kwargs: Dict[str, Any]) -> sentencepiece.SentencePieceProcessor:
-    spm = sentencepiece.SentencePieceProcessor(**sp_model_kwargs)
-    spm.Load(str(path))
-    return spm
-
-
-def load_json(path: str) -> Union[Dict, List]:
-    with open(path, "r") as f:
-        return json.load(f)
-
-
-def save_json(data, path: str) -> None:
-    with open(path, "w") as f:
-        json.dump(data, f, indent=2)
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
+        input_ids = []
+        for is_user, text in conversation.iter_texts():
+            input_ids.extend(self.encode(text, add_special_tokens=False) + [self.eos_token_id])
+        if len(input_ids) > self.model_max_length:
+            input_ids = input_ids[-self.model_max_length :]
+        return input_ids
