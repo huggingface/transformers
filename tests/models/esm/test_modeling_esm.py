@@ -105,9 +105,7 @@ class ESMModelTester:
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
+    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
         model = ESMModel(config=config)
         model.to(torch_device)
         model.eval()
