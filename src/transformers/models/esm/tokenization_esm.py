@@ -86,7 +86,8 @@ class ESMTokenizer(PreTrainedTokenizer):
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
-        assert token_ids_1 is None, "not supporting multiple sentences"
+        if token_ids_1 is not None:
+            raise ValueError("Multiple input sentences are not supported!")
         cls_: List[int] = [self.cls_token_id]
         eos_: List[int] = [self.eos_token_id]
         return cls_ + token_ids_0 + eos_
