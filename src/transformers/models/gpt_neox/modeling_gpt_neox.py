@@ -300,7 +300,7 @@ class GPTNeoXMLP(nn.Module):
 class GPTNeoXLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.gpt_j_residual = config.gpt_j_residual
+        self.use_parallel_residual = config.use_parallel_residual
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = GPTNeoXAttention(config)
@@ -327,7 +327,7 @@ class GPTNeoXLayer(nn.Module):
         attn_output = attention_layer_outputs[0]  # output_attn: attn_output, present, (attn_weights)
         outputs = attention_layer_outputs[1:]
 
-        if self.gpt_j_residual:
+        if self.use_parallel_residual:
             # pseudocode:
             # x = x + attn(ln1(x)) + mlp(ln2(x))
             mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
