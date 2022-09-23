@@ -253,6 +253,8 @@
         title: GPT Neo
       - local: model_doc/gpt_neox
         title: GPT NeoX
+      - local: model_doc/gpt_neox_japanese
+        title: GPT NeoX Japanese
       - local: model_doc/gptj
         title: GPT-J
       - local: model_doc/gpt2
@@ -360,10 +362,14 @@
       sections:
       - local: model_doc/beit
         title: BEiT
+      - local: model_doc/conditional_detr
+        title: Conditional DETR
       - local: model_doc/convnext
         title: ConvNeXT
       - local: model_doc/cvt
         title: CvT
+      - local: model_doc/deformable_detr
+        title: Deformable DETR
       - local: model_doc/deit
         title: DeiT
       - local: model_doc/detr
@@ -402,6 +408,8 @@
         title: Vision Transformer (ViT)
       - local: model_doc/vit_mae
         title: ViTMAE
+      - local: model_doc/vit_msn
+        title: ViTMSN
       - local: model_doc/yolos
         title: YOLOS
       title: Vision models

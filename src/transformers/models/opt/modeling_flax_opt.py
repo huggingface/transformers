@@ -484,8 +484,6 @@ class FlaxOPTDecoder(nn.Module):
 
         hidden_states = inputs_embeds + positions
 
-        hidden_states = self.dropout_layer(hidden_states, deterministic=deterministic)
-
         hidden_state, all_hidden_states, attentions = self.layers(
             hidden_states,
             attention_mask,
