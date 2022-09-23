@@ -2213,24 +2213,17 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             )
             for shard_file, shard in shards.items():
                 with h5py.File(os.path.join(save_directory, shard_file), mode="w") as shard_file:
-                    layers = []
-                    for layer in sorted(shard, key=lambda x: x.name):
-                        if "embed_tokens" in layer.name: 
-                            layer_name = layer.name
-                        if "model." in layer.name : 
-                            layer_name = layer.name
-                        else:
-                            layer_name = "/".join(layer.name.split("/")[1:])
-                        param_dset = shard_file.create_dataset(
-                                layer_name, layer.numpy().shape, dtype=layer.numpy().dtype
-                        )
-                        param_dset[:] = layer.numpy()
-                        layers.append(layer_name.encode("utf8"))
                     save_attributes_to_hdf5_group(
                         shard_file,
                         "layer_names",
-                        layers,
+                        ["/".join(layer.name.split("/")[1:]).encode("utf8") for layer in shard],
                     )
+
+                    for layer in sorted(shard, key=lambda x: x.name):
+                        param_dset = shard_file.create_dataset(
+                            "/".join(layer.name.split("/")[1:]), layer.numpy().shape, dtype=layer.numpy().dtype
+                        )
+                        param_dset[:] = layer.numpy()
 
         if push_to_hub:
             self._upload_modified_files(
@@ -3061,6 +3054,7 @@ class TFWrappedEmbeddings:
     def __init__(self, layer, abs_scope_name=None):
         self._layer = layer
         self._abs_scope_name = abs_scope_name
+        self.vocab_size = self._layer.vocab_size
 
     def call(self, inputs, mode="embedding"):
         if self._abs_scope_name is None:
