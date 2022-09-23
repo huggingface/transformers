@@ -28,7 +28,6 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
-        ("time_series_transformer", "TimeSeriesTransformerModel"),
         ("albert", "AlbertModel"),
         ("bart", "BartModel"),
         ("beit", "BeitModel"),
@@ -129,6 +128,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("swinv2", "Swinv2Model"),
         ("t5", "T5Model"),
         ("tapas", "TapasModel"),
+        ("time_series_transformer", "TimeSeriesTransformerModel"),
         ("trajectory_transformer", "TrajectoryTransformerModel"),
         ("transfo-xl", "TransfoXLModel"),
         ("unispeech", "UniSpeechModel"),

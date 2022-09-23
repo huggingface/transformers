@@ -10,21 +10,20 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# TimeSeriesTransformer
+# Time Series Transformer
 
 ## Overview
 
-The TimeSeriesTransformer model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>)  by <INSERT AUTHORS HERE>. <INSERT SHORT SUMMARY HERE>
-
-The abstract from the paper is the following:
-
-*<INSERT PAPER ABSTRACT HERE>*
+The Time Series Transformer model is a vanilla encoder-decoder Transformer for time series forecasting and classification.
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- The model is trained using "teacher-forcing", similar to machine translation. This means that, during training, one provides the ground truth
+previous targets to the model rather than the model's predictions in order to predict the next target. Only at inference time, we sample from the model
+to make a prediction at each time step, which is then fed to the model in order to make the next prediction (also called autoregressive generation).
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingface.co/<INSERT YOUR HF USERNAME HERE>). The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [kashif](<https://huggingface.co/kashif).
+
 
 ## TimeSeriesTransformerConfig
 
@@ -36,3 +35,8 @@ This model was contributed by [INSERT YOUR HF USERNAME HERE](<https://huggingfac
 [[autodoc]] TimeSeriesTransformerModel
     - forward
 
+
+## TimeSeriesTransformerForPrediction
+
+[[autodoc]] TimeSeriesTransformerForPrediction
+    - forward

@@ -28,7 +28,6 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCross
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
-    add_end_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -219,18 +218,22 @@ class FeatureEmbedder(nn.Module):
 
 class MeanScaler(nn.Module):
     """
-    Computes a scaling factor as the weighted average absolute value along dimension ``dim``, and scales the data
-    accordingly. Parameters ---------- dim
-        dimension along which to compute the scale
-    keepdim
-        controls whether to retain dimension ``dim`` (of length 1) in the scale tensor, or suppress it.
-    minimum_scale
-        default scale that is used for elements that are constantly zero along dimension ``dim``.
+    Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
+    accordingly.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        minimum_scale (`float`, *optional*, defaults to 1e-10):
+            Default scale that is used for elements that are constantly zero along dimension ``dim``.
     """
 
     def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-10):
         super().__init__()
-        assert dim > 0, "Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0"
+        if not dim > 0:
+            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
         self.dim = dim
         self.keepdim = keepdim
         self.register_buffer("minimum_scale", torch.tensor(minimum_scale))
@@ -270,10 +273,12 @@ class MeanScaler(nn.Module):
 class NOPScaler(nn.Module):
     """
     Assigns a scaling factor equal to 1 along dimension ``dim``, and therefore applies no scaling to the input data.
-    Parameters ---------- dim
-        dimension along which to compute the scale
-    keepdim
-        controls whether to retain dimension ``dim`` (of length 1) in the scale tensor, or suppress it.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension ``dim`` (of length 1) in the scale tensor, or suppress it.
     """
 
     def __init__(self, dim: int, keepdim: bool = False):
@@ -289,31 +294,38 @@ class NOPScaler(nn.Module):
         return data, scale
 
 
-def _weighted_average(x: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
+def _weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
     """
-    Computes the weighted average of a given tensor across a given dim, masking values associated with weight zero,
-    meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`. Parameters ---------- x
-        Input tensor, of which the average must be computed.
-    weights
-        Weights tensor, of the same shape as `x`.
-    dim
-        The dim along which to average `x`
-    Returns ------- Tensor:
-        The tensor with values averaged along the specified `dim`.
+    Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
+    meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
+
+    Args:
+        input_tensor (`torch.FloatTensor`):
+            Input tensor, of which the average must be computed.
+        weights (`torch.FloatTensor`, *optional*):
+            Weights tensor, of the same shape as `input_tensor`.
+        dim (`int`, *optional*):
+            The dim along which to average `input_tensor`.
+
+    Returns:
+        `torch.FloatTensor`: The tensor with values averaged along the specified `dim`.
     """
     if weights is not None:
-        weighted_tensor = torch.where(weights != 0, x * weights, torch.zeros_like(x))
+        weighted_tensor = torch.where(weights != 0, input_tensor * weights, torch.zeros_like(input_tensor))
         sum_weights = torch.clamp(weights.sum(dim=dim) if dim else weights.sum(), min=1.0)
         return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
     else:
-        return x.mean(dim=dim)
+        return input_tensor.mean(dim=dim)
 
 
 class NegativeLogLikelihood:
     """
-    Compute the negative log likelihood loss. Parameters ---------- beta: float in range (0, 1)
-        beta parameter from the paper: "On the Pitfalls of Heteroscedastic Uncertainty Estimation with Probabilistic
-        Neural Networks" by Seitzer et al. 2022 https://openreview.net/forum?id=aPOpXlnV1T
+    Computes the negative log likelihood loss.
+
+    Args:
+        beta (`float`):
+            Float in range (0, 1). The beta parameter from the paper: "On the Pitfalls of Heteroscedastic Uncertainty Estimation
+            with Probabilistic Neural Networks" by [Seitzer et al. 2022](https://openreview.net/forum?id=aPOpXlnV1T).
     """
 
     beta: float = 0.0
@@ -1549,7 +1561,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         )
 
 
-class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
+class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
         self.model = TimeSeriesTransformerModel(config)
@@ -1717,17 +1729,3 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
                 (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
             )
         )
-
-
-class TimeSeriesTransformerDecoderWrapper(TimeSeriesTransformerPreTrainedModel):
-    """
-    This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
-    used in combination with the [`EncoderDecoderModel`] framework.
-    """
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.decoder = TimeSeriesTransformerDecoder(config)
-
-    def forward(self, *args, **kwargs):
-        return self.decoder(*args, **kwargs)
