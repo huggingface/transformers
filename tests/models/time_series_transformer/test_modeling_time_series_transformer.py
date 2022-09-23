@@ -14,11 +14,13 @@
 # limitations under the License.
 """ Testing suite for the PyTorch TimeSeriesTransformer model. """
 
+import copy
 import inspect
 import tempfile
 import unittest
 
-from transformers import is_torch_available
+from transformers import is_torch_available, MODEL_MAPPING
+from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -210,6 +212,8 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_missing_keys = False
     test_torchscript = False
+    test_inputs_embeds = False
+    test_model_common_attributes = False
 
     def setUp(self):
         self.model_tester = TimeSeriesTransformerModelTester(self)
@@ -242,6 +246,17 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
     #     model.generate(input_ids, attention_mask=attention_mask)
     #     model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
+    # Ignore since we have no tokens embeddings
+    def test_resize_tokens_embeddings(self):
+        pass
+
+    # # Input is 'feat_static_cat' not 'input_ids'
+    def test_model_main_input_name(self):
+        model_signature = inspect.signature(getattr(TimeSeriesTransformerModel, "forward"))
+        # The main input is the name of the argument after `self`
+        observed_main_input_name = list(model_signature.parameters.keys())[1]
+        self.assertEqual(TimeSeriesTransformerModel.main_input_name, observed_main_input_name)
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -252,10 +267,10 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = [
+                "past_target",
                 "feat_static_cat",
                 "feat_static_real",
                 "past_time_feat",
-                "past_target",
                 "past_observed_values",
                 "future_time_feat",
                 "future_target",
@@ -322,6 +337,12 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
 
             if "past_key_values" in outputs:
                 correct_outlen += 1  # past_key_values have been returned
+
+            if "loss" in outputs:
+                correct_outlen += 1
+
+            if "params" in outputs:
+                correct_outlen += 1
 
             self.assertEqual(out_len, correct_outlen)
 

@@ -782,6 +782,7 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
 class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
     config_class = TimeSeriesTransformerConfig
     base_model_prefix = "model"
+    main_input_name = "past_target"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
@@ -1442,14 +1443,20 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
+        past_target: torch.Tensor,
         feat_static_cat: torch.Tensor,
         feat_static_real: torch.Tensor,
         past_time_feat: torch.Tensor,
-        past_target: torch.Tensor,
         past_observed_values: torch.Tensor,
         future_time_feat: Optional[torch.Tensor] = None,
         future_target: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
         output_hidden_states: Optional[bool] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1510,6 +1517,8 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             enc_input = transformer_inputs[:, : self.config.context_length, ...]
             encoder_outputs = self.encoder(
                 inputs_embeds=enc_input,
+                attention_mask=attention_mask,
+                head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1525,7 +1534,12 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         dec_input = transformer_inputs[:, self.config.context_length :, ...]
         decoder_outputs = self.decoder(
             inputs_embeds=dec_input,
+            attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
+            encoder_attention_mask=attention_mask,
+            head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1588,10 +1602,10 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
+        past_target: torch.Tensor,
         feat_static_cat: torch.Tensor,
         feat_static_real: torch.Tensor,
         past_time_feat: torch.Tensor,
-        past_target: torch.Tensor,
         past_observed_values: torch.Tensor,
         future_time_feat: Optional[torch.Tensor] = None,
         future_target: Optional[torch.Tensor] = None,
@@ -1642,10 +1656,10 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             use_cache = False
 
         outputs = self.model(
+            past_target=past_target,
             feat_static_cat=feat_static_cat,
             feat_static_real=feat_static_real,
             past_time_feat=past_time_feat,
-            past_target=past_target,
             past_observed_values=past_observed_values,
             future_time_feat=future_time_feat,
             future_target=future_target,
@@ -1658,11 +1672,14 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
 
         prediction_loss = None
         params = None
-        if future_target is not None and future_observed_values is not None:
-            params = self.output_params(outputs.last_hidden_state)
-            distr = self.output_distribution(params, outputs.scale)
+        if future_target is not None:
+            params = self.output_params(outputs[0])  # outputs.last_hidden_state
+            distr = self.output_distribution(params, outputs[-2])  # outputs.scale
 
             loss = self.loss(distr, future_target)
+
+            if future_observed_values is None:
+                future_observed_values = torch.ones_like(future_target)
 
             if len(self.target_shape) == 0:
                 loss_weights = future_observed_values
