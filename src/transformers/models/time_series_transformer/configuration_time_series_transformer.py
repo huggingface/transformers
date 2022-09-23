@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" TimeSeriesTransformer model configuration"""
+""" Time Series Transformer model configuration"""
 from typing import List, Optional
 
 from ...configuration_utils import PretrainedConfig
@@ -30,9 +30,9 @@ TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class TimeSeriesTransformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~TimeSeriesTransformerModel`]. It is used to
-    instantiate a TimeSeriesTransformer model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    TimeSeriesTransformer [huggingface/tst-ett](https://huggingface.co/huggingface/tst-ett) architecture.
+    instantiate a Time Series Transformer model according to the specified arguments, defining the model architecture.
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the Time Series
+    Transformer [huggingface/tst-ett](https://huggingface.co/huggingface/tst-ett) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -105,7 +105,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     ```python
     >>> from transformers import TimeSeriesTransformerConfig, TimeSeriesTransformerModel
 
-    >>> # Initializing a TimeSeriesTransformer huggingface/tst-ett style configuration
+    >>> # Initializing a Time Series Transformer huggingface/tst-ett style configuration
     >>> configuration = TimeSeriesTransformerConfig()
 
     >>> # Initializing a model from the huggingface/tst-ett style configuration

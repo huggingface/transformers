@@ -12,28 +12,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch TimeSeriesTransformer model."""
+""" PyTorch Time Series Transformer model."""
 
 import random
 from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.distributions import AffineTransform, Distribution, StudentT, TransformedDistribution
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_code_sample_docstrings,
-    add_end_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_time_series_transformer import TimeSeriesTransformerConfig
 
 
@@ -180,8 +172,8 @@ class StudentTOutput(DistributionOutput):
 
     @classmethod
     def domain_map(cls, df: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor):
-        scale = F.softplus(scale)
-        df = 2.0 + F.softplus(df)
+        scale = nn.functional.softplus(scale)
+        df = 2.0 + nn.functional.softplus(df)
         return df.squeeze(-1), loc.squeeze(-1), scale.squeeze(-1)
 
     @property
@@ -190,11 +182,7 @@ class StudentTOutput(DistributionOutput):
 
 
 class FeatureEmbedder(nn.Module):
-    def __init__(
-        self,
-        cardinalities: List[int],
-        embedding_dims: List[int],
-    ) -> None:
+    def __init__(self, cardinalities: List[int], embedding_dims: List[int]) -> None:
         super().__init__()
 
         self.num_features = len(cardinalities)
@@ -219,18 +207,22 @@ class FeatureEmbedder(nn.Module):
 
 class MeanScaler(nn.Module):
     """
-    Computes a scaling factor as the weighted average absolute value along dimension ``dim``, and scales the data
-    accordingly. Parameters ---------- dim
-        dimension along which to compute the scale
-    keepdim
-        controls whether to retain dimension ``dim`` (of length 1) in the scale tensor, or suppress it.
-    minimum_scale
-        default scale that is used for elements that are constantly zero along dimension ``dim``.
+    Computes a scaling factor as the weighted average absolute value along dimension `dim`, and scales the data
+    accordingly.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
+        minimum_scale (`float`, *optional*, defaults to 1e-10):
+            Default scale that is used for elements that are constantly zero along dimension `dim`.
     """
 
     def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-10):
         super().__init__()
-        assert dim > 0, "Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0"
+        if not dim > 0:
+            raise ValueError("Cannot compute scale along dim = 0 (batch dimension), please provide dim > 0")
         self.dim = dim
         self.keepdim = keepdim
         self.register_buffer("minimum_scale", torch.tensor(minimum_scale))
@@ -269,11 +261,13 @@ class MeanScaler(nn.Module):
 
 class NOPScaler(nn.Module):
     """
-    Assigns a scaling factor equal to 1 along dimension ``dim``, and therefore applies no scaling to the input data.
-    Parameters ---------- dim
-        dimension along which to compute the scale
-    keepdim
-        controls whether to retain dimension ``dim`` (of length 1) in the scale tensor, or suppress it.
+    Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
+
+    Args:
+        dim (`int`):
+            Dimension along which to compute the scale.
+        keepdim (`bool`, *optional*, defaults to `False`):
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
     """
 
     def __init__(self, dim: int, keepdim: bool = False):
@@ -289,31 +283,39 @@ class NOPScaler(nn.Module):
         return data, scale
 
 
-def _weighted_average(x: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
+def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
     """
-    Computes the weighted average of a given tensor across a given dim, masking values associated with weight zero,
-    meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`. Parameters ---------- x
-        Input tensor, of which the average must be computed.
-    weights
-        Weights tensor, of the same shape as `x`.
-    dim
-        The dim along which to average `x`
-    Returns ------- Tensor:
-        The tensor with values averaged along the specified `dim`.
+    Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
+    meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
+
+    Args:
+        input_tensor (`torch.FloatTensor`):
+            Input tensor, of which the average must be computed.
+        weights (`torch.FloatTensor`, *optional*):
+            Weights tensor, of the same shape as `input_tensor`.
+        dim (`int`, *optional*):
+            The dim along which to average `input_tensor`.
+
+    Returns:
+        `torch.FloatTensor`: The tensor with values averaged along the specified `dim`.
     """
     if weights is not None:
-        weighted_tensor = torch.where(weights != 0, x * weights, torch.zeros_like(x))
+        weighted_tensor = torch.where(weights != 0, input_tensor * weights, torch.zeros_like(input_tensor))
         sum_weights = torch.clamp(weights.sum(dim=dim) if dim else weights.sum(), min=1.0)
         return (weighted_tensor.sum(dim=dim) if dim else weighted_tensor.sum()) / sum_weights
     else:
-        return x.mean(dim=dim)
+        return input_tensor.mean(dim=dim)
 
 
 class NegativeLogLikelihood:
     """
-    Compute the negative log likelihood loss. Parameters ---------- beta: float in range (0, 1)
-        beta parameter from the paper: "On the Pitfalls of Heteroscedastic Uncertainty Estimation with Probabilistic
-        Neural Networks" by Seitzer et al. 2022 https://openreview.net/forum?id=aPOpXlnV1T
+    Computes the negative log likelihood loss.
+
+    Args:
+        beta (`float`):
+            Float in range (0, 1). The beta parameter from the paper: "On the Pitfalls of Heteroscedastic Uncertainty
+            Estimation with Probabilistic Neural Networks" by [Seitzer et al.
+            2022](https://openreview.net/forum?id=aPOpXlnV1T).
     """
 
     beta: float = 0.0
@@ -326,6 +328,7 @@ class NegativeLogLikelihood:
         return nll
 
 
+# Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
@@ -341,6 +344,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
+# Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -352,7 +356,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
     inverted_mask = 1.0 - expanded_mask
 
-    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
+    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 @dataclass
@@ -775,30 +779,6 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
         return outputs
 
 
-class TimeSeriesTransformerClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(
-        self,
-        input_dim: int,
-        inner_dim: int,
-        num_classes: int,
-        pooler_dropout: float,
-    ):
-        super().__init__()
-        self.dense = nn.Linear(input_dim, inner_dim)
-        self.dropout = nn.Dropout(p=pooler_dropout)
-        self.out_proj = nn.Linear(inner_dim, num_classes)
-
-    def forward(self, hidden_states: torch.Tensor):
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.dense(hidden_states)
-        hidden_states = torch.tanh(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.out_proj(hidden_states)
-        return hidden_states
-
-
 class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
     config_class = TimeSeriesTransformerConfig
     base_model_prefix = "model"
@@ -834,23 +814,6 @@ TIME_SERIES_TRANSFORMER_START_DOCSTRING = r"""
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-TIME_SERIES_TRANSFORMER_PREDICTION_EXAMPLE = r"""
-    Summarization example:
-
-    ```python
-    >>> from transformers import TimeSeriesTransformerForPrediction
-
-    >>> model = TimeSeriesTransformerForConditionalGeneration.from_pretrained("huggingface/tst-ett")
-
-    >>> ARTICLE_TO_SUMMARIZE = "My friends are cool but they eat too many carbs."
-    >>> inputs = tokenizer([ARTICLE_TO_SUMMARIZE], max_length=1024, return_tensors="pt")
-
-    >>> # Generate Summary
-    >>> summary_ids = model.generate(inputs["input_ids"], num_beams=4, max_length=5)
-    >>> print(tokenizer.decode(summary_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False))
-    ```
 """
 
 TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
@@ -1469,11 +1432,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Seq2SeqTSModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
+    @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         feat_static_cat: torch.Tensor,
@@ -1489,6 +1448,47 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         output_attentions: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import TimeSeriesTransformerModel
+        >>> import torch
+
+        >>> model = TimeSeriesTransformerModel.from_pretrained("huggingface/tst-base")
+
+        >>> inputs = dict()
+        >>> batch_size = 2
+        >>> cardinality = 5
+        >>> num_time_features = 10
+        >>> content_length = 8
+        >>> prediction_length = 2
+        >>> lags_seq = [2, 3]
+        >>> past_length = context_length + max(lags_seq)
+
+        >>> # encoder inputs
+        >>> inputs["feat_static_cat"] = ids_tensor([batch_size, 1], cardinality)
+        >>> inputs["feat_static_real"] = torch.randn([batch_size, 1])
+        >>> inputs["past_time_feat"] = torch.randn([batch_size, past_length, num_time_features])
+        >>> inputs["past_target"] = torch.randn([batch_size, past_length])
+        >>> inputs["past_observed_values"] = torch.randn([batch_size, past_length])
+
+        >>> # decoder inputs
+        >>> inputs["future_time_feat"] = torch.randn([batch_size, prediction_length, num_time_features])
+        >>> inputs["future_target"] = torch.randn([batch_size, prediction_length])
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_states = outputs.last_hidden_state
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
         transformer_inputs, scale, static_feat = self.create_network_inputs(
             feat_static_cat=feat_static_cat,
             feat_static_real=feat_static_real,
@@ -1498,13 +1498,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             future_time_feat=future_time_feat,
             future_target=future_target,
         )
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
             enc_input = transformer_inputs[:, : self.config.context_length, ...]
@@ -1549,7 +1542,11 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         )
 
 
-class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
+@add_start_docstrings(
+    "The Time Series Transformer Model with a distribution head on top for time-series forecasting.",
+    TIME_SERIES_TRANSFORMER_START_DOCSTRING,
+)
+class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
     def __init__(self, config: TimeSeriesTransformerConfig):
         super().__init__(config)
         self.model = TimeSeriesTransformerModel(config)
@@ -1577,6 +1574,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             sliced_params = [p[:, -trailing_n:] for p in params]
         return self.distribution_output.distribution(sliced_params, scale=scale)
 
+    @add_start_docstrings_to_model_forward(TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         feat_static_cat: torch.Tensor,
@@ -1593,6 +1592,41 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
+        r"""
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import TimeSeriesTransformerForPrediction
+        >>> import torch
+
+        >>> model = TimeSeriesTransformerForPrediction.from_pretrained("huggingface/tst-base")
+
+        >>> inputs = dict()
+        >>> batch_size = 2
+        >>> cardinality = 5
+        >>> num_time_features = 10
+        >>> content_length = 8
+        >>> prediction_length = 2
+        >>> lags_seq = [2, 3]
+        >>> past_length = context_length + max(lags_seq)
+
+        >>> # encoder inputs
+        >>> inputs["feat_static_cat"] = ids_tensor([batch_size, 1], cardinality)
+        >>> inputs["feat_static_real"] = torch.randn([batch_size, 1])
+        >>> inputs["past_time_feat"] = torch.randn([batch_size, past_length, num_time_features])
+        >>> inputs["past_target"] = torch.randn([batch_size, past_length])
+        >>> inputs["past_observed_values"] = torch.randn([batch_size, past_length])
+
+        >>> # decoder inputs
+        >>> inputs["future_time_feat"] = torch.randn([batch_size, prediction_length, num_time_features])
+        >>> inputs["future_target"] = torch.randn([batch_size, prediction_length])
+
+        >>> outputs = model(**inputs)
+        >>> loss = outputs.loss
+        ```"""
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if future_target is not None:
             use_cache = False
@@ -1625,7 +1659,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
             else:
                 loss_weights = future_observed_values.min(dim=-1, keepdim=False)
 
-            prediction_loss = _weighted_average(loss, weights=loss_weights)
+            prediction_loss = weighted_average(loss, weights=loss_weights)
 
         if not return_dict:
             outputs = (params + outputs[1:]) if params is not None else outputs[1:]
@@ -1719,17 +1753,3 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerModel):
                 (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
             )
         )
-
-
-class TimeSeriesTransformerDecoderWrapper(TimeSeriesTransformerPreTrainedModel):
-    """
-    This wrapper class is a helper class to correctly load pretrained checkpoints when the causal language model is
-    used in combination with the [`EncoderDecoderModel`] framework.
-    """
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.decoder = TimeSeriesTransformerDecoder(config)
-
-    def forward(self, *args, **kwargs):
-        return self.decoder(*args, **kwargs)

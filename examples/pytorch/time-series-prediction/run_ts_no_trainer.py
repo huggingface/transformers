@@ -1,30 +1,42 @@
+#!/usr/bin/env python
+# coding=utf-8
+# Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+
 import argparse
-import json
 import logging
-import math
 import os
-import random
-from itertools import chain
 from pathlib import Path
 
 import datasets
-import torch
 from datasets import load_dataset
-from torch.utils.data import DataLoader
-from tqdm.auto import tqdm
 
 import transformers
-from accelerate import Accelerator, DistributedType
+from accelerate import Accelerator
 from accelerate.logging import get_logger
 from accelerate.utils import set_seed
 from huggingface_hub import Repository
-from transformers import SchedulerType
+from transformers import AutoConfig, SchedulerType, TimeSeriesTransformerForPrediction
 from transformers.utils import get_full_repo_name, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
+""" Training a 🤗 Transformers model for time series prediction"""
+
+
 logger = get_logger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/time-series-prediction/requirements.txt")
+
 
 # Parsing input arguments
 def parse_args():
@@ -59,7 +71,7 @@ def parse_args():
         "--prediction_length",
         type=int,
         default=None,
-        help=("The prediction horizon of the time series forecasting task."),
+        help="The prediction horizon of the time series forecasting task.",
     )
     parser.add_argument(
         "--freq",
@@ -133,6 +145,8 @@ def parse_args():
     )
     args = parser.parse_args()
 
+    return args
+
 
 def main():
     args = parse_args()
@@ -192,3 +206,9 @@ def main():
 
     # model
     model = TimeSeriesTransformerForPrediction(config)
+
+    # just printing for now to make sure quality passes
+    print(args)
+    print(raw_datasets)
+    print(model)
+    print(repo)
