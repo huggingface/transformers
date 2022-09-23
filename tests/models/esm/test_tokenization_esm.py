@@ -32,41 +32,9 @@ class ESMTokenizationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
         self.tmpdirname = tempfile.mkdtemp()
-        vocab_tokens: List[str] = [
-            "<cls>",
-            "<pad>",
-            "<eos>",
-            "<unk>",
-            "L",
-            "A",
-            "G",
-            "V",
-            "S",
-            "E",
-            "R",
-            "T",
-            "I",
-            "D",
-            "P",
-            "K",
-            "Q",
-            "N",
-            "F",
-            "Y",
-            "M",
-            "H",
-            "W",
-            "C",
-            "X",
-            "B",
-            "U",
-            "Z",
-            "O",
-            ".",
-            "-",
-            "<null_1>",
-            "<mask>",
-        ]
+        # fmt: off
+        vocab_tokens: List[str] = ["<cls>", "<pad>", "<eos>", "<unk>", "L", "A", "G", "V", "S", "E", "R", "T", "I", "D", "P", "K", "Q", "N", "F", "Y", "M", "H", "W", "C", "X", "B", "U", "Z", "O", ".", "-", "<null_1>", "<mask>"]  # noqa: E501
+        # fmt: on
         self.vocab_file = os.path.join(self.tmpdirname, VOCAB_FILES_NAMES["vocab_file"])
         with open(self.vocab_file, "w", encoding="utf-8") as vocab_writer:
             vocab_writer.write("".join([x + "\n" for x in vocab_tokens]))
