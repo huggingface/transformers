@@ -50,6 +50,8 @@ from .pytorch_utils import (  # noqa: F401
 from .utils import (
     DUMMY_INPUTS,
     FLAX_WEIGHTS_NAME,
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
     TF2_WEIGHTS_NAME,
     TF_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
@@ -65,6 +67,7 @@ from .utils import (
     is_bitsandbytes_available,
     is_offline_mode,
     is_remote_url,
+    is_safetensors_available,
     logging,
     replace_return_docstrings,
 )
@@ -86,6 +89,8 @@ if is_accelerate_available():
     else:
         get_balanced_memory = None
 
+if is_safetensors_available():
+    from safetensors.torch import load_file
 
 logger = logging.get_logger(__name__)
 
@@ -367,6 +372,8 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
+    if checkpoint_file.endswith(".safetensors") and is_safetensors_available():
+        return load_file(checkpoint_file)
     try:
         return torch.load(checkpoint_file, map_location="cpu")
     except Exception as e:
@@ -1966,6 +1973,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 ):
                     # Load from a Flax checkpoint in priority if from_flax
                     archive_file = os.path.join(pretrained_model_name_or_path, subfolder, FLAX_WEIGHTS_NAME)
+                elif is_safetensors_available() and os.path.isfile(
+                    os.path.join(pretrained_model_name_or_path, subfolder, SAFE_WEIGHTS_NAME)
+                ):
+                    # Load from a safetensors checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, SAFE_WEIGHTS_NAME)
+                elif is_safetensors_available() and os.path.isfile(
+                    os.path.join(pretrained_model_name_or_path, subfolder, SAFE_WEIGHTS_INDEX_NAME)
+                ):
+                    # Load from a sharded safetensors checkpoint
+                    archive_file = os.path.join(pretrained_model_name_or_path, subfolder, SAFE_WEIGHTS_INDEX_NAME)
+                    is_sharded = True
                 elif os.path.isfile(os.path.join(pretrained_model_name_or_path, subfolder, WEIGHTS_NAME)):
                     # Load from a PyTorch checkpoint
                     archive_file = os.path.join(pretrained_model_name_or_path, subfolder, WEIGHTS_NAME)
@@ -2013,6 +2031,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     filename = TF2_WEIGHTS_NAME
                 elif from_flax:
                     filename = FLAX_WEIGHTS_NAME
+                elif is_safetensors_available():
+                    filename = SAFE_WEIGHTS_NAME
                 else:
                     filename = WEIGHTS_NAME
 
@@ -2025,7 +2045,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         resume_download=resume_download,
                         local_files_only=local_files_only,
                         use_auth_token=use_auth_token,
-                        user_agent=user_agent,
+                        user_agent=user_agent,a
                         revision=revision,
                         subfolder=subfolder,
                         _raise_exceptions_for_missing_entries=False,
@@ -2033,8 +2053,21 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                     resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
-                    # Since we set _raise_exceptions_for_missing_entries=False, we don't get an expection but a None
+                    # Since we set _raise_exceptions_for_missing_entries=False, we don't get an exception but a None
                     # result when internet is up, the repo and revision exist, but the file does not.
+                    if resolved_archive_file is None and filename == SAFE_WEIGHTS_NAME:
+                        # Maybe the checkpoint is sharded, we try to grab the index name in this case.
+                        resolved_archive_file = cached_file(
+                            pretrained_model_name_or_path, SAFE_WEIGHTS_INDEX_NAME, **cached_file_kwargs
+                        )
+                        if resolved_archive_file is not None:
+                            is_sharded = True
+                        else:
+                            # This repo has no safetensors file of any kind, we switch to PyTorch.
+                            filename = WEIGHTS_NAME
+                            resolved_archive_file = cached_file(
+                                pretrained_model_name_or_path, WEIGHTS_NAME, **cached_file_kwargs
+                            )
                     if resolved_archive_file is None and filename == WEIGHTS_NAME:
                         # Maybe the checkpoint is sharded, we try to grab the index name in this case.
                         resolved_archive_file = cached_file(
