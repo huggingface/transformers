@@ -14,7 +14,6 @@
 # limitations under the License.
 """Feature extractor class for DETR."""
 
-import copy
 import io
 import pathlib
 from collections import defaultdict
@@ -138,7 +137,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             sequence like `(width, height)`, output size will be matched to this. If size is an int, smaller edge of
             the image will be matched to this number. i.e, if `height > width`, then image will be rescaled to `(size *
             height / width, size)`.
-        max_size (`int`, *optional*, defaults to `1333`):
+        max_size (`int`, *optional*, defaults to 1333):
             The largest size an image dimension can have (otherwise it's capped). Only has an effect if `do_resize` is
             set to `True`.
         do_normalize (`bool`, *optional*, defaults to `True`):
@@ -549,10 +548,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 annotations = [annotations]
 
         # Create deep copies to avoid editing inputs in place
-        images = [copy.deepcopy(image) for image in images]
+        images = [image for image in images]
 
         if annotations is not None:
-            annotations = [copy.deepcopy(annotation) for annotation in annotations]
+            annotations = [annotation for annotation in annotations]
 
         # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
         if annotations is not None:
@@ -567,10 +566,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         if self.do_resize and self.size is not None:
             if annotations is not None:
                 for idx, (image, target) in enumerate(zip(images, annotations)):
-                    copy_image = image.copy()
-                    image, target = self._resize(
-                        image=copy_image, target=target, size=self.size, max_size=self.max_size
-                    )
+                    image, target = self._resize(image=image, target=target, size=self.size, max_size=self.max_size)
                     images[idx] = image
                     annotations[idx] = target
             else:
@@ -695,9 +691,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             outputs ([`DetrObjectDetectionOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
-                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
-                image size (before any data augmentation). For visualization, this should be the image size after data
-                augment, but before padding.
+                Tensor containing the size (height, width) of each image of the batch. For evaluation, this must be the
+                original image size (before any data augmentation). For visualization, this should be the image size
+                after data augment, but before padding.
 
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
