@@ -19,7 +19,6 @@ from dataclasses import dataclass
 from typing import Callable, Dict, List, Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.distributions import AffineTransform, Distribution, StudentT, TransformedDistribution
 
@@ -173,8 +172,8 @@ class StudentTOutput(DistributionOutput):
 
     @classmethod
     def domain_map(cls, df: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor):
-        scale = F.softplus(scale)
-        df = 2.0 + F.softplus(df)
+        scale = nn.functional.softplus(scale)
+        df = 2.0 + nn.functional.softplus(df)
         return df.squeeze(-1), loc.squeeze(-1), scale.squeeze(-1)
 
     @property
@@ -183,11 +182,7 @@ class StudentTOutput(DistributionOutput):
 
 
 class FeatureEmbedder(nn.Module):
-    def __init__(
-        self,
-        cardinalities: List[int],
-        embedding_dims: List[int],
-    ) -> None:
+    def __init__(self, cardinalities: List[int], embedding_dims: List[int]) -> None:
         super().__init__()
 
         self.num_features = len(cardinalities)
@@ -333,6 +328,7 @@ class NegativeLogLikelihood:
         return nll
 
 
+# Copied from transformers.models.bart.modeling_bart._make_causal_mask
 def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_values_length: int = 0):
     """
     Make causal mask used for bi-directional self-attention.
@@ -348,6 +344,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
     return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
 
 
+# Copied from transformers.models.bart.modeling_bart._expand_mask
 def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
@@ -359,7 +356,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
     inverted_mask = 1.0 - expanded_mask
 
-    return inverted_mask.masked_fill(inverted_mask.bool(), torch.finfo(dtype).min)
+    return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
 @dataclass
@@ -780,30 +777,6 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
-
-
-class TimeSeriesTransformerClassificationHead(nn.Module):
-    """Head for sentence-level classification tasks."""
-
-    def __init__(
-        self,
-        input_dim: int,
-        inner_dim: int,
-        num_classes: int,
-        pooler_dropout: float,
-    ):
-        super().__init__()
-        self.dense = nn.Linear(input_dim, inner_dim)
-        self.dropout = nn.Dropout(p=pooler_dropout)
-        self.out_proj = nn.Linear(inner_dim, num_classes)
-
-    def forward(self, hidden_states: torch.Tensor):
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.dense(hidden_states)
-        hidden_states = torch.tanh(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = self.out_proj(hidden_states)
-        return hidden_states
 
 
 class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
