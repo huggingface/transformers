@@ -3994,7 +3994,6 @@ if TYPE_CHECKING:
             ESMForMaskedLM,
             ESMForSequenceClassification,
             ESMForTokenClassification,
-            ESMLayer,
             ESMModel,
             ESMPreTrainedModel,
         )
