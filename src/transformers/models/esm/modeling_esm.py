@@ -81,7 +81,7 @@ class RotaryEmbedding(torch.nn.Module):
         (it does not create the embedding dimension) and will likely be picked up (imported) on a ad-hoc basis
     """
 
-    def __init__(self, dim: int, *_, **__):
+    def __init__(self, dim: int):
         super().__init__()
         # Generate and save the inverse frequency buffer (non trainable)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2).float() / dim))
