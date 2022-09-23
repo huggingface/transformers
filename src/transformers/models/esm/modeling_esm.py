@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch ESM model."""
 
-import math
 import os
 from typing import List, Optional, Tuple, Union
 
@@ -134,8 +133,6 @@ def load_tf_weights_in_esm(model, config, tf_checkpoint_path):
     return model
 
 
-
-
 def rotate_half(x):
     x1, x2 = x.chunk(2, dim=-1)
     return torch.cat((-x2, x1), dim=-1)
@@ -150,15 +147,12 @@ def apply_rotary_pos_emb(x, cos, sin):
 
 class RotaryEmbedding(torch.nn.Module):
     """
-    The rotary position embeddings from RoFormer_ (Su et. al).
-    A crucial insight from the method is that the query and keys are
-    transformed by rotation matrices which depend on the relative positions.
-    Other implementations are available in the Rotary Transformer repo_ and in
-    GPT-NeoX_, GPT-NeoX was an inspiration
-    .. _RoFormer: https://arxiv.org/abs/2104.09864
-    .. _repo: https://github.com/ZhuiyiTechnology/roformer
-    .. _GPT-NeoX: https://github.com/EleutherAI/gpt-neox
-    .. warning: Please note that this embedding is not registered on purpose, as it is transformative
+    The rotary position embeddings from RoFormer_ (Su et. al). A crucial insight from the method is that the query and
+    keys are transformed by rotation matrices which depend on the relative positions. Other implementations are
+    available in the Rotary Transformer repo_ and in GPT-NeoX_, GPT-NeoX was an inspiration .. _RoFormer:
+    https://arxiv.org/abs/2104.09864 .. _repo: https://github.com/ZhuiyiTechnology/roformer .. _GPT-NeoX:
+    https://github.com/EleutherAI/gpt-neox .. warning: Please note that this embedding is not registered on purpose, as
+    it is transformative
         (it does not create the embedding dimension) and will likely be picked up (imported) on a ad-hoc basis
     """
 
@@ -197,6 +191,7 @@ class RotaryEmbedding(torch.nn.Module):
             apply_rotary_pos_emb(q, self._cos_cached, self._sin_cached),
             apply_rotary_pos_emb(k, self._cos_cached, self._sin_cached),
         )
+
 
 class ESMEmbeddings(nn.Module):
     """
@@ -285,7 +280,6 @@ class ESMEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-# Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->ESM
 class ESMSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
@@ -365,7 +359,6 @@ class ESMSelfAttention(nn.Module):
         # ESM code and fix rotary embeddings.
         query_layer = query_layer * self.attention_head_size**-0.5
 
-
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
@@ -397,7 +390,6 @@ class ESMSelfAttention(nn.Module):
                 relative_position_scores_query = torch.einsum("bhld,lrd->bhlr", query_layer, positional_embedding)
                 relative_position_scores_key = torch.einsum("bhrd,lrd->bhlr", key_layer, positional_embedding)
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
-
 
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in ESMModel forward() function)
@@ -793,7 +785,6 @@ ESM_INPUTS_DOCSTRING = r"""
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-            
         position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.

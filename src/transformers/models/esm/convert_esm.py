@@ -17,12 +17,17 @@
 
 import argparse
 import pathlib
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 # import fairseq
 import torch
 
 import esm as esm_module
+from transformers.models.esm.configuration_esm import ESMConfig
 from transformers.models.esm.modeling_esm import (
+    ESMForMaskedLM,
+    ESMForSequenceClassification,
     ESMIntermediate,
     ESMLayer,
     ESMOutput,
@@ -30,13 +35,7 @@ from transformers.models.esm.modeling_esm import (
     ESMSelfOutput,
 )
 from transformers.models.esm.tokenization_esm import ESMTokenizer
-from transformers.models.esm.configuration_esm import ESMConfig
-from transformers.models.esm.modeling_esm import ESMForMaskedLM, ESMForSequenceClassification
 from transformers.utils import logging
-
-from tempfile import TemporaryDirectory
-
-from pathlib import Path
 
 
 # if version.parse(fairseq.__version__) < version.parse("0.9.0"):
@@ -105,11 +104,11 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
         max_position_embeddings=1026,
         layer_norm_eps=1e-5,  # PyTorch default used in fairseq
         attention_probs_dropout_prob=0.0,
-        hidden_dropout_prob=0.,
+        hidden_dropout_prob=0.0,
         pad_token_id=esm.padding_idx,
         emb_layer_norm_before=emb_layer_norm_before,
         token_dropout=token_dropout,
-        position_embedding_type=position_embedding_type
+        position_embedding_type=position_embedding_type,
     )
     if classification_head:
         config.num_labels = esm.classification_heads["mnli"].out_proj.weight.shape[0]
@@ -214,13 +213,11 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
 
     with torch.no_grad():
         our_output = model(**hf_tokens, output_hidden_states=True)
-        our_hiddens = our_output.hidden_states
         our_output = our_output["logits"]
         if classification_head:
             their_output = esm.model.classification_heads["mnli"](esm.extract_features(batch_tokens))
         else:
             their_output = esm(batch_tokens, repr_layers=list(range(999)))
-            their_hiddens = their_output["representations"]
             their_output = their_output["logits"]
     print(our_output.shape, their_output.shape)
     max_absolute_diff = torch.max(torch.abs(our_output - their_output)).item()
@@ -248,8 +245,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--classification_head", action="store_true", help="Whether to convert a final classification head."
     )
-    parser.add_argument(
-        "--model", default=None, type=str, required=True, help="Name of model to convert."
-    )
+    parser.add_argument("--model", default=None, type=str, required=True, help="Name of model to convert.")
     args = parser.parse_args()
     convert_esm_checkpoint_to_pytorch(args.model, args.pytorch_dump_folder_path, args.classification_head)
