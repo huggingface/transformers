@@ -1515,15 +1515,15 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ConditionalDetrFeatureExtractor, ConditionalDetrModel
+        >>> from transformers import AutoFeatureExtractor, AutoModel
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ConditionalDetrFeatureExtractor.from_pretrained("microsoft/conditional-detr-resnet-50")
-        >>> model = ConditionalDetrModel.from_pretrained("microsoft/conditional-detr-resnet-50")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/conditional-detr-resnet-50")
+        >>> model = AutoModel.from_pretrained("microsoft/conditional-detr-resnet-50")
 
         >>> # prepare image for the model
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
@@ -1683,21 +1683,36 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import ConditionalDetrFeatureExtractor, ConditionalDetrForObjectDetection
+        >>> from transformers import AutoFeatureExtractor, AutoModelForObjectDetection
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ConditionalDetrFeatureExtractor.from_pretrained("microsoft/conditional-detr-resnet-50")
-        >>> model = ConditionalDetrForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/conditional-detr-resnet-50")
+        >>> model = AutoModelForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50")
 
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
+
         >>> outputs = model(**inputs)
-        >>> # model predicts bounding boxes and corresponding COCO classes
-        >>> logits = outputs.logits
-        >>> bboxes = outputs.pred_boxes
+
+        >>> # convert outputs (bounding boxes and class logits) to COCO API
+        >>> target_sizes = torch.tensor([image.size[::-1]])
+        >>> results = feature_extractor.post_process(outputs, target_sizes=target_sizes)[0]
+        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     # let's only keep detections with score > 0.5
+        ...     if score > 0.5:
+        ...         print(
+        ...             f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...             f"{round(score.item(), 3)} at location {box}"
+        ...         )
+        Detected remote with confidence 0.833 at location [38.31, 72.1, 177.63, 118.45]
+        Detected cat with confidence 0.831 at location [9.2, 51.38, 321.13, 469.0]
+        Detected cat with confidence 0.804 at location [340.3, 16.85, 642.93, 370.95]
+        Detected remote with confidence 0.683 at location [334.48, 73.49, 366.37, 190.01]
+        Detected couch with confidence 0.535 at location [0.52, 1.19, 640.35, 475.1]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1860,16 +1875,21 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         >>> import torch
         >>> import numpy
 
-        >>> from transformers import ConditionalDetrFeatureExtractor, ConditionalDetrForSegmentation
+        >>> from transformers import (
+        ...     AutoFeatureExtractor,
+        ...     ConditionalDetrConfig,
+        ...     ConditionalDetrForSegmentation,
+        ... )
         >>> from transformers.models.conditional_detr.feature_extraction_conditional_detr import rgb_to_id
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> feature_extractor = ConditionalDetrFeatureExtractor.from_pretrained(
-        ...     "facebook/conditional_detr-resnet-50-panoptic"
-        ... )
-        >>> model = ConditionalDetrForSegmentation.from_pretrained("facebook/conditional_detr-resnet-50-panoptic")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("microsoft/conditional-detr-resnet-50")
+
+        >>> # randomly initialize all weights of the model
+        >>> config = ConditionalDetrConfig()
+        >>> model = ConditionalDetrForSegmentation(config)
 
         >>> # prepare image for the model
         >>> inputs = feature_extractor(images=image, return_tensors="pt")
