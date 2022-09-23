@@ -320,6 +320,9 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
             if "last_hidden_state" in outputs:
                 correct_outlen += 1
 
+            if "past_key_values" in outputs:
+                correct_outlen += 1  # past_key_values have been returned
+
             self.assertEqual(out_len, correct_outlen)
 
             # decoder attentions
