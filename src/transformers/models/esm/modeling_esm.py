@@ -446,7 +446,8 @@ class ESMLayer(nn.Module):
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
-            assert self.is_decoder, f"{self} should be used as a decoder model if cross attention is added"
+            if not self.is_decoder:
+                raise RuntimeError(f"{self} should be used as a decoder model if cross attention is added")
             self.crossattention = ESMAttention(config)
         self.intermediate = ESMIntermediate(config)
         self.output = ESMOutput(config)
