@@ -80,6 +80,10 @@ class ESMConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
+        emb_layer_norm_before (`bool`, *optional*):
+            Whether to apply layer normalization after embeddings but before the main stem of the network.
+        token_dropout (`bool`, defaults to `False`):
+            When this is enabled, masked tokens are treated as if they had been dropped out by input dropout.
 
     Examples:
 
