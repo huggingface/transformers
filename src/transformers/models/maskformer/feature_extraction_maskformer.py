@@ -518,6 +518,26 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         return segmentation
 
+    def binary_mask_to_rle(self, mask):
+        """
+        Converts given binary mask of shape (height, width) to the run-length encoding (RLE) format.
+
+        Args:
+            mask (`torch.Tensor` or `numpy.array`):
+                A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target segment_id.
+
+        Returns:
+            `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE format.
+        """
+        if is_torch_tensor(mask):
+            mask = mask.numpy()
+
+        pixels = mask.flatten()
+        pixels = np.concatenate([[0], pixels, [0]])
+        runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
+        runs[1::2] -= runs[::2]
+        return [x for x in runs]
+
     def remove_low_and_no_objects(self, masks, scores, labels, object_mask_threshold, num_labels):
         """
         Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores`
@@ -606,10 +626,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 format.
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
-            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`.
-            - **segments** -- a dictionary with the following keys
-                - **id** -- an integer representing the `segment_id`.
-                - **label_id** -- an integer representing the segment's label / class id.
+            - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or `List[List]` run-length encoding (RLE) of the segmentation map if return_coco_format is set to `True`.
+            - **segments** -- A dictionary with the following keys
+                - **id** -- An integer representing the `segment_id`.
+                - **label_id** -- An integer representing the segment's label / class id.
         """
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
@@ -684,6 +704,19 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                                 "label_id": pred_class,
                             }
                         )
+
+            # Return segmentation map in run-length encoding (RLE) format 
+            if return_coco_format:
+                segment_ids = torch.unique(segmentation)
+
+                run_length_encodings = []
+                for idx in segment_ids:
+                    mask = torch.where(segmentation==idx, 1, 0)
+                    rle = self.binary_mask_to_rle(mask)
+                    run_length_encodings.append(rle)
+
+                segmentation = run_length_encodings
+                    
             results.append({"segmentation": segmentation, "segments": segments})
         return results
 
@@ -694,7 +727,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         overlap_mask_area_threshold: float = 0.8,
         label_ids_to_fuse: Optional[Set[int]] = None,
         target_sizes: List[Tuple] = None,
-        return_coco_format: Optional[bool] = False,
     ) -> List[Dict]:
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation
@@ -716,13 +748,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction in batch. If left to None, predictions will not be
                 resized.
-            return_coco_format (`bool`, *optional*):
-                Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
-                format.
 
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
-            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`.
+            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`. If `target_sizes` is specified, segmentation is resized to the corresponding `target_sizes` entry. 
             - **segments** -- a dictionary with the following keys
                 - **id** -- an integer representing the `segment_id`.
                 - **label_id** -- an integer representing the segment's label / class id.
