@@ -1022,6 +1022,9 @@ class PerceiverForMaskedLM(PerceiverPreTrainedModel):
 
         >>> outputs = model(**inputs, labels=labels)
         >>> loss = outputs.loss
+        >>> round(loss.item(), 2)
+        19.87
+
         >>> logits = outputs.logits
         >>> list(logits.shape)
         [1, 2048, 262]
