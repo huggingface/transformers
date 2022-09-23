@@ -14,7 +14,6 @@
 # limitations under the License.
 """ PyTorch ESM model."""
 
-import os
 from typing import List, Optional, Tuple, Union
 
 import torch
