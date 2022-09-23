@@ -703,10 +703,10 @@ class LogitNormalization(LogitsProcessor, LogitsWarper):
         scores = scores.log_softmax(dim=-1)
         return scores
 
-class SuppressBlank(LogitsProcessor):
-    r"""
 
-    """
+class SuppressBlank(LogitsProcessor):
+    r""" """
+
     def __init__(self, tokenizer, sample_begin: int = 1):
         self.tokenizer = tokenizer
         self.sample_begin = sample_begin
@@ -720,9 +720,8 @@ class SuppressBlank(LogitsProcessor):
 
 
 class SuppressTokens(LogitsProcessor):
-    r"""
+    r""" """
 
-    """
     def __init__(self, suppress_tokens):
         self.suppress_tokens = list(suppress_tokens)
 
@@ -733,12 +732,9 @@ class SuppressTokens(LogitsProcessor):
 
 
 class ApplyTimestampRules(LogitsProcessor):
-    r"""
+    r""" """
 
-    """
-    def __init__(
-        self, tokenizer, sample_begin: int = 1, max_initial_timestamp_index: Optional[int] = None
-    ):
+    def __init__(self, tokenizer, sample_begin: int = 1, max_initial_timestamp_index: Optional[int] = None):
         self.tokenizer = tokenizer
         self.sample_begin = sample_begin
         self.max_initial_timestamp_index = max_initial_timestamp_index
