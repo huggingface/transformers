@@ -21,6 +21,7 @@ src/transformers/models/bigbird_pegasus/modeling_bigbird_pegasus.py
 src/transformers/models/big_bird/modeling_big_bird.py
 src/transformers/models/blenderbot/modeling_blenderbot.py
 src/transformers/models/blenderbot_small/modeling_blenderbot_small.py
+src/transformers/models/conditional_detr/modeling_conditional_detr.py
 src/transformers/models/convnext/modeling_convnext.py
 src/transformers/models/ctrl/modeling_ctrl.py
 src/transformers/models/cvt/modeling_cvt.py
@@ -57,6 +58,7 @@ src/transformers/models/opt/modeling_opt.py
 src/transformers/models/opt/modeling_tf_opt.py
 src/transformers/models/owlvit/modeling_owlvit.py
 src/transformers/models/pegasus/modeling_pegasus.py
+src/transformers/models/perceiver/modeling_perceiver.py
 src/transformers/models/plbart/modeling_plbart.py
 src/transformers/models/poolformer/modeling_poolformer.py
 src/transformers/models/reformer/modeling_reformer.py
@@ -84,6 +86,7 @@ src/transformers/models/vision_encoder_decoder/modeling_vision_encoder_decoder.p
 src/transformers/models/vit/modeling_vit.py
 src/transformers/models/vit/modeling_tf_vit.py
 src/transformers/models/vit_mae/modeling_vit_mae.py
+src/transformers/models/vit_msn/modeling_vit_msn.py
 src/transformers/models/wav2vec2/modeling_wav2vec2.py
 src/transformers/models/wav2vec2/tokenization_wav2vec2.py
 src/transformers/models/wav2vec2_conformer/modeling_wav2vec2_conformer.py
