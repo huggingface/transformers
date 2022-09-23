@@ -338,29 +338,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         if task is not None:
             sot_sequence.append(transcribe if task == "transcribe" else translate)
         self.sot_sequence = sot_sequence
-        
-
-    @property
-    @lru_cache()
-    def all_language_tokens(self) -> Tuple[int]:
-        result = []
-        for token, token_id in zip(
-            self.additional_special_tokens,
-            self.additional_special_tokens_ids,
-        ):
-            if token.strip("<|>") in LANGUAGES:
-                result.append(token_id)
-        return tuple(result)
-
-    @property
-    @lru_cache()
-    def all_language_codes(self) -> Tuple[str]:
-        return tuple(self.decode([l]).strip("<|>") for l in self.all_language_tokens)
-
-    @property
-    @lru_cache()
-    def sot_sequence_including_notimestamps(self) -> Tuple[int]:
-        return tuple(list(self.sot_sequence) + [self.no_timestamps])
+    
 
     @property
     @lru_cache()
@@ -395,9 +373,65 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return tuple(sorted(result))
 
     def _get_single_token_id(self, text) -> int:
-        tokens = self.tokenizer.encode(text)
-        assert len(tokens) == 1, f"{text} is not encoded as a single token"
+        tokens = self.encode(text)
         return tokens[0]
+
+    @property
+    @lru_cache()
+    def eot(self) -> int:
+        return self.tokenizer.eos_token_id
+
+    @property
+    @lru_cache()
+    def sot(self) -> int:
+        return self._get_single_token_id("<|startoftranscript|>")
+
+    @property
+    @lru_cache()
+    def sot_lm(self) -> int:
+        return self._get_single_token_id("<|startoflm|>")
+
+    @property
+    @lru_cache()
+    def sot_prev(self) -> int:
+        return self._get_single_token_id("<|startofprev|>")
+
+    @property
+    @lru_cache()
+    def no_captions(self) -> int:
+        return self._get_single_token_id("<|nocaptions|>")
+
+    @property
+    @lru_cache()
+    def no_timestamps(self) -> int:
+        return self._get_single_token_id("<|notimestamps|>")
+
+    @property
+    @lru_cache()
+    def timestamp_begin(self) -> int:
+        return self.tokenizer.all_special_ids[-1] + 1
+
+    @property
+    @lru_cache()
+    def all_language_tokens(self) -> Tuple[int]:
+        result = []
+        for token, token_id in zip(
+            self.additional_special_tokens,
+            self.additional_special_tokens_ids,
+        ):
+            if token.strip("<|>") in LANGUAGES:
+                result.append(token_id)
+        return tuple(result)
+
+    @property
+    @lru_cache()
+    def all_language_codes(self) -> Tuple[str]:
+        return tuple(self.decode([l]).strip("<|>") for l in self.all_language_tokens)
+
+    @property
+    @lru_cache()
+    def sot_sequence_including_notimestamps(self) -> Tuple[int]:
+        return tuple(list(self.sot_sequence) + [self.no_timestamps])
 
     @property
     def vocab_size(self) -> int:
@@ -548,6 +582,22 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file
 
+    def decode_with_timestamps(self, tokens) -> str:
+        """
+        Timestamp tokens are above the special tokens' id range and are ignored by `decode()`.
+        This method decodes given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
+        """
+        outputs = [[]]
+        for token in tokens:
+            if token >= self.timestamp_begin:
+                timestamp = f"<|{(token - self.timestamp_begin) * 0.02:.2f}|>"
+                outputs.append(timestamp)
+                outputs.append([])
+            else:
+                outputs[-1].append(token)
+        outputs = [s if isinstance(s, str) else self.tokenizer.decode(s) for s in outputs]
+        return "".join(outputs)
+
     def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
         add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
         if is_split_into_words or add_prefix_space:
@@ -561,3 +611,25 @@ class WhisperTokenizer(PreTrainedTokenizer):
         if len(input_ids) > self.model_max_length:
             input_ids = input_ids[-self.model_max_length :]
         return input_ids
+
+    
+    def _get_suppress_tokens(self, suppress_tokens = []) -> Tuple[int]:
+ 
+
+        if isinstance(suppress_tokens, str):
+            suppress_tokens = [int(t) for t in suppress_tokens.split(",")]
+
+        if -1 in suppress_tokens:
+            suppress_tokens = [t for t in suppress_tokens if t >= 0]
+            suppress_tokens.extend(self.non_speech_tokens)
+        elif suppress_tokens is None or len(suppress_tokens) == 0:
+            suppress_tokens = []  # interpret empty string as an empty list
+
+        suppress_tokens.extend(
+            [self.sot, self.sot_prev, self.sot_lm]
+        )
+        if self.no_captions is not None:
+            # no-captions probability is collected separately
+            suppress_tokens.append(self.no_captions)
+
+        return tuple(sorted(set(suppress_tokens)))
