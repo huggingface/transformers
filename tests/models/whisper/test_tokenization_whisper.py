@@ -115,8 +115,8 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
     def test_tokenizer_equivalence(self):
         text = "다람쥐 헌 쳇바퀴에 타고파"
-        multilingual_tokenizer =  WhisperTokenizer.from_pretrained(self.checkpoint_name, multi_lingual = True)
-        gpt2_tokenizer = WhisperTokenizer.from_pretrained(self.checkpoint_name, multi_lingual = False)
+        multilingual_tokenizer =  WhisperTokenizer.from_pretrained("/home/arthur_huggingface_co/transformers/whisper/tiny-multy")
+        gpt2_tokenizer = WhisperTokenizer.from_pretrained("/home/arthur_huggingface_co/transformers/whisper/tiny")
 
         text = "다람쥐 헌 쳇바퀴에 타고파"
         gpt2_tokens = gpt2_tokenizer.encode(text)
@@ -127,6 +127,16 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         assert multilingual_tokenizer.decode(multilingual_tokens) == text
         assert len(gpt2_tokens) > len(multilingual_tokens)
 
+        EXPECTED_MULTI = [ 9835, 22855,   168,    98,   238, 13431,   234, 43517,   229, 47053,
+          169,   222, 19086, 19840,  1313, 17974]
+
+        EXPECTED_ENG = [46695,    97,   167,   252,   234,   168,    98,   238,   220,   169,
+          245,   234, 23821,   111,   229,   167,   108,   242,   169,   222,
+          112,   168,   245,   238,   220,   169,   225,   222,   166,   111,
+          254,   169,   234,   234]
+        
+        self.assertListEqual(gpt2_tokens, EXPECTED_ENG)
+        self.assertListEqual(multilingual_tokens, EXPECTED_MULTI)
 
     def check_language_codes(self):
         self.assertEqual(self.tokenizer.lang_code_to_id["pt"], 4)
