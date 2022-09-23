@@ -19,7 +19,7 @@ from pathlib import Path
 from shutil import copyfile
 
 from transformers import WhisperTokenizer, is_speech_available
-from transformers.models.whisper.tokenization_whisper import VOCAB_FILES_NAMES, save_json
+from transformers.models.whisper.tokenization_whisper import VOCAB_FILES_NAMES
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_torch, require_torchaudio
 from transformers.utils import FEATURE_EXTRACTOR_NAME
 
