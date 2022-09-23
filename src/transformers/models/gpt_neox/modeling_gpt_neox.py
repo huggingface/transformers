@@ -315,46 +315,37 @@ class GPTNeoXLayer(nn.Module):
         layer_past=None,
         output_attentions=False,
     ):
+
+        attention_layer_outputs = self.attention(
+            self.input_layernorm(hidden_states),
+            attention_mask=attention_mask,
+            layer_past=layer_past,
+            head_mask=head_mask,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+        )
+        attn_output = attention_layer_outputs[0]  # output_attn: attn_output, present, (attn_weights)
+        outputs = attention_layer_outputs[1:]
+
         if self.gpt_j_residual:
-            residual = hidden_states
-            ln_out = self.input_layernorm(hidden_states)
-            attention_layer_outputs = self.attention(
-                ln_out,
-                attention_mask=attention_mask,
-                layer_past=layer_past,
-                head_mask=head_mask,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-            )
-            attn_output = attention_layer_outputs[0]  # output_attn: a, present, (attentions)
-            outputs = attention_layer_outputs[1:]
-
+            # pseudocode:
+            # x = x + attn(ln1(x)) + mlp(ln2(x))
             mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
-            hidden_states = mlp_output + attn_output + residual
+            hidden_states = mlp_output + attn_output + hidden_states
         else:
-            residual = hidden_states
-            ln_out = self.input_layernorm(hidden_states)
-            attention_layer_outputs = self.attention(
-                ln_out,
-                attention_mask=attention_mask,
-                layer_past=layer_past,
-                head_mask=head_mask,
-                use_cache=use_cache,
-                output_attentions=output_attentions,
-            )
-            attn_output = attention_layer_outputs[0]  # output_attn: a, present, (attentions)
-            attn_output = attn_output + residual
-            outputs = attention_layer_outputs[1:]
-
+            # pseudocode:
+            # x = x + attn(ln1(x))
+            # x = x + mlp(ln2(x))
+            attn_output = attn_output + hidden_states
             mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
             hidden_states = mlp_output + attn_output
 
         if use_cache:
-            outputs = (hidden_states,) + outputs
+            outputs = (hidden_states,) + outputs  # hidden_states, present, (attn_weights)
         else:
-            outputs = (hidden_states,) + outputs[1:]
+            outputs = (hidden_states,) + outputs[1:]  # hidden_states, (attn_weights)
 
-        return outputs  # hidden_states, present, (attentions)
+        return outputs
 
 
 GPT_NEOX_START_DOCSTRING = r"""
