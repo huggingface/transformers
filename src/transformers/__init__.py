@@ -1223,7 +1223,6 @@ else:
             "ESMLayer",
             "ESMModel",
             "ESMPreTrainedModel",
-            "load_tf_weights_in_esm",
         ]
     )
     _import_structure["models.flaubert"].extend(
@@ -3999,7 +3998,6 @@ if TYPE_CHECKING:
             ESMLayer,
             ESMModel,
             ESMPreTrainedModel,
-            load_tf_weights_in_esm,
         )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,

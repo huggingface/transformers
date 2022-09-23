@@ -40,7 +40,6 @@ else:
         "ESMLayer",
         "ESMModel",
         "ESMPreTrainedModel",
-        "load_tf_weights_in_esm",
     ]
 
 
@@ -63,7 +62,6 @@ if TYPE_CHECKING:
             ESMLayer,
             ESMModel,
             ESMPreTrainedModel,
-            load_tf_weights_in_esm,
         )
 
 

@@ -2000,10 +2000,6 @@ class ESMPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-def load_tf_weights_in_esm(*args, **kwargs):
-    requires_backends(load_tf_weights_in_esm, ["torch"])
-
-
 FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
