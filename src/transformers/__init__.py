@@ -1220,7 +1220,6 @@ else:
             "ESMForMaskedLM",
             "ESMForSequenceClassification",
             "ESMForTokenClassification",
-            "ESMLayer",
             "ESMModel",
             "ESMPreTrainedModel",
         ]
