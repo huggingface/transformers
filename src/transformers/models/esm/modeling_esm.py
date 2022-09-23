@@ -43,14 +43,14 @@ from ...modeling_utils import (
     prune_linear_layer,
 )
 from ...utils import logging
-from .configuration_esm import ESMConfig
+from .configuration_esm import EsmConfig
 
 
 logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "facebook/esm-1b"
-_CONFIG_FOR_DOC = "ESMConfig"
-_TOKENIZER_FOR_DOC = "ESMTokenizer"
+_CONFIG_FOR_DOC = "EsmConfig"
+_TOKENIZER_FOR_DOC = "EsmTokenizer"
 
 ESM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/esm-1b",
@@ -114,7 +114,7 @@ class RotaryEmbedding(torch.nn.Module):
         )
 
 
-class ESMEmbeddings(nn.Module):
+class EsmEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
@@ -201,7 +201,7 @@ class ESMEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-class ESMSelfAttention(nn.Module):
+class EsmSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -313,7 +313,7 @@ class ESMSelfAttention(nn.Module):
                 attention_scores = attention_scores + relative_position_scores_query + relative_position_scores_key
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in ESMModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in EsmModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -340,7 +340,7 @@ class ESMSelfAttention(nn.Module):
         return outputs
 
 
-class ESMSelfOutput(nn.Module):
+class EsmSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -353,11 +353,11 @@ class ESMSelfOutput(nn.Module):
         return hidden_states
 
 
-class ESMAttention(nn.Module):
+class EsmAttention(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.self = ESMSelfAttention(config)
-        self.output = ESMSelfOutput(config)
+        self.self = EsmSelfAttention(config)
+        self.output = EsmSelfOutput(config)
         self.pruned_heads = set()
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -405,7 +405,7 @@ class ESMAttention(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertIntermediate
-class ESMIntermediate(nn.Module):
+class EsmIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -420,7 +420,7 @@ class ESMIntermediate(nn.Module):
         return hidden_states
 
 
-class ESMOutput(nn.Module):
+class EsmOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -433,20 +433,20 @@ class ESMOutput(nn.Module):
         return hidden_states
 
 
-class ESMLayer(nn.Module):
+class EsmLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = ESMAttention(config)
+        self.attention = EsmAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise RuntimeError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = ESMAttention(config)
-        self.intermediate = ESMIntermediate(config)
-        self.output = ESMOutput(config)
+            self.crossattention = EsmAttention(config)
+        self.intermediate = EsmIntermediate(config)
+        self.output = EsmOutput(config)
         self.LayerNorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
@@ -521,11 +521,11 @@ class ESMLayer(nn.Module):
         return layer_output
 
 
-class ESMEncoder(nn.Module):
+class EsmEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([ESMLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([EsmLayer(config) for _ in range(config.num_hidden_layers)])
         self.emb_layer_norm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
@@ -624,7 +624,7 @@ class ESMEncoder(nn.Module):
 
 
 # Copied from transformers.models.bert.modeling_bert.BertPooler
-class ESMPooler(nn.Module):
+class EsmPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -639,13 +639,13 @@ class ESMPooler(nn.Module):
         return pooled_output
 
 
-class ESMPreTrainedModel(PreTrainedModel):
+class EsmPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ESMConfig
+    config_class = EsmConfig
     base_model_prefix = "esm"
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
@@ -686,7 +686,7 @@ ESM_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`ESMConfig`]): Model configuration class with all the parameters of the
+        config ([`EsmConfig`]): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -696,7 +696,7 @@ ESM_INPUTS_DOCSTRING = r"""
         input_ids (`torch.LongTensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`ESMTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`EsmTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
@@ -737,7 +737,7 @@ ESM_INPUTS_DOCSTRING = r"""
     "The bare ESM Model transformer outputting raw hidden-states without any specific head on top.",
     ESM_START_DOCSTRING,
 )
-class ESMModel(ESMPreTrainedModel):
+class EsmModel(EsmPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -753,21 +753,21 @@ class ESMModel(ESMPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = False
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->ESM
+    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Esm
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = ESMEmbeddings(config)
-        self.encoder = ESMEncoder(config)
+        self.embeddings = EsmEmbeddings(config)
+        self.encoder = EsmEncoder(config)
 
-        self.pooler = ESMPooler(config) if add_pooling_layer else None
+        self.pooler = EsmPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, ESMEncoder):
+        if isinstance(module, EsmEncoder):
             module.gradient_checkpointing = value
 
     def get_input_embeddings(self):
@@ -913,7 +913,7 @@ class ESMModel(ESMPreTrainedModel):
 
 
 @add_start_docstrings("""ESM Model with a `language modeling` head on top for CLM fine-tuning.""", ESM_START_DOCSTRING)
-class ESMForCausalLM(ESMPreTrainedModel):
+class EsmForCausalLM(EsmPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -922,10 +922,10 @@ class ESMForCausalLM(ESMPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `ESMLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `EsmLMHeadModel` as a standalone, add `is_decoder=True.`")
 
-        self.esm = ESMModel(config, add_pooling_layer=False)
-        self.lm_head = ESMLMHead(config)
+        self.esm = EsmModel(config, add_pooling_layer=False)
+        self.lm_head = EsmLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
         self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
@@ -989,13 +989,13 @@ class ESMForCausalLM(ESMPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import ESMTokenizer, ESMForCausalLM, ESMConfig
+        >>> from transformers import EsmTokenizer, EsmForCausalLM, EsmConfig
         >>> import torch
 
-        >>> tokenizer = ESMTokenizer.from_pretrained("facebook/esm-1b")
-        >>> config = ESMConfig.from_pretrained("facebook/esm-1b")
+        >>> tokenizer = EsmTokenizer.from_pretrained("facebook/esm-1b")
+        >>> config = EsmConfig.from_pretrained("facebook/esm-1b")
         >>> config.is_decoder = True
-        >>> model = ESMForCausalLM.from_pretrained("facebook/esm-1b", config=config)
+        >>> model = EsmForCausalLM.from_pretrained("facebook/esm-1b", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1066,7 +1066,7 @@ class ESMForCausalLM(ESMPreTrainedModel):
 
 
 @add_start_docstrings("""ESM Model with a `language modeling` head on top.""", ESM_START_DOCSTRING)
-class ESMForMaskedLM(ESMPreTrainedModel):
+class EsmForMaskedLM(EsmPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -1076,12 +1076,12 @@ class ESMForMaskedLM(ESMPreTrainedModel):
 
         if config.is_decoder:
             logger.warning(
-                "If you want to use `ESMForMaskedLM` make sure `config.is_decoder=False` for "
+                "If you want to use `EsmForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
-        self.esm = ESMModel(config, add_pooling_layer=False)
-        self.lm_head = ESMLMHead(config)
+        self.esm = EsmModel(config, add_pooling_layer=False)
+        self.lm_head = EsmLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
         self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
@@ -1158,7 +1158,7 @@ class ESMForMaskedLM(ESMPreTrainedModel):
         )
 
 
-class ESMLMHead(nn.Module):
+class EsmLMHead(nn.Module):
     """ESM Head for masked language modeling."""
 
     def __init__(self, config):
@@ -1190,7 +1190,7 @@ class ESMLMHead(nn.Module):
     """,
     ESM_START_DOCSTRING,
 )
-class ESMForSequenceClassification(ESMPreTrainedModel):
+class EsmForSequenceClassification(EsmPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
@@ -1198,8 +1198,8 @@ class ESMForSequenceClassification(ESMPreTrainedModel):
         self.num_labels = config.num_labels
         self.config = config
 
-        self.esm = ESMModel(config, add_pooling_layer=False)
-        self.classifier = ESMClassificationHead(config)
+        self.esm = EsmModel(config, add_pooling_layer=False)
+        self.classifier = EsmClassificationHead(config)
 
         self.init_weights()
 
@@ -1285,7 +1285,7 @@ class ESMForSequenceClassification(ESMPreTrainedModel):
     """,
     ESM_START_DOCSTRING,
 )
-class ESMForTokenClassification(ESMPreTrainedModel):
+class EsmForTokenClassification(EsmPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -1293,7 +1293,7 @@ class ESMForTokenClassification(ESMPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.esm = ESMModel(config, add_pooling_layer=False)
+        self.esm = EsmModel(config, add_pooling_layer=False)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
@@ -1366,7 +1366,7 @@ class ESMForTokenClassification(ESMPreTrainedModel):
         )
 
 
-class ESMClassificationHead(nn.Module):
+class EsmClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config):

@@ -17,7 +17,7 @@
 
 import unittest
 
-from transformers import ESMConfig, is_torch_available
+from transformers import EsmConfig, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
@@ -29,21 +29,21 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        ESMForCausalLM,
-        ESMForMaskedLM,
-        ESMForSequenceClassification,
-        ESMForTokenClassification,
-        ESMModel,
+        EsmForCausalLM,
+        EsmForMaskedLM,
+        EsmForSequenceClassification,
+        EsmForTokenClassification,
+        EsmModel,
     )
     from transformers.models.esm.modeling_esm import (
         ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
-        ESMEmbeddings,
+        EsmEmbeddings,
         create_position_ids_from_input_ids,
     )
 
 
 # copied from tests.test_modeling_roberta
-class ESMModelTester:
+class EsmModelTester:
     def __init__(
         self,
         parent,
@@ -91,7 +91,7 @@ class ESMModelTester:
         return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return ESMConfig(
+        return EsmConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
@@ -106,7 +106,7 @@ class ESMModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
-        model = ESMModel(config=config)
+        model = EsmModel(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -127,7 +127,7 @@ class ESMModelTester:
         encoder_hidden_states,
         encoder_attention_mask,
     ):
-        model = ESMForCausalLM(config=config)
+        model = EsmForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -136,7 +136,7 @@ class ESMModelTester:
     def create_and_check_for_masked_lm(
         self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = ESMForMaskedLM(config=config)
+        model = EsmForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -146,7 +146,7 @@ class ESMModelTester:
         self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = ESMForTokenClassification(config=config)
+        model = EsmForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -167,25 +167,25 @@ class ESMModelTester:
 
 
 @require_torch
-class ESMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class EsmModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            ESMForCausalLM,
-            ESMForMaskedLM,
-            ESMModel,
-            ESMForSequenceClassification,
-            ESMForTokenClassification,
+            EsmForCausalLM,
+            EsmForMaskedLM,
+            EsmModel,
+            EsmForSequenceClassification,
+            EsmForTokenClassification,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (ESMForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (EsmForCausalLM,) if is_torch_available() else ()
     test_sequence_classification_problem_types = True
 
     def setUp(self):
-        self.model_tester = ESMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ESMConfig, hidden_size=37)
+        self.model_tester = EsmModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=EsmConfig, hidden_size=37)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -211,7 +211,7 @@ class ESMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     @slow
     def test_model_from_pretrained(self):
         for model_name in ESM_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
-            model = ESMModel.from_pretrained(model_name)
+            model = EsmModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
     def test_create_position_ids_respects_padding_index(self):
@@ -219,10 +219,10 @@ class ESMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
-        first available non-padding position index is ESMEmbeddings.padding_idx + 1
+        first available non-padding position index is EsmEmbeddings.padding_idx + 1
         """
         config = self.model_tester.prepare_config_and_inputs()[0]
-        model = ESMEmbeddings(config=config)
+        model = EsmEmbeddings(config=config)
 
         input_ids = torch.as_tensor([[12, 31, 13, model.padding_idx]])
         expected_positions = torch.as_tensor(
@@ -238,10 +238,10 @@ class ESMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         test for https://github.com/huggingface/transformers/issues/1761
 
         The position ids should be masked with the embedding object's padding index. Therefore, the
-        first available non-padding position index is ESMEmbeddings.padding_idx + 1
+        first available non-padding position index is EsmEmbeddings.padding_idx + 1
         """
         config = self.model_tester.prepare_config_and_inputs()[0]
-        embeddings = ESMEmbeddings(config=config)
+        embeddings = EsmEmbeddings(config=config)
 
         inputs_embeds = torch.empty(2, 4, 30)
         expected_single_positions = [
@@ -257,10 +257,10 @@ class ESMModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class ESMModelIntegrationTest(TestCasePlus):
+class EsmModelIntegrationTest(TestCasePlus):
     @slow
     def test_inference_masked_lm(self):
-        model = ESMForMaskedLM.from_pretrained("facebook/esm-1b")
+        model = EsmForMaskedLM.from_pretrained("facebook/esm-1b")
         input_ids = torch.tensor([[0, 1, 2, 3, 4, 5]])
         output = model(input_ids)[0]
 
@@ -277,7 +277,7 @@ class ESMModelIntegrationTest(TestCasePlus):
 
     @slow
     def test_inference_no_head(self):
-        model = ESMModel.from_pretrained("facebook/esm-1b")
+        model = EsmModel.from_pretrained("facebook/esm-1b")
 
         input_ids = torch.tensor([[0, 6, 4, 13, 5, 4, 16, 12, 11, 7, 2]])
         output = model(input_ids)[0]
@@ -294,12 +294,12 @@ class ESMModelIntegrationTest(TestCasePlus):
 
         keys_to_ignore_on_save_tied = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
         keys_to_ignore_on_save_untied = [r"lm_head.decoder.bias"]
-        config = ESMConfig.from_pretrained("facebook/esm-1b")
+        config = EsmConfig.from_pretrained("facebook/esm-1b")
         config_tied = deepcopy(config)
         config_tied.tie_word_embeddings = True
         config_untied = deepcopy(config)
         config_untied.tie_word_embeddings = False
-        for cls in [ESMForMaskedLM, ESMForCausalLM]:
+        for cls in [EsmForMaskedLM, EsmForCausalLM]:
             model = cls(config_tied)
             self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_tied, cls)
 

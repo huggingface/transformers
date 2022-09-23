@@ -26,7 +26,7 @@ ESM_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-class ESMConfig(PretrainedConfig):
+class EsmConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ESMModel`]. It is used to instantiate a ESM model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -88,9 +88,9 @@ class ESMConfig(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import ESMModel, ESMConfig
+    >>> from transformers import EsmModel, EsmConfig
 
-    >>> # Initializing a ESM esm-base-uncased style configuration >>> configuration = ESMConfig()
+    >>> # Initializing a ESM esm-base-uncased style configuration >>> configuration = EsmConfig()
 
     >>> # Initializing a model from the configuration >>> model = ESMModel(configuration)
 

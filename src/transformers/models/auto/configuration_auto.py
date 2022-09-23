@@ -64,7 +64,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("electra", "ElectraConfig"),
         ("encoder-decoder", "EncoderDecoderConfig"),
         ("ernie", "ErnieConfig"),
-        ("esm", "ESMConfig"),
+        ("esm", "EsmConfig"),
         ("flaubert", "FlaubertConfig"),
         ("flava", "FlavaConfig"),
         ("fnet", "FNetConfig"),

@@ -1951,42 +1951,42 @@ class ErniePreTrainedModel(metaclass=DummyObject):
 ESM_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
-class ESMForCausalLM(metaclass=DummyObject):
+class EsmForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ESMForMaskedLM(metaclass=DummyObject):
+class EsmForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ESMForSequenceClassification(metaclass=DummyObject):
+class EsmForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ESMForTokenClassification(metaclass=DummyObject):
+class EsmForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ESMModel(metaclass=DummyObject):
+class EsmModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class ESMPreTrainedModel(metaclass=DummyObject):
+class EsmPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):

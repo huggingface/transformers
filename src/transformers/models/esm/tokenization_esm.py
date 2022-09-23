@@ -42,7 +42,7 @@ def load_vocab_file(vocab_file):
         return [l.strip() for l in lines]
 
 
-class ESMTokenizer(PreTrainedTokenizer):
+class EsmTokenizer(PreTrainedTokenizer):
     """
     Constructs an ESM tokenizer.
     """

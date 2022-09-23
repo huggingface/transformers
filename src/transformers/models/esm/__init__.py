@@ -21,8 +21,8 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "ESMConfig"],
-    "tokenization_esm": ["ESMTokenizer"],
+    "configuration_esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig"],
+    "tokenization_esm": ["EsmTokenizer"],
 }
 
 try:
@@ -33,18 +33,18 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_esm"] = [
         "ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "ESMForCausalLM",
-        "ESMForMaskedLM",
-        "ESMForSequenceClassification",
-        "ESMForTokenClassification",
-        "ESMModel",
-        "ESMPreTrainedModel",
+        "EsmForCausalLM",
+        "EsmForMaskedLM",
+        "EsmForSequenceClassification",
+        "EsmForTokenClassification",
+        "EsmModel",
+        "EsmPreTrainedModel",
     ]
 
 
 if TYPE_CHECKING:
-    from .configuration_esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, ESMConfig
-    from .tokenization_esm import ESMTokenizer
+    from .configuration_esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig
+    from .tokenization_esm import EsmTokenizer
 
     try:
         if not is_torch_available():
@@ -54,12 +54,12 @@ if TYPE_CHECKING:
     else:
         from .modeling_esm import (
             ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            ESMForCausalLM,
-            ESMForMaskedLM,
-            ESMForSequenceClassification,
-            ESMForTokenClassification,
-            ESMModel,
-            ESMPreTrainedModel,
+            EsmForCausalLM,
+            EsmForMaskedLM,
+            EsmForSequenceClassification,
+            EsmForTokenClassification,
+            EsmModel,
+            EsmPreTrainedModel,
         )
 
 

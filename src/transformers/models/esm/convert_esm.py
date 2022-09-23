@@ -23,17 +23,17 @@ from tempfile import TemporaryDirectory
 import torch
 
 import esm as esm_module
-from transformers.models.esm.configuration_esm import ESMConfig
+from transformers.models.esm.configuration_esm import EsmConfig
 from transformers.models.esm.modeling_esm import (
-    ESMForMaskedLM,
-    ESMForSequenceClassification,
-    ESMIntermediate,
-    ESMLayer,
-    ESMOutput,
-    ESMSelfAttention,
-    ESMSelfOutput,
+    EsmForMaskedLM,
+    EsmForSequenceClassification,
+    EsmIntermediate,
+    EsmLayer,
+    EsmOutput,
+    EsmSelfAttention,
+    EsmSelfOutput,
 )
-from transformers.models.esm.tokenization_esm import ESMTokenizer
+from transformers.models.esm.tokenization_esm import EsmTokenizer
 from transformers.utils import logging
 
 
@@ -89,7 +89,7 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
         emb_layer_norm_before = False  # This code path does not exist in ESM-2
         position_embedding_type = "rotary"
 
-    config = ESMConfig(
+    config = EsmConfig(
         vocab_size=esm_sent_encoder.embed_tokens.num_embeddings,
         mask_token_id=alphabet.mask_idx,
         hidden_size=embed_dim,
@@ -109,7 +109,7 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
         config.num_labels = esm.classification_heads["mnli"].out_proj.weight.shape[0]
     print("Our BERT config:", config)
 
-    model = ESMForSequenceClassification(config) if classification_head else ESMForMaskedLM(config)
+    model = EsmForSequenceClassification(config) if classification_head else EsmForMaskedLM(config)
     model.eval()
 
     # Now let's copy all the weights.
@@ -127,12 +127,12 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
 
     for i in range(config.num_hidden_layers):
         # Encoder: start of layer
-        layer: ESMLayer = model.esm.encoder.layer[i]
+        layer: EsmLayer = model.esm.encoder.layer[i]
         # esm_layer: TransformerSentenceEncoderLayer = esm_sent_encoder.layers[i]
         esm_layer = esm_sent_encoder.layers[i]
 
         # self attention
-        self_attn: ESMSelfAttention = layer.attention.self
+        self_attn: EsmSelfAttention = layer.attention.self
         assert (
             esm_layer.self_attn.k_proj.weight.data.shape
             == esm_layer.self_attn.q_proj.weight.data.shape
@@ -154,19 +154,19 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
         layer.LayerNorm.bias = esm_layer.final_layer_norm.bias
 
         # self-attention output
-        self_output: ESMSelfOutput = layer.attention.output
+        self_output: EsmSelfOutput = layer.attention.output
         assert self_output.dense.weight.shape == esm_layer.self_attn.out_proj.weight.shape
         self_output.dense.weight = esm_layer.self_attn.out_proj.weight
         self_output.dense.bias = esm_layer.self_attn.out_proj.bias
 
         # intermediate
-        intermediate: ESMIntermediate = layer.intermediate
+        intermediate: EsmIntermediate = layer.intermediate
         assert intermediate.dense.weight.shape == esm_layer.fc1.weight.shape
         intermediate.dense.weight = esm_layer.fc1.weight
         intermediate.dense.bias = esm_layer.fc1.bias
 
         # output
-        bert_output: ESMOutput = layer.output
+        bert_output: EsmOutput = layer.output
         assert bert_output.dense.weight.shape == esm_layer.fc2.weight.shape
         bert_output.dense.weight = esm_layer.fc2.weight
         bert_output.dense.bias = esm_layer.fc2.bias
@@ -198,7 +198,7 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
         vocab = "\n".join(alphabet.all_toks)
         vocab_file = Path(tempdir) / "vocab.txt"
         vocab_file.write_text(vocab)
-        hf_tokenizer = ESMTokenizer(vocab_file=str(vocab_file))
+        hf_tokenizer = EsmTokenizer(vocab_file=str(vocab_file))
 
     hf_tokens = hf_tokenizer([row[1] for row in SAMPLE_DATA], return_tensors="pt", padding=True)
     success = torch.all(hf_tokens["input_ids"] == batch_tokens)
