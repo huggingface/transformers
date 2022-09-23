@@ -216,7 +216,7 @@ class MeanScaler(nn.Module):
         keepdim (`bool`, *optional*, defaults to `False`):
             Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
         minimum_scale (`float`, *optional*, defaults to 1e-10):
-            Default scale that is used for elements that are constantly zero along dimension ``dim``.
+            Default scale that is used for elements that are constantly zero along dimension `dim`.
     """
 
     def __init__(self, dim: int, keepdim: bool = False, minimum_scale: float = 1e-10):
@@ -261,13 +261,13 @@ class MeanScaler(nn.Module):
 
 class NOPScaler(nn.Module):
     """
-    Assigns a scaling factor equal to 1 along dimension ``dim``, and therefore applies no scaling to the input data.
+    Assigns a scaling factor equal to 1 along dimension `dim`, and therefore applies no scaling to the input data.
 
     Args:
         dim (`int`):
             Dimension along which to compute the scale.
         keepdim (`bool`, *optional*, defaults to `False`):
-            Controls whether to retain dimension ``dim`` (of length 1) in the scale tensor, or suppress it.
+            Controls whether to retain dimension `dim` (of length 1) in the scale tensor, or suppress it.
     """
 
     def __init__(self, dim: int, keepdim: bool = False):
