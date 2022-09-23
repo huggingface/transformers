@@ -70,12 +70,10 @@ class TrOCRProcessorWithLM(ProcessorMixin):
 
         super().__init__(feature_extractor, tokenizer)
         if not isinstance(decoder, BeamSearchDecoderCTC):
-            raise ValueError(
-                f"`decoder` has to be of type {BeamSearchDecoderCTC.__class__}, but is {type(decoder)}")
+            raise ValueError(f"`decoder` has to be of type {BeamSearchDecoderCTC.__class__}, but is {type(decoder)}")
 
         # make sure that decoder's alphabet and tokenizer's vocab match in content
-        missing_decoder_tokens = self.get_missing_alphabet_tokens(
-            decoder, tokenizer)
+        missing_decoder_tokens = self.get_missing_alphabet_tokens(decoder, tokenizer)
         if len(missing_decoder_tokens) > 0:
             raise ValueError(
                 f"The tokens {(missing_decoder_tokens)} are defined in the tokenizer's "
@@ -119,12 +117,10 @@ class TrOCRProcessorWithLM(ProcessorMixin):
         requires_backends(cls, "pyctcdecode")
         from pyctcdecode import BeamSearchDecoderCTC
 
-        feature_extractor, tokenizer = super()._get_arguments_from_pretrained(
-            pretrained_model_name_or_path, **kwargs)
+        feature_extractor, tokenizer = super()._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
 
         if os.path.isdir(pretrained_model_name_or_path) or os.path.isfile(pretrained_model_name_or_path):
-            decoder = BeamSearchDecoderCTC.load_from_dir(
-                pretrained_model_name_or_path)
+            decoder = BeamSearchDecoderCTC.load_from_dir(pretrained_model_name_or_path)
         else:
             # BeamSearchDecoderCTC has no auto class
             kwargs.pop("_from_auto", None)
@@ -132,8 +128,7 @@ class TrOCRProcessorWithLM(ProcessorMixin):
             kwargs.pop("trust_remote_code", None)
 
             # make sure that only relevant filenames are downloaded
-            language_model_filenames = os.path.join(
-                BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*")
+            language_model_filenames = os.path.join(BeamSearchDecoderCTC._LANGUAGE_MODEL_SERIALIZED_DIRECTORY, "*")
             alphabet_filename = BeamSearchDecoderCTC._ALPHABET_SERIALIZED_FILENAME
             allow_regex = [language_model_filenames, alphabet_filename]
 
@@ -149,8 +144,7 @@ class TrOCRProcessorWithLM(ProcessorMixin):
                 cls._set_language_model_attribute(decoder, attribute, value)
 
         # make sure that decoder's alphabet and tokenizer's vocab match in content
-        missing_decoder_tokens = cls.get_missing_alphabet_tokens(
-            decoder, tokenizer)
+        missing_decoder_tokens = cls.get_missing_alphabet_tokens(decoder, tokenizer)
         if len(missing_decoder_tokens) > 0:
             raise ValueError(
                 f"The tokens {missing_decoder_tokens} are defined in the tokenizer's "
@@ -170,8 +164,13 @@ class TrOCRProcessorWithLM(ProcessorMixin):
 
     @staticmethod
     def get_missing_alphabet_tokens(decoder, tokenizer):
-        from pyctcdecode.alphabet import BLANK_TOKEN_PTN, UNK_TOKEN, UNK_TOKEN_PTN, _normalize_bpe_alphabet, SPECIAL_TOKEN_PTN
-
+        from pyctcdecode.alphabet import (
+            BLANK_TOKEN_PTN,
+            UNK_TOKEN,
+            UNK_TOKEN_PTN,
+            _normalize_bpe_alphabet,
+            SPECIAL_TOKEN_PTN,
+        )
 
         # we need to make sure that all of the tokenizer's except the special tokens
         # are present in the decoder's alphabet. Retrieve missing alphabet token
@@ -194,11 +193,9 @@ class TrOCRProcessorWithLM(ProcessorMixin):
         # data = data.replace("\'", "\"")
         # decoder._alphabet.loads(data)
 
-        updated_missing_tokens = set(tokenizer_vocab_list) - \
-            set(decoder._alphabet.labels)
+        updated_missing_tokens = set(tokenizer_vocab_list) - set(decoder._alphabet.labels)
 
         return updated_missing_tokens
-
 
     def __call__(self, *args, **kwargs):
         """
@@ -219,8 +216,7 @@ class TrOCRProcessorWithLM(ProcessorMixin):
             args = args[1:]
 
         if images is None and text is None:
-            raise ValueError(
-                "You need to specify either an `images` or `text` input to process.")
+            raise ValueError("You need to specify either an `images` or `text` input to process.")
 
         if images is not None:
             inputs = self.feature_extractor(images, *args, **kwargs)
@@ -312,8 +308,7 @@ class TrOCRProcessorWithLM(ProcessorMixin):
 
         # create multiprocessing pool and list numpy arrays
         # filter out logits padding
-        logits_list = [array[(array != -100.0).all(axis=-1)]
-                       for array in logits]
+        logits_list = [array[(array != -100.0).all(axis=-1)] for array in logits]
         pool = get_context("fork").Pool(num_processes)
 
         # pyctcdecode
@@ -336,8 +331,7 @@ class TrOCRProcessorWithLM(ProcessorMixin):
             batch_texts.append(d[0][0])
             logit_scores.append(d[0][-2])
             lm_scores.append(d[0][-1])
-            word_offsets.append(
-                [{"word": t[0], "start_offset": t[1][0], "end_offset": t[1][1]} for t in d[0][1]])
+            word_offsets.append([{"word": t[0], "start_offset": t[1][0], "end_offset": t[1][1]} for t in d[0][1]])
 
         word_offsets = word_offsets if output_word_offsets else None
 
