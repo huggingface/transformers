@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2018 The HuggingFace Inc. team.
+# Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,7 +20,6 @@ import pathlib
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-# import fairseq
 import torch
 
 import esm as esm_module
@@ -36,10 +35,6 @@ from transformers.models.esm.modeling_esm import (
 )
 from transformers.models.esm.tokenization_esm import ESMTokenizer
 from transformers.utils import logging
-
-
-# if version.parse(fairseq.__version__) < version.parse("0.9.0"):
-#     raise Exception("requires fairseq >= 0.9.0")
 
 
 logging.set_verbosity_info()
