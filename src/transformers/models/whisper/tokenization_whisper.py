@@ -29,37 +29,13 @@ from ...tokenization_utils import PreTrainedTokenizer, AddedToken
 from ...utils import logging
 
 
-@lru_cache()
-def bytes_to_unicode():
-    """
-    Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
-    characters the bpe code barfs on.
 
-    The reversible bpe codes work on unicode strings. This means you need a large # of unicode characters in your vocab
-    if you want to avoid UNKs. When you're at something like a 10B token dataset you end up needing around 5K for
-    decent coverage. This is a significant percentage of your normal, say, 32K bpe vocab. To avoid that, we want lookup
-    tables between utf-8 bytes and unicode strings.
-    """
-    bs = (
-        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
-    )
-    cs = bs[:]
-    n = 0
-    for b in range(2**8):
-        if b not in bs:
-            bs.append(b)
-            cs.append(2**8 + n)
-            n += 1
-    cs = [chr(n) for n in cs]
-    return dict(zip(bs, cs))
-
-logger = logging.get_logger(__name__)
 
 SPIECE_UNDERLINE = "▁"
 
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
-    "tokenizer_file": "tokenization.json",
+    "tokenizer_file": "tokenizer.json",
     "merges_file":"merges.txt"
 }
 
@@ -197,6 +173,31 @@ TO_LANGUAGE_CODE = {
     "castilian": "es",
 }
 
+@lru_cache()
+def bytes_to_unicode():
+    """
+    Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
+    characters the bpe code barfs on.
+
+    The reversible bpe codes work on unicode strings. This means you need a large # of unicode characters in your vocab
+    if you want to avoid UNKs. When you're at something like a 10B token dataset you end up needing around 5K for
+    decent coverage. This is a significant percentage of your normal, say, 32K bpe vocab. To avoid that, we want lookup
+    tables between utf-8 bytes and unicode strings.
+    """
+    bs = (
+        list(range(ord("!"), ord("~") + 1)) + list(range(ord("¡"), ord("¬") + 1)) + list(range(ord("®"), ord("ÿ") + 1))
+    )
+    cs = bs[:]
+    n = 0
+    for b in range(2**8):
+        if b not in bs:
+            bs.append(b)
+            cs.append(2**8 + n)
+            n += 1
+    cs = [chr(n) for n in cs]
+    return dict(zip(bs, cs))
+
+logger = logging.get_logger(__name__)
 
 def get_pairs(word):
     """
@@ -248,9 +249,9 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self,
         vocab_file,
         merges_file,
-        multilingual, 
+        multilingual=True,
         task=None,
-        language=None,
+        language="en",
         errors="replace",
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
@@ -306,17 +307,34 @@ class WhisperTokenizer(PreTrainedTokenizer):
         ]
 
         self.add_special_tokens(dict(additional_special_tokens=specials))
+
+        if language is not None:
+            language = language.lower()
+            if language not in LANGUAGES:
+                if language in TO_LANGUAGE_CODE:
+                    language = TO_LANGUAGE_CODE[language]
+                else:
+                    raise ValueError(f"Unsupported language: {language}")
+
+        if multilingual:
+            task = task or "transcribe"
+            language = language or "en"
+        else:
+            task = None
+            language = None
+
         self.language = language
-        if language is not None :
-            additional_tokens = dict(zip(self.additional_special_tokens,self.additional_special_tokens_ids,))
-            self.language_token = additional_tokens[f"<|{self.language}|>"]
-        
 
         translate = self.all_special_ids[-6]
         transcribe = self.all_special_ids[-5]
         sot_sequence = [self.all_special_ids[1]]
-        if language is not None:
-            sot_sequence.append(self.all_special_ids[1] + 1 + LANGUAGES.keys().index(language))
+
+        if language is not None :
+            additional_tokens = dict(zip(self.additional_special_tokens,self.additional_special_tokens_ids,))
+            self.language_token = additional_tokens[f"<|{self.language}|>"]
+            langs = tuple(LANGUAGES.keys())
+            sot_sequence.append(self.all_special_ids[1] + 1 + langs.index(language))
+                    
         if task is not None:
             sot_sequence.append(transcribe if task == "transcribe" else translate)
         self.sot_sequence = sot_sequence

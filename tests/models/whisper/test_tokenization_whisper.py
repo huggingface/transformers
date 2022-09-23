@@ -16,18 +16,12 @@ import unittest
 from pathlib import Path
 from shutil import copyfile
 
-from transformers import SPIECE_UNDERLINE, is_sentencepiece_available
+from transformers import SPIECE_UNDERLINE
 from transformers.models.whisper import WhisperTokenizer
-from transformers.models.whisper.tokenization_whisper import VOCAB_FILES_NAMES, save_json
+from transformers.models.whisper.tokenization_whisper import VOCAB_FILES_NAMES
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
-
-
-SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
-
-if is_sentencepiece_available():
-    import sentencepiece as sp
 
 
 FR_CODE = 5
@@ -43,20 +37,7 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
     def setUp(self):
         super().setUp()
-
-        spm_model = sp.SentencePieceProcessor()
-        spm_model.Load(SAMPLE_SP)
-        vocab = ["<s>", "<pad>", "</s>", "<unk>"]
-
-        vocab += [spm_model.IdToPiece(id_) for id_ in range(len(spm_model))]
-        vocab_tokens = dict(zip(vocab, range(len(vocab))))
-
-        save_dir = Path(self.tmpdirname)
-        save_json(vocab_tokens, save_dir / VOCAB_FILES_NAMES["vocab_file"])
-        if not (save_dir / VOCAB_FILES_NAMES["spm_file"]).exists():
-            copyfile(SAMPLE_SP, save_dir / VOCAB_FILES_NAMES["spm_file"])
-
-        tokenizer = WhisperTokenizer.from_pretrained(self.tmpdirname)
+        tokenizer = WhisperTokenizer.from_pretrained("/home/arthur_huggingface_co/transformers/whisper/tiny")
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_convert_token_and_id(self):
@@ -122,7 +103,7 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
 @require_sentencepiece
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
-    checkpoint_name = "valhalla/s2t_mustc_multilinguial_medium"
+    checkpoint_name = "/home/arthur_huggingface_co/transformers/whisper/tiny"
 
     french_text = "C'est trop cool"
     spanish_text = "Esto es genial"
@@ -131,6 +112,21 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     def setUpClass(cls):
         cls.tokenizer: WhisperTokenizer = WhisperTokenizer.from_pretrained(cls.checkpoint_name)
         return cls
+
+    def test_tokenizer_equivalence(self):
+        text = "다람쥐 헌 쳇바퀴에 타고파"
+        multilingual_tokenizer =  WhisperTokenizer.from_pretrained(self.checkpoint_name, multi_lingual = True)
+        gpt2_tokenizer = WhisperTokenizer.from_pretrained(self.checkpoint_name, multi_lingual = False)
+
+        text = "다람쥐 헌 쳇바퀴에 타고파"
+        gpt2_tokens = gpt2_tokenizer.encode(text)
+        multilingual_tokens = multilingual_tokenizer.encode(text)
+
+
+        assert gpt2_tokenizer.decode(gpt2_tokens) == text
+        assert multilingual_tokenizer.decode(multilingual_tokens) == text
+        assert len(gpt2_tokens) > len(multilingual_tokens)
+
 
     def check_language_codes(self):
         self.assertEqual(self.tokenizer.lang_code_to_id["pt"], 4)
