@@ -14,14 +14,12 @@
 # limitations under the License.
 """ Testing suite for the PyTorch TimeSeriesTransformer model. """
 
-
-import copy
+import inspect
 import tempfile
 import unittest
 
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
@@ -131,38 +129,38 @@ class TimeSeriesTransformerModelTester:
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 
-    def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
-        model = TimeSeriesTransformerModel(config=config).get_decoder().to(torch_device).eval()
-        input_ids = inputs_dict["input_ids"]
-        attention_mask = inputs_dict["attention_mask"]
+    # def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
+    #     model = TimeSeriesTransformerModel(config=config).get_decoder().to(torch_device).eval()
+    #     input_ids = inputs_dict["input_ids"]
+    #     attention_mask = inputs_dict["attention_mask"]
 
-        # first forward pass
-        outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
+    #     # first forward pass
+    #     outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
 
-        output, past_key_values = outputs.to_tuple()
+    #     output, past_key_values = outputs.to_tuple()
 
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_attn_mask = ids_tensor((self.batch_size, 3), 2)
+    #     # create hypothetical multiple next token and extent to next_input_ids
+    #     next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+    #     next_attn_mask = ids_tensor((self.batch_size, 3), 2)
 
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
+    #     # append to next input_ids and
+    #     next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+    #     next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
 
-        output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-        output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-            "last_hidden_state"
-        ]
+    #     output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
+    #     output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
+    #         "last_hidden_state"
+    #     ]
 
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+    #     # select random slice
+    #     random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+    #     output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+    #     output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+    #     self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
 
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
+    #     # test that outputs are equal for slice
+    #     self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
 
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = TimeSeriesTransformerModel(config=config).to(torch_device).eval()
@@ -180,7 +178,7 @@ class TimeSeriesTransformerModelTester:
         enc_input = transformer_inputs[:, : config.context_length, ...]
         dec_input = transformer_inputs[:, config.context_length :, ...]
 
-        encoder_last_hidden_state_2 = encoder(input_ids=enc_input)[0]
+        encoder_last_hidden_state_2 = encoder(inputs_embeds=enc_input)[0]
 
         self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
 
@@ -190,7 +188,7 @@ class TimeSeriesTransformerModelTester:
             decoder = TimeSeriesTransformerDecoder.from_pretrained(tmpdirname).to(torch_device)
 
         last_hidden_state_2 = decoder(
-            input_ids=dec_input,
+            inputs_embeds=dec_input,
             encoder_hidden_states=encoder_last_hidden_state,
         )[0]
 
@@ -244,6 +242,40 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
     #         model.half()
     #     model.generate(input_ids, attention_mask=attention_mask)
     #     model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
+
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = [
+                "feat_static_cat",
+                "feat_static_real",
+                "past_time_feat",
+                "past_target",
+                "past_observed_values",
+                "future_time_feat",
+                "future_target",
+            ]
+
+            expected_arg_names.extend(
+                [
+                    "future_observed_values",
+                    "encoder_outputs",
+                    "use_cache",
+                    "output_attentions",
+                    "output_hidden_states",
+                    "return_dict",
+                ]
+                if "future_observed_values" in arg_names
+                else ["encoder_outputs", "output_hidden_states", "use_cache", "output_attentions", "return_dict"]
+            )
+
+            self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
