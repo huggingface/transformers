@@ -36,6 +36,8 @@ from transformers.models.esm.modeling_esm import (
 from transformers.models.esm.tokenization_esm import EsmTokenizer
 from transformers.utils import logging
 
+from pathlib import Path
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -63,7 +65,7 @@ MODEL_MAPPING = {
 }
 
 
-def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str, classification_head: bool):
+def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str, classification_head: bool, push_to_repo: str, auth_token: str):
     """
     Copy/paste/tweak esm's weights to our BERT structure.
     """
@@ -230,16 +232,24 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
     print(f"Saving tokenizer to {pytorch_dump_folder_path}")
     hf_tokenizer.save_pretrained(pytorch_dump_folder_path)
 
+    if push_to_repo:
+        model.push_to_hub(repo_id=push_to_repo, use_auth_token=auth_token)
+        hf_tokenizer.push_to_hub(repo_id=push_to_repo, use_auth_token=auth_token)
+
+
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, required=True, help="Path to the output PyTorch model."
+        "--pytorch_dump_folder_path", type=str, required=True, help="Path to the output PyTorch model."
     )
     parser.add_argument(
         "--classification_head", action="store_true", help="Whether to convert a final classification head."
     )
     parser.add_argument("--model", default=None, type=str, required=True, help="Name of model to convert.")
+    parser.add_argument("--push_to_repo", type=str, help="Repo to upload to (including username!).")
+    parser.add_argument("--auth_token", type=str, help="HuggingFace auth token.")
     args = parser.parse_args()
-    convert_esm_checkpoint_to_pytorch(args.model, args.pytorch_dump_folder_path, args.classification_head)
+    convert_esm_checkpoint_to_pytorch(args.model, args.pytorch_dump_folder_path, args.classification_head, args.push_to_repo, args.auth_token)
