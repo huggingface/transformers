@@ -703,48 +703,75 @@ class LogitNormalization(LogitsProcessor, LogitsWarper):
         scores = scores.log_softmax(dim=-1)
         return scores
 
-
-class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
+class SuppressBlank(LogitsProcessor):
     r"""
-    [`SuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function starts
-    generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` at not
-    sampled at the begining of the generation.
-    """
 
-    def __init__(self, begin_suppress_tokens, begin_index):
-        self.begin_suppress_tokens = list(begin_suppress_tokens)
-        self.begin_index = begin_index
+    """
+    def __init__(self, tokenizer, sample_begin: int = 1):
+        self.tokenizer = tokenizer
+        self.sample_begin = sample_begin
 
     def __call__(self, input_ids, scores):
-        if input_ids.shape[1] == self.begin_index:
-            scores[:, self.begin_suppress_tokens] = -float("inf")
+        tokens = input_ids
+        logits = scores
+        if tokens.shape[1] == self.sample_begin:
+            logits[:, self.tokenizer.encode(" ") + [self.tokenizer.eot]] = -np.inf
+        return logits
 
-        return scores
 
+class SuppressTokens(LogitsProcessor):
+    r"""
 
-class SuppressTokensLogitsProcessor(LogitsProcessor):
-    r"""This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so that they
-    are not sampled."""
-
+    """
     def __init__(self, suppress_tokens):
         self.suppress_tokens = list(suppress_tokens)
 
     def __call__(self, input_ids, scores):
-        scores[:, self.suppress_tokens] = -float("inf")
-        return scores
+        logits = scores
+        logits[:, self.suppress_tokens] = -np.inf
+        return logits
 
 
-class ForceTokensLogitsProcessor(LogitsProcessor):
-    r"""This processor can be used to force a list of tokens. The processor will set their log probs to `inf` so that they
-    are sampled at their corresponding index."""
+class ApplyTimestampRules(LogitsProcessor):
+    r"""
 
-    def __init__(self, force_token_map):
-        self.force_token_map = dict(force_token_map)
+    """
+    def __init__(
+        self, tokenizer, sample_begin: int = 1, max_initial_timestamp_index: Optional[int] = None
+    ):
+        self.tokenizer = tokenizer
+        self.sample_begin = sample_begin
+        self.max_initial_timestamp_index = max_initial_timestamp_index
 
     def __call__(self, input_ids, scores):
-        generation_idx = input_ids.shape[-1]
-        current_token = self.force_token_map.get(generation_idx, None)
-        if current_token is not None:
-            scores[:, :] = -float("inf")
-            scores[:, current_token] = 0
-        return scores
+        tokens = input_ids
+        logits = scores
+        # suppress <|notimestamps|> which is handled by without_timestamps
+        if self.tokenizer.no_timestamps is not None:
+            logits[:, self.tokenizer.no_timestamps] = -np.inf
+
+        # timestamps have to appear in pairs, except directly before EOT; mask logits accordingly
+        for k in range(tokens.shape[0]):
+            seq = [t for t in tokens[k, self.sample_begin :].tolist()]
+            last_was_timestamp = len(seq) >= 1 and seq[-1] >= self.tokenizer.timestamp_begin
+            penultimate_was_timestamp = len(seq) < 2 or seq[-2] >= self.tokenizer.timestamp_begin
+
+            if last_was_timestamp:
+                if penultimate_was_timestamp:  # has to be non-timestamp
+                    logits[k, self.tokenizer.timestamp_begin :] = -np.inf
+                else:  # cannot be normal text tokens
+                    logits[k, : self.tokenizer.eot] = -np.inf
+
+        # apply the `max_initial_timestamp` option
+        if tokens.shape[1] == self.sample_begin and self.max_initial_timestamp_index is not None:
+            last_allowed = self.tokenizer.timestamp_begin + self.max_initial_timestamp_index
+            logits[:, last_allowed + 1 :] = -np.inf
+
+        # if sum of probability over timestamps is above any other token, sample timestamp
+        logprobs = torch.nn.functional.log_softmax(logits.float(), dim=-1)
+        for k in range(tokens.shape[0]):
+            timestamp_logprob = logprobs[k, self.tokenizer.timestamp_begin :].logsumexp(dim=-1)
+            max_text_token_logprob = logprobs[k, : self.tokenizer.timestamp_begin].max()
+            if timestamp_logprob > max_text_token_logprob:
+                logits[k, : self.tokenizer.timestamp_begin] = -np.inf
+        return logits

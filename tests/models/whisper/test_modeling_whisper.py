@@ -832,3 +832,20 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(torch.allclose(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+
+    def test_generationt(self):
+        from transformers import WhisperTokenizer, WhisperFeatureExtractor, set_seed
+
+        torch_device = "cpu"
+        set_seed(0)
+        model = WhisperForConditionalGeneration.from_pretrained("whisper/tiny")
+        model.to(torch_device)
+
+        input_speech = self._load_datasamples(1)
+        feaure_extractor = WhisperFeatureExtractor()
+
+        input_features = feaure_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(torch_device)
+
+        tokenizer = WhisperTokenizer.from_pretrained("whisper/tiny-multy")
+        generated_ids = model.generate(input_features, num_beams = 5)
+        transcript = tokenizer.batch_decode(generated_ids)

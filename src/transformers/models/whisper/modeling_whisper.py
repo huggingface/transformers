@@ -17,7 +17,7 @@
 
 import math
 import random
-from typing import Iterable, Optional, Tuple
+from typing import Iterable, Optional, Tuple, Dict
 
 import torch
 import torch.nn.functional as F
@@ -1265,6 +1265,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         r"decoder.version",
         r"model.encoder.embed_positions.weights",
         r"model.decoder.embed_positions.weights",
+        r"proj_out.weight"
     ]
     _keys_to_ignore_on_save = [
         r"model.encoder.embed_positions.weights",
@@ -1420,6 +1421,39 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             "cross_attn_head_mask": cross_attn_head_mask,
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
+
+    def _prepare_attention_mask_for_generation(
+        self,
+        inputs: torch.Tensor,
+        pad_token_id: Optional[int],
+        eos_token_id: Optional[int],
+    ) -> torch.LongTensor:
+        is_mel_spec = len(inputs.shape) == 3 and inputs.dtype in [torch.int, torch.long]
+        is_pad_token_in_inputs = (pad_token_id is not None) and (pad_token_id in inputs)
+        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id != eos_token_id)
+
+        # Check if input is input_ids and padded -> only then is attention_mask defined
+        if is_mel_spec and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
+            return inputs.ne(pad_token_id).long()
+        else : 
+            return None
+
+    def _prepare_decoder_input_ids_for_generation(
+        self,
+        batch_size: int,
+        decoder_start_token_id: int = None,
+        bos_token_id: int = None,
+        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
+        device: torch.device = None,
+    ) -> torch.LongTensor:
+
+        if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
+            return model_kwargs.pop("decoder_input_ids")
+        else:
+            decoder_start_token_id = self.config.decoder_start_token_id
+            if device is None:
+                device = self.device
+            return torch.ones((batch_size, 1), dtype=torch.long, device=device) * decoder_start_token_id
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
