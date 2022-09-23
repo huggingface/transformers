@@ -387,7 +387,7 @@ class Message:
         return json.dumps(blocks)
 
     @staticmethod
-    def error_out(title, ci_title="", setup_failed=False, runner_failed=False):
+    def error_out(title, ci_title="", runner_not_available=False, runner_failed=False, setup_failed=False):
 
         blocks = []
         title_block = {"type": "header", "text": {"type": "plain_text", "text": title}}
@@ -397,10 +397,12 @@ class Message:
             ci_title_block = {"type": "section", "text": {"type": "mrkdwn", "text": ci_title}}
             blocks.append(ci_title_block)
 
-        if setup_failed:
-            text = "💔 Setup job failed. Tests are not run. 😭"
+        if runner_not_available:
+            text = "💔 CI runners are not available! Tests are not run. 😭"
         elif runner_failed:
             text = "💔 CI runners have problems! Tests are not run. 😭"
+        elif setup_failed:
+            text = "💔 Setup job failed. Tests are not run. 😭"
         else:
             text = "💔 There was an issue running the tests. 😭"
 
@@ -654,10 +656,13 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 if __name__ == "__main__":
 
-    setup_status = os.environ.get("SETUP_STATUS")
     runner_status = os.environ.get("RUNNER_STATUS")
+    runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
+    setup_status = os.environ.get("SETUP_STATUS")
+
+    runner_not_available = True if runner_status is not None and runner_status != "success" else False
+    runner_failed = True if runner_env_status is not None and runner_env_status != "success" else False
     setup_failed = True if setup_status is not None and setup_status != "success" else False
-    runner_failed = True if runner_status is not None and runner_status != "success" else False
 
     org = "huggingface"
     repo = "transformers"
@@ -718,8 +723,8 @@ if __name__ == "__main__":
     else:
         ci_title = ""
 
-    if setup_failed or runner_failed:
-        Message.error_out(title, ci_title, setup_failed, runner_failed)
+    if runner_not_available or runner_failed or setup_failed:
+        Message.error_out(title, ci_title, runner_not_available, runner_failed, setup_failed)
         exit(0)
 
     arguments = sys.argv[1:][0]
@@ -728,7 +733,7 @@ if __name__ == "__main__":
         # Need to change from elements like `models/bert` to `models_bert` (the ones used as artifact names).
         models = [x.replace("models/", "models_") for x in models]
     except SyntaxError:
-        Message.error_out()
+        Message.error_out(title, ci_title)
         raise ValueError("Errored out.")
 
     github_actions_job_links = get_job_links()

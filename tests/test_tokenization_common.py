@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
 from huggingface_hub import HfFolder, delete_repo, set_access_token
+from huggingface_hub.file_download import http_get
 from parameterized import parameterized
 from requests.exceptions import HTTPError
 from transformers import (
@@ -3888,6 +3889,21 @@ class TokenizerUtilTester(unittest.TestCase):
             _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
+
+    def test_legacy_load_from_one_file(self):
+        # This test is for deprecated behavior and can be removed in v5
+        try:
+            tmp_file = tempfile.mktemp()
+            with open(tmp_file, "wb") as f:
+                http_get("https://huggingface.co/albert-base-v1/resolve/main/spiece.model", f)
+
+            _ = AlbertTokenizer.from_pretrained(tmp_file)
+        finally:
+            os.remove(tmp_file)
+
+    def test_legacy_load_from_url(self):
+        # This test is for deprecated behavior and can be removed in v5
+        _ = AlbertTokenizer.from_pretrained("https://huggingface.co/albert-base-v1/resolve/main/spiece.model")
 
 
 @is_staging_test

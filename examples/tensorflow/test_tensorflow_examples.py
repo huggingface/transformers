@@ -157,6 +157,7 @@ class ExamplesTests(TestCasePlus):
             --do_eval
             --prediction_loss_only
             --num_train_epochs=1
+            --learning_rate=1e-4
         """.split()
 
         with patch.object(sys, "argv", testargs):
