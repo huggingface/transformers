@@ -17,11 +17,11 @@
 
 import math
 import random
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
-from torch import Tensor, nn
+from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN

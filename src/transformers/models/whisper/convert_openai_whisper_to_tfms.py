@@ -17,11 +17,11 @@ import argparse
 import torch
 from torch import nn
 
-from transformers import WhisperConfig, WhisperModel
+from transformers import WhisperConfig, WhisperForConditionalGeneration, WhisperModel
 
 
 def remove_ignore_keys_(state_dict):
-    ignore_keys = ["layers", "blocks", "proj_out.weight"]
+    ignore_keys = ["layers", "blocks"]
     for k in ignore_keys:
         state_dict.pop(k, None)
 
@@ -73,10 +73,10 @@ def make_linear_from_emb(emb):
 
 
 def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
-    m2m_100 = torch.load(checkpoint_path, map_location="cpu")
-    args = m2m_100["args"]
-    state_dict = m2m_100["model"]
-    lm_head_weights = state_dict["decoder.output_projection.weight"]
+    original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
+    dimensions = original_checkpoint["dims"]
+    state_dict = original_checkpoint["model_state_dict"]
+    proj_out_weights = state_dict["decoder.token_embedding.weight"]
 
     remove_ignore_keys_(state_dict)
     rename_keys(state_dict)
@@ -87,31 +87,15 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
 
     conv_kernel_sizes = [int(i) for i in args.conv_kernel_sizes.split(",")]
     config = WhisperConfig(
-        vocab_size=vocab_size,
-        max_source_positions=args.max_source_positions,
-        max_target_positions=args.max_target_positions,
-        encoder_layers=args.encoder_layers,
-        decoder_layers=args.decoder_layers,
-        encoder_attention_heads=args.encoder_attention_heads,
-        decoder_attention_heads=args.decoder_attention_heads,
-        encoder_ffn_dim=args.encoder_ffn_embed_dim,
-        decoder_ffn_dim=args.decoder_ffn_embed_dim,
-        d_model=args.encoder_embed_dim,
-        dropout=args.dropout,
-        attention_dropout=args.attention_dropout,
-        activation_dropout=args.activation_dropout,
-        activation_function="relu",
-        num_conv_layers=len(conv_kernel_sizes),
-        conv_channels=args.conv_channels,
-        conv_kernel_sizes=conv_kernel_sizes,
-        input_feat_per_channel=args.input_feat_per_channel,
-        input_channels=args.input_channels,
-        tie_word_embeddings=tie_embeds,
-        num_beams=5,
-        max_length=200,
-        use_cache=True,
-        decoder_start_token_id=2,
-        early_stopping=True,
+        vocab_size=dimensions["n_vocab"],
+        num_mel_bins=dimensions["n°mels"],
+        d_model=dimensions["n_audio_state"],
+        max_target_positions=dimensions["n_text_ctx"],
+        encoder_layers=dimensions["n_audio_layers"],
+        encoder_attention_heads=dimensions["n_audio_heads"],
+        decoder_layers=dimensions["n_text_layers"],
+        decoder_attention_heads=dimensions["n_text_heads"],
+        max_source_positions=dimensions["n_audio_ctx"],
     )
 
     model = WhisperForConditionalGeneration(config)
@@ -128,9 +112,9 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
         )
 
     if tie_embeds:
-        model.lm_head = make_linear_from_emb(model.model.decoder.embed_tokens)
+        model.proj_out = make_linear_from_emb(model.model.decoder.embed_tokens)
     else:
-        model.lm_head.weight.data = lm_head_weights
+        model.proj_out.weight.data = proj_out_weights
 
     model.save_pretrained(pytorch_dump_folder_path)
 
@@ -194,16 +178,7 @@ def _download(url: str, root: str) -> bytes:
     return model_bytes
 
 
-if __name__ == "__main__":
-    # parser = argparse.ArgumentParser()
-    # # Required parameters
-    # parser.add_argument("--fairseq_path", type=str, help="Path to the fairseq model (.pt) file.")
-    # parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
-    # args = parser.parse_args()
-    import torch
-
-    from transformers import WhisperConfig, WhisperModel
-
+def convert_every_model(save_dir):
     layers = [4, 6, 12, 24, 32]
     width = [384, 512, 768, 1024, 1280]
     heads = [6, 8, 12, 16, 20]
@@ -229,4 +204,14 @@ if __name__ == "__main__":
         missing, unexpected = model.load_state_dict(new, strict=False)
         if missing == []:
             print("succesfully loaded")
-            model.save_pretrained(f"whisper/{n}")
+            model.save_pretrained(f"{save_dir}/{n}")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    # # Required parameters
+    parser.add_argument("--original_name", type=str, help="Path to the fairseq model (.pt) file.")
+    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    args = parser.parse_args()
+
+    convert_openai_whisper_to_tfms(parser.original_name, parser.pytorch_dump_folder_path)
