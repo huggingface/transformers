@@ -81,8 +81,7 @@ class RotaryEmbedding(torch.nn.Module):
         super().__init__()
         # Generate and save the inverse frequency buffer (non trainable)
         inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2).float() / dim))
-        # Disgusting hack to match the ESM repo, which converts to fp16 at some point and loses this precision
-        inv_freq = inv_freq.half().float()
+        inv_freq = inv_freq
         self.register_buffer("inv_freq", inv_freq)
 
         self._seq_len_cached = None

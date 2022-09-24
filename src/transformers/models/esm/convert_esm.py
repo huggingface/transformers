@@ -149,6 +149,15 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
         self_attn.value.weight.data = esm_layer.self_attn.v_proj.weight
         self_attn.value.bias.data = esm_layer.self_attn.v_proj.bias
 
+        if hasattr(esm_layer.self_attn, "rot_emb"):
+            # Matt: Although inv_freq is not a trainable weight, it is computed at model init and cached.
+            # During the training of ESM-2 the model was converted to float16 precision, which also converts
+            # the inv_freq tensor, and the loss of precision remains even if the model is loaded later as float32.
+            # If we recompute inv_freq without this loss of precision then we will get subtly different rotary
+            # embeddings, which are enough to cause significant discrepancies in model outputs. To avoid this,
+            # we make sure the new model copies the data from the old inv_freq.
+            self_attn.rotary_embeddings.inv_freq.data = esm_layer.self_attn.rot_emb.inv_freq
+
         # LayerNorm changes for pre-activation
         layer.attention.LayerNorm.weight = esm_layer.self_attn_layer_norm.weight
         layer.attention.LayerNorm.bias = esm_layer.self_attn_layer_norm.bias
