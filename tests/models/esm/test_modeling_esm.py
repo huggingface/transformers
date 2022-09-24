@@ -227,7 +227,14 @@ class EsmModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
         input_ids = torch.as_tensor([[12, 31, 13, model.embeddings.padding_idx]])
         expected_positions = torch.as_tensor(
-            [[0 + model.embeddings.padding_idx + 1, 1 + model.embeddings.padding_idx + 1, 2 + model.embeddings.padding_idx + 1, model.embeddings.padding_idx]]
+            [
+                [
+                    0 + model.embeddings.padding_idx + 1,
+                    1 + model.embeddings.padding_idx + 1,
+                    2 + model.embeddings.padding_idx + 1,
+                    model.embeddings.padding_idx,
+                ]
+            ]
         )
         position_ids = create_position_ids_from_input_ids(input_ids, model.embeddings.padding_idx)
         self.assertEqual(position_ids.shape, expected_positions.shape)

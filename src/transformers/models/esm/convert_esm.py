@@ -36,8 +36,6 @@ from transformers.models.esm.modeling_esm import (
 from transformers.models.esm.tokenization_esm import EsmTokenizer
 from transformers.utils import logging
 
-from pathlib import Path
-
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -65,7 +63,9 @@ MODEL_MAPPING = {
 }
 
 
-def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str, classification_head: bool, push_to_repo: str, auth_token: str):
+def convert_esm_checkpoint_to_pytorch(
+    model: str, pytorch_dump_folder_path: str, classification_head: bool, push_to_repo: str, auth_token: str
+):
     """
     Copy/paste/tweak esm's weights to our BERT structure.
     """
@@ -246,8 +246,6 @@ def convert_esm_checkpoint_to_pytorch(model: str, pytorch_dump_folder_path: str,
         hf_tokenizer.push_to_hub(repo_id=push_to_repo, use_auth_token=auth_token)
 
 
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # Required parameters
@@ -261,4 +259,6 @@ if __name__ == "__main__":
     parser.add_argument("--push_to_repo", type=str, help="Repo to upload to (including username!).")
     parser.add_argument("--auth_token", type=str, help="HuggingFace auth token.")
     args = parser.parse_args()
-    convert_esm_checkpoint_to_pytorch(args.model, args.pytorch_dump_folder_path, args.classification_head, args.push_to_repo, args.auth_token)
+    convert_esm_checkpoint_to_pytorch(
+        args.model, args.pytorch_dump_folder_path, args.classification_head, args.push_to_repo, args.auth_token
+    )
