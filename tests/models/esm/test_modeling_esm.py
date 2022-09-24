@@ -94,6 +94,7 @@ class EsmModelTester:
         return EsmConfig(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
+            pad_token_id=1,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             intermediate_size=self.intermediate_size,
@@ -224,12 +225,11 @@ class EsmModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         config = self.model_tester.prepare_config_and_inputs()[0]
         model = EsmEmbeddings(config=config)
 
-        input_ids = torch.as_tensor([[12, 31, 13, model.padding_idx]])
+        input_ids = torch.as_tensor([[12, 31, 13, model.embeddings.padding_idx]])
         expected_positions = torch.as_tensor(
-            [[0 + model.padding_idx + 1, 1 + model.padding_idx + 1, 2 + model.padding_idx + 1, model.padding_idx]]
+            [[0 + model.embeddings.padding_idx + 1, 1 + model.embeddings.padding_idx + 1, 2 + model.embeddings.padding_idx + 1, model.embeddings.padding_idx]]
         )
-
-        position_ids = create_position_ids_from_input_ids(input_ids, model.padding_idx)
+        position_ids = create_position_ids_from_input_ids(input_ids, model.embeddings.padding_idx)
         self.assertEqual(position_ids.shape, expected_positions.shape)
         self.assertTrue(torch.all(torch.eq(position_ids, expected_positions)))
 
