@@ -222,8 +222,8 @@ def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]
     """
     if resolved_file is None or commit_hash is not None:
         return commit_hash
-    if isinstance(resolved_file, str) and sys.platform == 'win32':
-        resolved_file = re.sub("\\\\", '/', resolved_file)
+    if isinstance(resolved_file, str) and sys.platform == "win32":
+        resolved_file = re.sub("\\\\", "/", resolved_file)
     search = re.search(r"snapshots/([^/]+)/", resolved_file)
     if search is None:
         return None
@@ -859,19 +859,19 @@ def convert_file_size_to_int(size: Union[int, str]):
     if isinstance(size, int):
         return size
     if size.upper().endswith("GIB"):
-        return int(size[:-3]) * (2**30)
+        return int(size[:-3]) * (2 ** 30)
     if size.upper().endswith("MIB"):
-        return int(size[:-3]) * (2**20)
+        return int(size[:-3]) * (2 ** 20)
     if size.upper().endswith("KIB"):
-        return int(size[:-3]) * (2**10)
+        return int(size[:-3]) * (2 ** 10)
     if size.upper().endswith("GB"):
-        int_size = int(size[:-2]) * (10**9)
+        int_size = int(size[:-2]) * (10 ** 9)
         return int_size // 8 if size.endswith("b") else int_size
     if size.upper().endswith("MB"):
-        int_size = int(size[:-2]) * (10**6)
+        int_size = int(size[:-2]) * (10 ** 6)
         return int_size // 8 if size.endswith("b") else int_size
     if size.upper().endswith("KB"):
-        int_size = int(size[:-2]) * (10**3)
+        int_size = int(size[:-2]) * (10 ** 3)
         return int_size // 8 if size.endswith("b") else int_size
     raise ValueError("`size` is not in a valid format. Use an integer followed by the unit, e.g., '5GB'.")
 
