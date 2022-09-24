@@ -222,7 +222,8 @@ def extract_commit_hash(resolved_file: Optional[str], commit_hash: Optional[str]
     """
     if resolved_file is None or commit_hash is not None:
         return commit_hash
-
+    if isinstance(resolved_file, str) and sys.platform == 'win32':
+        resolved_file = re.sub("\\\\", '/', resolved_file)
     search = re.search(r"snapshots/([^/]+)/", resolved_file)
     if search is None:
         return None
