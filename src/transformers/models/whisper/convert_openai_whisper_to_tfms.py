@@ -72,29 +72,32 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
-def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
-    original_checkpoint = torch.load(checkpoint_path, map_location="cpu")
+def convert_openai_whisper_to_tfms(checkpoint_name, pytorch_dump_folder_path, checkpoint_path = "weights"):
+    full_path = os.path.join(os.getcwd(),checkpoint_path)
+    if not os.path.isdir(os.path.join(full_path)):
+        os.makedirs(full_path, exist_ok=True)
+        try:
+            _ , checkpoint_path = _download(_MODELS[checkpoint_name],full_path )
+        except KeyError:
+            print("The original checkpoint should be in _MODELS ")
+
+    print(f"Loading model from : {full_path}/{checkpoint_name}")
+    original_checkpoint = torch.load(os.path.join(full_path,checkpoint_name)+".pt", map_location="cpu")
     dimensions = original_checkpoint["dims"]
     state_dict = original_checkpoint["model_state_dict"]
-    proj_out_weights = state_dict["decoder.token_embedding.weight"]
 
     remove_ignore_keys_(state_dict)
     rename_keys(state_dict)
 
-    vocab_size = state_dict["decoder.embed_tokens.weight"].shape[0]
-
-    tie_embeds = args.share_decoder_input_output_embed
-
-    conv_kernel_sizes = [int(i) for i in args.conv_kernel_sizes.split(",")]
     config = WhisperConfig(
         vocab_size=dimensions["n_vocab"],
-        num_mel_bins=dimensions["n°mels"],
+        num_mel_bins=dimensions["n_mels"],
         d_model=dimensions["n_audio_state"],
         max_target_positions=dimensions["n_text_ctx"],
-        encoder_layers=dimensions["n_audio_layers"],
-        encoder_attention_heads=dimensions["n_audio_heads"],
-        decoder_layers=dimensions["n_text_layers"],
-        decoder_attention_heads=dimensions["n_text_heads"],
+        encoder_layers=dimensions["n_audio_layer"],
+        encoder_attention_heads=dimensions["n_audio_head"],
+        decoder_layers=dimensions["n_text_layer"],
+        decoder_attention_heads=dimensions["n_text_head"],
         max_source_positions=dimensions["n_audio_ctx"],
     )
 
@@ -111,12 +114,7 @@ def convert_openai_whisper_to_tfms(checkpoint_path, pytorch_dump_folder_path):
             f" but all the following weights are missing {missing}"
         )
 
-    if tie_embeds:
-        model.proj_out = make_linear_from_emb(model.model.decoder.embed_tokens)
-    else:
-        model.proj_out.weight.data = proj_out_weights
-
-    model.save_pretrained(pytorch_dump_folder_path)
+    model.save_pretrained(os.path.join(pytorch_dump_folder_path,checkpoint_name))
 
 
 _MODELS = {
@@ -153,7 +151,7 @@ def _download(url: str, root: str) -> bytes:
     if os.path.isfile(download_target):
         model_bytes = open(download_target, "rb").read()
         if hashlib.sha256(model_bytes).hexdigest() == expected_sha256:
-            return model_bytes
+            return None, download_target
         else:
             warnings.warn(f"{download_target} exists, but the SHA256 checksum does not match; re-downloading the file")
 
@@ -175,7 +173,7 @@ def _download(url: str, root: str) -> bytes:
             "Model has been downloaded but the SHA256 checksum does not not match. Please retry loading the model."
         )
 
-    return model_bytes
+    return model_bytes, download_target
 
 
 def convert_every_model(save_dir):
@@ -211,7 +209,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # # Required parameters
     parser.add_argument("--original_name", type=str, help="Path to the fairseq model (.pt) file.")
-    parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
+    parser.add_argument("--pytorch_dump_folder_path", default="whisper-converted", type=str, help="Path to the output PyTorch model.")
     args = parser.parse_args()
 
-    convert_openai_whisper_to_tfms(parser.original_name, parser.pytorch_dump_folder_path)
+    convert_openai_whisper_to_tfms(args.original_name, args.pytorch_dump_folder_path)
