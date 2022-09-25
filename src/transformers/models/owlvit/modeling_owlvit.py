@@ -879,7 +879,6 @@ class OwlViTVisionTransformer(nn.Module):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        use_hidden_state: Optional[bool] = True,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
@@ -903,10 +902,7 @@ class OwlViTVisionTransformer(nn.Module):
         last_hidden_state = encoder_outputs[0]
         pooled_output = last_hidden_state[:, 0, :]
 
-        if use_hidden_state:
-            pooled_output = self.post_layernorm(last_hidden_state)
-        else:
-            pooled_output = self.post_layernorm(pooled_output)
+        pooled_output = self.post_layernorm(pooled_output)
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
@@ -1148,7 +1144,6 @@ class OwlViTModel(OwlViTPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            use_hidden_state=False,
         )
 
         # Get embeddings for all text queries in all batch samples
