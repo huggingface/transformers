@@ -716,7 +716,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 @require_torchaudio
 @require_sentencepiece
 @require_tokenizers
-# @slow
+@slow
 class WhisperModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
@@ -841,3 +841,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         tokenizer = WhisperTokenizer.from_pretrained("whisper/tiny-multy")
         generated_ids = model.generate(input_features, num_beams=5)
         transcript = tokenizer.batch_decode(generated_ids)
+
+        EXPECTED_TRANSCRIPT = "Nor is Mr. Quilters manner less interesting than his matter."
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
