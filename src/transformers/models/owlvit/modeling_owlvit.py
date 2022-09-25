@@ -1416,6 +1416,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             each_query_box = torch.tensor([[0, 0, 1, 1]])
             each_query_pred_boxes = pred_boxes_as_corners[i]
             ious, _ = box_iou(each_query_box, each_query_pred_boxes)
+
+            # If there are no overlapping boxes, fall back to generalized IoU
             if torch.all(ious[0] == 0.0):
                 ious = generalized_box_iou(each_query_box, each_query_pred_boxes)
 
