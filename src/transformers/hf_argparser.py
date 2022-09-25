@@ -292,7 +292,7 @@ class HfArgumentParser(ArgumentParser):
         if not allow_extra_keys and unused_keys:
             raise ValueError(f"Some keys are not used by the HfArgumentParser: {sorted(unused_keys)}")
         return tuple(outputs)
-    
+
     def parse_yaml_file(self, yaml_file, allow_extra_keys: bool = False) -> Tuple[DataClass, ...]:
         """
         Alternative helper method that does not use `argparse` at all, instead uses a dict and populating the dataclass
@@ -306,8 +306,8 @@ class HfArgumentParser(ArgumentParser):
             Tuple consisting of:
                 - the dataclass instances in the same order as they were passed to the initializer.
         """
-        with open(yaml_file, 'r') as f:
-            data = yaml.load(f,Loader=yaml.FullLoader)
+        with open(yaml_file, "r") as f:
+            data = yaml.load(f, Loader=yaml.FullLoader)
         unused_keys = set(data.keys())
         outputs = []
         for dtype in self.dataclass_types:
