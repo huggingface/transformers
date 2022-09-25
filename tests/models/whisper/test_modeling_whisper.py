@@ -833,7 +833,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         self.assertTrue(torch.allclose(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
 
-    def test_generationt(self):
+    def test_generation(self):
         from transformers import WhisperFeatureExtractor, WhisperTokenizer, set_seed
 
         torch_device = "cpu"
