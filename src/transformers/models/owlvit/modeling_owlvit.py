@@ -118,7 +118,7 @@ def center_to_corners_format(boxes: torch.Tensor) -> torch.Tensor:
     Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
     (left, top, right, bottom).
     """
-    x_center, y_center, width, height = x.unbind(-1)
+    x_center, y_center, width, height = boxes.unbind(-1)
     boxes = [(x_center - 0.5 * width), (y_center - 0.5 * height), (x_center + 0.5 * width), (y_center + 0.5 * height)]
     return torch.stack(boxes, dim=-1)
 
