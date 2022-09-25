@@ -60,6 +60,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "DetrEncoder",  # Building part of bigger (tested) model.
     "DetrDecoder",  # Building part of bigger (tested) model.
     "DetrDecoderWrapper",  # Building part of bigger (tested) model.
+    "ConditionalDetrEncoder",  # Building part of bigger (tested) model.
+    "ConditionalDetrDecoder",  # Building part of bigger (tested) model.
     "M2M100Encoder",  # Building part of bigger (tested) model.
     "M2M100Decoder",  # Building part of bigger (tested) model.
     "MCTCTEncoder",  # Building part of bigger (tested) model.
@@ -165,6 +167,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlaxCLIPVisionModel",
     "FlaxWav2Vec2ForCTC",
     "DetrForSegmentation",
+    "ConditionalDetrForSegmentation",
     "DPRReader",
     "FlaubertForQuestionAnswering",
     "FlavaImageCodebook",
