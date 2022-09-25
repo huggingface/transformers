@@ -707,15 +707,16 @@ class LogitNormalization(LogitsProcessor, LogitsWarper):
 class SuppressBlank(LogitsProcessor):
     r""" """
 
-    def __init__(self, tokenizer, sample_begin: int = 1):
-        self.tokenizer = tokenizer
+    def __init__(self, blank_token_id, eos_token_id, sample_begin: int = 1):
+        self.blank_token_id = blank_token_id
+        self.eos_token_id = eos_token_id
         self.sample_begin = sample_begin
 
     def __call__(self, input_ids, scores):
         tokens = input_ids
         logits = scores
         if tokens.shape[1] == self.sample_begin:
-            logits[:, self.tokenizer.encode(" ") + [self.tokenizer.eot]] = -np.inf
+            logits[:, self.blank_token_id + [self.eos_token_id]] = -np.inf
         return logits
 
 

@@ -30,9 +30,6 @@ if is_speech_available():
     from transformers import WhisperFeatureExtractor, WhisperProcessor
 
 
-SAMPLE_SP = get_tests_dir("fixtures/test_sentencepiece.model")
-
-
 @require_torch
 @require_torchaudio
 @require_sentencepiece

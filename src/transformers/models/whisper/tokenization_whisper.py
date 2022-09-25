@@ -22,6 +22,7 @@ import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
+from .configuration_whisper import NON_SPEECH_TOKENS
 
 
 SPIECE_UNDERLINE = "▁"
@@ -238,7 +239,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self,
         vocab_file,
         merges_file,
-        multilingual=True,
         task=None,
         language="en",
         errors="replace",
@@ -249,7 +249,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
         add_prefix_space=False,
         add_bos_token=False,
         **kwargs
-    ):
+    ):        
+
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
         unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
@@ -265,6 +266,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         self.add_bos_token = add_bos_token
+        self.language=language
+        self.task=task
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -282,41 +285,15 @@ class WhisperTokenizer(PreTrainedTokenizer):
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
-        specials = [
-            "<|startoftranscript|>",
-            *[f"<|{lang}|>" for lang in LANGUAGES.keys()],
-            "<|translate|>",
-            "<|transcribe|>",
-            "<|startoflm|>",
-            "<|startofprev|>",
-            "<|nocaptions|>",
-            "<|notimestamps|>",
-        ]
 
-        self.add_special_tokens(dict(additional_special_tokens=specials))
-
-        if language is not None:
-            language = language.lower()
-            if language not in LANGUAGES:
-                if language in TO_LANGUAGE_CODE:
-                    language = TO_LANGUAGE_CODE[language]
-                else:
-                    raise ValueError(f"Unsupported language: {language}")
-
-        if multilingual:
-            task = task or "transcribe"
-            language = language or "en"
-        else:
-            task = None
-            language = None
-
-        self.language = language
-
+    @property
+    @lru_cache()
+    def sot_sequence(self) -> Tuple[int]:
         translate = self.all_special_ids[-6]
         transcribe = self.all_special_ids[-5]
         sot_sequence = [self.all_special_ids[1]]
 
-        if language is not None:
+        if self.language is not None:
             additional_tokens = dict(
                 zip(
                     self.additional_special_tokens,
@@ -325,52 +302,16 @@ class WhisperTokenizer(PreTrainedTokenizer):
             )
             self.language_token = additional_tokens[f"<|{self.language}|>"]
             langs = tuple(LANGUAGES.keys())
-            sot_sequence.append(self.all_special_ids[1] + 1 + langs.index(language))
+            sot_sequence.append(self.all_special_ids[1] + 1 + langs.index(self.language))
 
-        if task is not None:
-            sot_sequence.append(transcribe if task == "transcribe" else translate)
-        self.sot_sequence = sot_sequence
-
-    @property
-    @lru_cache()
-    def non_speech_tokens(self) -> Tuple[int]:
-        """
-        Returns the list of tokens to suppress in order to avoid any speaker tags or non-speech annotations, to prevent
-        sampling texts that are not actually spoken in the audio, e.g.
-
-        - ♪♪♪
-        - ( SPEAKING FOREIGN LANGUAGE )
-        - [DAVID] Hey there,
-
-        keeping basic punctuations like commas, periods, question marks, exclamation points, etc.
-        """
-
-        result = set()
-        symbols = list("'\"#()*+-/:;<=>@[\\]^_`{|}~「」『』")
-        symbols += "<< >> <<< >>> -- --- -( -[ (' (\" (( )) ((( ))) [[ ]] {{ }} ♪♪ ♪♪♪".split()
-
-        # symbols that may be a single token or multiple tokens depending on the tokenizer.
-        # In case they're multiple tokens, suppress the first token, which is safe because:
-        # These are between U+2640 and U+267F miscellaneous symbols that are okay to suppress
-        # in generations, and in the 3-byte UTF-8 representation they share the first two bytes.
-        miscellaneous = set("♩♪♫♬♭♮♯")
-        assert all(0x2640 <= ord(c) <= 0x267F for c in miscellaneous)
-
-        for symbol in symbols + list(miscellaneous):
-            for tokens in [self.encode(symbol), self.encode(" " + symbol)]:
-                if len(tokens) == 1 or symbol in miscellaneous:
-                    result.add(tokens[0])
-
-        return tuple(sorted(result))
+        if self.task is not None:
+            sot_sequence.append(transcribe if self.task == "transcribe" else translate)
+        return sot_sequence
 
     def _get_single_token_id(self, text) -> int:
         tokens = self.encode(text)
         return tokens[0]
 
-    @property
-    @lru_cache()
-    def eot(self) -> int:
-        return self.tokenizer.eos_token_id
 
     @property
     @lru_cache()
@@ -535,7 +476,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        return self.decoder.get(index)
+        return self.decoder.get(index, self.decoder.get(self.unk_token_id))
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
@@ -602,6 +543,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             input_ids = input_ids[-self.model_max_length :]
         return input_ids
 
+    # TODO move to the logit processor 
     def _get_suppress_tokens(self, suppress_tokens=[]) -> Tuple[int]:
 
         if isinstance(suppress_tokens, str):
@@ -609,7 +551,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         if -1 in suppress_tokens:
             suppress_tokens = [t for t in suppress_tokens if t >= 0]
-            suppress_tokens.extend(self.non_speech_tokens)
+            suppress_tokens.extend(NON_SPEECH_TOKENS)
         elif suppress_tokens is None or len(suppress_tokens) == 0:
             suppress_tokens = []  # interpret empty string as an empty list
 
