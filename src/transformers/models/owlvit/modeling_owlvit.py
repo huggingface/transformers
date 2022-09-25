@@ -113,7 +113,7 @@ class OwlViTOutput(ModelOutput):
         )
 
 
-def center_to_corners_format(x):
+def center_to_corners_format(boxes: torch.Tensor) -> torch.Tensor:
     """
     Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
     (left, top, right, bottom).
