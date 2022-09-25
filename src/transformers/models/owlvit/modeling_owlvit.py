@@ -151,7 +151,19 @@ def box_area(boxes: torch.Tensor) -> torch.Tensor:
 
 
 # modified from torchvision to also return the union
-def box_iou(boxes1, boxes2):
+def box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
+    """
+    Computes IoU values between given sets of bounding boxes.
+
+    Args:
+        boxes1 (`torch.FloatTensor` of shape `(num_boxes1, 4)`):
+            Predicted bounding boxes in (x1, y1, x2, y2) format with `0 <= x1 < x2` and `0 <= y1 < y2`.
+        boxes2 (`torch.FloatTensor` of shape `(num_boxes2, 4)`):
+            Target bounding boxes in (x1, y1, x2, y2) format with `0 <= x1 < x2` and `0 <= y1 < y2`.
+
+    Returns:
+        `torch.FloatTensor`: a tensor containing the area for each box.
+    """
     area1 = box_area(boxes1)
     area2 = box_area(boxes2)
 
