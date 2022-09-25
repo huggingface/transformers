@@ -179,7 +179,7 @@ def box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
     return iou, union
 
 
-def generalized_box_iou(boxes1, boxes2):
+def generalized_box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
     """
     Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
 
