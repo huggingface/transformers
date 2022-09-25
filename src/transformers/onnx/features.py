@@ -262,9 +262,9 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.deberta_v2.DebertaV2OnnxConfig",
         ),
-        "decisiontransformer": supported_features_mapping(
+        "decision_transformer": supported_features_mapping(
             "default",
-            onnx_config_cls="models.electra.DecisionTransformerOnnxConfig",
+            onnx_config_cls="models.decision_transformer.DecisionTransformerOnnxConfig",
         ),
         "deit": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls="models.deit.DeiTOnnxConfig"
