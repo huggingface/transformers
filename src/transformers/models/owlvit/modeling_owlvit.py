@@ -1077,7 +1077,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         if return_base_image_embeds:
             last_hidden_state = vision_outputs[0]
             image_features = self.vision_model.post_layernorm(last_hidden_state)
-        # Unmodified CLIP embeddings
+        # Unmodified OwlViTModel (CLIP) embeddings
         else:
             pooled_output = vision_outputs[1]
             image_features = self.visual_projection(pooled_output)
