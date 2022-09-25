@@ -16,7 +16,9 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-
+from ...onnx import OnnxConfig
+from typing import Mapping
+from collections import OrderedDict
 
 logger = logging.get_logger(__name__)
 
@@ -79,7 +81,7 @@ class DecisionTransformerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         scale_attn_weights (`bool`, *optional*, defaults to `True`):
             Scale attention weights by dividing by sqrt(hidden_size)..
-        use_cache (`bool`, *optional*, defaults to `True`):
+        use_cache (`bool`, *optiofrom typing import Mappingnal*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
             Whether to additionally scale attention weights by `1 / layer_idx + 1`.
@@ -174,3 +176,18 @@ class DecisionTransformerConfig(PretrainedConfig):
         self.eos_token_id = eos_token_id
 
         super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+
+
+class DecisionTransformerOnnxConfig(OnnxConfig):
+    @property
+    def inputs(self) -> Mapping[str, Mapping[int, str]]:
+        if self.task == "multiple-choice":
+            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
+        else:
+            dynamic_axis = {0: "batch", 1: "sequence"}
+        return OrderedDict(
+            [
+                ("input_ids", dynamic_axis),
+                ("attention_mask", dynamic_axis),
+            ]
+        )
