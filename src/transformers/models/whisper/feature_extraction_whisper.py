@@ -158,6 +158,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
+        padding: Optional[str]="max_length",
+        max_length: Optional[int]=None,
         **kwargs
     ) -> BatchFeature:
         """
@@ -237,8 +239,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         padded_inputs = self.pad(
             encoded_inputs,
-            padding="max_length",
-            max_length=self.nb_max_frame,
+            padding=padding,
+            max_length=max_length if max_length else self.nb_max_frame,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
