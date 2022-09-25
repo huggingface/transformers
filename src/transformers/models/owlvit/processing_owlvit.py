@@ -134,7 +134,7 @@ class OwlViTProcessor(ProcessorMixin):
             encoding = BatchEncoding()
             encoding["input_ids"] = input_ids
             encoding["attention_mask"] = attention_mask
-            
+
         if query_image is not None:
             encoding = BatchEncoding()
             query_pixel_values = self.feature_extractor(

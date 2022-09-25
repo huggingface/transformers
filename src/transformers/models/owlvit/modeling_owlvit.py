@@ -603,15 +603,21 @@ OWLVIT_OBJECT_DETECTION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values.
-        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`):
+        input_ids (`torch.LongTensor` of shape `(batch_size * num_max_text_queries, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary. Indices can be obtained using [`CLIPTokenizer`]. See
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
-            IDs?](../glossary#input-ids)
+            IDs?](../glossary#input-ids) Either pass `input_ids` or `query_pixel_values`.
+        query_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`, *optional*):
+            Pixel values of query image(s) to be detected. Either pass `input_ids` or `query_pixel_values`.
         attention_mask (`torch.Tensor` of shape `(batch_size, num_max_text_queries, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
             [What are attention masks?](../glossary#attention-mask)
+        iou_threshold (`float`, *optional*):
+            When `query_pixel_values` is passed, we run first run inference on the query image itself. The model
+            predicts embeddings for multiple bounding boxes, from which we only take those that has IoU >
+            `iou_threshold` with the query image. Default threshold is 0.65
 """
 
 
@@ -1386,12 +1392,13 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         return (text_embeds, image_embeds, text_model_last_hidden_state, vision_model_last_hidden_state)
 
     def embed_image_query(
-        self, query_pixel_values: torch.FloatTensor, query_feature_map: torch.FloatTensor, iou_threshold: float = 0.65
+        self, query_pixel_values: torch.FloatTensor, query_feature_map: torch.FloatTensor, iou_threshold: float
     ) -> torch.FloatTensor:
         (_, class_embeds) = self.class_predictor(query_pixel_values)
         pred_boxes = self.box_predictor(query_pixel_values, query_feature_map)
         pred_boxes_as_corners = center_to_corners_format(pred_boxes)
 
+        # Loop over query images
         filtered_embeds = []
         for i in range(query_pixel_values.shape[0]):
             each_query_box = torch.tensor([[0, 0, 1, 1]])
@@ -1488,6 +1495,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
+        iou_threshold: Optional[float] = 0.65,
         return_dict: Optional[bool] = None,
     ) -> OwlViTObjectDetectionOutput:
         r"""
@@ -1578,7 +1586,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         else:
             batch_size, num_patches, num_patches, hidden_dim = query_feature_map.shape
             query_image_feats = torch.reshape(query_feature_map, (batch_size, num_patches * num_patches, hidden_dim))
-            query_embeds = self.embed_image_query(query_image_feats, query_feature_map)
+            query_embeds = self.embed_image_query(query_image_feats, query_feature_map, iou_threshold)
 
         # Predict object classes [batch_size, num_patches, num_queries+1]
         (pred_logits, class_embeds) = self.class_predictor(image_feats, query_embeds, query_mask)
