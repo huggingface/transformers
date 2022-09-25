@@ -177,7 +177,7 @@ class TrOCRProcessorWithLM(ProcessorMixin):
         # from decoder
         tokenizer_vocab_list = list(tokenizer.get_vocab().keys())
 
-        tokenizer_vocab_list = _normalize_bpe_alphabet(tokenizer_vocab_list)
+#         tokenizer_vocab_list = _normalize_bpe_alphabet(tokenizer_vocab_list)
 
         # replace special tokens
         for i, token in enumerate(tokenizer_vocab_list):
