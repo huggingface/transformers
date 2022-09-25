@@ -127,7 +127,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         enorm = 2.0 / (mel_f[2 : n_mels + 2] - mel_f[:n_mels])
         weights *= enorm[:, np.newaxis]
 
-        return torch.from_numpy(weights)
+        return weights
 
     def _extract_fbank_features(
         self,
@@ -141,7 +141,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, return_complex=True)
         magnitudes = stft[:, :-1].abs() ** 2
 
-        filters = self.mel_filters
+        filters = torch.from_numpy(self.mel_filters)
         mel_spec = filters @ magnitudes
 
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()

@@ -36,7 +36,7 @@ class WhisperProcessor(ProcessorMixin):
             An instance of [`WhisperTokenizer`]. The tokenizer is a required input.
     """
     feature_extractor_class = "WhisperFeatureExtractor"
-    tokenizer_class = "GPT2Tokenizer"
+    tokenizer_class = "WhisperTokenizer"
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
@@ -93,20 +93,3 @@ class WhisperProcessor(ProcessorMixin):
         the docstring of this method for more information.
         """
         return self.tokenizer.decode(*args, **kwargs)
-
-    @contextmanager
-    def as_target_processor(self):
-        """
-        Temporarily sets the tokenizer for processing the input. Useful for encoding the labels when fine-tuning
-        Whisper.
-        """
-        warnings.warn(
-            "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
-            "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
-            "your audio inputs, or in a separate call."
-        )
-        self._in_target_context_manager = True
-        self.current_processor = self.tokenizer
-        yield
-        self.current_processor = self.feature_extractor
-        self._in_target_context_manager = False
