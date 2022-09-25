@@ -103,8 +103,8 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     checkpoint_name = "/home/arthur_huggingface_co/transformers/whisper/tiny"
 
-    french_text = "C'est trop cool"
-    spanish_text = "Esto es genial"
+    transcript = "'<|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>  Nor is Mr. Quilters manner less interesting than his matter.<|endoftext|>'"
+    clean_transcript = "  Nor is Mr. Quilters manner less interesting than his matter."
 
     @classmethod
     def setUpClass(cls):
