@@ -13,9 +13,15 @@
 # limitations under the License.
 
 import argparse
+import hashlib
+import io
+import os
+import urllib
+import warnings
 
 import torch
 from torch import nn
+from tqdm import tqdm
 
 from transformers import WhisperConfig, WhisperForConditionalGeneration, WhisperModel
 
@@ -72,17 +78,17 @@ def make_linear_from_emb(emb):
     return lin_layer
 
 
-def convert_openai_whisper_to_tfms(checkpoint_name, pytorch_dump_folder_path, checkpoint_path = "weights"):
-    full_path = os.path.join(os.getcwd(),checkpoint_path)
+def convert_openai_whisper_to_tfms(checkpoint_name, pytorch_dump_folder_path, checkpoint_path="weights"):
+    full_path = os.path.join(os.getcwd(), checkpoint_path)
     if not os.path.isdir(os.path.join(full_path)):
         os.makedirs(full_path, exist_ok=True)
         try:
-            _ , checkpoint_path = _download(_MODELS[checkpoint_name],full_path )
+            _, checkpoint_path = _download(_MODELS[checkpoint_name], full_path)
         except KeyError:
             print("The original checkpoint should be in _MODELS ")
 
     print(f"Loading model from : {full_path}/{checkpoint_name}")
-    original_checkpoint = torch.load(os.path.join(full_path,checkpoint_name)+".pt", map_location="cpu")
+    original_checkpoint = torch.load(os.path.join(full_path, checkpoint_name) + ".pt", map_location="cpu")
     dimensions = original_checkpoint["dims"]
     state_dict = original_checkpoint["model_state_dict"]
 
@@ -114,7 +120,7 @@ def convert_openai_whisper_to_tfms(checkpoint_name, pytorch_dump_folder_path, ch
             f" but all the following weights are missing {missing}"
         )
 
-    model.save_pretrained(os.path.join(pytorch_dump_folder_path,checkpoint_name))
+    model.save_pretrained(os.path.join(pytorch_dump_folder_path, checkpoint_name))
 
 
 _MODELS = {
@@ -128,14 +134,6 @@ _MODELS = {
     "medium": "https://openaipublic.azureedge.net/main/whisper/models/345ae4da62f9b3d59415adc60127b97c714f32e89e936602e85993674d08dcb1/medium.pt",
     "large": "https://openaipublic.azureedge.net/main/whisper/models/e4b87e7e0bf463eb8e6956e646f1e277e901512310def2c24bf0e11bd3c28e9a/large.pt",
 }
-
-import hashlib
-import io
-import os
-import urllib
-import warnings
-
-from tqdm import tqdm
 
 
 def _download(url: str, root: str) -> bytes:
@@ -209,7 +207,9 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # # Required parameters
     parser.add_argument("--original_name", type=str, help="Path to the fairseq model (.pt) file.")
-    parser.add_argument("--pytorch_dump_folder_path", default="whisper-converted", type=str, help="Path to the output PyTorch model.")
+    parser.add_argument(
+        "--pytorch_dump_folder_path", default="whisper-converted", type=str, help="Path to the output PyTorch model."
+    )
     args = parser.parse_args()
 
     convert_openai_whisper_to_tfms(args.original_name, args.pytorch_dump_folder_path)

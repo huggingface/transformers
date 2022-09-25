@@ -25,7 +25,7 @@ WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 # fmt: off
-NON_SPEECH_TOKENS = [    
+NON_SPEECH_TOKENS = [
     1, 2, 6, 7, 8, 9, 10, 12, 14, 25,
     26, 27, 28, 29, 31, 58, 59, 60, 61, 62,
     63, 90, 91, 92, 93, 359, 503, 522, 542, 873,
@@ -37,7 +37,7 @@ NON_SPEECH_TOKENS = [
     42863, 47425, 49870, 50254
 ]
 # fmt: on
-    
+
 
 class WhisperConfig(PretrainedConfig):
     r"""

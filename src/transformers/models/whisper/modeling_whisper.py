@@ -719,8 +719,8 @@ class WhisperEncoder(WhisperPreTrainedModel):
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            if attention_mask.shape[-1]>self.max_source_positions:
-                attention_mask = attention_mask[:,:self.max_source_positions]
+            if attention_mask.shape[-1] > self.max_source_positions:
+                attention_mask = attention_mask[:, : self.max_source_positions]
             attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
@@ -1357,7 +1357,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         # Check if input is input_ids and padded -> only then is attention_mask defined
         if is_mel_spec and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
-            return inputs.ne(pad_token_id).long()[:,:,:self.max_source_positions,:self.max_source_positions]
+            return inputs.ne(pad_token_id).long()[:, :, : self.max_source_positions, : self.max_source_positions]
         else:
             return None
 

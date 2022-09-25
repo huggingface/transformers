@@ -249,7 +249,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         add_prefix_space=False,
         add_bos_token=False,
         **kwargs
-    ):        
+    ):
 
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
         eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
@@ -266,8 +266,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         self.add_bos_token = add_bos_token
-        self.language=language
-        self.task=task
+        self.language = language
+        self.task = task
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)
@@ -284,7 +284,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
-
 
     @property
     @lru_cache()
@@ -311,7 +310,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
     def _get_single_token_id(self, text) -> int:
         tokens = self.encode(text)
         return tokens[0]
-
 
     @property
     @lru_cache()
@@ -543,7 +541,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             input_ids = input_ids[-self.model_max_length :]
         return input_ids
 
-    # TODO move to the logit processor 
+    # TODO move to the logit processor
     def _get_suppress_tokens(self, suppress_tokens=[]) -> Tuple[int]:
 
         if isinstance(suppress_tokens, str):
