@@ -177,7 +177,7 @@ class TrOCRProcessorWithLM(ProcessorMixin):
         # from decoder
         tokenizer_vocab_list = list(tokenizer.get_vocab().keys())
 
-#         tokenizer_vocab_list = _normalize_bpe_alphabet(tokenizer_vocab_list)
+        # tokenizer_vocab_list = _normalize_bpe_alphabet(tokenizer_vocab_list)
 
         # replace special tokens
         for i, token in enumerate(tokenizer_vocab_list):
@@ -186,7 +186,7 @@ class TrOCRProcessorWithLM(ProcessorMixin):
             if SPECIAL_TOKEN_PTN.match(token):
                 tokenizer_vocab_list[i] = ""
             if UNK_TOKEN_PTN.match(token):
-                tokenizer_vocab_list[i] = UNK_TOKEN
+                tokenizer_vocab_list[i] = ""
 
         # are any of the extra tokens no special tokenizer tokens?
         # data = str({"labels":tokenizer_vocab_list,"is_bpe":"True"})
