@@ -475,7 +475,7 @@ class TFGenerationMixin:
                 [What are attention masks?](../glossary#attention-mask)
             decoder_start_token_id (`int`, *optional*):
                 If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
-            use_cache: (`bool`, *optional*, defaults to `True`):
+            use_cache (`bool`, *optional*, defaults to `True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
             output_attentions (`bool`, *optional*, defaults to `False`):
