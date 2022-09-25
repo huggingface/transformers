@@ -484,6 +484,8 @@
         title: Speech Encoder Decoder Models
       - local: model_doc/trocr
         title: TrOCR
+      - local: model_doc/whisper
+        title: Whisper
       - local: model_doc/vilt
         title: ViLT
       - local: model_doc/vision-encoder-decoder
