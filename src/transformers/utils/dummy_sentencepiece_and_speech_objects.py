@@ -8,3 +8,10 @@ class Speech2TextProcessor(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["sentencepiece", "speech"])
+
+
+class WhisperProcessor(metaclass=DummyObject):
+    _backends = ["sentencepiece", "speech"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["sentencepiece", "speech"])
