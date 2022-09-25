@@ -158,8 +158,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
-        padding: Optional[str]="max_length",
-        max_length: Optional[int]=None,
+        padding: Optional[str] = "max_length",
+        max_length: Optional[int] = None,
         **kwargs
     ) -> BatchFeature:
         """

@@ -16,7 +16,6 @@
 Speech processor class for Whisper
 """
 import warnings
-from contextlib import contextmanager
 
 from ...processing_utils import ProcessorMixin
 

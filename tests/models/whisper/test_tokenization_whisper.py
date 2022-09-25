@@ -16,8 +16,7 @@ import unittest
 
 from transformers import SPIECE_UNDERLINE
 from transformers.models.whisper import WhisperTokenizer
-from transformers.models.whisper.tokenization_whisper import VOCAB_FILES_NAMES
-from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -103,7 +102,10 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     checkpoint_name = "/home/arthur_huggingface_co/transformers/whisper/tiny"
 
-    transcript = "'<|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>  Nor is Mr. Quilters manner less interesting than his matter.<|endoftext|>'"
+    transcript = (
+        "'<|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>  Nor is Mr. Quilters manner less interesting"
+        " than his matter.<|endoftext|>'"
+    )
     clean_transcript = "  Nor is Mr. Quilters manner less interesting than his matter."
 
     @classmethod
@@ -259,8 +261,6 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
         # parameters of the original tokenizer : multilingual False, language=Japanese
         self.assertListEqual(jp_tokenizer.encode(text), EXPECTED_JAP)
-
-        supress_tokens = multilingual_tokenizer.non_speech_tokens
 
     def check_language_codes(self):
         self.assertEqual(self.tokenizer.lang_code_to_id["pt"], 4)

@@ -108,8 +108,7 @@ class WhisperModelTester:
         pad_token_id=0,
         num_mel_bins=80,
         decoder_start_token_id=(50258, 50259, 50359),
-        num_conv_layers=2
-
+        num_conv_layers=2,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -124,20 +123,18 @@ class WhisperModelTester:
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.num_mel_bins=num_mel_bins
+        self.num_mel_bins = num_mel_bins
         self.max_position_embeddings = max_position_embeddings
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
-        self.decoder_start_token_id=decoder_start_token_id
-        self.num_conv_layers=num_conv_layers
+        self.decoder_start_token_id = decoder_start_token_id
+        self.num_conv_layers = num_conv_layers
 
     def prepare_config_and_inputs(self):
-        input_features = floats_tensor(
-            [self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size
-        )
+        input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
         attention_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.long, device=torch_device)
         decoder_input_ids = torch.tensor(self.decoder_start_token_id)
 
@@ -783,7 +780,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
 
     def test_large_logits_librispeech(self):
-
 
         torch_device = "cpu"
         set_seed(0)
