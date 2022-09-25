@@ -130,77 +130,6 @@ class Conv1dSubsampler(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextSinusoidalPositionalEmbedding with Speech2Text->Whisper
-class WhisperSinusoidalPositionalEmbedding(nn.Module):
-    """This module produces sinusoidal positional embeddings of any length."""
-
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
-        super().__init__()
-        self.offset = 2
-        self.embedding_dim = embedding_dim
-        self.padding_idx = padding_idx
-        self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
-
-    def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
-        emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
-        if hasattr(self, "weights"):
-            # in forward put the weights on the correct dtype and device of the param
-            emb_weights = emb_weights.to(dtype=self.weights.dtype, device=self.weights.device)
-
-        self.weights = nn.Parameter(emb_weights)
-        self.weights.requires_grad = False
-        self.weights.detach_()
-
-    @staticmethod
-    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
-        """
-        Build sinusoidal embeddings. This matches the implementation in tensor2tensor, but differs slightly from the
-        description in Section 3.5 of "Attention Is All You Need".
-        """
-        half_dim = embedding_dim // 2
-        emb = math.log(10000) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, dtype=torch.float) * -emb)
-        emb = torch.arange(num_embeddings, dtype=torch.float).unsqueeze(1) * emb.unsqueeze(0)
-        emb = torch.cat([torch.sin(emb), torch.cos(emb)], dim=1).view(num_embeddings, -1)
-        if embedding_dim % 2 == 1:
-            # zero pad
-            emb = torch.cat([emb, torch.zeros(num_embeddings, 1)], dim=1)
-        if padding_idx is not None:
-            emb[padding_idx, :] = 0
-        return emb
-
-    @torch.no_grad()
-    def forward(self, input_ids: torch.Tensor, past_key_values_length: int = 0):
-        bsz, seq_len = input_ids.size()
-        # Create the position ids from the input token ids. Any padded tokens remain padded.
-        position_ids = self.create_position_ids_from_input_ids(input_ids, self.padding_idx, past_key_values_length).to(
-            input_ids.device
-        )
-
-        # expand embeddings if needed
-        max_pos = self.padding_idx + 1 + seq_len
-        if max_pos > self.weights.size(0):
-            self.make_weights(max_pos + self.offset, self.embedding_dim, self.padding_idx)
-
-        return self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
-
-    def create_position_ids_from_input_ids(
-        self, input_ids: torch.Tensor, padding_idx: int, past_key_values_length: Optional[int] = 0
-    ):
-        """
-        Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
-        symbols are ignored. This is modified from fairseq's `utils.make_positions`.
-
-        Args:
-            x: torch.Tensor x:
-        Returns: torch.Tensor
-        """
-        # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-        mask = input_ids.ne(padding_idx).int()
-        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
-        return incremental_indices.long() + padding_idx
-
-
 class WhisperPositionalEmbedding(nn.Embedding):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__(num_positions, embedding_dim)
@@ -571,8 +500,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
         """
         Computes the output length of the convolutional layers
         """
-        for i in range(self.config.num_conv_layers):
-            input_lengths = (input_lengths - 1) // 2 + 1
+        input_lengths = (input_lengths - 1) // 2 + 1
 
         return input_lengths
 
@@ -724,12 +652,6 @@ class WhisperEncoder(WhisperPreTrainedModel):
         self.conv1 = nn.Conv1d(self.num_mel_bins, embed_dim, kernel_size=3, padding=1)
         self.conv2 = nn.Conv1d(embed_dim, embed_dim, kernel_size=3, stride=2, padding=1)
 
-        # self.embed_positions = WhisperSinusoidalPositionalEmbedding(
-        #     self.max_source_positions,
-        #     embed_dim,
-        #     self.padding_idx,
-        # )
-
         self.embed_positions = nn.Embedding(self.max_source_positions, embed_dim)
 
         self.layers = nn.ModuleList([WhisperEncoderLayer(config) for _ in range(config.encoder_layers)])
@@ -797,6 +719,8 @@ class WhisperEncoder(WhisperPreTrainedModel):
         # expand attention_mask
         if attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            if attention_mask.shape[-1]>self.max_source_positions:
+                attention_mask = attention_mask[:,:self.max_source_positions]
             attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
 
         encoder_states = () if output_hidden_states else None
@@ -860,7 +784,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
     Args:
         config: WhisperConfig
-        embed_tokens (nn.Embedding): output embedding
     """
 
     def __init__(self, config: WhisperConfig):
@@ -1263,13 +1186,13 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"encoder.version",
         r"decoder.version",
-        r"model.encoder.embed_positions.weights",
-        r"model.decoder.embed_positions.weights",
+        r"model.encoder.embed_positions.weight",
+        r"model.decoder.embed_positions.weight",
         r"proj_out.weight",
     ]
     _keys_to_ignore_on_save = [
-        r"model.encoder.embed_positions.weights",
-        r"model.decoder.embed_positions.weights",
+        r"model.encoder.embed_positions.weight",
+        r"model.decoder.embed_positions.weight",
     ]
 
     def __init__(self, config: WhisperConfig):
@@ -1434,7 +1357,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         # Check if input is input_ids and padded -> only then is attention_mask defined
         if is_mel_spec and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
-            return inputs.ne(pad_token_id).long()
+            return inputs.ne(pad_token_id).long()[:,:,:self.max_source_positions,:self.max_source_positions]
         else:
             return None
 

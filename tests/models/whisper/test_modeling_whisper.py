@@ -40,7 +40,14 @@ from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_
 if is_torch_available():
     import torch
 
-    from transformers import WhisperForConditionalGeneration, WhisperModel, WhisperProcessor
+    from transformers import (
+        WhisperFeatureExtractor,
+        WhisperForConditionalGeneration,
+        WhisperModel,
+        WhisperProcessor,
+        WhisperTokenizer,
+        set_seed,
+    )
     from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder
 
 
@@ -82,28 +89,27 @@ class WhisperModelTester:
         self,
         parent,
         batch_size=13,
-        seq_length=7,
+        seq_length=30,
         is_training=True,
         use_labels=False,
         vocab_size=99,
         hidden_size=16,
         num_hidden_layers=2,
         num_attention_heads=4,
-        intermediate_size=4,
-        num_conv_layers=2,
-        conv_kernel_sizes=(5, 5),
-        conv_channels=32,
-        input_feat_per_channel=24,
         input_channels=1,
-        hidden_act="relu",
+        hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=20,
-        max_source_positions=20,
-        max_target_positions=20,
-        eos_token_id=2,
-        pad_token_id=1,
-        bos_token_id=0,
+        max_source_positions=15,
+        max_target_positions=4,
+        bos_token_id=50257,
+        eos_token_id=50257,
+        pad_token_id=0,
+        num_mel_bins=80,
+        decoder_start_token_id=(50258, 50259, 50359),
+        num_conv_layers=2
+
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -114,28 +120,26 @@ class WhisperModelTester:
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.num_conv_layers = num_conv_layers
-        self.conv_kernel_sizes = conv_kernel_sizes
-        self.conv_channels = conv_channels
-        self.input_feat_per_channel = input_feat_per_channel
         self.input_channels = input_channels
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.num_mel_bins=num_mel_bins
         self.max_position_embeddings = max_position_embeddings
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
+        self.decoder_start_token_id=decoder_start_token_id
+        self.num_conv_layers=num_conv_layers
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor(
-            [self.batch_size, self.seq_length, self.input_feat_per_channel], self.vocab_size
+            [self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size
         )
         attention_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.long, device=torch_device)
-        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(2)
+        decoder_input_ids = torch.tensor(self.decoder_start_token_id)
 
         config = self.get_config()
         inputs_dict = prepare_whisper_inputs_dict(
@@ -154,12 +158,6 @@ class WhisperModelTester:
             decoder_layers=self.num_hidden_layers,
             encoder_attention_heads=self.num_attention_heads,
             decoder_attention_heads=self.num_attention_heads,
-            encoder_ffn_dim=self.intermediate_size,
-            decoder_ffn_dim=self.intermediate_size,
-            num_conv_layers=self.num_conv_layers,
-            conv_kernel_sizes=self.conv_kernel_sizes,
-            conv_channels=self.conv_channels,
-            input_feat_per_channel=self.input_feat_per_channel,
             input_channels=self.input_channels,
             dropout=self.hidden_dropout_prob,
             attention_dropout=self.attention_probs_dropout_prob,
@@ -721,7 +719,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 @require_torchaudio
 @require_sentencepiece
 @require_tokenizers
-@slow
+# @slow
 class WhisperModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
@@ -786,7 +784,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     def test_large_logits_librispeech(self):
 
-        from transformers import GPT2Tokenizer, WhisperFeatureExtractor, set_seed
 
         torch_device = "cpu"
         set_seed(0)
@@ -798,7 +795,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_speech = self._load_datasamples(1)
 
         feaure_extractor = WhisperFeatureExtractor()
-        tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
+        tokenizer = WhisperTokenizer.from_pretrained("gpt2")
         tokenizer.pad_token = 0
 
         processor = WhisperProcessor(feaure_extractor, tokenizer)
@@ -834,7 +831,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertTrue(torch.allclose(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
 
     def test_generation(self):
-        from transformers import WhisperFeatureExtractor, WhisperTokenizer, set_seed
 
         torch_device = "cpu"
         set_seed(0)

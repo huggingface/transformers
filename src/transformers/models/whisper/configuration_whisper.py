@@ -150,7 +150,7 @@ class WhisperConfig(PretrainedConfig):
         max_source_positions=1500,
         max_target_positions=448,
         pad_token_id=0,
-        bos_token_id=50258,
+        bos_token_id=50257,
         eos_token_id=50257,
         input_channels=1,
         tie_word_embeddings=True,
