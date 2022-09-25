@@ -135,6 +135,8 @@ class WhisperConfig(PretrainedConfig):
         encoder_attention_heads=4,
         decoder_layers=6,
         decoder_attention_heads=4,
+        decoder_ffn_dim=4,
+        encoder_ffn_dim=4,
         encoder_layerdrop=0.0,
         decoder_layerdrop=0.0,
         decoder_start_token_id=(50258, 50259, 50359),
@@ -163,6 +165,8 @@ class WhisperConfig(PretrainedConfig):
         self.encoder_attention_heads = encoder_attention_heads
         self.decoder_layers = decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
+        self.decoder_ffn_dim = decoder_ffn_dim
+        self.encoder_ffn_dim = encoder_ffn_dim
         self.dropout = dropout
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout

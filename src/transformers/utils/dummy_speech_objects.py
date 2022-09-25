@@ -15,3 +15,10 @@ class Speech2TextFeatureExtractor(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["speech"])
+
+
+class WhisperFeatureExtractor(metaclass=DummyObject):
+    _backends = ["speech"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["speech"])
