@@ -281,7 +281,7 @@ class HfArgumentParser(ArgumentParser):
 
                 - the dataclass instances in the same order as they were passed to the initializer.
         """
-        outputs = self.parse_dict(json.loads(Path(json_file).read_text()))
+        outputs = self.parse_dict(json.loads(Path(json_file).read_text()), allow_extra_keys=allow_extra_keys)
         return tuple(outputs)
 
     def parse_yaml_file(self, yaml_file: str, allow_extra_keys: bool = False) -> Tuple[DataClass, ...]:
@@ -301,5 +301,5 @@ class HfArgumentParser(ArgumentParser):
 
                 - the dataclass instances in the same order as they were passed to the initializer.
         """
-        outputs = self.parse_dict(yaml.safe_load(yaml_file))
+        outputs = self.parse_dict(yaml.safe_load(yaml_file), allow_extra_keys=allow_extra_keys)
         return tuple(outputs)
