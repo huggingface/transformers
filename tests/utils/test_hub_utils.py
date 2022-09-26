@@ -76,6 +76,9 @@ class GetFromCacheTests(unittest.TestCase):
         path = cached_file(RANDOM_BERT, "conf", _raise_exceptions_for_missing_entries=False)
         self.assertIsNone(path)
 
+        path = cached_file(RANDOM_BERT, "conf", local_files_only=True, _raise_exceptions_for_missing_entries=False)
+        self.assertIsNone(path)
+
     def test_has_file(self):
         self.assertTrue(has_file("hf-internal-testing/tiny-bert-pt-only", WEIGHTS_NAME))
         self.assertFalse(has_file("hf-internal-testing/tiny-bert-pt-only", TF2_WEIGHTS_NAME))
