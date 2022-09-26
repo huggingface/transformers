@@ -176,7 +176,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     config = BeitConfig()
     has_lm_head = False
     is_semantic = False
-    repo_id = "datasets/huggingface/label-files"
+    repo_id = "huggingface/label-files"
     # set config parameters based on URL
     if checkpoint_url[-9:-4] == "pt22k":
         # masked image modeling
@@ -188,7 +188,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.use_relative_position_bias = True
         config.num_labels = 21841
         filename = "imagenet-22k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         # this dataset contains 21843 labels but the model only has 21841
         # we delete the classes as mentioned in https://github.com/google-research/big_transfer/issues/18
@@ -201,7 +201,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.use_relative_position_bias = True
         config.num_labels = 1000
         filename = "imagenet-1k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -214,7 +214,7 @@ def convert_beit_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         config.use_relative_position_bias = True
         config.num_labels = 150
         filename = "ade20k-id2label.json"
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
