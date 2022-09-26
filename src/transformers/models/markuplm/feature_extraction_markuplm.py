@@ -18,7 +18,6 @@ Feature extractor class for MarkupLM.
 
 import html
 
-# TODO soft dependency
 import bs4
 from bs4 import BeautifulSoup
 

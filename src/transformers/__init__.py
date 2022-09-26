@@ -501,7 +501,7 @@ except OptionalDependencyNotAvailable:
     from .utils import dummy_bs4_objects
 
     _import_structure["utils.dummy_bs4_objects"] = [
-        name for name in dir(dummy_vision_objects) if not name.startswith("_")
+        name for name in dir(dummy_bs4_objects) if not name.startswith("_")
     ]
 else:
     _import_structure["models.markuplm"] = ["MarkupLMFeatureExtractor"]
