@@ -338,12 +338,7 @@ _import_structure = {
         "TransfoXLCorpus",
         "TransfoXLTokenizer",
     ],
-    "models.trocr": [
-        "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "TrOCRConfig",
-        "TrOCRProcessor",
-        "TrOCRProcessorWithLM"
-    ],
+    "models.trocr": ["TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP", "TrOCRConfig", "TrOCRProcessor", "TrOCRProcessorWithLM"],
     "models.unispeech": [
         "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "UniSpeechConfig",
