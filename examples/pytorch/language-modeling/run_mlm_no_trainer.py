@@ -57,7 +57,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.22.0.dev0")
+check_min_version("4.23.0.dev0")
 
 logger = get_logger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
@@ -190,7 +190,7 @@ def parse_args():
         help="The number of processes to use for the preprocessing.",
     )
     parser.add_argument(
-        "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
+        "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
     )
     parser.add_argument(
         "--mlm_probability", type=float, default=0.15, help="Ratio of tokens to mask for masked language modeling loss"
@@ -692,6 +692,9 @@ def main():
             if args.output_dir is not None:
                 output_dir = os.path.join(args.output_dir, output_dir)
             accelerator.save_state(output_dir)
+
+    if args.with_tracking:
+        accelerator.end_training()
 
     if args.output_dir is not None:
         accelerator.wait_for_everyone()

@@ -135,9 +135,7 @@ parser.add_argument(
 parser.add_argument(
     "--preprocessing_num_workers", type=int, default=4, help="A csv or a json file containing the training data."
 )
-parser.add_argument(
-    "--overwrite_cache", type=bool, default=False, help="Overwrite the cached training and evaluation sets"
-)
+parser.add_argument("--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets")
 parser.add_argument(
     "--fp16",
     action="store_true",

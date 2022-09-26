@@ -161,13 +161,12 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_to
         shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
     )
 
-    if tf.executing_eagerly():
-        # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=input_ids.dtype))
+    # "Verify that `labels` has only positive values and -100"
+    assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=input_ids.dtype))
 
-        # Make sure the assertion op is called by wrapping the result in an identity no-op
-        with tf.control_dependencies([assert_gte0]):
-            shifted_input_ids = tf.identity(shifted_input_ids)
+    # Make sure the assertion op is called by wrapping the result in an identity no-op
+    with tf.control_dependencies([assert_gte0]):
+        shifted_input_ids = tf.identity(shifted_input_ids)
 
     return shifted_input_ids
 

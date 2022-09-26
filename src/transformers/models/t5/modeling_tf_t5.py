@@ -681,6 +681,16 @@ class TFT5MainLayer(tf.keras.layers.Layer):
 
         if inputs_embeds is None:
             assert self.embed_tokens is not None, "You have to initialize the model with valid token embeddings"
+            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+            tf.debugging.assert_less(
+                input_ids,
+                tf.cast(self.embed_tokens.vocab_size, dtype=input_ids.dtype),
+                message=(
+                    "input_ids must be smaller than the embedding layer's input dimension (got"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.vocab_size})"
+                ),
+            )
             inputs_embeds = self.embed_tokens(input_ids)
 
         batch_size, seq_length = input_shape
@@ -872,10 +882,10 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "decoder_input_ids": tf.TensorSpec((None, None), tf.int32, name="decoder_input_ids"),
-                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int32, name="decoder_attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "decoder_input_ids": tf.TensorSpec((None, None), tf.int64, name="decoder_input_ids"),
+                "decoder_attention_mask": tf.TensorSpec((None, None), tf.int64, name="decoder_attention_mask"),
             }
         ]
     )
@@ -954,22 +964,27 @@ T5_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
-
-    - a single Tensor with `input_ids` only and nothing else: `model(inputs_ids)`
+    - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -1179,6 +1194,10 @@ class TFT5Model(TFT5PreTrainedModel):
         ...     "Studies have been shown that owning a dog is good for you", return_tensors="tf"
         ... ).input_ids  # Batch size 1
         >>> decoder_input_ids = tokenizer("Studies show that", return_tensors="tf").input_ids  # Batch size 1
+
+        >>> # preprocess: Prepend decoder_input_ids with start token which is pad token for T5Model.
+        >>> # This is not needed for torch's T5ForConditionalGeneration as it does this internally using labels arg.
+        >>> decoder_input_ids = model._shift_right(decoder_input_ids)
 
         >>> # forward pass
         >>> outputs = model(input_ids, decoder_input_ids=decoder_input_ids)

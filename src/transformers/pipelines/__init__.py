@@ -51,6 +51,7 @@ from .base import (
     infer_framework_load_model,
 )
 from .conversational import Conversation, ConversationalPipeline
+from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
@@ -109,6 +110,7 @@ if is_torch_available():
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
         AutoModelForCTC,
+        AutoModelForDocumentQuestionAnswering,
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
         AutoModelForMaskedLM,
@@ -212,6 +214,15 @@ SUPPORTED_TASKS = {
         "tf": (),
         "default": {
             "model": {"pt": ("dandelin/vilt-b32-finetuned-vqa", "4355f59")},
+        },
+        "type": "multimodal",
+    },
+    "document-question-answering": {
+        "impl": DocumentQuestionAnsweringPipeline,
+        "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
+        "tf": (),
+        "default": {
+            "model": {"pt": ("impira/layoutlm-document-qa", "52e01b3")},
         },
         "type": "multimodal",
     },
@@ -374,7 +385,7 @@ def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
     return task
 
 
-def check_task(task: str) -> Tuple[Dict, Any]:
+def check_task(task: str) -> Tuple[str, Dict, Any]:
     """
     Checks an incoming task string, to validate it's correct and return the default Pipeline and Model classes, and
     default models if they exist.
@@ -443,7 +454,7 @@ def pipeline(
     trust_remote_code: Optional[bool] = None,
     model_kwargs: Dict[str, Any] = None,
     pipeline_class: Optional[Any] = None,
-    **kwargs
+    **kwargs,
 ) -> Pipeline:
     """
     Utility factory method to build a [`Pipeline`].

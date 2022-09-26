@@ -31,7 +31,6 @@ from typing import Any, Dict, Iterator, List, Optional, Union
 import numpy as np
 import torch
 import torch.distributed as dist
-from packaging import version
 from torch import nn
 from torch.utils.data import Dataset, IterableDataset, RandomSampler, Sampler
 from torch.utils.data.distributed import DistributedSampler
@@ -831,12 +830,7 @@ def _get_learning_rate(self):
             else:
                 raise
     else:
-        last_lr = (
-            # backward compatibility for pytorch schedulers
-            self.lr_scheduler.get_last_lr()[0]
-            if version.parse(version.parse(torch.__version__).base_version) >= version.parse("1.4")
-            else self.lr_scheduler.get_lr()[0]
-        )
+        last_lr = self.lr_scheduler.get_last_lr()[0]
         if torch.is_tensor(last_lr):
             last_lr = last_lr.item()
     return last_lr

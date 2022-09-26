@@ -435,8 +435,8 @@ Depending on your task, you'll typically pass the following parameters to [`Trai
 4. Your preprocessed train and test datasets:
 
    ```py
-   >>> train_dataset = dataset["train"]
-   >>> eval_dataset = dataset["eval"]
+   >>> train_dataset = dataset["train"]  # doctest: +SKIP
+   >>> eval_dataset = dataset["eval"]  # doctest: +SKIP
    ```
 
 5. A [`DataCollator`] to create a batch of examples from your dataset:
@@ -459,13 +459,13 @@ Now gather all these classes in [`Trainer`]:
 ...     eval_dataset=dataset["test"],
 ...     tokenizer=tokenizer,
 ...     data_collator=data_collator,
-... )
+... )  # doctest: +SKIP
 ```
 
 When you're ready, call [`~Trainer.train`] to start training:
 
 ```py
->>> trainer.train()
+>>> trainer.train()  # doctest: +SKIP
 ```
 
 <Tip>
@@ -498,24 +498,29 @@ All models are a standard [`tf.keras.Model`](https://www.tensorflow.org/api_docs
    >>> tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased")
    ```
 
-3. Tokenize the dataset and pass it and the tokenizer to [`~TFPreTrainedModel.prepare_tf_dataset`]. You can also change the batch size and shuffle the dataset here if you'd like:
+3. Create a function to tokenize the dataset:
 
    ```py
    >>> def tokenize_dataset(dataset):
-   ...     return tokenizer(dataset["text"])
-
-
-   >>> dataset = dataset.map(tokenize_dataset)
-   >>> tf_dataset = model.prepare_tf_dataset(dataset, batch_size=16, shuffle=True, tokenizer=tokenizer)
+   ...     return tokenizer(dataset["text"])  # doctest: +SKIP
    ```
 
-4. When you're ready, you can call `compile` and `fit` to start training:
+4. Apply the tokenizer over the entire dataset with [`~datasets.Dataset.map`] and then pass the dataset and tokenizer to [`~TFPreTrainedModel.prepare_tf_dataset`]. You can also change the batch size and shuffle the dataset here if you'd like:
+
+   ```py
+   >>> dataset = dataset.map(tokenize_dataset)  # doctest: +SKIP
+   >>> tf_dataset = model.prepare_tf_dataset(
+   ...     dataset, batch_size=16, shuffle=True, tokenizer=tokenizer
+   ... )  # doctest: +SKIP
+   ```
+
+5. When you're ready, you can call `compile` and `fit` to start training:
 
    ```py
    >>> from tensorflow.keras.optimizers import Adam
 
    >>> model.compile(optimizer=Adam(3e-5))
-   >>> model.fit(dataset)
+   >>> model.fit(dataset)  # doctest: +SKIP
    ```
 
 ## What's next?
