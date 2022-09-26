@@ -18,15 +18,28 @@
 from typing import TYPE_CHECKING
 
 # rely on isort to merge the imports
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_available, is_torch_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_bs4_available,
+    is_tokenizers_available,
+    is_torch_available,
+)
 
 
 _import_structure = {
     "configuration_markuplm": ["MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP", "MarkupLMConfig"],
-    "feature_extraction_markuplm": ["MarkupLMFeatureExtractor"],
     "processing_markuplm": ["MarkupLMProcessor"],
     "tokenization_markuplm": ["MarkupLMTokenizer"],
 }
+
+try:
+    if not is_bs4_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["feature_extraction_markuplm"] = ["MarkupLMFeatureExtractor"]
 
 try:
     if not is_tokenizers_available():
@@ -54,9 +67,16 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_markuplm import MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP, MarkupLMConfig
-    from .feature_extraction_markuplm import MarkupLMFeatureExtractor
     from .processing_markuplm import MarkupLMProcessor
     from .tokenization_markuplm import MarkupLMTokenizer
+
+    try:
+        if not is_bs4_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_markuplm import MarkupLMFeatureExtractor
 
     try:
         if not is_tokenizers_available():

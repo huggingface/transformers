@@ -125,6 +125,14 @@ except importlib_metadata.PackageNotFoundError:
     _datasets_available = False
 
 
+_bs4_available = importlib.util.find_spec("bs4") is not None
+try:
+    _bs4_version = importlib_metadata.version("bs4")
+    logger.debug(f"Successfully imported bs4 version {_bs4_version}")
+except importlib_metadata.PackageNotFoundError:
+    _bs4_available = False
+
+
 _detectron2_available = importlib.util.find_spec("detectron2") is not None
 try:
     _detectron2_version = importlib_metadata.version("detectron2")
@@ -384,6 +392,10 @@ if _torch_available:
 
 def is_torch_fx_available():
     return _torch_fx_available
+
+
+def is_bs4_available():
+    return _bs4_available
 
 
 def is_torch_onnx_dict_inputs_support_available():
@@ -748,6 +760,12 @@ If you really do want to use TensorFlow, please follow the instructions on the
 installation page https://www.tensorflow.org/install that match your environment.
 """
 
+# docstyle-ignore
+BS4_IMPORT_ERROR = """
+{0} requires the Beautiful Soup library but it was not found in your environment. You can install it with pip:
+`pip install beautifulsoup4`
+"""
+
 
 # docstyle-ignore
 SKLEARN_IMPORT_ERROR = """
@@ -889,6 +907,7 @@ CCL_IMPORT_ERROR = """
 
 BACKENDS_MAPPING = OrderedDict(
     [
+        ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
