@@ -1307,37 +1307,37 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
-    def _prepare_attention_mask_for_generation(
-        self,
-        inputs: torch.Tensor,
-        pad_token_id: Optional[int],
-        eos_token_id: Optional[int],
-    ) -> torch.LongTensor:
-        is_mel_spec = len(inputs.shape) == 3 and inputs.dtype in [torch.float32, torch.float16]
-        pad_token_id = -0.8060266971588135
+#    def _prepare_attention_mask_for_generation(
+#        self,
+#        inputs: torch.Tensor,
+#        pad_token_id: Optional[int],
+#        eos_token_id: Optional[int],
+#    ) -> torch.LongTensor:
+#        is_mel_spec = len(inputs.shape) == 3 and inputs.dtype in [torch.float32, torch.float16]
+#        pad_token_id = -0.8060266971588135
         # Check if input is input_ids and padded -> only then is attention_mask defined
-        if is_mel_spec:
-            return inputs.ne(pad_token_id).long()
-        else:
-            return None
+#        if is_mel_spec:
+#            return inputs.ne(pad_token_id).long()
+#        else:
+#            return None
 
-    def _prepare_decoder_input_ids_for_generation(
-        self,
-        batch_size: int,
-        decoder_start_token_id: int = None,
-        bos_token_id: int = None,
-        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
-        device: torch.device = None,
-    ) -> torch.LongTensor:
-
-        if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
-            return model_kwargs.pop("decoder_input_ids")
-        else:
-            decoder_start_token_id = list(self.config.decoder_start_token_id)
-            if device is None:
-                device = self.device
-            return torch.tensor(batch_size * [decoder_start_token_id], dtype=torch.long, device=device)
-
+#    def _prepare_decoder_input_ids_for_generation(
+#        self,
+#        batch_size: int,
+#        decoder_start_token_id: int = None,
+#        bos_token_id: int = None,
+#        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
+#        device: torch.device = None,
+#    ) -> torch.LongTensor:
+#
+#        if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
+#            return model_kwargs.pop("decoder_input_ids")
+#        else:
+#            decoder_start_token_id = list(self.config.decoder_start_token_id)
+#            if device is None:
+#                device = self.device
+#            return torch.tensor(batch_size * [decoder_start_token_id], dtype=torch.long, device=device)
+#
     @staticmethod
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
