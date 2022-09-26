@@ -16,6 +16,7 @@ from ...utils import ModelOutput, requires_backends
 
 if TYPE_CHECKING:
     from pyctcdecode import BeamSearchDecoderCTC
+
     from ...feature_extraction_utils import FeatureExtractionMixin
     from ...tokenization_utils import PreTrainedTokenizerBase
 
@@ -166,10 +167,10 @@ class TrOCRProcessorWithLM(ProcessorMixin):
     def get_missing_alphabet_tokens(decoder, tokenizer):
         from pyctcdecode.alphabet import (
             BLANK_TOKEN_PTN,
+            SPECIAL_TOKEN_PTN,
             UNK_TOKEN,
             UNK_TOKEN_PTN,
             _normalize_bpe_alphabet,
-            SPECIAL_TOKEN_PTN,
         )
 
         # we need to make sure that all of the tokenizer's except the special tokens
