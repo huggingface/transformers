@@ -467,7 +467,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
         # generate creates 3D attention mask, because of the shape of input_features
         # convert it to 2D if thats the case
         if len(attention_mask.shape) > 2:
-            attention_mask = attention_mask[:, :, -1]
+            attention_mask = attention_mask[:, 0, :]
 
         subsampled_lengths = (attention_mask.sum(-1) - 1) // 2 + 1
         bsz = attention_mask.size()[0]
@@ -682,7 +682,6 @@ class WhisperEncoder(WhisperPreTrainedModel):
             attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
         # else:
         #     attention_mask = torch.ones([], dtype=torch.long, device=inputs_embeds.device)
-        
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -898,7 +897,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
@@ -1111,6 +1109,8 @@ class WhisperModel(WhisperPreTrainedModel):
         else:
             encoder_attention_mask = None
 
+        
+
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
@@ -1307,19 +1307,19 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
-    # def _prepare_attention_mask_for_generation(
-    #     self,
-    #     inputs: torch.Tensor,
-    #     pad_token_id: Optional[int],
-    #     eos_token_id: Optional[int],
-    # ) -> torch.LongTensor:
-    #     is_mel_spec = len(inputs.shape) == 3 and inputs.dtype in [torch.float32, torch.float16]
-    #     pad_token_id = -0.8060266971588135
-    #     # Check if input is input_ids and padded -> only then is attention_mask defined
-    #     if is_mel_spec :
-    #         return inputs.ne(pad_token_id).long()
-    #     else:
-    #         return None
+    def _prepare_attention_mask_for_generation(
+        self,
+        inputs: torch.Tensor,
+        pad_token_id: Optional[int],
+        eos_token_id: Optional[int],
+    ) -> torch.LongTensor:
+        is_mel_spec = len(inputs.shape) == 3 and inputs.dtype in [torch.float32, torch.float16]
+        pad_token_id = -0.8060266971588135
+        # Check if input is input_ids and padded -> only then is attention_mask defined
+        if is_mel_spec:
+            return inputs.ne(pad_token_id).long()
+        else:
+            return None
 
     def _prepare_decoder_input_ids_for_generation(
         self,
