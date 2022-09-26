@@ -1006,7 +1006,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             preds.append(predictions)
         return preds
 
-    def post_process_object_detection(self, outputs, object_detection_threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None):
+    def post_process_object_detection(
+        self, outputs, object_detection_threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
+    ):
         """
         Converts the output of [`DetrForObjectDetection`] into the format expected by the COCO api. Only supports
         PyTorch.
@@ -1051,10 +1053,10 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         results = []
         for s, l, b in zip(scores, labels, boxes):
-            score = s[s>object_detection_threshold]
-            label = l[s>object_detection_threshold]
-            box = b[s>object_detection_threshold]
-            results.append({"scores": score, "labels": label, "boxes": boxes})
+            score = s[s > object_detection_threshold]
+            label = l[s > object_detection_threshold]
+            box = b[s > object_detection_threshold]
+            results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
 
