@@ -1277,9 +1277,11 @@ class CanineForSequenceClassification(CaninePreTrainedModel):
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="vicl/canine-c-finetuned-cola",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'LABEL_0'",
+        expected_loss=0.82
     )
     def forward(
         self,
@@ -1467,9 +1469,17 @@ class CanineForTokenClassification(CaninePreTrainedModel):
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="aliosm/sha3bor-poetry-diacritizer-canine-s",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output=['LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_3', 'LABEL_0', 'LABEL_2', 'LABEL_2', 'LABEL_0',
+                         'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_0',
+                         'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_3', 'LABEL_0', 'LABEL_3', 'LABEL_0',
+                         'LABEL_0', 'LABEL_3', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_0',
+                         'LABEL_0', 'LABEL_0', 'LABEL_1', 'LABEL_0', 'LABEL_3', 'LABEL_0', 'LABEL_1', 'LABEL_0',
+                         'LABEL_1', 'LABEL_0', 'LABEL_0', 'LABEL_0', 'LABEL_3', 'LABEL_0', 'LABEL_0', 'LABEL_0',
+                         'LABEL_1', 'LABEL_0', 'LABEL_3', 'LABEL_3'],
+        expected_loss=0.46
     )
     def forward(
         self,
@@ -1545,9 +1555,11 @@ class CanineForQuestionAnswering(CaninePreTrainedModel):
     @add_start_docstrings_to_model_forward(CANINE_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
+        checkpoint="Splend1dchan/canine-c-squad",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
+        expected_output="'nice puppet'",
+        expected_loss=8.81
     )
     def forward(
         self,
