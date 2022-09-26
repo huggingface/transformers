@@ -47,7 +47,7 @@ jobs:
   latest-with-torch-nightly-docker:
     name: "Nightly PyTorch + Stable TensorFlow"
     # Push CI doesn't need this image
-    if: inputs.image_postfix != ''
+    if: inputs.image_postfix != '-push-ci'
     runs-on: ubuntu-latest
     steps:
       -
@@ -102,7 +102,7 @@ jobs:
   nightly-torch-deepspeed-docker:
     name: "Nightly PyTorch + DeepSpeed"
     # Push CI doesn't need this image
-    if: inputs.image_postfix != ''
+    if: inputs.image_postfix != '-push-ci'
     runs-on: ubuntu-latest
     steps:
       -
@@ -130,7 +130,7 @@ jobs:
   doc-builder:
     name: "Doc builder"
     # Push CI doesn't need this image
-    if: inputs.image_postfix != ''
+    if: inputs.image_postfix != '-push-ci'
     runs-on: ubuntu-latest
     steps:
       -
@@ -156,7 +156,7 @@ jobs:
   latest-pytorch:
     name: "Latest PyTorch [dev]"
     # Push CI doesn't need this image
-    if: inputs.image_postfix != ''
+    if: inputs.image_postfix != '-push-ci'
     runs-on: ubuntu-latest
     steps:
       -
@@ -184,7 +184,7 @@ jobs:
   latest-tensorflow:
     name: "Latest TensorFlow [dev]"
     # Push CI doesn't need this image
-    if: inputs.image_postfix != ''
+    if: inputs.image_postfix != '-push-ci'
     runs-on: ubuntu-latest
     steps:
       -
