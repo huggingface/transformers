@@ -803,6 +803,11 @@ class DeformableDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtract
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and masks for an
             image in the batch as predicted by the model.
         """
+        logger.warning(
+            "`post_process_instance` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_instance_segmentation`.",
+            FutureWarning,
+        )
 
         if len(orig_target_sizes) != len(max_target_sizes):
             raise ValueError("Make sure to pass in as many orig_target_sizes as max_target_sizes")
@@ -847,6 +852,11 @@ class DeformableDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtract
             `List[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values for
             an image in the batch as predicted by the model.
         """
+        logger.warning(
+            "`post_process_panoptic is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_panoptic_segmentation`.",
+            FutureWarning,
+        )
         if target_sizes is None:
             target_sizes = processed_sizes
         if len(processed_sizes) != len(target_sizes):
