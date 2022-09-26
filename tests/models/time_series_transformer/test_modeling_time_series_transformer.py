@@ -19,7 +19,7 @@ import inspect
 import tempfile
 import unittest
 
-from transformers import is_torch_available, MODEL_MAPPING
+from transformers import MODEL_MAPPING, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -116,10 +116,10 @@ class TimeSeriesTransformerModelTester:
         )
 
         inputs_dict = {
+            "past_target": past_target,
             "feat_static_cat": feat_static_cat,
             "feat_static_real": feat_static_real,
             "past_time_feat": past_time_feat,
-            "past_target": past_target,
             "future_time_feat": future_time_feat,
             "past_observed_values": past_observed_values,
             "future_target": future_target,

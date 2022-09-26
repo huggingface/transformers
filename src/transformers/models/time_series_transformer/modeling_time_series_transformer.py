@@ -1689,7 +1689,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             prediction_loss = weighted_average(loss, weights=loss_weights)
 
         if not return_dict:
-            outputs = (params + outputs[1:]) if params is not None else outputs[1:]
+            outputs = ((params,) + outputs[1:]) if params is not None else outputs[1:]
             return ((prediction_loss,) + outputs) if prediction_loss is not None else outputs
 
         return Seq2SeqTSPredictionOutput(
