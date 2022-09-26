@@ -21,6 +21,7 @@ import tempfile
 import unittest
 
 from transformers import WhisperConfig
+from transformers.generation_logits_process import LogitsProcessorList, SuppressBlank, SuppressTokens
 from transformers.testing_utils import (
     is_torch_available,
     require_sentencepiece,
@@ -31,7 +32,6 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import cached_property
-from transformers.generation_logits_process import SuppressBlank, SuppressTokens, LogitsProcessorList
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -108,7 +108,7 @@ class WhisperModelTester:
         eos_token_id=98,
         pad_token_id=0,
         num_mel_bins=80,
-        decoder_start_token_id=[85,87],
+        decoder_start_token_id=[85, 87],
         num_conv_layers=1,
     ):
         self.parent = parent
@@ -136,7 +136,9 @@ class WhisperModelTester:
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones([self.batch_size, self.max_source_positions], dtype=torch.long, device=torch_device)
+        attention_mask = torch.ones(
+            [self.batch_size, self.max_source_positions], dtype=torch.long, device=torch_device
+        )
         decoder_input_ids = torch.tensor(self.batch_size * [self.decoder_start_token_id], device=torch_device)
 
         config = self.get_config()
@@ -165,16 +167,14 @@ class WhisperModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
-            decoder_ffn_dim = self.hidden_size,
-            encoder_ffn_dim = self.hidden_size,
-            decoder_start_token_id=self.decoder_start_token_id
+            decoder_ffn_dim=self.hidden_size,
+            encoder_ffn_dim=self.hidden_size,
+            decoder_start_token_id=self.decoder_start_token_id,
         )
 
     def prepare_config_and_inputs_for_common(self):
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
-
-
 
     def get_subsampled_output_lengths(self, input_lengths):
         """
@@ -315,7 +315,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         # cut to half length & take max batch_size 3
         max_batch_size = 3
         sequence_length = input_ids.shape[-1] // 2
-        input_ids = input_ids[:max_batch_size, : , :]
+        input_ids = input_ids[:max_batch_size, :, :]
 
         # generate max 3 tokens
         max_length = input_ids.shape[-1] + 3
@@ -405,7 +405,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
                 self.assertIsInstance(hidden_states, (list, tuple))
                 self.assertEqual(len(hidden_states), expected_num_layers)
-                seq_len = getattr(self.model_tester, "seq_length", None)
+
                 decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", 2)
 
                 self.assertListEqual(
@@ -635,7 +635,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             num_interleave, dim=0
         )
         input_ids = input_ids[:, :, 0]
-        input_ids = torch.zeros_like(input_ids[:, :1], dtype=torch.long) + torch.tensor([model._get_decoder_start_token_id()], device=input_ids.device)
+        input_ids = torch.zeros_like(input_ids[:, :1], dtype=torch.long) + torch.tensor(
+            [model._get_decoder_start_token_id()], device=input_ids.device
+        )
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
 
@@ -762,9 +764,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         set_seed(0)
         model = WhisperModel.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
-        input_speech = self._load_datasamples(1)[-1]
+        input_speech = self._load_datasamples(1)
         feature_extractor = WhisperFeatureExtractor()
-        input_features = feature_extractor(input_speech).input_features
+        input_features = feature_extractor(2*input_speech, return_tensors = "pt").input_features
+
         with torch.no_grad():
             logits = model(
                 input_features,
@@ -778,11 +781,11 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
             [
-                3.0952, -7.5706,  4.4620,  4.0414,  1.1512, -5.6110,  4.9799, -2.3589,
-                0.2374,  1.3166,  2.4747,  5.3375,  1.8736, -7.0334,  4.5650,  7.2630,
-                5.3717, -1.4470,  8.2825,  0.0850,  0.2813, -9.2511, -1.0556, -7.4180,
-                1.3470,  3.8482,  6.9497, -5.4600, -2.3341,  8.6016
-         ]
+                2.9892, -6.7607,  5.7348,  3.6095,  0.2152, -5.7321,  4.8855, -1.6407,
+                0.2823, -1.5718, 10.4269,  3.4427,  0.0219, -8.0612,  3.4784,  8.4246,
+                4.0575, -2.2864, 11.1084,  0.9963,  0.9884, -8.5154, -3.5469, -9.3714,
+                0.9786,  3.5435,  7.4850, -5.2579, -1.4366, 10.4841
+            ]
         )
         # fmt: on
         self.assertTrue(torch.allclose(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
@@ -790,17 +793,16 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_GENERATION = torch.tensor(
             [
-                -2.7021, -4.1197,  1.4249,  1.0848,  2.6796, -1.2697, -4.7105,  0.6435,
-                -1.2619, -0.2921, -0.1743, -1.0284, -4.8171, -1.8063, -0.8316,  3.6740,
-                -0.2714,  0.2152, -0.2616, -1.6536,  0.5402,  0.0383,  0.0252,  1.2742,
-                0.5945, -6.7489, -1.9650,  3.0372,  1.9253,  1.6359
+                -1.4651, -2.6944,  2.7821,  2.3793,  4.0738,  0.0188, -3.3204,  1.9836,
+                0.0520,  0.7095,  1.1063,  0.2952, -3.6786, -0.5249,  0.3105,  4.7691,
+                1.1562,  1.3046,  0.5810, -0.3624,  1.7006,  1.3424,  0.9817,  2.1958,
+                1.8775, -5.7046, -0.7679,  4.0113,  2.6848,  2.8609
             ]
         )
         # fmt: on
-        
+
         head_logits = logits[0] @ model.decoder.embed_tokens.weight.T
         self.assertTrue(torch.allclose(head_logits[0, 0, :30].cpu(), EXPECTED_GENERATION, atol=1e-4))
-
 
     def test_small_logits_librispeech(self):
 
@@ -811,7 +813,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # processor = self.default_processor
 
-        input_speech = self._load_datasamples(1)[-1]
+        input_speech = self._load_datasamples(1)
 
         feaure_extractor = WhisperFeatureExtractor()
         tokenizer = WhisperTokenizer.from_pretrained("ArthurZ/whisper-small.en")
@@ -819,9 +821,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         processor = WhisperProcessor(feaure_extractor, tokenizer)
 
-        input_features = processor(
-            audio=input_speech, return_tensors="pt"
-        ).input_features.to(torch_device)
+        input_features = processor(audio=input_speech, return_tensors="pt").input_features.to(torch_device)
 
         with torch.no_grad():
             logits = model(
@@ -909,7 +909,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(input_features, num_beams=5)
         transcript = tokenizer.batch_decode(generated_ids)[0]
 
-        EXPECTED_TRANSCRIPT = "<|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>  Mr. Quilter is the apostle of the middle classes and we are glad"
+        EXPECTED_TRANSCRIPT = (
+            "<|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>  Mr. Quilter is the apostle of the middle"
+            " classes and we are glad"
+        )
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     def test_generation(self):
@@ -926,10 +929,15 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = feaure_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(torch_device)
 
         tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
-        generated_ids = model.generate(input_features, num_beams=5, decoder_input_ids = torch.tensor([ [50258, 50259, 50359, 50363]]))
+        generated_ids = model.generate(
+            input_features, num_beams=5, decoder_input_ids=torch.tensor([[50258, 50363]])
+        )
         transcript = tokenizer.batch_decode(generated_ids)[0]
 
-        EXPECTED_TRANSCRIPT = "<|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>  Mr. Quilter is the apostle of the middle classes and we are glad"
+        EXPECTED_TRANSCRIPT = (
+            "<|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>  Mr. Quilter is the apostle of the middle"
+            " classes and we are glad"
+        )
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     def test_large_generation(self):
@@ -946,11 +954,25 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-small.en")
 
-        logits_processor = LogitsProcessorList([SuppressBlank(tokenizer.encode(" "),tokenizer.eos_token_id ), SuppressTokens(tokenizer._get_suppress_tokens("-1"))]    )
+        logits_processor = LogitsProcessorList(
+            [
+                SuppressBlank(tokenizer.encode(" "), tokenizer.eos_token_id),
+                SuppressTokens(tokenizer._get_suppress_tokens("-1")),
+            ]
+        )
 
-
-        generated_ids = model.generate(input_features, do_sample = False, logits_processor=logits_processor, decoder_start_token_id=torch.tensor([ [50257, 50362]] ), attention_mask=None, decoder_attention_mask =None  )
+        generated_ids = model.generate(
+            input_features,
+            do_sample=False,
+            logits_processor=logits_processor,
+            decoder_input_ids=torch.tensor([[50257, 50362]]),
+            attention_mask=None,
+            decoder_attention_mask=None,
+        )
         transcript = tokenizer.batch_decode(generated_ids)
 
-        EXPECTED_TRANSCRIPT = "<|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>  Mr. Quilter is the apostle of the middle classes and we are glad"
+        EXPECTED_TRANSCRIPT = (
+            "<|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>  Mr. Quilter is the apostle of the middle"
+            " classes and we are glad"
+        )
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
