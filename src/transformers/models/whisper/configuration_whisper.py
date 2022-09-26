@@ -128,7 +128,7 @@ class WhisperConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=10000,
+        vocab_size=51865,
         feature_size=1,
         num_mel_bins=80,
         encoder_layers=6,
@@ -139,7 +139,7 @@ class WhisperConfig(PretrainedConfig):
         encoder_ffn_dim=1536,
         encoder_layerdrop=0.0,
         decoder_layerdrop=0.0,
-        decoder_start_token_id=(50258, 50259, 50359),
+        decoder_start_token_id=[50258, 50259, 50359],
         use_cache=True,
         is_encoder_decoder=True,
         activation_function="gelu",

@@ -95,41 +95,6 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
     return inverted_mask.masked_fill(inverted_mask.to(torch.bool), torch.finfo(dtype).min)
 
 
-class Conv1dSubsampler(nn.Module):
-    """
-    Convolutional subsampler: a stack of 1D convolution (along temporal dimension) followed by non-linear activation
-    via gated linear units (https://arxiv.org/abs/1911.08460)
-    """
-
-    def __init__(self, config):
-        super(Conv1dSubsampler, self).__init__()
-        self.config = config
-        self.num_layers = config.num_conv_layers
-        self.in_channels = config.input_feat_per_channel * config.input_channels
-        self.mid_channels = config.conv_channels
-        self.out_channels = config.d_model
-        self.kernel_sizes = config.conv_kernel_sizes
-
-        self.conv_layers = nn.ModuleList(
-            nn.Conv1d(
-                self.in_channels if i == 0 else self.mid_channels // 2,
-                self.mid_channels if i < self.num_layers - 1 else self.out_channels * 2,
-                kernel_size=k,
-                stride=2,
-                padding=k // 2,
-            )
-            for i, k in enumerate(self.kernel_sizes)
-        )
-
-    def forward(self, input_features):
-        hidden_states = input_features.transpose(1, 2).contiguous()  # -> B x (C x D) x T
-        for conv in self.conv_layers:
-            hidden_states = conv(hidden_states)
-            hidden_states = nn.functional.glu(hidden_states, dim=1)
-        hidden_states = hidden_states.transpose(1, 2).contiguous()  # -> T x B x (C x D)
-        return hidden_states
-
-
 class WhisperPositionalEmbedding(nn.Embedding):
     def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
         super().__init__(num_positions, embedding_dim)
@@ -494,23 +459,14 @@ class WhisperPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (WhisperDecoder, WhisperEncoder)):
             module.gradient_checkpointing = value
-
-    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
-        """
-        Computes the output length of the convolutional layers
-        """
-        for i in range(self.config.num_conv_layers):
-            input_lengths = (input_lengths - 1) // 2 + 1
-
-        return input_lengths
-
+    
     def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
         # generate creates 3D attention mask, because of the shape of input_features
         # convert it to 2D if thats the case
         if len(attention_mask.shape) > 2:
             attention_mask = attention_mask[:, :, -1]
 
-        subsampled_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
+        subsampled_lengths = (attention_mask.sum(-1)-1)//2 +1
         bsz = attention_mask.size()[0]
         attention_mask = torch.zeros(
             (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
@@ -716,12 +672,15 @@ class WhisperEncoder(WhisperPreTrainedModel):
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        # expand attention_mask
+
+        # subsample attention mask if necessary
         if attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            if attention_mask.shape[-1] > self.max_source_positions:
-                attention_mask = attention_mask[:, : self.max_source_positions]
+            attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
+            attention_mask = attention_mask.ne(1).long()
             attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
+        # else:
+        #     attention_mask = torch.ones([], dtype=torch.long, device=inputs_embeds.device)
+  
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -1139,9 +1098,7 @@ class WhisperModel(WhisperPreTrainedModel):
 
         # downsample encoder attention mask
         if attention_mask is not None:
-            encoder_attention_mask = self._get_feature_vector_attention_mask(
-                encoder_outputs[0].shape[1], attention_mask
-            )
+            encoder_attention_mask =  attention_mask[  : , encoder_outputs[0].shape[1]]
         else:
             encoder_attention_mask = None
 
@@ -1372,10 +1329,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
             return model_kwargs.pop("decoder_input_ids")
         else:
-            decoder_start_token_id = self.config.decoder_start_token_id
+            decoder_start_token_id = list(self.config.decoder_start_token_id)
             if device is None:
                 device = self.device
-            return torch.ones((batch_size, 1), dtype=torch.long, device=device) * decoder_start_token_id
+            return torch.tensor(batch_size * [decoder_start_token_id], dtype=torch.long, device=device) 
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
