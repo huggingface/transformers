@@ -1006,7 +1006,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             preds.append(predictions)
         return preds
 
-    def post_process_object_detection(self, outputs, target_sizes: Union[TensorType, List[Tuple]] = None):
+    def post_process_object_detection(self, outputs, object_detection_threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None):
         """
         Converts the output of [`DetrForObjectDetection`] into the format expected by the COCO api. Only supports
         PyTorch.
@@ -1014,6 +1014,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
                 Raw outputs of the model.
+            object_detection_threshold (`float`, *optional*):
+                Score threshold to keep object detection predictions.
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
@@ -1047,7 +1049,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
             boxes = boxes * scale_fct[:, None, :]
 
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
+        results = []
+        for s, l, b in zip(scores, labels, boxes):
+            score = s[s>object_detection_threshold]
+            label = l[s>object_detection_threshold]
+            box = b[s>object_detection_threshold]
+            results.append({"scores": score, "labels": label, "boxes": boxes})
+
         return results
 
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
