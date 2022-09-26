@@ -29,7 +29,7 @@ TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class TimeSeriesTransformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`~TimeSeriesTransformerModel`]. It is used to
+    This is the configuration class to store the configuration of a [`TimeSeriesTransformerModel`]. It is used to
     instantiate a Time Series Transformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Time Series
     Transformer [huggingface/tst-ett](https://huggingface.co/huggingface/tst-ett) architecture.
