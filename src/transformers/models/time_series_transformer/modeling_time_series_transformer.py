@@ -276,10 +276,7 @@ class NOPScaler(nn.Module):
         self.keepdim = keepdim
 
     def forward(self, data: torch.Tensor, observed_indicator: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        scale = torch.ones_like(data).mean(
-            dim=self.dim,
-            keepdim=self.keepdim,
-        )
+        scale = torch.ones_like(data).mean(dim=self.dim, keepdim=self.keepdim)
         return data, scale
 
 
