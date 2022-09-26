@@ -19,7 +19,10 @@ Feature extractor class for Whisper
 from typing import List, Optional, Union
 
 import numpy as np
-import torch
+from transformers import is_torch_available
+
+if is_torch_available():
+    import torch
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
