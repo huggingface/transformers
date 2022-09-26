@@ -232,6 +232,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         if not is_batched:
             raw_speech = [raw_speech]
 
+
+        # TODO switch order, should pad first, mel after
         # extract fbank features
         features = [self._extract_fbank_features(waveform).permute(1, 0) for waveform in raw_speech]
 

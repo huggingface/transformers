@@ -101,13 +101,13 @@ class WhisperModelTester:
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=20,
-        max_source_positions=15,
+        max_source_positions=30,
         max_target_positions=4,
-        bos_token_id=50257,
-        eos_token_id=50257,
+        bos_token_id=99,
+        eos_token_id=99,
         pad_token_id=0,
         num_mel_bins=80,
-        decoder_start_token_id=(50258, 50259, 50359),
+        decoder_start_token_id=[96,98],
         num_conv_layers=2,
     ):
         self.parent = parent
@@ -135,8 +135,8 @@ class WhisperModelTester:
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones([self.batch_size, self.seq_length], dtype=torch.long, device=torch_device)
-        decoder_input_ids = torch.tensor(self.decoder_start_token_id)
+        attention_mask = torch.ones([self.batch_size, self.max_source_positions], dtype=torch.long, device=torch_device)
+        decoder_input_ids = torch.tensor(self.batch_size * [self.decoder_start_token_id], device=torch_device)
 
         config = self.get_config()
         inputs_dict = prepare_whisper_inputs_dict(
@@ -164,6 +164,7 @@ class WhisperModelTester:
             eos_token_id=self.eos_token_id,
             bos_token_id=self.bos_token_id,
             pad_token_id=self.pad_token_id,
+            decoder_start_token_id=self.decoder_start_token_id
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -630,7 +631,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             num_interleave, dim=0
         )
         input_ids = input_ids[:, :, 0]
-        input_ids = torch.zeros_like(input_ids[:, :1], dtype=torch.long) + model._get_decoder_start_token_id()
+        input_ids = torch.zeros_like(input_ids[:, :1], dtype=torch.long) + torch.tensor([model._get_decoder_start_token_id()], device=input_ids.device)
         attention_mask = None
         return encoder_outputs, input_ids, attention_mask
 
@@ -755,7 +756,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
         torch_device = "cpu"
         set_seed(0)
-        model = WhisperModel.from_pretrained("whisper/tiny")
+        model = WhisperModel.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
         input_speech = self._load_datasamples(1)[-1]
         feature_extractor = WhisperFeatureExtractor()
@@ -793,7 +794,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         # fmt: on
         
-        head_logits = logits.last_hidden_state @ model.decoder.embed_tokens.weight.T
+        head_logits = logits[0] @ model.decoder.embed_tokens.weight.T
         self.assertTrue(torch.allclose(head_logits[0, 0, :30].cpu(), EXPECTED_GENERATION, atol=1e-4))
 
 
@@ -801,7 +802,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch_device = "cpu"
         set_seed(0)
-        model = WhisperModel.from_pretrained("/home/arthur_huggingface_co/transformers/whisper-final/small.en")
+        model = WhisperModel.from_pretrained("openai/whisper-small.en")
         model.to(torch_device)
 
         # processor = self.default_processor
@@ -844,8 +845,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def test_large_logits_librispeech(self):
 
         torch_device = "cpu"
+        model = WhisperModel.from_pretrained("openai/whisper-large")
         set_seed(0)
-        model = WhisperModel.from_pretrained("whisper/large")
         model.to(torch_device)
 
         # processor = self.default_processor
@@ -853,7 +854,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_speech = self._load_datasamples(1)
 
         feaure_extractor = WhisperFeatureExtractor()
-        tokenizer = WhisperTokenizer.from_pretrained("gpt2")
+        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-large")
         tokenizer.pad_token = 0
 
         processor = WhisperProcessor(feaure_extractor, tokenizer)
@@ -892,7 +893,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch_device = "cpu"
         set_seed(0)
-        model = WhisperForConditionalGeneration.from_pretrained("whisper-final/tiny")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
 
         input_speech = self._load_datasamples(1)
@@ -900,9 +901,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_features = feaure_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(torch_device)
 
-        tokenizer = WhisperTokenizer.from_pretrained("ArthurZ/whisper-small.en")
+        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
         generated_ids = model.generate(input_features, num_beams=5)
-        transcript = tokenizer.batch_decode(generated_ids)
+        transcript = tokenizer.batch_decode(generated_ids)[0]
 
         EXPECTED_TRANSCRIPT = "<|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>  Mr. Quilter is the apostle of the middle classes and we are glad"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
@@ -911,7 +912,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch_device = "cpu"
         set_seed(0)
-        model = WhisperForConditionalGeneration.from_pretrained("whisper-final/large")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
         input_speech = self._load_datasamples(1)
@@ -919,7 +920,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         input_features = feaure_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(torch_device)
 
-        tokenizer = WhisperTokenizer.from_pretrained("ArthurZ/whisper-small.en")
+        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-large")
         generated_ids = model.generate(input_features, do_sample = False)
         transcript = tokenizer.batch_decode(generated_ids)
 

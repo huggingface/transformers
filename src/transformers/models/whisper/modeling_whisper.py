@@ -81,7 +81,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None ):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -751,6 +751,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_target_positions
+        self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model, self.padding_idx)
@@ -1030,6 +1031,9 @@ class WhisperModel(WhisperPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
+    def _get_feat_extract_output_lengths(self, input:int):
+        return (input-1//2) +1
+
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1098,7 +1102,9 @@ class WhisperModel(WhisperPreTrainedModel):
 
         # downsample encoder attention mask
         if attention_mask is not None:
-            encoder_attention_mask =  attention_mask[  : , encoder_outputs[0].shape[1]]
+            encoder_attention_mask = self._get_feature_vector_attention_mask(
+                encoder_outputs[0].shape[1], attention_mask
+            )
         else:
             encoder_attention_mask = None
 
