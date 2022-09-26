@@ -489,8 +489,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 A tensor of shape (`batch_size, num_class_labels, height, width`).
         """
         logger.warning(
-            "`post_process_segmentation` will be deprecated soon, please use `post_process_instance_segmentation`"
-            " instead."
+            "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_instance_segmentation`",
+            FutureWarning,
         )
 
         # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
@@ -513,7 +514,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         # where $ softmax(p) \in R^{q, c} $ is the mask classes
         # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
         # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
-
         segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
         return segmentation
@@ -525,7 +525,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         Args:
             mask (`torch.Tensor` or `numpy.array`):
                 A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
-                segment_id.
+                segment_id or class_id.
 
         Returns:
             `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
@@ -577,16 +577,16 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         Args:
             outputs ([`MaskFormerForInstanceSegmentation`]):
                 Raw outputs of the model.
-            target_size (`Tuple[int, int]`, of *optional*):
+            target_size (`Tuple[int, int]`, *optional*):
                 Target (height, width) to resize predictions to. If left to None, predictions will not be resized.
         Returns:
-            semantic_segmentation (`torch.Tensor`): Semantic segmentation maps of shape (batch_size, height, width).
-            Each `torch.Tensor` value corresponds to a semantic class id.
+            `torch.Tensor`: Semantic segmentation maps tensor of shape (batch_size, height, width). Each `torch.Tensor`
+            value corresponds to a semantic class id.
         """
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
 
-        # remove the null class `[..., :-1]`
+        # Remove the null class `[..., :-1]`
         masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
         masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
