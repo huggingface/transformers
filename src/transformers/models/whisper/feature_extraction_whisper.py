@@ -230,30 +230,31 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         # always return batch
         if not is_batched:
-            raw_speech = [raw_speech]
+            # raw_speech = [raw_speech]
+            pass
 
-
-        # TODO switch order, should pad first, mel after
-        # extract fbank features
-        features = [self._extract_fbank_features(waveform).permute(1, 0) for waveform in raw_speech]
+        batched_speech = BatchFeature({"input_features": [np.asarray(raw_speech).T]})
 
         # convert into correct format for padding
-        encoded_inputs = BatchFeature({"input_features": features})
+        
 
         padded_inputs = self.pad(
-            encoded_inputs,
+            batched_speech,
             padding=padding,
-            max_length=max_length if max_length else self.nb_max_frame,
+            max_length=max_length if max_length else self.n_samples+1,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
             **kwargs,
         )
-        padded_inputs["input_features"] = padded_inputs["input_features"].permute(0, 2, 1)
         # make sure list is in array format
-        input_features = padded_inputs.get("input_features")
+        input_features = padded_inputs.get("input_features").transpose(0, 2,1)
+        input_features = [self._extract_fbank_features(waveform[0]) for waveform in input_features]
+        
         if isinstance(input_features[0], list):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
+        else : 
+            padded_inputs["input_features"] = input_features
 
         attention_mask = padded_inputs.get("attention_mask")
         if attention_mask is not None:
