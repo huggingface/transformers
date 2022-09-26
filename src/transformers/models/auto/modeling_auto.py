@@ -295,7 +295,6 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("data2vec-text", "Data2VecTextForCausalLM"),
         ("electra", "ElectraForCausalLM"),
         ("ernie", "ErnieForCausalLM"),
-        ("esm", "EsmForCausalLM"),
         ("gpt2", "GPT2LMHeadModel"),
         ("gpt_neo", "GPTNeoForCausalLM"),
         ("gpt_neox", "GPTNeoXForCausalLM"),

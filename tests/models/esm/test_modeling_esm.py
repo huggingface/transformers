@@ -28,13 +28,7 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attenti
 if is_torch_available():
     import torch
 
-    from transformers import (
-        EsmForCausalLM,
-        EsmForMaskedLM,
-        EsmForSequenceClassification,
-        EsmForTokenClassification,
-        EsmModel,
-    )
+    from transformers import EsmForMaskedLM, EsmForSequenceClassification, EsmForTokenClassification, EsmModel
     from transformers.models.esm.modeling_esm import (
         ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
         EsmEmbeddings,
@@ -117,23 +111,6 @@ class EsmModelTester:
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = EsmForCausalLM(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
     def create_and_check_for_masked_lm(
         self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
@@ -174,7 +151,6 @@ class EsmModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
     all_model_classes = (
         (
-            EsmForCausalLM,
             EsmForMaskedLM,
             EsmModel,
             EsmForSequenceClassification,
@@ -183,7 +159,7 @@ class EsmModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (EsmForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = ()
     test_sequence_classification_problem_types = True
 
     def setUp(self):
@@ -305,7 +281,7 @@ class EsmModelIntegrationTest(TestCasePlus):
         config_tied.tie_word_embeddings = True
         config_untied = deepcopy(config)
         config_untied.tie_word_embeddings = False
-        for cls in [EsmForMaskedLM, EsmForCausalLM]:
+        for cls in [EsmForMaskedLM]:
             model = cls(config_tied)
             self.assertEqual(model._keys_to_ignore_on_save, keys_to_ignore_on_save_tied, cls)
 

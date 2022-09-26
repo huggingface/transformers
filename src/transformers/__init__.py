@@ -1216,7 +1216,6 @@ else:
     _import_structure["models.esm"].extend(
         [
             "ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "EsmForCausalLM",
             "EsmForMaskedLM",
             "EsmForSequenceClassification",
             "EsmForTokenClassification",
@@ -3990,7 +3989,6 @@ if TYPE_CHECKING:
         )
         from .models.esm import (
             ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            EsmForCausalLM,
             EsmForMaskedLM,
             EsmForSequenceClassification,
             EsmForTokenClassification,

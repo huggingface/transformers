@@ -33,7 +33,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_esm"] = [
         "ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "EsmForCausalLM",
         "EsmForMaskedLM",
         "EsmForSequenceClassification",
         "EsmForTokenClassification",
@@ -54,7 +53,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_esm import (
             ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
-            EsmForCausalLM,
             EsmForMaskedLM,
             EsmForSequenceClassification,
             EsmForTokenClassification,
