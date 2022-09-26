@@ -460,6 +460,9 @@ class WhisperPreTrainedModel(PreTrainedModel):
         if isinstance(module, (WhisperDecoder, WhisperEncoder)):
             module.gradient_checkpointing = value
     
+    def _get_feat_extract_output_lengths(self, input:int):
+        return (input-1)//2 +1
+
     def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
         # generate creates 3D attention mask, because of the shape of input_features
         # convert it to 2D if thats the case
@@ -775,12 +778,15 @@ class WhisperDecoder(WhisperPreTrainedModel):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
-        if input_shape[-1] > 1:
+    
+        if input_shape[-1] > 1  :
             combined_attention_mask = _make_causal_mask(
                 input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
             ).to(inputs_embeds.device)
 
         if attention_mask is not None:
+            if attention_mask.shape[-1] > input_shape[-1] > 1  :
+                attention_mask = attention_mask[:,:input_shape[-1]]
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
             combined_attention_mask = (
@@ -893,6 +899,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
+        
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
@@ -1031,8 +1038,7 @@ class WhisperModel(WhisperPreTrainedModel):
     def get_decoder(self):
         return self.decoder
 
-    def _get_feat_extract_output_lengths(self, input:int):
-        return (input-1//2) +1
+
 
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1148,13 +1154,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"encoder.version",
         r"decoder.version",
-        r"model.encoder.embed_positions.weight",
-        r"model.decoder.embed_positions.weight",
         r"proj_out.weight",
     ]
     _keys_to_ignore_on_save = [
-        r"model.encoder.embed_positions.weight",
-        r"model.decoder.embed_positions.weight",
+        r"proj_out.weight",
     ]
 
     def __init__(self, config: WhisperConfig):
