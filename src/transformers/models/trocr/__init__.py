@@ -28,7 +28,8 @@ from ...utils import (
 
 _import_structure = {
     "configuration_trocr": ["TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP", "TrOCRConfig"],
-    "processing_trocr": ["TrOCRProcessor", "TrOCRProcessorWithLM"],
+    "processing_trocr": ["TrOCRProcessor"],
+    "processing_trocr_with_lm": ["TrOCRProcessorWithLM"],
 }
 
 
