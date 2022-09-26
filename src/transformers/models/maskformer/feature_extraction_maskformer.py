@@ -653,22 +653,22 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 mask_probs[i], pred_scores[i], pred_labels[i], object_mask_threshold, num_labels
             )
 
-            # Resize mask to corresponding target_size
-            if target_sizes is not None:
-                mask_probs_item = interpolate(
-                    mask_probs_item.unsqueeze(0),
-                    size=target_sizes[i],
-                    mode="bilinear",
-                    align_corners=False,
-                )[0]
-
-            _, height, width = mask_probs_item.shape
-            object_detected = mask_probs_item.shape[0] > 0
-
+            height, width = target_sizes[i][0], target_sizes[i][1] 
             segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs_item.device)
             segments: List[Dict] = []
 
+            object_detected = mask_probs_item.shape[0] > 0
+
             if object_detected:
+                # Resize mask to corresponding target_size
+                if target_sizes is not None:
+                    mask_probs_item = interpolate(
+                        mask_probs_item.unsqueeze(0),
+                        size=target_sizes[i],
+                        mode="bilinear",
+                        align_corners=False,
+                    )[0]
+
                 current_segment_id = 0
 
                 # Weigh each mask by its prediction score
@@ -707,6 +707,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                                 "label_id": pred_class,
                             }
                         )
+            else:
+                segmentation -= 1
 
             # Return segmentation map in run-length encoding (RLE) format
             if return_coco_format:
@@ -786,22 +788,22 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 mask_probs[i], pred_scores[i], pred_labels[i], object_mask_threshold, num_labels
             )
 
-            # Resize mask to corresponding target_size
-            if target_sizes is not None:
-                mask_probs_item = interpolate(
-                    mask_probs_item.unsqueeze(0),
-                    size=target_sizes[i],
-                    mode="bilinear",
-                    align_corners=False,
-                )[0]
-
-            _, height, width = mask_probs_item.shape
-            object_detected = mask_probs_item.shape[0] > 0
-
+            height, width = target_sizes[i][0], target_sizes[i][1] 
             segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs_item.device)
             segments: List[Dict] = []
 
+            object_detected = mask_probs_item.shape[0] > 0
+
             if object_detected:
+                # Resize mask to corresponding target_size
+                if target_sizes is not None:
+                    mask_probs_item = interpolate(
+                        mask_probs_item.unsqueeze(0),
+                        size=target_sizes[i],
+                        mode="bilinear",
+                        align_corners=False,
+                    )[0]
+
                 current_segment_id = 0
 
                 # Weigh each mask by its prediction score
@@ -845,6 +847,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                         )
                         if should_fuse:
                             stuff_memory_list[pred_class] = current_segment_id
-
+            else:
+                segmentation -= 1
+                
             results.append({"segmentation": segmentation, "segments": segments})
         return results
