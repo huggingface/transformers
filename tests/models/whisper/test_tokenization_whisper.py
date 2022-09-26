@@ -100,7 +100,7 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
 
 @require_sentencepiece
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
-    checkpoint_name = "/home/arthur_huggingface_co/transformers/whisper/tiny"
+    checkpoint_name = "ArthurZ/whisper-small.eng"
 
     transcript = (
         "'<|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>  Nor is Mr. Quilters manner less interesting"
@@ -116,9 +116,9 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     def test_tokenizer_equivalence(self):
         text = "다람쥐 헌 쳇바퀴에 타고파"
         multilingual_tokenizer = WhisperTokenizer.from_pretrained(
-            "/home/arthur_huggingface_co/transformers/whisper/tiny-multy"
+            "ArthurZ/whisper-small"
         )
-        gpt2_tokenizer = WhisperTokenizer.from_pretrained("/home/arthur_huggingface_co/transformers/whisper/tiny")
+        gpt2_tokenizer = WhisperTokenizer.from_pretrained("ArthurZ/whisper-small.eng")
 
         text = "다람쥐 헌 쳇바퀴에 타고파"
         gpt2_tokens = gpt2_tokenizer.encode(text)
@@ -189,7 +189,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
     def test_tokenizer_special(self):
         multilingual_tokenizer = WhisperTokenizer.from_pretrained(
-            "/home/arthur_huggingface_co/transformers/whisper/tiny-multy"
+            "ArthurZ/whisper-small.eng"
         )
         text = "[Denis] Hey! How are you feeling? J'ai l'impression que 郷さん est prêt"
         multilingual_tokens = multilingual_tokenizer.encode(text)
