@@ -625,6 +625,7 @@ MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("layoutlm", "LayoutLMForQuestionAnswering"),
         ("layoutlmv2", "LayoutLMv2ForQuestionAnswering"),
         ("layoutlmv3", "LayoutLMv3ForQuestionAnswering"),
+        ("donut-swin", "DonutSwinModel"),
     ]
 )
 
