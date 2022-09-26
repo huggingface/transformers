@@ -19,7 +19,9 @@ Feature extractor class for Whisper
 from typing import List, Optional, Union
 
 import numpy as np
+
 from transformers import is_torch_available
+
 
 if is_torch_available():
     import torch
@@ -225,7 +227,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         )
 
         if is_batched:
-            raw_speech = [np.asarray(speech, dtype=np.float32) for speech in raw_speech]
+            raw_speech = [np.asarray([speech], dtype=np.float32).T for speech in raw_speech]
         elif not is_batched and not isinstance(raw_speech, np.ndarray):
             raw_speech = np.asarray(raw_speech, dtype=np.float32)
         elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):
@@ -233,9 +235,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         # always return batch
         if not is_batched:
-            raw_speech = [raw_speech]
-            
-        batched_speech = BatchFeature({"input_features": [np.asarray(raw_speech).T]})
+            raw_speech = [raw_speech.T]
+
+        batched_speech = BatchFeature({"input_features": raw_speech})
 
         # convert into correct format for padding
 
@@ -252,12 +254,12 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         input_features = padded_inputs.get("input_features").transpose(0, 2, 1)
         input_features = [self._extract_fbank_features(waveform) for waveform in input_features[0]]
 
-        if isinstance(input_features[0], torch.Tensor) or isinstance(input_features[0],List) :
+        if isinstance(input_features[0], torch.Tensor) or isinstance(input_features[0], List):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
         else:
             padded_inputs["input_features"] = input_features
 
-        attention_mask = np.asarray(padded_inputs.get("attention_mask"))[:,:self.nb_max_frame]
+        attention_mask = np.asarray(padded_inputs.get("attention_mask"))[:, : self.nb_max_frame]
         if attention_mask is not None:
             padded_inputs["attention_mask"] = [attention_mask]
 
