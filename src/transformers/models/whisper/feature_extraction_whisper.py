@@ -77,7 +77,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self.return_attention_mask = True
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frame = self.n_samples // hop_length
-
+        self.sampling_rate = sampling_rate
         self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=num_mel_bins)
 
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
@@ -230,9 +230,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         # always return batch
         if not is_batched:
-            # raw_speech = [raw_speech]
-            pass
-
+            raw_speech = [raw_speech]
+            
         batched_speech = BatchFeature({"input_features": [np.asarray(raw_speech).T]})
 
         # convert into correct format for padding
@@ -248,7 +247,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         )
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(0, 2, 1)
-        input_features = [self._extract_fbank_features(waveform[0]) for waveform in input_features]
+        input_features = [self._extract_fbank_features(waveform) for waveform in input_features[0]]
 
         if isinstance(input_features[0], torch.Tensor) or isinstance(input_features[0],List) :
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
