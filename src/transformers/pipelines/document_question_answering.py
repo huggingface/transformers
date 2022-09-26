@@ -348,7 +348,6 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             # We put 0 on the tokens from the context and 1 everywhere else (question and special tokens)
             # This logic mirrors the logic in the question_answering pipeline
             p_mask = [[tok != 1 for tok in encoding.sequence_ids(span_id)] for span_id in range(num_spans)]
-            print(num_spans)
             for span_idx in range(num_spans):
                 if self.framework == "pt":
                     span_encoding = {k: torch.tensor(v[span_idx : span_idx + 1]) for (k, v) in encoding.items()}
@@ -445,14 +444,16 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             words = output["words"]
 
             starts, ends, scores, min_null_score = select_starts_ends(
-                output["start_logits"],
-                output["end_logits"],
-                output["p_mask"],
-                output["attention_mask"].numpy() if output.get("attention_mask", None) is not None else None,
-                min_null_score,
-                top_k,
-                handle_impossible_answer,
-                max_answer_len,
+                start=output["start_logits"],
+                end=output["end_logits"],
+                p_mask=output["p_mask"],
+                attention_mask=output["attention_mask"].numpy()
+                if output.get("attention_mask", None) is not None
+                else None,
+                min_null_score=min_null_score,
+                top_k=top_k,
+                handle_impossible_answer=handle_impossible_answer,
+                max_answer_len=max_answer_len,
             )
             word_ids = output["word_ids"]
             for start, end, score in zip(starts, ends, scores):
