@@ -170,6 +170,8 @@ class EsmModelTester:
 @require_torch
 class EsmModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
+    test_mismatched_shapes = False
+
     all_model_classes = (
         (
             EsmForCausalLM,
@@ -277,9 +279,8 @@ class EsmModelIntegrationTest(TestCasePlus):
         self.assertEqual(output.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[[24.4653, -8.0736, 10.0146], [-9.0505, -15.9262, -4.8583], [-6.9496, -14.6652, 6.2619]]]]
+            [[[15.0973,  -6.6406,  -1.1351], [-0.2209,  -9.9622,   4.2109], [-1.6055, -10.0023,   1.5914]]]
         )
-
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
     @slow
@@ -290,12 +291,10 @@ class EsmModelIntegrationTest(TestCasePlus):
         output = model(input_ids)[0]
         # compare the actual values for a slice.
         expected_slice = torch.tensor(
-            [[[-0.1687, 0.0673, 0.0991], [0.2569, 0.0041, 0.2266], [0.1488, 0.0387, 0.0665]]]
+            [[[0.1444, 0.5413, 0.3248], [0.3034, 0.0053, 0.3108], [0.3228, -0.2499, 0.3415]]]
         )
-
         self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=1e-4))
 
-    # XXX: this might be a candidate for common tests if we have many of those
     def test_lm_head_ignore_keys(self):
         from copy import deepcopy
 
