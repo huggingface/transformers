@@ -105,6 +105,8 @@ def convert_openai_whisper_to_tfms(checkpoint_name, pytorch_dump_folder_path, ch
         decoder_layers=dimensions["n_text_layer"],
         decoder_attention_heads=dimensions["n_text_head"],
         max_source_positions=dimensions["n_audio_ctx"],
+        decoder_ffn_dim=4 * dimensions["n_audio_state"],
+        encoder_ffn_dim=4 * dimensions["n_audio_state"],
     )
 
     model = WhisperForConditionalGeneration(config)
@@ -174,23 +176,26 @@ def _download(url: str, root: str) -> bytes:
     return model_bytes, download_target
 
 
-def convert_every_model(save_dir):
+def convert_every_model(save_dir="whisper"):
     layers = [4, 6, 12, 24, 32]
     width = [384, 512, 768, 1024, 1280]
     heads = [6, 8, 12, 16, 20]
     name = ["tiny", "base", "small", "medium", "large"]
     for l, w, h, n in zip(layers, width, heads, name):
+        n += ".en"
         config = WhisperConfig(
-            vocab_size=51865,
+            vocab_size=51864,
             encoder_layers=l,
             encoder_attention_heads=h,
             decoder_attention_heads=h,
             decoder_layers=l,
             d_model=w,
+            decoder_ffn_dim=4*w,
+            encoder_ffn_dim=4*w,
         )
         model = WhisperModel(config)
 
-        model_bytes = _download(_MODELS[n], "weights")
+        model_bytes, _ = _download(_MODELS[n], "original-weights")
         with io.BytesIO(model_bytes) as fp:
             original = torch.load(fp, map_location="cpu")["model_state_dict"]
 
