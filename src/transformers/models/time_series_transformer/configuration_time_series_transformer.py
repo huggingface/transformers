@@ -45,7 +45,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             `prediction_length`.
         distribution_output (`string`, *optional* defaults to `"student_t"`):
             The distribution emission head for the model.
-        loss (`string`, *optional* defaults to `nll`):
+        loss (`string`, *optional* defaults to `"nll"`):
             The loss function for the model corresponding to the `distribution_output` head. For parametric
             distributions it is negative log likelihood.
         input_size (`int`, *optional* defaults to 1):
