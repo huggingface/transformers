@@ -354,7 +354,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "feature_extraction_utils.py": "test_feature_extraction_common.py",
     "file_utils.py": ["utils/test_file_utils.py", "utils/test_model_output.py"],
     "utils/generic.py": ["utils/test_file_utils.py", "utils/test_model_output.py", "utils/test_generic.py"],
-    "utils/hub.py": "utils/test_file_utils.py",
+    "utils/hub.py": "utils/test_hub_utils.py",
     "modelcard.py": "utils/test_model_card.py",
     "modeling_flax_utils.py": "test_modeling_flax_common.py",
     "modeling_tf_utils.py": ["test_modeling_tf_common.py", "utils/test_modeling_tf_core.py"],

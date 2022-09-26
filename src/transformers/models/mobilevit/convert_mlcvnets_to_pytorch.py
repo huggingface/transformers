@@ -62,8 +62,8 @@ def get_mobilevit_config(mobilevit_name):
         config.num_labels = 1000
         filename = "imagenet-1k-id2label.json"
 
-    repo_id = "datasets/huggingface/label-files"
-    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    repo_id = "huggingface/label-files"
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
