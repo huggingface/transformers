@@ -22,6 +22,8 @@ from inspect import isclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, NewType, Optional, Tuple, Union, get_type_hints
 
+import yaml
+
 
 DataClass = NewType("DataClass", Any)
 DataClassType = NewType("DataClassType", Any)
@@ -234,36 +236,6 @@ class HfArgumentParser(ArgumentParser):
 
             return (*outputs,)
 
-    def parse_json_file(self, json_file: str, allow_extra_keys: bool = False) -> Tuple[DataClass, ...]:
-        """
-        Alternative helper method that does not use `argparse` at all, instead loading a json file and populating the
-        dataclass types.
-
-        Args:
-            json_file (`str` or `os.PathLike`):
-                File name of the json file to parse
-            allow_extra_keys (`bool`, *optional*, defaults to `False`):
-                Defaults to False. If False, will raise an exception if the json file contains keys that are not
-                parsed.
-
-        Returns:
-            Tuple consisting of:
-
-                - the dataclass instances in the same order as they were passed to the initializer.
-        """
-        data = json.loads(Path(json_file).read_text())
-        unused_keys = set(data.keys())
-        outputs = []
-        for dtype in self.dataclass_types:
-            keys = {f.name for f in dataclasses.fields(dtype) if f.init}
-            inputs = {k: v for k, v in data.items() if k in keys}
-            unused_keys.difference_update(inputs.keys())
-            obj = dtype(**inputs)
-            outputs.append(obj)
-        if not allow_extra_keys and unused_keys:
-            raise ValueError(f"Some keys are not used by the HfArgumentParser: {sorted(unused_keys)}")
-        return tuple(outputs)
-
     def parse_dict(self, args: Dict[str, Any], allow_extra_keys: bool = False) -> Tuple[DataClass, ...]:
         """
         Alternative helper method that does not use `argparse` at all, instead uses a dict and populating the dataclass
@@ -290,4 +262,44 @@ class HfArgumentParser(ArgumentParser):
             outputs.append(obj)
         if not allow_extra_keys and unused_keys:
             raise ValueError(f"Some keys are not used by the HfArgumentParser: {sorted(unused_keys)}")
+        return tuple(outputs)
+
+    def parse_json_file(self, json_file: str, allow_extra_keys: bool = False) -> Tuple[DataClass, ...]:
+        """
+        Alternative helper method that does not use `argparse` at all, instead loading a json file and populating the
+        dataclass types.
+
+        Args:
+            json_file (`str` or `os.PathLike`):
+                File name of the json file to parse
+            allow_extra_keys (`bool`, *optional*, defaults to `False`):
+                Defaults to False. If False, will raise an exception if the json file contains keys that are not
+                parsed.
+
+        Returns:
+            Tuple consisting of:
+
+                - the dataclass instances in the same order as they were passed to the initializer.
+        """
+        outputs = self.parse_dict(json.loads(Path(json_file).read_text()), allow_extra_keys=allow_extra_keys)
+        return tuple(outputs)
+
+    def parse_yaml_file(self, yaml_file: str, allow_extra_keys: bool = False) -> Tuple[DataClass, ...]:
+        """
+        Alternative helper method that does not use `argparse` at all, instead loading a json file and populating the
+        dataclass types.
+
+        Args:
+            yaml_file (`str` or `os.PathLike`):
+                File name of the yaml file to parse
+            allow_extra_keys (`bool`, *optional*, defaults to `False`):
+                Defaults to False. If False, will raise an exception if the json file contains keys that are not
+                parsed.
+
+        Returns:
+            Tuple consisting of:
+
+                - the dataclass instances in the same order as they were passed to the initializer.
+        """
+        outputs = self.parse_dict(yaml.safe_load(yaml_file), allow_extra_keys=allow_extra_keys)
         return tuple(outputs)
