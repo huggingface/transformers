@@ -286,7 +286,19 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
                     "return_dict",
                 ]
                 if "future_observed_values" in arg_names
-                else ["encoder_outputs", "output_hidden_states", "use_cache", "output_attentions", "return_dict"]
+                else [
+                    "attention_mask",
+                    "decoder_attention_mask",
+                    "head_mask",
+                    "decoder_head_mask",
+                    "cross_attn_head_mask",
+                    "encoder_outputs",
+                    "past_key_values",
+                    "output_hidden_states",
+                    "use_cache",
+                    "output_attentions",
+                    "return_dict",
+                ]
             )
 
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
