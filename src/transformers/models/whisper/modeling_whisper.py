@@ -81,7 +81,7 @@ def _make_causal_mask(input_ids_shape: torch.Size, dtype: torch.dtype, past_key_
 
 
 # Copied from transformers.models.bart.modeling_bart._expand_mask
-def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None ):
+def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] = None):
     """
     Expands attention_mask from `[bsz, seq_len]` to `[bsz, 1, tgt_seq_len, src_seq_len]`.
     """
@@ -459,9 +459,9 @@ class WhisperPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, module, value=False):
         if isinstance(module, (WhisperDecoder, WhisperEncoder)):
             module.gradient_checkpointing = value
-    
-    def _get_feat_extract_output_lengths(self, input:int):
-        return (input-1)//2 +1
+
+    def _get_feat_extract_output_lengths(self, input: int):
+        return (input - 1) // 2 + 1
 
     def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
         # generate creates 3D attention mask, because of the shape of input_features
@@ -469,7 +469,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
         if len(attention_mask.shape) > 2:
             attention_mask = attention_mask[:, :, -1]
 
-        subsampled_lengths = (attention_mask.sum(-1)-1)//2 +1
+        subsampled_lengths = (attention_mask.sum(-1) - 1) // 2 + 1
         bsz = attention_mask.size()[0]
         attention_mask = torch.zeros(
             (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
@@ -675,7 +675,6 @@ class WhisperEncoder(WhisperPreTrainedModel):
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-
         # subsample attention mask if necessary
         if attention_mask is not None:
             attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
@@ -683,7 +682,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
             attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
         # else:
         #     attention_mask = torch.ones([], dtype=torch.long, device=inputs_embeds.device)
-  
+        
 
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
@@ -778,15 +777,15 @@ class WhisperDecoder(WhisperPreTrainedModel):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
         combined_attention_mask = None
-    
-        if input_shape[-1] > 1  :
+
+        if input_shape[-1] > 1:
             combined_attention_mask = _make_causal_mask(
                 input_shape, inputs_embeds.dtype, past_key_values_length=past_key_values_length
             ).to(inputs_embeds.device)
 
         if attention_mask is not None:
-            if attention_mask.shape[-1] > input_shape[-1] > 1  :
-                attention_mask = attention_mask[:,:input_shape[-1]]
+            if attention_mask.shape[-1] > input_shape[-1] > 1:
+                attention_mask = attention_mask[:, : input_shape[-1]]
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
             combined_attention_mask = (
@@ -1037,8 +1036,6 @@ class WhisperModel(WhisperPreTrainedModel):
 
     def get_decoder(self):
         return self.decoder
-
-
 
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1310,21 +1307,19 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
         }
 
-    def _prepare_attention_mask_for_generation(
-        self,
-        inputs: torch.Tensor,
-        pad_token_id: Optional[int],
-        eos_token_id: Optional[int],
-    ) -> torch.LongTensor:
-        is_mel_spec = len(inputs.shape) == 3 and inputs.dtype in [torch.int, torch.long]
-        is_pad_token_in_inputs = (pad_token_id is not None) and (pad_token_id in inputs)
-        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id != eos_token_id)
-
-        # Check if input is input_ids and padded -> only then is attention_mask defined
-        if is_mel_spec and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
-            return inputs.ne(pad_token_id).long()[:, :, : self.max_source_positions, : self.max_source_positions]
-        else:
-            return None
+    # def _prepare_attention_mask_for_generation(
+    #     self,
+    #     inputs: torch.Tensor,
+    #     pad_token_id: Optional[int],
+    #     eos_token_id: Optional[int],
+    # ) -> torch.LongTensor:
+    #     is_mel_spec = len(inputs.shape) == 3 and inputs.dtype in [torch.float32, torch.float16]
+    #     pad_token_id = -0.8060266971588135
+    #     # Check if input is input_ids and padded -> only then is attention_mask defined
+    #     if is_mel_spec :
+    #         return inputs.ne(pad_token_id).long()
+    #     else:
+    #         return None
 
     def _prepare_decoder_input_ids_for_generation(
         self,
@@ -1341,7 +1336,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             decoder_start_token_id = list(self.config.decoder_start_token_id)
             if device is None:
                 device = self.device
-            return torch.tensor(batch_size * [decoder_start_token_id], dtype=torch.long, device=device) 
+            return torch.tensor(batch_size * [decoder_start_token_id], dtype=torch.long, device=device)
 
     @staticmethod
     def _reorder_cache(past, beam_idx):
