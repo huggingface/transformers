@@ -57,11 +57,11 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             5, 6, 7]`.
         num_time_features (`int`, *optional* defaults to 0):
             The number of time features in the input time series.
-        num_feat_dynamic_real (`int`, *optional* defaults to `0`):
+        num_feat_dynamic_real (`int`, *optional* defaults to 0):
             The number of dynamic real valued features.
-        num_feat_static_cat (`int`, *optional* defaults to `0`):
+        num_feat_static_cat (`int`, *optional* defaults to 0):
             The number of static categorical features.
-        num_feat_static_real (`int`, *optional* defaults to `0`):
+        num_feat_static_real (`int`, *optional* defaults to 0):
             The number of static real valued features.
         cardinality (`list` of `int`, *optional*):
             The cardinality of the categorical features. Cannot be `None` if `num_feat_static_cat` is `> 0`.
