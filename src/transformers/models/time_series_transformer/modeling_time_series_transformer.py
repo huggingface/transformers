@@ -1412,8 +1412,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
         # sequence = torch.cat((prior_input, inputs), dim=1)
         lagged_sequence = self.get_lagged_subsequences(
-            sequence=inputs,
-            subsequences_length=subsequences_length,
+            sequence=inputs, subsequences_length=subsequences_length
         )
 
         lags_shape = lagged_sequence.shape
