@@ -236,29 +236,28 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         batched_speech = BatchFeature({"input_features": [np.asarray(raw_speech).T]})
 
         # convert into correct format for padding
-        
 
         padded_inputs = self.pad(
             batched_speech,
             padding=padding,
-            max_length=max_length if max_length else self.n_samples+1,
+            max_length=max_length if max_length else self.n_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
             return_attention_mask=return_attention_mask,
             **kwargs,
         )
         # make sure list is in array format
-        input_features = padded_inputs.get("input_features").transpose(0, 2,1)
+        input_features = padded_inputs.get("input_features").transpose(0, 2, 1)
         input_features = [self._extract_fbank_features(waveform[0]) for waveform in input_features]
-        
-        if isinstance(input_features[0], list):
+
+        if isinstance(input_features[0], torch.Tensor) or isinstance(input_features[0],List) :
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
-        else : 
+        else:
             padded_inputs["input_features"] = input_features
 
-        attention_mask = padded_inputs.get("attention_mask")
+        attention_mask = np.asarray(padded_inputs.get("attention_mask"))[:,:self.nb_max_frame]
         if attention_mask is not None:
-            padded_inputs["attention_mask"] = [np.asarray(array, dtype=np.int32) for array in attention_mask]
+            padded_inputs["attention_mask"] = [attention_mask]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
