@@ -674,6 +674,12 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
+        logger.warning(
+            "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_object_detection`",
+            FutureWarning,
+        )
+
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if len(out_logits) != len(target_sizes):
@@ -692,7 +698,6 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         boxes = boxes * scale_fct[:, None, :]
 
         results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
-
         return results
 
     # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_segmentation
@@ -714,6 +719,11 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an image
             in the batch as predicted by the model.
         """
+        logger.warning(
+            "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_semantic_segmentation`.",
+            FutureWarning,
+        )
         out_logits, raw_masks = outputs.logits, outputs.pred_masks
         preds = []
 

@@ -555,7 +555,7 @@ class DeformableDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtract
             if annotations is not None:
                 annotations = [annotations]
 
-        # Create deep copies to avoid editing inputs in place
+        # Create a copy of the list to avoid editing it in place
         images = [image for image in images]
 
         if annotations is not None:
@@ -750,6 +750,11 @@ class DeformableDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtract
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an image
             in the batch as predicted by the model.
         """
+        logger.warning(
+            "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_semantic_segmentation`.",
+            FutureWarning,
+        )
         out_logits, raw_masks = outputs.logits, outputs.pred_masks
         preds = []
 

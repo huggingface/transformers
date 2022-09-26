@@ -17,7 +17,7 @@
 import io
 import pathlib
 from collections import defaultdict
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -547,7 +547,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             if annotations is not None:
                 annotations = [annotations]
 
-        # Create deep copies to avoid editing inputs in place
+        # Create a copy of the list to avoid editing it in place
         images = [image for image in images]
 
         if annotations is not None:
@@ -699,6 +699,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
+        logger.warning(
+            "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_object_detection`",
+            FutureWarning,
+        )
+
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if len(out_logits) != len(target_sizes):
@@ -717,7 +723,6 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         boxes = boxes * scale_fct[:, None, :]
 
         results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
-
         return results
 
     def post_process_segmentation(self, outputs, target_sizes, threshold=0.9, mask_threshold=0.5):
@@ -738,6 +743,11 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an image
             in the batch as predicted by the model.
         """
+        logger.warning(
+            "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_semantic_segmentation`.",
+            FutureWarning,
+        )
         out_logits, raw_masks = outputs.logits, outputs.pred_masks
         preds = []
 
@@ -939,3 +949,93 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 predictions = {"png_string": out.getvalue(), "segments_info": segments_info}
             preds.append(predictions)
         return preds
+
+    def post_process_object_detection(self, outputs, target_sizes: Union[TensorType, List[Tuple]] = None):
+        """
+        Converts the output of [`DetrForObjectDetection`] into the format expected by the COCO api. Only supports
+        PyTorch.
+
+        Args:
+            outputs ([`DetrObjectDetectionOutput`]):
+                Raw outputs of the model.
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
+
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
+            in the batch as predicted by the model.
+        """
+        out_logits, out_bbox = outputs.logits, outputs.pred_boxes
+
+        if target_sizes is not None:
+            if len(out_logits) != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+        prob = nn.functional.softmax(out_logits, -1)
+        scores, labels = prob[..., :-1].max(-1)
+
+        # Convert to [x0, y0, x1, y1] format
+        boxes = center_to_corners_format(out_bbox)
+
+        # Convert from relative [0, 1] to absolute [0, height] coordinates
+        if target_sizes is not None:
+            if isinstance(target_sizes, List):
+                img_h = torch.Tensor([i[0] for i in target_sizes])
+                img_w = torch.Tensor([i[1] for i in target_sizes])
+            else:
+                img_h, img_w = target_sizes.unbind(1)
+
+            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1)
+            boxes = boxes * scale_fct[:, None, :]
+
+        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
+        return results
+
+    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+        """
+        Args:
+        Converts the output of [`DetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+            outputs ([`DetrForSegmentation`]):
+                Raw outputs of the model.
+            target_sizes (`List[Tuple[int, int]]`, *optional*):
+                A list of tuples (`Tuple[int, int]`) containing the target size (height, width) of each image in the
+                batch. If left to None, predictions will not be resized.
+        Returns:
+            `List[torch.Tensor]`:
+                A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
+                corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
+                `torch.Tensor` correspond to a semantic class id.
+        """
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
+        masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
+
+        # Remove the null class `[..., :-1]`
+        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
+        masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
+
+        # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
+        segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        batch_size = class_queries_logits.shape[0]
+
+        # Resize logits and compute semantic segmentation maps
+        if target_sizes is not None:
+            if batch_size != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
+            semantic_segmentation = []
+            for idx in range(batch_size):
+                resized_logits = torch.nn.functional.interpolate(
+                    segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(semantic_map)
+        else:
+            semantic_segmentation = segmentation.argmax(dim=1)
+            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+
+        return semantic_segmentation
