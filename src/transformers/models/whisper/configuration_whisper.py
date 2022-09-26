@@ -189,5 +189,6 @@ class WhisperConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
+            tie_word_embeddings = tie_word_embeddings,
             **kwargs,
         )
