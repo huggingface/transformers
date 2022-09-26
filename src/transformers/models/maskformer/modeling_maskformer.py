@@ -30,7 +30,7 @@ from transformers.utils import logging
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithCrossAttentions
 from ...modeling_utils import ModuleUtilsMixin, PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, is_torch_greater_or_equal_than_1_10, prune_linear_layer
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -50,11 +50,6 @@ if is_scipy_available():
 
 logger = logging.get_logger(__name__)
 
-if not is_torch_greater_or_equal_than_1_10:
-    logger.warning(
-        f"You are using torch=={torch.__version__}, but torch>=1.10.0 is required to use "
-        "MaskFormerModel. Please upgrade torch."
-    )
 
 _CONFIG_FOR_DOC = "MaskFormerConfig"
 _CHECKPOINT_FOR_DOC = "facebook/maskformer-swin-base-ade"
@@ -2107,7 +2102,7 @@ class MaskFormerSinePositionEmbedding(nn.Module):
         self.num_pos_feats = num_pos_feats
         self.temperature = temperature
         self.normalize = normalize
-        self.scale = 2 * torch.pi if scale is None else scale
+        self.scale = 2 * math.pi if scale is None else scale
 
     def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         if mask is None:
