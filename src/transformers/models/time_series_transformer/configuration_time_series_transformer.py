@@ -43,7 +43,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         context_length (`int`, *optional*):
             The context length for the encoder. If `None`, the context length will be the same as the
             `prediction_length`.
-        distribution_output (`string`, *optional* defaults to `student_t`):
+        distribution_output (`string`, *optional* defaults to `"student_t"`):
             The distribution emission head for the model.
         loss (`string`, *optional* defaults to `nll`):
             The loss function for the model corresponding to the `distribution_output` head. For parametric
