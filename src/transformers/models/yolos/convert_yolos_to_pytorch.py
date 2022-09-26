@@ -57,9 +57,9 @@ def get_yolos_config(yolos_name):
         config.image_size = [800, 1344]
 
     config.num_labels = 91
-    repo_id = "datasets/huggingface/label-files"
+    repo_id = "huggingface/label-files"
     filename = "coco-detection-id2label.json"
-    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
