@@ -1193,12 +1193,6 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             xpath_subs_ids = self.build_xpath_subs_with_special_tokens(xpath_subs_seq, pair_xpath_subs_seq)
             if labels:
                 labels = [self.pad_token_label] + labels + [self.pad_token_label]
-            # xpath_tags_ids = (
-            #     [self.pad_xpath_tags_seq] + xpath_tags_seq + [self.pad_xpath_tags_seq] + pair_xpath_tags_seq
-            # )
-            # xpath_subs_ids = (
-            #     [self.pad_xpath_subs_seq] + xpath_subs_seq + [self.pad_xpath_subs_seq] + + pair_xpath_subs_seq
-            # )
         else:
             sequence = ids + pair_ids if pair else ids
             token_type_ids = [0] * len(ids) + ([0] * len(pair_ids) if pair else [])

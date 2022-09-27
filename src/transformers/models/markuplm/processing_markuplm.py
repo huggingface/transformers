@@ -38,6 +38,8 @@ class MarkupLMProcessor(ProcessorMixin):
             An instance of [`MarkupLMFeatureExtractor`]. The feature extractor is a required input.
         tokenizer (`MarkupLMTokenizer` or `MarkupLMTokenizerFast`):
             An instance of [`MarkupLMTokenizer`] or [`MarkupLMTokenizerFast`]. The tokenizer is a required input.
+        parse_html (`bool`, *optional*, defaults to `True`):
+            Whether or not to use `MarkupLMFeatureExtractor` to parse HTML strings into nodes and corresponding xpaths.
     """
     feature_extractor_class = "MarkupLMFeatureExtractor"
     tokenizer_class = ("MarkupLMTokenizer", "MarkupLMTokenizerFast")
@@ -77,13 +79,20 @@ class MarkupLMProcessor(ProcessorMixin):
         """
         # first, create nodes and xpaths
         if self.parse_html:
-            assert html_strings is not None
-            assert nodes is None
-            assert xpaths is None
-            assert node_labels is None
+            if html_strings is None:
+                raise ValueError("Make sure to pass HTML strings in case `parse_html` is set to `True`")
+
+            if nodes is not None or xpaths is not None or node_labels is not None:
+                raise ValueError(
+                    "Please don't pass nodes, xpaths nor node labels in case `parse_html` is set to `True`"
+                )
+
             features = self.feature_extractor(html_strings)
             nodes = features["nodes"]
             xpaths = features["xpaths"]
+        else:
+            if nodes is None or xpaths is None:
+                raise ValueError("Make sure to pass nodes and xpaths in case `parse_html` is set to `False`")
 
         # # second, apply the tokenizer
         if questions is not None and self.parse_html:
