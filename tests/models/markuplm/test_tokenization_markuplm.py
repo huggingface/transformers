@@ -615,32 +615,20 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Using pad after tokenization
                 nodes, xpaths = self.get_nodes_and_xpaths_batch()
-                input_r = tokenizer_r.batch_encode_plus(
-                    nodes,
-                    xpaths=xpaths,
-                )
+                input_r = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths)
                 input_r = tokenizer_r.pad(input_r)
 
-                input_p = tokenizer_r.batch_encode_plus(
-                    nodes,
-                    xpaths=xpaths,
-                )
+                input_p = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths)
                 input_p = tokenizer_r.pad(input_p)
 
                 self.assert_batch_padded_input_match(input_r, input_p, len(input_r["input_ids"][0]), pad_token_id)
 
                 # Using pad after tokenization
                 nodes, xpaths = self.get_nodes_and_xpaths_batch()
-                input_r = tokenizer_r.batch_encode_plus(
-                    nodes,
-                    xpaths=xpaths,
-                )
+                input_r = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths)
                 input_r = tokenizer_r.pad(input_r, max_length=max_length, padding="max_length")
 
-                input_p = tokenizer_r.batch_encode_plus(
-                    nodes,
-                    xpaths=xpaths,
-                )
+                input_p = tokenizer_r.batch_encode_plus(nodes, xpaths=xpaths)
                 input_p = tokenizer_r.pad(input_p, max_length=max_length, padding="max_length")
 
                 self.assert_batch_padded_input_match(input_r, input_p, max_length, pad_token_id)
@@ -1205,16 +1193,8 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 nodes, xpaths = self.get_nodes_and_xpaths()
-                tokens_r = tokenizer_r.encode_plus(
-                    nodes,
-                    xpaths=xpaths,
-                    add_special_tokens=True,
-                )
-                tokens_p = tokenizer_p.encode_plus(
-                    nodes,
-                    xpaths=xpaths,
-                    add_special_tokens=True,
-                )
+                tokens_r = tokenizer_r.encode_plus(nodes, xpaths=xpaths, add_special_tokens=True)
+                tokens_p = tokenizer_p.encode_plus(nodes, xpaths=xpaths, add_special_tokens=True)
 
                 for key in tokens_p.keys():
                     self.assertEqual(tokens_r[key], tokens_p[key])
