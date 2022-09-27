@@ -1443,15 +1443,16 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
     ) -> torch.Tensor:
         """
-        Returns lagged subsequences of a given sequence. Parameters ---------- sequence : Tensor
-            the sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
-        subsequences_length : int
-            length of the subsequences to be extracted.
-        shift: int
-            shift the lags by this amount back.
-        Returns -------- lagged : Tensor
-            a tensor of shape (N, S, C, I), where S = subsequences_length and I = len(indices), containing lagged
-            subsequences. Specifically, lagged[i, j, :, k] = sequence[i, -indices[k]-S+j, :].
+        Returns lagged subsequences of a given sequence. Returns a tensor of shape (N, S, C, I),
+            where S = subsequences_length and I = len(indices), containing lagged subsequences. Specifically, lagged[i,
+            j, :, k] = sequence[i, -indices[k]-S+j, :].
+        Args:
+            sequence : Tensor
+                the sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
+            subsequences_length : int
+                length of the subsequences to be extracted.
+            shift: int
+                shift the lags by this amount back.
         """
         sequence_length = sequence.shape[1]
         indices = [lag - shift for lag in self.config.lags_seq]
