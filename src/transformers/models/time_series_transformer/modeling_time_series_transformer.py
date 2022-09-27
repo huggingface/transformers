@@ -38,12 +38,12 @@ from .configuration_time_series_transformer import TimeSeriesTransformerConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "huggingface/tst-ett"
+_CHECKPOINT_FOR_DOC = "huggingface/time-series-transformer-tourism-monthly"
 _CONFIG_FOR_DOC = "TimeSeriesTransformerConfig"
 
 
 TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "huggingface/tst-ett",
+    "huggingface/time-series-transformer-tourism-monthly",
     # See all TimeSeriesTransformer models at https://huggingface.co/models?filter=time_series_transformer
 ]
 
@@ -932,31 +932,67 @@ TIME_SERIES_TRANSFORMER_START_DOCSTRING = r"""
 
 TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
+        past_target (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Past values of the time series, that serve as context in order to predict the future. These values may contain lags,
+            i.e. additional values from the past which are added in order to serve as "extra context". The `past_target` is what
+            the Transformer encoder gets as input (with optional additional features, such as `feat_static_cat`, `feat_static_real`,
+            `past_time_feat`).
 
-            Indices can be obtained using [`~TimeSeriesTransformerTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            See the demo notebook and code snippets for details.
 
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            Missing values need to be replaced with zeros.
 
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
+        past_observed_values (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Boolean mask to indicate which `past_target` values were observed and which were missing. Mask values selected in `[0, 1]`:
 
-            [What are attention masks?](../glossary#attention-mask)
-        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Provide for translation and summarization training. By default, the model will create this tensor by
-            shifting the `input_ids` to the right, following the paper.
-        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
-            be used by default.
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros i).
 
-            If you want to change padding behavior, you should read
-            [`modeling_time_series_transformer._prepare_decoder_attention_mask`] and modify to your needs. See diagram
-            1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+        past_time_feat (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`, *optional*):
+            Optional additional features, which the model internally will add to `past_target`. These could be things like "month of year",
+            "day of the month", etc. encoded as vectors (for instance as Fourier features). These could also be so-called "age" features,
+            which basically help the model know "at which point in life" a time-series is. Age features have small values for distant past
+            time steps and increase monotonically the more we approach the current time step.
+
+            These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT, where the position encodings
+            are learned from scratch internally as parameters of the model, the Time Series Transformer requires to provide additional features.
+
+            The Time Series Transformer only learns additional embeddings for `feat_static_cat`.
+
+        feat_static_cat (`torch.LongTensor` of shape `(batch_size, number of static categorical features)`, *optional*):
+            Optional static categorical features for which the model will learn an embedding vector, which it will add to the values
+            of the time series.
+
+            Static categorical features are features which have the same value for all time steps (static over time).
+
+            A typical example of a static categorical feature is a time series ID.
+
+        feat_static_real (`torch.FloatTensor` of shape `(batch_size, number of static real features)`, *optional*):
+            Optional static real features which the model will add to the values of the time series.
+
+            Static real features are features which have the same value for all time steps (static over time).
+
+            A typical example of a static real feature is promotion information.
+
+        future_target (`torch.FloatTensor` of shape `(batch_size, prediction_length)`):
+            Future values of the time series, that serve as labels for the model. The `future_target` is what the Transformer
+            needs to learn to output, given the `past_target`.
+
+            See the demo notebook and code snippets for details.
+
+            Missing values need to be replaced with zeros.
+
+        future_time_feat (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`, *optional*):
+            Optional additional features, which the model internally will add to `future_target`. These could be things like "month of year",
+            "day of the month", etc. encoded as vectors (for instance as Fourier features). These could also be so-called "age" features,
+            which basically help the model know "at which point in life" a time-series is. Age features have small values for distant past
+            time steps and increase monotonically the more we approach the current time step.
+
+            These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT, where the position encodings
+            are learned from scratch internally as parameters of the model, the Time Series Transformer requires to provide additional features.
+
+            The Time Series Transformer only learns additional embeddings for `feat_static_cat`.
+
         head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -994,45 +1030,10 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             you can choose to directly pass an embedded representation. This is useful if you want more control over
             how to convert `input_ids` indices into associated vectors than the model's internal embedding lookup
             matrix.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, target_sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded
-            representation. If `past_key_values` is used, optionally only the last `decoder_inputs_embeds` have to be
-            input (see `past_key_values`). This is useful if you want more control over how to convert
-            `decoder_input_ids` indices into associated vectors than the model's internal embedding lookup matrix.
 
-            If `decoder_input_ids` and `decoder_inputs_embeds` are both unset, `decoder_inputs_embeds` takes the value
-            of `inputs_embeds`.
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-TIME_SERIES_TRANSFORMER_STANDALONE_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`ProphetNetTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.

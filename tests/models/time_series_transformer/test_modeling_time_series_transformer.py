@@ -14,13 +14,11 @@
 # limitations under the License.
 """ Testing suite for the PyTorch TimeSeriesTransformer model. """
 
-import copy
 import inspect
 import tempfile
 import unittest
 
-from transformers import MODEL_MAPPING, is_torch_available
-from transformers.models.auto import get_values
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
