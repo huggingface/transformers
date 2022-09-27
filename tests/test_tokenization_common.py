@@ -40,6 +40,7 @@ from transformers import (
     AutoTokenizer,
     BertTokenizer,
     BertTokenizerFast,
+    GPT2TokenizerFast,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
@@ -3884,9 +3885,27 @@ class TokenizerUtilTester(unittest.TestCase):
         # Download this model to make sure it's in the cache.
         _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
 
-        # Under the mock environment we get a 500 error when trying to reach the model.
+        # Under the mock environment we get a 500 error when trying to reach the tokenizer.
         with mock.patch("requests.request", return_value=response_mock) as mock_head:
             _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
+            # This check we did call the fake head request
+            mock_head.assert_called()
+
+    @require_tokenizers
+    def test_cached_files_are_used_when_internet_is_down_missing_files(self):
+        # A mock response for an HTTP head request to emulate server down
+        response_mock = mock.Mock()
+        response_mock.status_code = 500
+        response_mock.headers = {}
+        response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.json.return_value = {}
+
+        # Download this model to make sure it's in the cache.
+        _ = GPT2TokenizerFast.from_pretrained("gpt2")
+
+        # Under the mock environment we get a 500 error when trying to reach the tokenizer.
+        with mock.patch("requests.request", return_value=response_mock) as mock_head:
+            _ = GPT2TokenizerFast.from_pretrained("gpt2")
             # This check we did call the fake head request
             mock_head.assert_called()
 
