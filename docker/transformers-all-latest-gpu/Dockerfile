@@ -16,7 +16,7 @@ ARG INTEL_TORCH_EXT='1.11.0'
 ARG CUDA='cu113'
 
 RUN apt update
-RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs
+RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg git-lfs curl libssl-dev
 RUN git lfs install
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
@@ -53,3 +53,12 @@ RUN python3 -m pip install --no-cache-dir decord
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN cargo --help
+RUN python3 -m pip uninstall -y tokenizers
+RUN git clone https://github.com/huggingface/tokenizers
+RUN python3 -m pip install --no-cache-dir setuptools-rust
+RUN python3 -m pip install --no-cache-dir ./tokenizers/bindings/python

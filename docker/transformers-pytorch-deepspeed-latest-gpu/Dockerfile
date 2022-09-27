@@ -8,7 +8,7 @@ ARG PYTORCH='1.12.1'
 ARG CUDA='cu113'
 
 RUN apt -y update
-RUN apt install -y libaio-dev
+RUN apt install -y libaio-dev curl libssl-dev
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
 ARG REF=main
@@ -33,3 +33,12 @@ RUN DS_BUILD_CPU_ADAM=1 DS_BUILD_FUSED_ADAM=1 DS_BUILD_AIO=1 DS_BUILD_UTILS=1 py
 RUN cd transformers && python3 setup.py develop
 
 RUN python3 -c "from deepspeed.launcher.runner import main"
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN cargo --help
+RUN python3 -m pip uninstall -y tokenizers
+RUN git clone https://github.com/huggingface/tokenizers
+RUN python3 -m pip install --no-cache-dir setuptools-rust
+RUN python3 -m pip install --no-cache-dir ./tokenizers/bindings/python

@@ -4,7 +4,7 @@ LABEL maintainer="Hugging Face"
 ARG DEBIAN_FRONTEND=noninteractive
 
 RUN apt update
-RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg
+RUN apt install -y git libsndfile1-dev tesseract-ocr espeak-ng python3 python3-pip ffmpeg curl libssl-dev
 RUN python3 -m pip install --no-cache-dir --upgrade pip
 
 ARG REF=main
@@ -21,3 +21,12 @@ RUN python3 -m pip install -U "itsdangerous<2.1.0"
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+RUN cargo --help
+RUN python3 -m pip uninstall -y tokenizers
+RUN git clone https://github.com/huggingface/tokenizers
+RUN python3 -m pip install --no-cache-dir setuptools-rust
+RUN python3 -m pip install --no-cache-dir ./tokenizers/bindings/python
