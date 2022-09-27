@@ -21,7 +21,7 @@ from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 from ..detr import DetrConfig
 from ..swin import SwinConfig
-
+from ..deformable_detr import DeformableDetrConfig
 
 MASK2FORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "shivi/mask2former-segmentation-swin-large-ade": "https://huggingface.co/shivi/mask2former-segmentation-swin-large-ade/resolve/main/config.json",
@@ -97,11 +97,11 @@ class Mask2FormerConfig(PretrainedConfig):
     attribute_map = {"hidden_size": "mask_feature_size"}
     backbones_supported = ["swin"]
     decoders_supported = ["detr"]
-    pixel_decoders_supported = ["detr"] #since deformable_detr not available in transformers yet
+    pixel_decoders_supported = ["deformable_detr"] #since deformable_detr not available in transformers yet
 
     def __init__(
         self,
-        fpn_feature_size: int = 256,
+        feature_size: int = 256,
         mask_feature_size: int = 256,
         no_object_weight: float = 0.1,
         use_auxiliary_loss: bool = False,
@@ -117,7 +117,8 @@ class Mask2FormerConfig(PretrainedConfig):
         importance_sample_ratio: Optional[float] = 0.75,
         oversample_ratio: Optional[float] = 3.0,
         common_stride: Optional[int] = 4,
-        encoder_in_features: Optional[List[str]] = ['res2', 'res3', 'res5'],
+        encoder_in_features: Optional[List[str]] = ['res3', 'res4', 'res5'],
+        feature_strides: Optional[List[int]] = [8, 16, 32],
         pixel_decoder_config: Optional[Dict] = None,
         **kwargs,
     ):
@@ -156,7 +157,7 @@ class Mask2FormerConfig(PretrainedConfig):
 
         if pixel_decoder_config is None:
             
-            pixel_decoder_config = DetrConfig()
+            pixel_decoder_config = DeformableDetrConfig()
         else:
             pixel_decoder_type = pixel_decoder_config.pop("model_type")
             if pixel_decoder_type not in self.pixel_decoders_supported:
@@ -169,7 +170,7 @@ class Mask2FormerConfig(PretrainedConfig):
         self.backbone_config = backbone_config
         self.decoder_config = decoder_config
         # main feature dimension for the model
-        self.fpn_feature_size = fpn_feature_size
+        self.feature_size = feature_size
         self.mask_feature_size = mask_feature_size
         # initializer
         self.init_std = init_std
@@ -184,8 +185,10 @@ class Mask2FormerConfig(PretrainedConfig):
         self.train_num_points = train_num_points
         self.importance_sample_ratio = importance_sample_ratio
         self.oversample_ratio = oversample_ratio
+        ##Pixel Decoder Config
         self.common_stride = common_stride
         self.encoder_in_features = encoder_in_features
+        self.feature_strides = feature_strides
         self.pixel_decoder_config = pixel_decoder_config
 
         self.num_attention_heads = self.decoder_config.encoder_attention_heads
