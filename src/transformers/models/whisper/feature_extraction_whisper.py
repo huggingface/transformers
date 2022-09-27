@@ -30,7 +30,6 @@ from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -67,7 +66,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self,
         feature_size=80,
         sampling_rate=16000,
-        num_mel_bins=80,
         hop_length=160,
         chunk_length=30,
         n_fft=400,
@@ -75,7 +73,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         **kwargs
     ):
         super().__init__(feature_size=feature_size, sampling_rate=sampling_rate, padding_value=padding_value, **kwargs)
-        self.num_mel_bins = num_mel_bins
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.chunk_length = chunk_length
@@ -83,7 +80,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self.n_samples = chunk_length * sampling_rate
         self.nb_max_frame = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
-        self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=num_mel_bins)
+        self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
 
     def get_mel_filters(self, sr, n_fft, n_mels=128, dtype=np.float32):
         # Initialize the weights
@@ -207,18 +204,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 The value that is used to fill the padding values / vectors.
         """
 
-        if sampling_rate is not None:
-            if sampling_rate != self.sampling_rate:
-                raise ValueError(
-                    f"The model corresponding to this feature extractor: {self} was trained using a sampling rate of"
-                    f" {self.sampling_rate}. Please make sure that the provided `raw_speech` input was sampled with"
-                    f" {self.sampling_rate} and not {sampling_rate}."
-                )
-        else:
-            logger.warning(
-                "It is strongly recommended to pass the `sampling_rate` argument to this function. "
-                "Failing to do so can result in silent errors that might be hard to debug."
-            )
 
         is_batched = bool(
             isinstance(raw_speech, (list, tuple))
@@ -251,7 +236,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         )
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
-            
+
         input_features = [self._extract_fbank_features(waveform) for waveform in input_features[0]]
 
         if isinstance(input_features[0], torch.Tensor) or isinstance(input_features[0], List):
