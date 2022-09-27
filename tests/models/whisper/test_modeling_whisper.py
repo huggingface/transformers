@@ -340,7 +340,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
     def test_generate_with_head_masking(self):
         pass
-    
+
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         config.max_target_positions = 400
@@ -902,6 +902,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         set_seed(0)
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model.to(torch_device)
+        model.config.decoder_start_token_id = 50257
 
         input_speech = self._load_datasamples(1)
         feaure_extractor = WhisperFeatureExtractor()
@@ -909,16 +910,16 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = feaure_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(torch_device)
 
         tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny.en")
-        generated_ids = model.generate(input_features, num_beams=5)
+        generated_ids = model.generate(input_features, num_beams=5, forced_bos_token_id=50362)
         transcript = tokenizer.batch_decode(generated_ids)[0]
 
         EXPECTED_TRANSCRIPT = (
-            "<|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>  Mr. Quilter is the apostle of the middle"
-            " classes and we are glad"
+            "<|startoftranscript|> <|notimestamps|>  Mr. Quilter is the apostle of the middle"
+            " classes, and we are glad to"
         )
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-    @slow
+    # @slow
     def test_generation(self):
 
         torch_device = "cpu"
@@ -933,7 +934,9 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = feaure_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(torch_device)
 
         tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
-        generated_ids = model.generate(input_features, num_beams=5, decoder_input_ids=torch.tensor([[50257, 50258, 50362]]))
+        generated_ids = model.generate(
+            input_features, num_beams=5, decoder_input_ids=torch.tensor([[50258, 50259]])
+        )
         transcript = tokenizer.batch_decode(generated_ids)[0]
 
         EXPECTED_TRANSCRIPT = (
@@ -944,7 +947,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_generation(self):
-
+        # TODO last remaining test, it does not work 
         torch_device = "cpu"
         set_seed(0)
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
@@ -959,23 +962,22 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         logits_processor = LogitsProcessorList(
             [
-                SuppressBlank(tokenizer.encode(" "), tokenizer.eos_token_id),
+                SuppressBlank(tokenizer.encode(" "), 50256),
                 SuppressTokens(tokenizer._get_suppress_tokens("-1")),
             ]
         )
 
+        decoder_input_ids = torch.tensor([[50258,50259]]).long()
         generated_ids = model.generate(
             input_features,
             do_sample=False,
             logits_processor=logits_processor,
-            decoder_input_ids=torch.tensor([[50257, 50362]]),
-            attention_mask=None,
-            decoder_attention_mask=None,
+            decoder_input_ids=decoder_input_ids,
         )
         transcript = tokenizer.batch_decode(generated_ids)
 
         EXPECTED_TRANSCRIPT = (
-            "<|startoftranscript|> <|en|> <|transcribe|> <|notimestamps|>  Mr. Quilter is the apostle of the middle"
+            "<|startoftranscript|> <|transcribe|> <|notimestamps|>  Mr. Quilter is the apostle of the middle"
             " classes and we are glad"
         )
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
