@@ -115,7 +115,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
     def test_tokenizer_equivalence(self):
         text = "다람쥐 헌 쳇바퀴에 타고파"
-        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny",language="ko")
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny", language="ko")
         gpt2_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny.en")
 
         gpt2_tokens = gpt2_tokenizer.encode(text)
@@ -159,7 +159,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
         self.assertEqual(text, multilingual_tokenizer.decode(multilingual_tokens))
 
-        transcript =  multilingual_tokenizer.decode(multilingual_tokens,skip_special_tokens=True)
+        transcript = multilingual_tokenizer.decode(multilingual_tokens, skip_special_tokens = True)
 
         EXPECTED_JAP = "  Hey! How are you feeling? J'ai l'impression que 郷さん est prêt "
         self.assertListEqual(transcript, EXPECTED_JAP)
