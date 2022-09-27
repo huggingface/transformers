@@ -19,7 +19,7 @@ from transformers import WhisperTokenizer, is_speech_available
 from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 
 from .test_feature_extraction_whisper import floats_list
-
+import tempfile
 
 if is_speech_available():
     from transformers import WhisperFeatureExtractor, WhisperProcessor
@@ -30,7 +30,8 @@ if is_speech_available():
 @require_sentencepiece
 class WhisperProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "ArthurZ/whisper-small.eng"
+        self.checkpoint = "openai/whisper-small.en"
+        self.tmpdirname = tempfile.mkdtemp()
 
     def get_tokenizer(self, **kwargs):
         return WhisperTokenizer.from_pretrained(self.checkpoint, **kwargs)
