@@ -47,7 +47,7 @@ def get_videomae_config(model_name):
         config.use_mean_pooling = False
 
     if "finetuned" in model_name:
-        repo_id = "datasets/huggingface/label-files"
+        repo_id = "huggingface/label-files"
         if "kinetics" in model_name:
             config.num_labels = 400
             filename = "kinetics400-id2label.json"
@@ -56,7 +56,7 @@ def get_videomae_config(model_name):
             filename = "something-something-v2-id2label.json"
         else:
             raise ValueError("Model name should either contain 'kinetics' or 'ssv2' in case it's fine-tuned.")
-        id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+        id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
         id2label = {int(k): v for k, v in id2label.items()}
         config.id2label = id2label
         config.label2id = {v: k for k, v in id2label.items()}
@@ -145,7 +145,9 @@ def convert_state_dict(orig_state_dict, config):
 # We will verify our results on a video of eating spaghetti
 # Frame indices used: [164 168 172 176 181 185 189 193 198 202 206 210 215 219 223 227]
 def prepare_video():
-    file = hf_hub_download(repo_id="datasets/hf-internal-testing/spaghetti-video", filename="eating_spaghetti.npy")
+    file = hf_hub_download(
+        repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti.npy", repo_type="dataset"
+    )
     video = np.load(file)
     return list(video)
 
