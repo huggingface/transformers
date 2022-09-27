@@ -367,9 +367,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return len(self.encoder)
 
-    @property
-    def tgt_lang(self) -> str:
-        return self._tgt_lang
 
     def bpe(self, token):
         if token in self.cache:
