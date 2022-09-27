@@ -165,11 +165,7 @@ class TrOCRProcessorWithLM(ProcessorMixin):
 
     @staticmethod
     def get_missing_alphabet_tokens(decoder, tokenizer):
-        from pyctcdecode.alphabet import (
-            BLANK_TOKEN_PTN,
-            SPECIAL_TOKEN_PTN,
-            UNK_TOKEN_PTN,
-        )
+        from pyctcdecode.alphabet import BLANK_TOKEN_PTN, SPECIAL_TOKEN_PTN, UNK_TOKEN_PTN
 
         # we need to make sure that all of the tokenizer's except the special tokens
         # are present in the decoder's alphabet. Retrieve missing alphabet token
