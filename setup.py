@@ -160,7 +160,7 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "timm",
-    "tokenizers>=0.11.1,!=0.11.3,<0.14",
+    "tokenizers",
     "torch>=1.7,!=1.12.0",
     "torchaudio",
     "pyctcdecode>=0.3.0",
@@ -333,8 +333,7 @@ extras["dev-torch"] = (
     extras["testing"]
     + extras["torch"]
     + extras["sentencepiece"]
-    + extras["tokenizers"]
-    + extras["torch-speech"]
+    + extras["tokenizers"] + extras["torch-speech"]
     + extras["vision"]
     + extras["integrations"]
     + extras["timm"]
