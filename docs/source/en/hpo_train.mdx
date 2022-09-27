@@ -16,7 +16,7 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 ## Hyperparameter Search backend
 
 [`Trainer`] supports four hyperparameter search backends currently:
-[Optuna](https://optuna.org/),[Sigopt](https://sigopt.com/),[Raytune](https://docs.ray.io/en/latest/tune/index.html),[wandb](https://wandb.ai/site/sweeps).
+[optuna](https://optuna.org/), [sigopt](https://sigopt.com/), [raytune](https://docs.ray.io/en/latest/tune/index.html) and [wandb](https://wandb.ai/site/sweeps).
 
 you should install them before using them as the hyperparameter search backend
 ```bash
@@ -60,7 +60,7 @@ For raytune, see raytune [object_parameter](https://docs.ray.io/en/latest/tune/a
 ...     }
 ```
 
-For wandb, see wandb [object_parameter](https://docs.wandb.ai/guides/sweeps/configuration),it's like following:
+For wandb, see wandb [object_parameter](https://docs.wandb.ai/guides/sweeps/configuration), it's like following:
 
 ```py
 >>> def wandb_hp_space(trial):
@@ -74,7 +74,7 @@ For wandb, see wandb [object_parameter](https://docs.wandb.ai/guides/sweeps/conf
 ...     }
 ```
 
-Define mode_init callback if you need to re-initialize the model per trial,and pass it when `Trainer Object` is created, take following as example
+Define a `model_init` function and pass it to the [`Trainer`], as an example:
 ```py
 >>> def model_init(trial):
 ...     return AutoModelForSequenceClassification.from_pretrained(
@@ -87,11 +87,11 @@ Define mode_init callback if you need to re-initialize the model per trial,and p
 ...     )
 ```
 
-Create a `Trainer object` with your model, model_init function, training arguments, training and test datasets, and evaluation function:
+Create a [`Trainer`] with your `model_init` function, training arguments, training and test datasets, and evaluation function:
 
 ```py
 >>> trainer = Trainer(
-...     model=model,
+...     model=None,
 ...     args=training_args,
 ...     train_dataset=small_train_dataset,
 ...     eval_dataset=small_eval_dataset,
@@ -117,4 +117,4 @@ You could define your own compute_objective function, if not defined, the defaul
 ```
 
 ## Hyperparameter search For DDP refinetune
-Currently, Hyperparameter search for DDP is enabled for optuna and sigopt. Only rank0 will generate the search trial and pass the argument to other ranks.
+Currently, Hyperparameter search for DDP is enabled for optuna and sigopt. Only the rank-zero process will generate the search trial and pass the argument to other ranks.
