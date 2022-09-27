@@ -20,7 +20,14 @@ from typing import Callable, Dict, List, Optional, Tuple, Union
 
 import torch
 from torch import nn
-from torch.distributions import AffineTransform, Distribution, StudentT, TransformedDistribution
+from torch.distributions import (
+    AffineTransform,
+    Distribution,
+    NegativeBinomial,
+    Normal,
+    StudentT,
+    TransformedDistribution,
+)
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, ModelOutput
@@ -98,23 +105,10 @@ class LambdaLayer(nn.Module):
         return self.function(x, *args)
 
 
-class Output:
+class DistributionOutput:
+    distr_cls: type
     in_features: int
     args_dim: Dict[str, int]
-
-    def get_param_proj(self, in_features: int) -> nn.Module:
-        return ParameterProjection(
-            in_features=in_features,
-            args_dim=self.args_dim,
-            domain_map=LambdaLayer(self.domain_map),
-        )
-
-    def domain_map(self, *args: torch.Tensor):
-        raise NotImplementedError()
-
-
-class DistributionOutput(Output):
-    distr_cls: type
 
     def __init__(self) -> None:
         pass
@@ -157,6 +151,16 @@ class DistributionOutput(Output):
         """
         return 0.0
 
+    def get_param_proj(self, in_features: int) -> nn.Module:
+        r"""
+        Return the parameter projection layer that maps the input to the appropriate parameters of the distribution.
+        """
+        return ParameterProjection(
+            in_features=in_features,
+            args_dim=self.args_dim,
+            domain_map=LambdaLayer(self.domain_map),
+        )
+
     def domain_map(self, *args: torch.Tensor):
         r"""
         Converts arguments to the right shape and domain. The domain depends on the type of distribution, while the
@@ -165,6 +169,14 @@ class DistributionOutput(Output):
         """
         raise NotImplementedError()
 
+    @classmethod
+    def squareplus(cls, x: torch.Tensor) -> torch.Tensor:
+        r"""
+        Helper to map inputs to the positive orthant by applying the square-plus operation. Reference:
+        https://twitter.com/jon_barron/status/1387167648669048833
+        """
+        return (x + torch.sqrt(torch.square(x) + 4.0)) / 2.0
+
 
 class StudentTOutput(DistributionOutput):
     args_dim: Dict[str, int] = {"df": 1, "loc": 1, "scale": 1}
@@ -172,9 +184,57 @@ class StudentTOutput(DistributionOutput):
 
     @classmethod
     def domain_map(cls, df: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor):
-        scale = nn.functional.softplus(scale)
-        df = 2.0 + nn.functional.softplus(df)
+        scale = cls.squareplus(scale)
+        df = 2.0 + cls.squareplus(df)
         return df.squeeze(-1), loc.squeeze(-1), scale.squeeze(-1)
+
+    @property
+    def event_shape(self) -> Tuple:
+        return ()
+
+
+class NormalOutput(DistributionOutput):
+    args_dim: Dict[str, int] = {"loc": 1, "scale": 1}
+    distr_cls: type = Normal
+
+    @classmethod
+    def domain_map(cls, loc: torch.Tensor, scale: torch.Tensor):
+        scale = cls.squareplus(scale)
+        return loc.squeeze(-1), scale.squeeze(-1)
+
+    @property
+    def event_shape(self) -> Tuple:
+        return ()
+
+
+class NegativeBinomialOutput(DistributionOutput):
+    args_dim: Dict[str, int] = {"total_count": 1, "logits": 1}
+    distr_cls: type = NegativeBinomial
+
+    @classmethod
+    def domain_map(cls, total_count: torch.Tensor, logits: torch.Tensor):
+        total_count = cls.squareplus(total_count)
+        return total_count.squeeze(-1), logits.squeeze(-1)
+
+    def _base_distribution(self, distr_args) -> Distribution:
+        total_count, logits = distr_args
+        return self.distr_cls(total_count=total_count, logits=logits)
+
+    # Overwrites the parent class method. We cannot scale using the affine
+    # transformation since negative binomial should return integers. Instead
+    # we scale the parameters.
+    def distribution(
+        self,
+        distr_args,
+        loc: Optional[torch.Tensor] = None,
+        scale: Optional[torch.Tensor] = None,
+    ) -> Distribution:
+        total_count, logits = distr_args
+
+        if scale is not None:
+            logits += scale.log()
+
+        return NegativeBinomial(total_count=total_count, logits=logits)
 
     @property
     def event_shape(self) -> Tuple:
@@ -359,7 +419,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 @dataclass
 class Seq2SeqTSModelOutput(ModelOutput):
     """
-    Base class for model encoder's outputs that also contains : pre-computed hidden states that can speed up sequential
+    Base class for model encoder's outputs that also contains pre-computed hidden states that can speed up sequential
     decoding.
 
     Args:
@@ -405,8 +465,11 @@ class Seq2SeqTSModelOutput(ModelOutput):
 
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
-        scale
-        static_features
+        scale: (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+            Scaling values of each time series' context window which is used to give the model inputs of the same
+            magnitude and then used to rescale to the original scale.
+        static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
+            Static features of each time series' in a batch which are copied to the covariates at inference time.
     """
 
     last_hidden_state: torch.FloatTensor = None
@@ -423,6 +486,59 @@ class Seq2SeqTSModelOutput(ModelOutput):
 
 @dataclass
 class Seq2SeqTSPredictionOutput(ModelOutput):
+    """
+    Base class for model's predictions outputs that also contain the loss as well parameters of the chosen
+    distribution.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when a `future_target` is provided):
+            Distributional loss.
+        params (`torch.FloatTensor` of shape `(batch_size, num_samples, num_params)`):
+            Parameters of the chosen distribution.
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+        decoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the decoder at the output of each layer plus the initial embedding outputs.
+        decoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the decoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        cross_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the decoder's cross-attention layer, after the attention softmax, used to compute the
+            weighted average in the cross-attention heads.
+        encoder_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder of the model.
+        encoder_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the encoder at the output of each layer plus the initial embedding outputs.
+        encoder_attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
+            self-attention heads.
+        scale: (`torch.FloatTensor` of shape `(batch_size,)`, *optional*):
+            Scaling values of each time series' context window which is used to give the model inputs of the same
+            magnitude and then used to rescale to the original scale.
+        static_features: (`torch.FloatTensor` of shape `(batch_size, feature size)`, *optional*):
+            Static features of each time series' in a batch which are copied to the covariates at inference time.
+    """
+
     loss: Optional[torch.FloatTensor] = None
     params: Optional[Tuple[torch.FloatTensor]] = None
     past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None
@@ -1408,9 +1524,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         features = torch.cat((expanded_static_feat, time_feat), dim=-1)
 
         # sequence = torch.cat((prior_input, inputs), dim=1)
-        lagged_sequence = self.get_lagged_subsequences(
-            sequence=inputs, subsequences_length=subsequences_length
-        )
+        lagged_sequence = self.get_lagged_subsequences(sequence=inputs, subsequences_length=subsequences_length)
 
         lags_shape = lagged_sequence.shape
         reshaped_lagged_sequence = lagged_sequence.reshape(lags_shape[0], lags_shape[1], -1)
@@ -1569,8 +1683,15 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         self.model = TimeSeriesTransformerModel(config)
         if config.distribution_output == "student_t":
             self.distribution_output = StudentTOutput()
-            self.param_proj = self.distribution_output.get_param_proj(self.model.config.d_model)
-            self.target_shape = self.distribution_output.event_shape
+        elif config.distribution_output == "normal":
+            self.distribution_output = NormalOutput()
+        elif config.distribution_output == "negative_binomial":
+            self.distribution_output = NegativeBinomialOutput()
+        else:
+            raise ValueError(f"Unknown distribution output {config.distribution_output}")
+
+        self.param_proj = self.distribution_output.get_param_proj(self.model.config.d_model)
+        self.target_shape = self.distribution_output.event_shape
 
         if config.loss == "nll":
             self.loss = NegativeLogLikelihood()
