@@ -1456,10 +1456,14 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         sequence_length = sequence.shape[1]
         indices = [lag - shift for lag in self.config.lags_seq]
 
-        assert max(indices) + subsequences_length <= sequence_length, (
-            f"lags cannot go further than history length, found lag {max(indices)} "
-            f"while history length is only {sequence_length}"
-        )
+        try:
+            assert max(indices) + subsequences_length <= sequence_length, (
+                f"lags cannot go further than history length, found lag {max(indices)} "
+                f"while history length is only {sequence_length}"
+            )
+        except AssertionError as e:
+            e.args += (max(indices), sequence_length)
+            raise
 
         lagged_values = []
         for lag_index in indices:
