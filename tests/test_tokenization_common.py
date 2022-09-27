@@ -3890,7 +3890,7 @@ class TokenizerUtilTester(unittest.TestCase):
             _ = BertTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert")
             # This check we did call the fake head request
             mock_head.assert_called()
-    
+
     @require_tokenizers
     def test_cached_files_are_used_when_internet_is_down_missing_files(self):
         # A mock response for an HTTP head request to emulate server down
