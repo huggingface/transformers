@@ -148,7 +148,7 @@ def rename_key(dct, old, new):
 def convert_vit_msn_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     config = ViTMSNConfig()
     config.num_labels = 1000
-    
+
     repo_id = "datasets/huggingface/label-files"
     filename = "imagenet-1k-id2label.json"
     id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
