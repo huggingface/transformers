@@ -45,7 +45,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.23.0.dev0")
+# check_min_version("4.23.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -477,21 +477,24 @@ def main():
     # Validation preprocessing
     def preprocess_validation_function(examples):
         inputs, targets = preprocess_squad_batch(examples, question_column, context_column, answer_column)
-
+    
         model_inputs = tokenizer(
             inputs,
             max_length=max_seq_length,
             padding=padding,
             truncation=True,
-            return_overflowing_tokens=True,
             return_offsets_mapping=True,
+            # return_overflowing_tokens=True,
         )
-        # Tokenize targets with the `text_target` keyword argument
-        labels = tokenizer(text_target=targets, max_length=max_answer_length, padding=padding, truncation=True)
+        
+        # Setup the tokenizer for targets
+        with tokenizer.as_target_tokenizer():
+            labels = tokenizer(targets, max_length=max_answer_length, padding=padding, truncation=True)
 
         # Since one example might give us several features if it has a long context, we need a map from a feature to
         # its corresponding example. This key gives us just that.
-        sample_mapping = model_inputs.pop("overflow_to_sample_mapping")
+        # sample_mapping = model_inputs.pop("overflow_to_sample_mapping")
+        sample_mapping = list(range(len(model_inputs["input_ids"])))
 
         # For evaluation, we will need to convert our predictions to substrings of the context, so we keep the
         # corresponding example_id and we will store the offset mappings.
@@ -510,6 +513,7 @@ def main():
             ]
 
         model_inputs["labels"] = labels["input_ids"]
+
         return model_inputs
 
     if training_args.do_train:
