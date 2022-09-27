@@ -491,7 +491,7 @@ class Seq2SeqTSPredictionOutput(ModelOutput):
     distribution.
 
     Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when a `future_target` is provided):
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when a `future_values` is provided):
             Distributional loss.
         params (`torch.FloatTensor` of shape `(batch_size, num_samples, num_params)`):
             Parameters of the chosen distribution.
@@ -895,7 +895,7 @@ class TimeSeriesTransformerDecoderLayer(nn.Module):
 class TimeSeriesTransformerPreTrainedModel(PreTrainedModel):
     config_class = TimeSeriesTransformerConfig
     base_model_prefix = "model"
-    main_input_name = "past_target"
+    main_input_name = "past_values"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
@@ -936,7 +936,7 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             Past values of the time series, that serve as context in order to predict the future. These values may contain lags,
             i.e. additional values from the past which are added in order to serve as "extra context". The `past_values` is what
             the Transformer encoder gets as input (with optional additional features, such as `static_categorical_features`, `static_real_features`,
-            `past_time_featuresures`).
+            `past_time_featuresuresures`).
 
             See the demo notebook and code snippets for details.
 
@@ -948,7 +948,7 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             - 1 for values that are **observed**,
             - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
-        past_time_featuresures (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`, *optional*):
+        past_time_featuresuresures (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`, *optional*):
             Optional time features, which the model internally will add to `past_values`. These could be things like "month of year",
             "day of the month", etc. encoded as vectors (for instance as Fourier features). These could also be so-called "age" features,
             which basically help the model know "at which point in life" a time-series is. Age features have small values for distant past
@@ -982,7 +982,7 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
 
             Missing values need to be replaced with zeros.
 
-        future_time_featuresures (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`, *optional*):
+        future_time_featuresuresures (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`, *optional*):
             Optional time features, which the model internally will add to `future_values`. These could be things like "month of year",
             "day of the month", etc. encoded as vectors (for instance as Fourier features). These could also be so-called "age" features,
             which basically help the model know "at which point in life" a time-series is. Age features have small values for distant past
@@ -1471,53 +1471,53 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
     def create_network_inputs(
         self,
-        feat_static_cat: torch.Tensor,
-        feat_static_real: torch.Tensor,
-        past_time_feat: torch.Tensor,
-        past_target: torch.Tensor,
-        past_observed_values: torch.Tensor,
-        future_time_feat: Optional[torch.Tensor] = None,
-        future_target: Optional[torch.Tensor] = None,
+        static_categorical_features: torch.Tensor,
+        static_real_features: torch.Tensor,
+        past_time_features: torch.Tensor,
+        past_values: torch.Tensor,
+        past_observed_mask: torch.Tensor,
+        future_time_features: Optional[torch.Tensor] = None,
+        future_values: Optional[torch.Tensor] = None,
     ):
         # time feature
         time_feat = (
             torch.cat(
                 (
-                    past_time_feat[:, self._past_length - self.config.context_length :, ...],
-                    future_time_feat,
+                    past_time_features[:, self._past_length - self.config.context_length :, ...],
+                    future_time_features,
                 ),
                 dim=1,
             )
-            if future_target is not None
-            else past_time_feat[:, self._past_length - self.config.context_length :, ...]
+            if future_values is not None
+            else past_time_features[:, self._past_length - self.config.context_length :, ...]
         )
 
         # target
-        context = past_target[:, -self.config.context_length :]
-        observed_context = past_observed_values[:, -self.config.context_length :]
+        context = past_values[:, -self.config.context_length :]
+        observed_context = past_observed_mask[:, -self.config.context_length :]
         _, scale = self.scaler(context, observed_context)
 
         inputs = (
-            torch.cat((past_target, future_target), dim=1) / scale
-            if future_target is not None
-            else past_target / scale
+            torch.cat((past_values, future_values), dim=1) / scale
+            if future_values is not None
+            else past_values / scale
         )
 
         inputs_length = (
-            self._past_length + self.config.prediction_length if future_target is not None else self._past_length
+            self._past_length + self.config.prediction_length if future_values is not None else self._past_length
         )
         assert inputs.shape[1] == inputs_length
 
         subsequences_length = (
             self.config.context_length + self.config.prediction_length
-            if future_target is not None
+            if future_values is not None
             else self.config.context_length
         )
 
         # embeddings
-        embedded_cat = self.embedder(feat_static_cat)
+        embedded_cat = self.embedder(static_categorical_features)
         static_feat = torch.cat(
-            (embedded_cat, feat_static_real, scale.log()),
+            (embedded_cat, static_real_features, scale.log()),
             dim=1,
         )
         expanded_static_feat = static_feat.unsqueeze(1).expand(-1, time_feat.shape[1], -1)
@@ -1554,13 +1554,13 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        past_target: torch.Tensor,
-        feat_static_cat: torch.Tensor,
-        feat_static_real: torch.Tensor,
-        past_time_feat: torch.Tensor,
-        past_observed_values: torch.Tensor,
-        future_time_feat: Optional[torch.Tensor] = None,
-        future_target: Optional[torch.Tensor] = None,
+        past_values: torch.Tensor,
+        static_categorical_features: torch.Tensor,
+        static_real_features: torch.Tensor,
+        past_time_features: torch.Tensor,
+        past_observed_mask: torch.Tensor,
+        future_time_features: Optional[torch.Tensor] = None,
+        future_values: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -1594,15 +1594,15 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         >>> past_length = context_length + max(lags_seq)
 
         >>> # encoder inputs
-        >>> inputs["feat_static_cat"] = ids_tensor([batch_size, 1], cardinality)
-        >>> inputs["feat_static_real"] = torch.randn([batch_size, 1])
-        >>> inputs["past_time_feat"] = torch.randn([batch_size, past_length, num_time_features])
-        >>> inputs["past_target"] = torch.randn([batch_size, past_length])
-        >>> inputs["past_observed_values"] = torch.randn([batch_size, past_length])
+        >>> inputs["static_categorical_features"] = ids_tensor([batch_size, 1], cardinality)
+        >>> inputs["static_real_features"] = torch.randn([batch_size, 1])
+        >>> inputs["past_time_features"] = torch.randn([batch_size, past_length, num_time_features])
+        >>> inputs["past_values"] = torch.randn([batch_size, past_length])
+        >>> inputs["past_observed_mask"] = torch.randn([batch_size, past_length])
 
         >>> # decoder inputs
-        >>> inputs["future_time_feat"] = torch.randn([batch_size, prediction_length, num_time_features])
-        >>> inputs["future_target"] = torch.randn([batch_size, prediction_length])
+        >>> inputs["future_time_features"] = torch.randn([batch_size, prediction_length, num_time_features])
+        >>> inputs["future_values"] = torch.randn([batch_size, prediction_length])
 
         >>> outputs = model(**inputs)
         >>> last_hidden_states = outputs.last_hidden_state
@@ -1615,13 +1615,13 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_inputs, scale, static_feat = self.create_network_inputs(
-            feat_static_cat=feat_static_cat,
-            feat_static_real=feat_static_real,
-            past_time_feat=past_time_feat,
-            past_target=past_target,
-            past_observed_values=past_observed_values,
-            future_time_feat=future_time_feat,
-            future_target=future_target,
+            static_categorical_features=static_categorical_features,
+            static_real_features=static_real_features,
+            past_time_features=past_time_features,
+            past_values=past_values,
+            past_observed_mask=past_observed_mask,
+            future_time_features=future_time_features,
+            future_values=future_values,
         )
 
         if encoder_outputs is None:
@@ -1720,14 +1720,14 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        past_target: torch.Tensor,
-        feat_static_cat: torch.Tensor,
-        feat_static_real: torch.Tensor,
-        past_time_feat: torch.Tensor,
-        past_observed_values: torch.Tensor,
-        future_time_feat: Optional[torch.Tensor] = None,
-        future_target: Optional[torch.Tensor] = None,
-        future_observed_values: Optional[torch.Tensor] = None,
+        past_values: torch.Tensor,
+        static_categorical_features: torch.Tensor,
+        static_real_features: torch.Tensor,
+        past_time_features: torch.Tensor,
+        past_observed_mask: torch.Tensor,
+        future_time_features: Optional[torch.Tensor] = None,
+        future_values: Optional[torch.Tensor] = None,
+        future_observed_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1755,32 +1755,32 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         >>> past_length = context_length + max(lags_seq)
 
         >>> # encoder inputs
-        >>> inputs["feat_static_cat"] = ids_tensor([batch_size, 1], cardinality)
-        >>> inputs["feat_static_real"] = torch.randn([batch_size, 1])
-        >>> inputs["past_time_feat"] = torch.randn([batch_size, past_length, num_time_features])
-        >>> inputs["past_target"] = torch.randn([batch_size, past_length])
-        >>> inputs["past_observed_values"] = torch.randn([batch_size, past_length])
+        >>> inputs["static_categorical_features"] = ids_tensor([batch_size, 1], cardinality)
+        >>> inputs["static_real_features"] = torch.randn([batch_size, 1])
+        >>> inputs["past_time_features"] = torch.randn([batch_size, past_length, num_time_features])
+        >>> inputs["past_values"] = torch.randn([batch_size, past_length])
+        >>> inputs["past_observed_mask"] = torch.randn([batch_size, past_length])
 
         >>> # decoder inputs
-        >>> inputs["future_time_feat"] = torch.randn([batch_size, prediction_length, num_time_features])
-        >>> inputs["future_target"] = torch.randn([batch_size, prediction_length])
+        >>> inputs["future_time_features"] = torch.randn([batch_size, prediction_length, num_time_features])
+        >>> inputs["future_values"] = torch.randn([batch_size, prediction_length])
 
         >>> outputs = model(**inputs)
         >>> loss = outputs.loss
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        if future_target is not None:
+        if future_values is not None:
             use_cache = False
 
         outputs = self.model(
-            past_target=past_target,
-            feat_static_cat=feat_static_cat,
-            feat_static_real=feat_static_real,
-            past_time_feat=past_time_feat,
-            past_observed_values=past_observed_values,
-            future_time_feat=future_time_feat,
-            future_target=future_target,
+            past_values=past_values,
+            static_categorical_features=static_categorical_features,
+            static_real_features=static_real_features,
+            past_time_features=past_time_features,
+            past_observed_mask=past_observed_mask,
+            future_time_features=future_time_features,
+            future_values=future_values,
             encoder_outputs=encoder_outputs,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1790,19 +1790,19 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
 
         prediction_loss = None
         params = None
-        if future_target is not None:
+        if future_values is not None:
             params = self.output_params(outputs[0])  # outputs.last_hidden_state
             distr = self.output_distribution(params, outputs[-2])  # outputs.scale
 
-            loss = self.loss(distr, future_target)
+            loss = self.loss(distr, future_values)
 
-            if future_observed_values is None:
-                future_observed_values = torch.ones_like(future_target)
+            if future_observed_mask is None:
+                future_observed_mask = torch.ones_like(future_values)
 
             if len(self.target_shape) == 0:
-                loss_weights = future_observed_values
+                loss_weights = future_observed_mask
             else:
-                loss_weights = future_observed_values.min(dim=-1, keepdim=False)
+                loss_weights = future_observed_mask.min(dim=-1, keepdim=False)
 
             prediction_loss = weighted_average(loss, weights=loss_weights)
 
@@ -1827,23 +1827,23 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
     @torch.no_grad()
     def generate(
         self,
-        feat_static_cat: torch.Tensor,
-        feat_static_real: torch.Tensor,
-        past_time_feat: torch.Tensor,
-        past_target: torch.Tensor,
-        past_observed_values: torch.Tensor,
-        future_time_feat: Optional[torch.Tensor],
+        static_categorical_features: torch.Tensor,
+        static_real_features: torch.Tensor,
+        past_time_features: torch.Tensor,
+        past_values: torch.Tensor,
+        past_observed_mask: torch.Tensor,
+        future_time_features: Optional[torch.Tensor],
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> torch.Tensor:
         outputs = self(
-            feat_static_cat=feat_static_cat,
-            feat_static_real=feat_static_real,
-            past_time_feat=past_time_feat,
-            past_target=past_target,
-            past_observed_values=past_observed_values,
-            future_time_feat=future_time_feat,
-            future_target=None,
+            static_categorical_features=static_categorical_features,
+            static_real_features=static_real_features,
+            past_time_features=past_time_features,
+            past_values=past_values,
+            past_observed_mask=past_observed_mask,
+            future_time_features=future_time_features,
+            future_values=None,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
@@ -1858,10 +1858,10 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         num_parallel_samples = self.config.num_parallel_samples
         repeated_scale = scale.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
-        repeated_past_target = past_target.repeat_interleave(repeats=num_parallel_samples, dim=0) / repeated_scale
+        repeated_past_values = past_values.repeat_interleave(repeats=num_parallel_samples, dim=0) / repeated_scale
 
-        expanded_static_feat = static_feat.unsqueeze(1).expand(-1, future_time_feat.shape[1], -1)
-        features = torch.cat((expanded_static_feat, future_time_feat), dim=-1)
+        expanded_static_feat = static_feat.unsqueeze(1).expand(-1, future_time_features.shape[1], -1)
+        features = torch.cat((expanded_static_feat, future_time_features), dim=-1)
         repeated_features = features.repeat_interleave(repeats=num_parallel_samples, dim=0)
 
         repeated_enc_last_hidden = enc_last_hidden.repeat_interleave(repeats=num_parallel_samples, dim=0)
@@ -1871,7 +1871,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         # greedy decoding
         for k in range(self.config.prediction_length):
             lagged_sequence = self.model.get_lagged_subsequences(
-                sequence=repeated_past_target,
+                sequence=repeated_past_values,
                 subsequences_length=1 + k,
                 shift=1,
             )
@@ -1888,7 +1888,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             distr = self.output_distribution(params, scale=repeated_scale)
             next_sample = distr.sample()
 
-            repeated_past_target = torch.cat((repeated_past_target, next_sample / repeated_scale), dim=1)
+            repeated_past_values = torch.cat((repeated_past_values, next_sample / repeated_scale), dim=1)
             future_samples.append(next_sample)
 
         concat_future_samples = torch.cat(future_samples, dim=1)

@@ -84,16 +84,16 @@ class TimeSeriesTransformerModelTester:
     def prepare_config_and_inputs(self):
         _past_length = self.context_length + max(self.lags_seq)
 
-        feat_static_cat = ids_tensor([self.batch_size, 1], self.cardinality)
-        feat_static_real = floats_tensor([self.batch_size, 1])
+        static_categorical_features = ids_tensor([self.batch_size, 1], self.cardinality)
+        static_real_features = floats_tensor([self.batch_size, 1])
 
-        past_time_feat = floats_tensor([self.batch_size, _past_length, self.num_time_features])
-        past_target = floats_tensor([self.batch_size, _past_length])
-        past_observed_values = floats_tensor([self.batch_size, _past_length])
+        past_time_features = floats_tensor([self.batch_size, _past_length, self.num_time_features])
+        past_values = floats_tensor([self.batch_size, _past_length])
+        past_observed_mask = floats_tensor([self.batch_size, _past_length])
 
         # decoder inputs
-        future_time_feat = floats_tensor([self.batch_size, self.prediction_length, self.num_time_features])
-        future_target = floats_tensor([self.batch_size, self.prediction_length])
+        future_time_features = floats_tensor([self.batch_size, self.prediction_length, self.num_time_features])
+        future_values = floats_tensor([self.batch_size, self.prediction_length])
 
         config = TimeSeriesTransformerConfig(
             encoder_layers=self.num_hidden_layers,
@@ -108,19 +108,19 @@ class TimeSeriesTransformerModelTester:
             context_length=self.context_length,
             lags_seq=self.lags_seq,
             num_time_features=self.num_time_features,
-            num_feat_static_cat=1,
+            num_static_categorical_features=1,
             cardinality=[self.cardinality],
             embedding_dimension=[self.embedding_dimension],
         )
 
         inputs_dict = {
-            "past_target": past_target,
-            "feat_static_cat": feat_static_cat,
-            "feat_static_real": feat_static_real,
-            "past_time_feat": past_time_feat,
-            "future_time_feat": future_time_feat,
-            "past_observed_values": past_observed_values,
-            "future_target": future_target,
+            "past_values": past_values,
+            "static_categorical_features": static_categorical_features,
+            "static_real_features": static_real_features,
+            "past_time_features": past_time_features,
+            "past_observed_mask": past_observed_mask,
+            "future_time_features": future_time_features,
+            "future_values": future_values,
         }
         return config, inputs_dict
 
@@ -205,7 +205,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
-    # # Input is 'feat_static_cat' not 'input_ids'
+    # # Input is 'static_categorical_features' not 'input_ids'
     def test_model_main_input_name(self):
         model_signature = inspect.signature(getattr(TimeSeriesTransformerModel, "forward"))
         # The main input is the name of the argument after `self`
@@ -222,25 +222,25 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = [
-                "past_target",
-                "feat_static_cat",
-                "feat_static_real",
-                "past_time_feat",
-                "past_observed_values",
-                "future_time_feat",
-                "future_target",
+                "past_values",
+                "static_categorical_features",
+                "static_real_features",
+                "past_time_features",
+                "past_observed_mask",
+                "future_time_features",
+                "future_values",
             ]
 
             expected_arg_names.extend(
                 [
-                    "future_observed_values",
+                    "future_observed_mask",
                     "encoder_outputs",
                     "use_cache",
                     "output_attentions",
                     "output_hidden_states",
                     "return_dict",
                 ]
-                if "future_observed_values" in arg_names
+                if "future_observed_mask" in arg_names
                 else [
                     "attention_mask",
                     "decoder_attention_mask",

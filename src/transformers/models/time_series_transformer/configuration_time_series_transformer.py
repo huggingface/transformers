@@ -57,16 +57,16 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             5, 6, 7]`.
         num_time_features (`int`, *optional* defaults to 0):
             The number of time features in the input time series.
-        num_feat_dynamic_real (`int`, *optional* defaults to 0):
+        num_dynamic_real_features (`int`, *optional* defaults to 0):
             The number of dynamic real valued features.
-        num_feat_static_cat (`int`, *optional* defaults to 0):
+        num_static_categorical_features (`int`, *optional* defaults to 0):
             The number of static categorical features.
-        num_feat_static_real (`int`, *optional* defaults to 0):
+        num_static_real_features (`int`, *optional* defaults to 0):
             The number of static real valued features.
         cardinality (`list` of `int`, *optional*):
-            The cardinality of the categorical features. Cannot be `None` if `num_feat_static_cat` is `> 0`.
+            The cardinality of the categorical features. Cannot be `None` if `num_static_categorical_features` is `> 0`.
         embedding_dimension (`list` of `int`, *optional*):
-            The dimension of the embedding for the categorical features. Cannot be `None` if `num_feat_static_cat` is
+            The dimension of the embedding for the categorical features. Cannot be `None` if `num_static_categorical_features` is
             `> 0`.
         encoder_layers (`int`, *optional*, defaults to `2`):
             Number of encoder layers.
@@ -130,9 +130,9 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         loss: str = "nll",
         lags_seq: List[int] = [1, 2, 3, 4, 5, 6, 7],
         scaling: bool = True,
-        num_feat_dynamic_real: int = 0,
-        num_feat_static_cat: int = 0,
-        num_feat_static_real: int = 0,
+        num_dynamic_real_features: int = 0,
+        num_static_categorical_features: int = 0,
+        num_static_real_features: int = 0,
         num_time_features: int = 0,
         cardinality: Optional[List[int]] = None,
         embedding_dimension: Optional[List[int]] = None,
@@ -163,10 +163,10 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.num_time_features = num_time_features
         self.lags_seq = lags_seq
         self.scaling = scaling
-        self.num_feat_dynamic_real = num_feat_dynamic_real
-        self.num_feat_static_real = num_feat_static_real
-        self.num_feat_static_cat = num_feat_static_cat
-        self.cardinality = cardinality if cardinality and num_feat_static_cat > 0 else [1]
+        self.num_dynamic_real_features = num_dynamic_real_features
+        self.num_static_real_features = num_static_real_features
+        self.num_static_categorical_features = num_static_categorical_features
+        self.cardinality = cardinality if cardinality and num_static_categorical_features > 0 else [1]
         self.embedding_dimension = embedding_dimension or [min(50, (cat + 1) // 2) for cat in self.cardinality]
         self.num_parallel_samples = num_parallel_samples
 
@@ -199,8 +199,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     def _number_of_features(self) -> int:
         return (
             sum(self.embedding_dimension)
-            + self.num_feat_dynamic_real
+            + self.num_dynamic_real_features
             + self.num_time_features
-            + max(1, self.num_feat_static_real)  # there is at least one dummy static real feature
+            + max(1, self.num_static_real_features)  # there is at least one dummy static real feature
             + 1  # the log(scale)
         )
