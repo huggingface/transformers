@@ -17,7 +17,7 @@
 
 import math
 import random
-from typing import Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -785,7 +785,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
 
         if attention_mask is not None:
             if attention_mask.shape[-1] > input_shape[-1] > 0:
-                attention_mask = attention_mask[:, : input_shape[-1]+past_key_values_length]
+                attention_mask = attention_mask[:, : input_shape[-1] + past_key_values_length]
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
             combined_attention_mask = (
@@ -1284,12 +1284,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs
+        self, decoder_input_ids, past=None, use_cache=None, encoder_outputs=None, **kwargs
     ):
         # cut decoder_input_ids if past is used
         if past is not None:
@@ -1300,11 +1295,11 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": None,
-            "encoder_attention_mask":None,
             "use_cache": use_cache,
-            "decoder_attention_mask":None
+            "decoder_attention_mask": None,
         }
-#
+
+    #
     @staticmethod
     def _reorder_cache(past, beam_idx):
         reordered_past = ()
