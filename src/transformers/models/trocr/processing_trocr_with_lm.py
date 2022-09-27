@@ -27,8 +27,8 @@ ListOfDict = List[Dict[str, Union[int, str]]]
 @dataclass
 class TrOCRDecoderWithLMOutput(ModelOutput):
     """
-    Output type of [`TrOCRDecoderWithLMOutput`], with transcription.
     Args:
+    Output type of [`TrOCRDecoderWithLMOutput`], with transcription.
         text (list of `str` or `str`):
             Decoded logits in text from. Usually the speech transcription.
         logit_score (list of `float` or `float`):
@@ -48,9 +48,9 @@ class TrOCRDecoderWithLMOutput(ModelOutput):
 
 class TrOCRProcessorWithLM(ProcessorMixin):
     r"""
-    Constructs a TrOCR processor which wraps a TrOCR feature extractor, a TrOCR tokenizer and a decoder
-    with language model support into a single processor for language model boosted speech recognition decoding.
     Args:
+    Constructs a TrOCR processor which wraps a TrOCR feature extractor, a TrOCR tokenizer and a decoder with language
+    model support into a single processor for language model boosted speech recognition decoding.
         feature_extractor ([`AutoFeatureExtractor`]):
             An instance of [`AutoFeatureExtractor`]. The feature extractor is a required input.
         tokenizer ([`AutoTokenizer`]):
@@ -94,13 +94,17 @@ class TrOCRProcessorWithLM(ProcessorMixin):
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         r"""
         Instantiate a [`TrOCRProcessorWithLM`] from a pretrained TrOCR processor.
+
         <Tip>
+
         This class method is simply calling TrOCRFeatureExtractor's
         [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`], TrOCRTokenizer's
         [`~tokenization_utils_base.PreTrainedTokenizer.from_pretrained`], and
-        [`pyctcdecode.BeamSearchDecoderCTC.load_from_hf_hub`].
-        Please refer to the docstrings of the methods above for more information.
+        [`pyctcdecode.BeamSearchDecoderCTC.load_from_hf_hub`]. Please refer to the docstrings of the methods above for
+        more information.
+
         </Tip>
+
         Args:
             pretrained_model_name_or_path (`str` or `os.PathLike`):
                 This can be either:
@@ -196,9 +200,8 @@ class TrOCRProcessorWithLM(ProcessorMixin):
         """
         When used in normal mode, this method forwards all its arguments to TrOCRFeatureExtractor's
         [`~TrOCRFeatureExtractor.__call__`] and returns its output. If used in the context
-        [`~TrOCRProcessorWithLM.as_target_processor`] this method forwards all its arguments to
-        TrOCRCTCTokenizer's [`~TrOCRCTCTokenizer.__call__`]. Please refer to the docstring of the above two
-        methods for more information.
+        [`~TrOCRProcessorWithLM.as_target_processor`] this method forwards all its arguments to TrOCRCTCTokenizer's
+        [`~TrOCRCTCTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
         """
         # For backward compatibility
         if self._in_target_context_manager:
@@ -242,10 +245,14 @@ class TrOCRProcessorWithLM(ProcessorMixin):
         output_word_offsets: bool = False,
     ):
         """
-        Batch decode output logits to audio transcription with language model support.
+        Batch decode output logits to Vision text with language model support.
+
         <Tip>
+
         This function makes use of Python's multiprocessing.
+
         </Tip>
+
         Args:
             logits (`np.ndarray`):
                 The logits output vector of the model representing the log probabilities for each token.
@@ -274,12 +281,15 @@ class TrOCRProcessorWithLM(ProcessorMixin):
             output_word_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
                 and model downsampling rate to compute the time-stamps of transcribed words.
+
                 <Tip>
-                Please take a look at the Example of [`~model.TrOCR_with_lm.processing_TrOCR_with_lm.decode`] to
-                better understand how to make use of `output_word_offsets`.
-                [`~model.TrOCR_with_lm.processing_TrOCR_with_lm.batch_decode`] works the same way with batched
-                output.
+
+                Please take a look at the Example of [`~model.TrOCR_with_lm.processing_TrOCR_with_lm.decode`] to better
+                understand how to make use of `output_word_offsets`.
+                [`~model.TrOCR_with_lm.processing_TrOCR_with_lm.batch_decode`] works the same way with batched output.
+
                 </Tip>
+
         Returns:
             [`~models.TrOCR.TrOCRDecoderWithLMOutput`] or `tuple`.
         """
@@ -349,8 +359,8 @@ class TrOCRProcessorWithLM(ProcessorMixin):
         output_word_offsets: bool = False,
     ):
         """
-        Decode output logits to audio transcription with language model support.
         Args:
+        Decode output logits to Vision transcription with language model support.
             logits (`np.ndarray`):
                 The logits output vector of the model representing the log probabilities for each token.
             beam_width (`int`, *optional*):
@@ -376,10 +386,14 @@ class TrOCRProcessorWithLM(ProcessorMixin):
             output_word_offsets (`bool`, *optional*, defaults to `False`):
                 Whether or not to output word offsets. Word offsets can be used in combination with the sampling rate
                 and model downsampling rate to compute the time-stamps of transcribed words.
+
                 <Tip>
+
                 Please take a look at the example of [`~models.TrOCR_with_lm.processing_TrOCR_with_lm.decode`] to
                 better understand how to make use of `output_word_offsets`.
+
                 </Tip>
+
         Returns:
             [`~models.TrOCR.TrOCRDecoderWithLMOutput`] or `tuple`.
         """
@@ -436,7 +450,7 @@ class TrOCRProcessorWithLM(ProcessorMixin):
         warnings.warn(
             "`as_target_processor` is deprecated and will be removed in v5 of Transformers. You can process your "
             "labels by using the argument `text` of the regular `__call__` method (either in the same call as "
-            "your audio inputs, or in a separate call."
+            "your image inputs, or in a separate call."
         )
         self._in_target_context_manager = True
         self.current_processor = self.tokenizer
