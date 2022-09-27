@@ -108,7 +108,7 @@ class WhisperModelTester:
         eos_token_id=98,
         pad_token_id=0,
         num_mel_bins=80,
-        decoder_start_token_id=[85, 87],
+        decoder_start_token_id=85,
         num_conv_layers=1,
     ):
         self.parent = parent
@@ -139,7 +139,7 @@ class WhisperModelTester:
         attention_mask = torch.ones(
             [self.batch_size, self.max_source_positions], dtype=torch.long, device=torch_device
         )
-        decoder_input_ids = torch.tensor(self.batch_size * [self.decoder_start_token_id], device=torch_device)
+        decoder_input_ids = torch.tensor(self.batch_size * [[self.decoder_start_token_id]], device=torch_device)
 
         config = self.get_config()
         inputs_dict = prepare_whisper_inputs_dict(
@@ -338,6 +338,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_training_gradient_checkpointing(self):
         pass
 
+    def test_generate_with_head_masking(self):
+        pass
+    
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         config.max_target_positions = 400
@@ -406,7 +409,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 self.assertIsInstance(hidden_states, (list, tuple))
                 self.assertEqual(len(hidden_states), expected_num_layers)
 
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", 2)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", 1)
 
                 self.assertListEqual(
                     list(hidden_states[0].shape[-2:]),
@@ -430,9 +433,9 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config.return_dict = True
 
         seq_len = getattr(self.model_tester, "seq_length", None)
-        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", 2)
+        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", 1)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", 2)
+        decoder_key_length = getattr(self.model_tester, "decoder_key_length", 1)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
         for model_class in self.all_model_classes:
@@ -930,7 +933,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = feaure_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(torch_device)
 
         tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
-        generated_ids = model.generate(input_features, num_beams=5, decoder_input_ids=torch.tensor([[50258, 50363]]))
+        generated_ids = model.generate(input_features, num_beams=5, decoder_input_ids=torch.tensor([[50257, 50258, 50362]]))
         transcript = tokenizer.batch_decode(generated_ids)[0]
 
         EXPECTED_TRANSCRIPT = (

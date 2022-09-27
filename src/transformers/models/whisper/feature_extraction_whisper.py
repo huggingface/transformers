@@ -235,7 +235,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         # always return batch
         if not is_batched:
-            raw_speech = [raw_speech.T]
+            raw_speech = [np.asarray([raw_speech]).T]
 
         batched_speech = BatchFeature({"input_features": raw_speech})
 
