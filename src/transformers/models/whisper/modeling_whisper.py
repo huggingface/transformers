@@ -469,7 +469,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
         if len(attention_mask.shape) > 2:
             attention_mask = attention_mask[:, 0, :]
 
-        subsampled_lengths = (attention_mask.sum(-1) - 1) // 2 + 1
+        subsampled_lengths = ((attention_mask.sum(-1) - 1) // 2) + 1
         bsz = attention_mask.size()[0]
         attention_mask = torch.zeros(
             (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
@@ -675,6 +675,7 @@ class WhisperEncoder(WhisperPreTrainedModel):
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
+        attention_mask = None
         # subsample attention mask if necessary
         if attention_mask is not None:
             attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
@@ -783,8 +784,8 @@ class WhisperDecoder(WhisperPreTrainedModel):
             ).to(inputs_embeds.device)
 
         if attention_mask is not None:
-            if attention_mask.shape[-1] > input_shape[-1] > 1:
-                attention_mask = attention_mask[:, : input_shape[-1]]
+            if attention_mask.shape[-1] > input_shape[-1] > 0:
+                attention_mask = attention_mask[:, : input_shape[-1]+past_key_values_length]
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = _expand_mask(attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
             combined_attention_mask = (
@@ -900,7 +901,8 @@ class WhisperDecoder(WhisperPreTrainedModel):
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
-
+        attention_mask = None
+        encoder_attention_mask = None
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1109,7 +1111,8 @@ class WhisperModel(WhisperPreTrainedModel):
         else:
             encoder_attention_mask = None
 
-        
+        encoder_attention_mask = None
+        decoder_attention_mask = None
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
@@ -1297,39 +1300,10 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "attention_mask": None,
+            "encoder_attention_mask":None,
             "use_cache": use_cache,
+            "decoder_attention_mask":None
         }
-
-#    def _prepare_attention_mask_for_generation(
-#        self,
-#        inputs: torch.Tensor,
-#        pad_token_id: Optional[int],
-#        eos_token_id: Optional[int],
-#    ) -> torch.LongTensor:
-#        is_mel_spec = len(inputs.shape) == 3 and inputs.dtype in [torch.float32, torch.float16]
-#        pad_token_id = -0.8060266971588135
-        # Check if input is input_ids and padded -> only then is attention_mask defined
-#        if is_mel_spec:
-#            return inputs.ne(pad_token_id).long()
-#        else:
-#            return None
-
-#    def _prepare_decoder_input_ids_for_generation(
-#        self,
-#        batch_size: int,
-#        decoder_start_token_id: int = None,
-#        bos_token_id: int = None,
-#        model_kwargs: Optional[Dict[str, torch.Tensor]] = None,
-#        device: torch.device = None,
-#    ) -> torch.LongTensor:
-#
-#        if model_kwargs is not None and "decoder_input_ids" in model_kwargs:
-#            return model_kwargs.pop("decoder_input_ids")
-#        else:
-#            decoder_start_token_id = list(self.config.decoder_start_token_id)
-#            if device is None:
-#                device = self.device
-#            return torch.tensor(batch_size * [decoder_start_token_id], dtype=torch.long, device=device)
 #
     @staticmethod
     def _reorder_cache(past, beam_idx):
