@@ -163,16 +163,13 @@ class ViTPatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
+        torch._assert(num_channels == self.num_channels,
+            "Make sure that the channel dimension of the pixel values match with the one set in the configuration.")
         if not interpolate_pos_encoding:
-            if height != self.image_size[0] or width != self.image_size[1]:
-                raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model"
-                    f" ({self.image_size[0]}*{self.image_size[1]})."
-                )
+            expected_height, expected_width = self.image_size
+            err_message = f"Input image size ({height}*{width}) doesn't match model({self.image_size[0]}*{self.image_size[1]})."
+            torch._assert(height == expected_height, err_message)
+            torch._assert(width == expected_width, err_message)
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
         return embeddings
 
