@@ -460,16 +460,22 @@ class WhisperPreTrainedModel(PreTrainedModel):
         if isinstance(module, (WhisperDecoder, WhisperEncoder)):
             module.gradient_checkpointing = value
 
-    def _get_feat_extract_output_lengths(self, input: int):
-        return (input - 1) // 2 + 1
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
+        """
+        Computes the output length of the convolutional layers
+        """
+        for i in range(self.config.num_conv_layers):
+            input_lengths = (input_lengths - 1) // 2 + 1
+
+        return input_lengths
 
     def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
         # generate creates 3D attention mask, because of the shape of input_features
         # convert it to 2D if thats the case
         if len(attention_mask.shape) > 2:
-            attention_mask = attention_mask[:, 0, :]
+            attention_mask = attention_mask[:, :, -1]
 
-        subsampled_lengths = (attention_mask.sum(-1) - 1) // 2 + 1
+        subsampled_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
         bsz = attention_mask.size()[0]
         attention_mask = torch.zeros(
             (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
