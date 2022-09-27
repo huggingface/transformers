@@ -1509,7 +1509,14 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         inputs_length = (
             self._past_length + self.config.prediction_length if future_target is not None else self._past_length
         )
-        assert inputs.shape[1] == inputs_length
+        try:
+            assert (
+                inputs.shape[1] == inputs_length,
+                f"input length {inputs.shape[1]} and dynamic feature lengths {inputs_length} does not match",
+            )
+        except AssertionError as e:
+            e.args += (inputs.shape[1], inputs_length)
+            raise
 
         subsequences_length = (
             self.config.context_length + self.config.prediction_length
