@@ -158,7 +158,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
     def __call__(
         self,
         raw_speech: Union[np.ndarray, List[float], List[np.ndarray], List[List[float]]],
-        truncation: bool = False,
+        truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         sampling_rate: Optional[int] = None,
@@ -251,6 +251,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         )
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
+            
         input_features = [self._extract_fbank_features(waveform) for waveform in input_features[0]]
 
         if isinstance(input_features[0], torch.Tensor) or isinstance(input_features[0], List):
