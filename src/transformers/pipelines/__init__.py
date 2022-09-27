@@ -25,6 +25,8 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 
 from numpy import isin
 
+from huggingface_hub.file_download import http_get
+
 from ..configuration_utils import PretrainedConfig
 from ..dynamic_module_utils import get_class_from_dynamic_module
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
@@ -33,7 +35,7 @@ from ..models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING, Aut
 from ..models.auto.tokenization_auto import TOKENIZER_MAPPING, AutoTokenizer
 from ..tokenization_utils import PreTrainedTokenizer
 from ..tokenization_utils_fast import PreTrainedTokenizerFast
-from ..utils import HUGGINGFACE_CO_RESOLVE_ENDPOINT, http_get, is_tf_available, is_torch_available, logging
+from ..utils import HUGGINGFACE_CO_RESOLVE_ENDPOINT, is_tf_available, is_torch_available, logging
 from .audio_classification import AudioClassificationPipeline
 from .automatic_speech_recognition import AutomaticSpeechRecognitionPipeline
 from .base import (
@@ -49,10 +51,12 @@ from .base import (
     infer_framework_load_model,
 )
 from .conversational import Conversation, ConversationalPipeline
+from .document_question_answering import DocumentQuestionAnsweringPipeline
 from .feature_extraction import FeatureExtractionPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
 from .image_segmentation import ImageSegmentationPipeline
+from .image_to_text import ImageToTextPipeline
 from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
@@ -81,12 +85,14 @@ if is_tf_available():
         TF_MODEL_WITH_LM_HEAD_MAPPING,
         TFAutoModel,
         TFAutoModelForCausalLM,
+        TFAutoModelForImageClassification,
         TFAutoModelForMaskedLM,
         TFAutoModelForQuestionAnswering,
         TFAutoModelForSeq2SeqLM,
         TFAutoModelForSequenceClassification,
         TFAutoModelForTableQuestionAnswering,
         TFAutoModelForTokenClassification,
+        TFAutoModelForVision2Seq,
     )
 
 if is_torch_available():
@@ -104,6 +110,7 @@ if is_torch_available():
         AutoModelForAudioClassification,
         AutoModelForCausalLM,
         AutoModelForCTC,
+        AutoModelForDocumentQuestionAnswering,
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
         AutoModelForMaskedLM,
@@ -115,6 +122,7 @@ if is_torch_available():
         AutoModelForSpeechSeq2Seq,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
+        AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
     )
 if TYPE_CHECKING:
@@ -209,6 +217,15 @@ SUPPORTED_TASKS = {
         },
         "type": "multimodal",
     },
+    "document-question-answering": {
+        "impl": DocumentQuestionAnsweringPipeline,
+        "pt": (AutoModelForDocumentQuestionAnswering,) if is_torch_available() else (),
+        "tf": (),
+        "default": {
+            "model": {"pt": ("impira/layoutlm-document-qa", "52e01b3")},
+        },
+        "type": "multimodal",
+    },
     "fill-mask": {
         "impl": FillMaskPipeline,
         "tf": (TFAutoModelForMaskedLM,) if is_tf_available() else (),
@@ -282,9 +299,14 @@ SUPPORTED_TASKS = {
     },
     "image-classification": {
         "impl": ImageClassificationPipeline,
-        "tf": (),
+        "tf": (TFAutoModelForImageClassification,) if is_tf_available() else (),
         "pt": (AutoModelForImageClassification,) if is_torch_available() else (),
-        "default": {"model": {"pt": ("google/vit-base-patch16-224", "5dca96d")}},
+        "default": {
+            "model": {
+                "pt": ("google/vit-base-patch16-224", "5dca96d"),
+                "tf": ("google/vit-base-patch16-224", "5dca96d"),
+            }
+        },
         "type": "image",
     },
     "image-segmentation": {
@@ -293,6 +315,18 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForImageSegmentation, AutoModelForSemanticSegmentation) if is_torch_available() else (),
         "default": {"model": {"pt": ("facebook/detr-resnet-50-panoptic", "fc15262")}},
         "type": "image",
+    },
+    "image-to-text": {
+        "impl": ImageToTextPipeline,
+        "tf": (TFAutoModelForVision2Seq,) if is_tf_available() else (),
+        "pt": (AutoModelForVision2Seq,) if is_torch_available() else (),
+        "default": {
+            "model": {
+                "pt": ("ydshieh/vit-gpt2-coco-en", "65636df"),
+                "tf": ("ydshieh/vit-gpt2-coco-en", "65636df"),
+            }
+        },
+        "type": "multimodal",
     },
     "object-detection": {
         "impl": ObjectDetectionPipeline,
@@ -305,6 +339,11 @@ SUPPORTED_TASKS = {
 
 NO_FEATURE_EXTRACTOR_TASKS = set()
 NO_TOKENIZER_TASKS = set()
+# Those model configs are special, they are generic over their task, meaning
+# any tokenizer/feature_extractor might be use for a given model so we cannot
+# use the statically defined TOKENIZER_MAPPING and FEATURE_EXTRACTOR_MAPPING to
+# see if the model defines such objects or not.
+MULTI_MODEL_CONFIGS = {"SpeechEncoderDecoderConfig", "VisionEncoderDecoderConfig", "VisionTextDualEncoderConfig"}
 for task, values in SUPPORTED_TASKS.items():
     if values["type"] == "text":
         NO_FEATURE_EXTRACTOR_TASKS.add(task)
@@ -346,7 +385,7 @@ def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
     return task
 
 
-def check_task(task: str) -> Tuple[Dict, Any]:
+def check_task(task: str) -> Tuple[str, Dict, Any]:
     """
     Checks an incoming task string, to validate it's correct and return the default Pipeline and Model classes, and
     default models if they exist.
@@ -374,8 +413,9 @@ def check_task(task: str) -> Tuple[Dict, Any]:
             - `"zero-shot-image-classification"`
 
     Returns:
-        (task_defaults`dict`, task_options: (`tuple`, None)) The actual dictionary required to initialize the pipeline
-        and some extra task options for parametrized tasks like "translation_XX_to_YY"
+        (normalized_task: `str`, task_defaults: `dict`, task_options: (`tuple`, None)) The normalized task name
+        (removed alias and options). The actual dictionary required to initialize the pipeline and some extra task
+        options for parametrized tasks like "translation_XX_to_YY"
 
 
     """
@@ -408,12 +448,13 @@ def pipeline(
     revision: Optional[str] = None,
     use_fast: bool = True,
     use_auth_token: Optional[Union[str, bool]] = None,
+    device: Optional[Union[int, str, "torch.device"]] = None,
     device_map=None,
     torch_dtype=None,
     trust_remote_code: Optional[bool] = None,
     model_kwargs: Dict[str, Any] = None,
     pipeline_class: Optional[Any] = None,
-    **kwargs
+    **kwargs,
 ) -> Pipeline:
     """
     Utility factory method to build a [`Pipeline`].
@@ -493,7 +534,10 @@ def pipeline(
             Whether or not to use a Fast tokenizer if possible (a [`PreTrainedTokenizerFast`]).
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`).
+            when running `huggingface-cli login` (stored in `~/.huggingface`).
+        device (`int` or `str` or `torch.device`):
+            Defines the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank like `1`) on which this
+            pipeline will be allocated.
         device_map (`str` or `Dict[str, Union[int, str, torch.device]`, *optional*):
             Sent directly as `model_kwargs` (just a simpler shortcut). When `accelerate` library is present, set
             `device_map="auto"` to compute the most optimized `device_map` automatically. [More
@@ -543,7 +587,12 @@ def pipeline(
     # Make sure we only pass use_auth_token once as a kwarg (it used to be possible to pass it in model_kwargs,
     # this is to keep BC).
     use_auth_token = model_kwargs.pop("use_auth_token", use_auth_token)
-    hub_kwargs = {"revision": revision, "use_auth_token": use_auth_token, "trust_remote_code": trust_remote_code}
+    hub_kwargs = {
+        "revision": revision,
+        "use_auth_token": use_auth_token,
+        "trust_remote_code": trust_remote_code,
+        "_commit_hash": None,
+    }
 
     if task is None and model is None:
         raise RuntimeError(
@@ -569,8 +618,10 @@ def pipeline(
     # Instantiate config if needed
     if isinstance(config, str):
         config = AutoConfig.from_pretrained(config, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        hub_kwargs["_commit_hash"] = config._commit_hash
     elif config is None and isinstance(model, str):
         config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+        hub_kwargs["_commit_hash"] = config._commit_hash
 
     custom_tasks = {}
     if config is not None and len(getattr(config, "custom_pipelines", {})) > 0:
@@ -594,6 +645,7 @@ def pipeline(
 
     # Retrieve the task
     if task in custom_tasks:
+        normalized_task = task
         targeted_task, task_options = clean_custom_task(custom_tasks[task])
         if pipeline_class is None:
             if not trust_remote_code:
@@ -608,7 +660,7 @@ def pipeline(
                 model, module_file + ".py", class_name, revision=revision, use_auth_token=use_auth_token
             )
     else:
-        targeted_task, task_options = check_task(task)
+        normalized_task, targeted_task, task_options = check_task(task)
         if pipeline_class is None:
             pipeline_class = targeted_task["impl"]
 
@@ -624,6 +676,7 @@ def pipeline(
         )
         if config is None and isinstance(model, str):
             config = AutoConfig.from_pretrained(model, _from_pipeline=task, **hub_kwargs, **model_kwargs)
+            hub_kwargs["_commit_hash"] = config._commit_hash
 
     if device_map is not None:
         if "device_map" in model_kwargs:
@@ -657,9 +710,33 @@ def pipeline(
     )
 
     model_config = model.config
+    hub_kwargs["_commit_hash"] = model.config._commit_hash
 
     load_tokenizer = type(model_config) in TOKENIZER_MAPPING or model_config.tokenizer_class is not None
     load_feature_extractor = type(model_config) in FEATURE_EXTRACTOR_MAPPING or feature_extractor is not None
+
+    if (
+        tokenizer is None
+        and not load_tokenizer
+        and normalized_task not in NO_TOKENIZER_TASKS
+        # Using class name to avoid importing the real class.
+        and model_config.__class__.__name__ in MULTI_MODEL_CONFIGS
+    ):
+        # This is a special category of models, that are fusions of multiple models
+        # so the model_config might not define a tokenizer, but it seems to be
+        # necessary for the task, so we're force-trying to load it.
+        load_tokenizer = True
+    if (
+        feature_extractor is None
+        and not load_feature_extractor
+        and normalized_task not in NO_FEATURE_EXTRACTOR_TASKS
+        # Using class name to avoid importing the real class.
+        and model_config.__class__.__name__ in MULTI_MODEL_CONFIGS
+    ):
+        # This is a special category of models, that are fusions of multiple models
+        # so the model_config might not define a tokenizer, but it seems to be
+        # necessary for the task, so we're force-trying to load it.
+        load_feature_extractor = True
 
     if task in NO_TOKENIZER_TASKS:
         # These will never require a tokenizer.
@@ -667,6 +744,7 @@ def pipeline(
         # the files could be missing from the hub, instead of failing
         # on such repos, we just force to not load it.
         load_tokenizer = False
+
     if task in NO_FEATURE_EXTRACTOR_TASKS:
         load_feature_extractor = False
 
@@ -762,5 +840,8 @@ def pipeline(
 
     if feature_extractor is not None:
         kwargs["feature_extractor"] = feature_extractor
+
+    if device is not None:
+        kwargs["device"] = device
 
     return pipeline_class(model=model, framework=framework, task=task, **kwargs)

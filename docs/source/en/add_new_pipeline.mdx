@@ -102,7 +102,7 @@ def _sanitize_parameters(self, **kwargs):
 
     postprocess_kwargs = {}
     if "top_k" in kwargs:
-        preprocess_kwargs["top_k"] = kwargs["top_k"]
+        postprocess_kwargs["top_k"] = kwargs["top_k"]
     return preprocess_kwargs, {}, postprocess_kwargs
 ```
 

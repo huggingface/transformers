@@ -17,6 +17,8 @@
 - sections:
   - local: fast_tokenizers
     title: Usando os Tokenizers do 🤗 Tokenizers
+  - local: create_a_model
+    title: Criando uma arquitetura customizada
   - sections:
     - local: tasks/sequence_classification
       title: Classificação de texto

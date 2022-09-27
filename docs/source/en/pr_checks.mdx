@@ -65,13 +65,9 @@ Just in case anything slipped through the cracks, the full test suite is also ru
 
 ## Documentation build
 
-The job `ci/circleci: build_doc` runs a build of the documentation just to make sure everything will be okay once your PR is merged. If that steps fails, you can inspect it locally by going into the `docs` folder of the Transformers repo and then typing
+The `build_pr_documentation` job builds and generates a preview of the documentation to make sure everything looks okay once your PR is merged. A bot will add a link to preview the documentation in your PR. Any changes you make to the PR are automatically updated in the preview. If the documentation fails to build, click on **Details** next to the failed job to see where things went wrong. Often, the error is as simple as a missing file in the `toctree`.
 
-```bash
-make html
-```
-
-Sphinx is not known for its helpful error messages, so you might have to try a few things to really find the source of the error.
+If you're interested in building or previewing the documentation locally, take a look at the [`README.md`](https://github.com/huggingface/transformers/tree/main/docs) in the docs folder.
 
 ## Code and documentation style
 

@@ -35,18 +35,15 @@ from packaging import version
 from . import __version__
 from .dynamic_module_utils import custom_object_save
 from .utils import (
-    EntryNotFoundError,
     ExplicitEnum,
     PaddingStrategy,
     PushToHubMixin,
-    RepositoryNotFoundError,
-    RevisionNotFoundError,
     TensorType,
     add_end_docstrings,
-    cached_path,
+    cached_file,
     copy_func,
-    get_file_from_repo,
-    hf_bucket_url,
+    download_url,
+    extract_commit_hash,
     is_flax_available,
     is_offline_mode,
     is_remote_url,
@@ -733,8 +730,10 @@ class BatchEncoding(UserDict):
                         "Please see if a fast version of this tokenizer is available to have this feature available."
                     )
                 raise ValueError(
-                    "Unable to create tensor, you should probably activate truncation and/or padding "
-                    "with 'padding=True' 'truncation=True' to have batched tensors with the same length."
+                    "Unable to create tensor, you should probably activate truncation and/or padding with"
+                    " 'padding=True' 'truncation=True' to have batched tensors with the same length. Perhaps your"
+                    f" features (`{key}` in this case) have excessive nesting (inputs type `list` where type `int` is"
+                    " expected)."
                 )
 
         return self
@@ -918,10 +917,12 @@ class SpecialTokensMixin:
     ) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
-        it with indices starting from length of the current vocabulary.
+        it with indices starting from length of the current vocabulary and and will be isolated before the tokenization
+        algorithm is applied. Added tokens and tokens from the vocabulary of the tokenization algorithm are therefore
+        not treated in the same way.
 
-        Note,None When adding new tokens to the vocabulary, you should make sure to also resize the token embedding
-        matrix of the model so that its embedding matrix matches the tokenizer.
+        Note, when adding new tokens to the vocabulary, you should make sure to also resize the token embedding matrix
+        of the model so that its embedding matrix matches the tokenizer.
 
         In order to do that, please use the [`~PreTrainedModel.resize_token_embeddings`] method.
 
@@ -1499,7 +1500,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         self.deprecation_warnings = (
             {}
         )  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
-
+        self._in_target_context_manager = False
         super().__init__(**kwargs)
 
     @property
@@ -1599,7 +1600,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 'http://hostname': 'foo.bar:4012'}`. The proxies are used on each request.
             use_auth_token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `transformers-cli login` (stored in `~/.huggingface`).
+                when running `huggingface-cli login` (stored in `~/.huggingface`).
             local_files_only (`bool`, *optional*, defaults to `False`):
                 Whether or not to only rely on local files and not to attempt to download any files.
             revision (`str`, *optional*, defaults to `"main"`):
@@ -1654,6 +1655,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         subfolder = kwargs.pop("subfolder", None)
         from_pipeline = kwargs.pop("_from_pipeline", None)
         from_auto_class = kwargs.pop("_from_auto", False)
+        commit_hash = kwargs.pop("_commit_hash", None)
 
         user_agent = {"file_type": "tokenizer", "from_auto_class": from_auto_class, "is_fast": "Fast" in cls.__name__}
         if from_pipeline is not None:
@@ -1667,6 +1669,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         vocab_files = {}
         init_configuration = {}
 
+        is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isfile(pretrained_model_name_or_path) or is_remote_url(pretrained_model_name_or_path):
             if len(cls.vocab_files_names) > 1:
                 raise ValueError(
@@ -1679,6 +1682,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 FutureWarning,
             )
             file_id = list(cls.vocab_files_names.keys())[0]
+
             vocab_files[file_id] = pretrained_model_name_or_path
         else:
             # At this point pretrained_model_name_or_path is either a directory or a model identifier name
@@ -1687,12 +1691,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "special_tokens_map_file": SPECIAL_TOKENS_MAP_FILE,
                 "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
             }
-            vocab_files_target = {**cls.vocab_files_names, **additional_files_names}
+            vocab_files = {**cls.vocab_files_names, **additional_files_names}
 
-            if "tokenizer_file" in vocab_files_target:
+            if "tokenizer_file" in vocab_files:
                 # Try to get the tokenizer config to see if there are versioned tokenizer files.
                 fast_tokenizer_file = FULL_TOKENIZER_FILE
-                resolved_config_file = get_file_from_repo(
+                resolved_config_file = cached_file(
                     pretrained_model_name_or_path,
                     TOKENIZER_CONFIG_FILE,
                     cache_dir=cache_dir,
@@ -1702,34 +1706,19 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     use_auth_token=use_auth_token,
                     revision=revision,
                     local_files_only=local_files_only,
+                    subfolder=subfolder,
+                    user_agent=user_agent,
+                    _raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_connection_errors=False,
+                    _commit_hash=commit_hash,
                 )
+                commit_hash = extract_commit_hash(resolved_config_file, commit_hash)
                 if resolved_config_file is not None:
                     with open(resolved_config_file, encoding="utf-8") as reader:
                         tokenizer_config = json.load(reader)
                         if "fast_tokenizer_files" in tokenizer_config:
                             fast_tokenizer_file = get_fast_tokenizer_file(tokenizer_config["fast_tokenizer_files"])
-                vocab_files_target["tokenizer_file"] = fast_tokenizer_file
-
-            # Look for the tokenizer files
-            for file_id, file_name in vocab_files_target.items():
-                if os.path.isdir(pretrained_model_name_or_path):
-                    if subfolder is not None:
-                        full_file_name = os.path.join(pretrained_model_name_or_path, subfolder, file_name)
-                    else:
-                        full_file_name = os.path.join(pretrained_model_name_or_path, file_name)
-                    if not os.path.exists(full_file_name):
-                        logger.info(f"Didn't find file {full_file_name}. We won't load it.")
-                        full_file_name = None
-                else:
-                    full_file_name = hf_bucket_url(
-                        pretrained_model_name_or_path,
-                        filename=file_name,
-                        subfolder=subfolder,
-                        revision=revision,
-                        mirror=None,
-                    )
-
-                vocab_files[file_id] = full_file_name
+                vocab_files["tokenizer_file"] = fast_tokenizer_file
 
         # Get files from url, cache, or disk depending on the case
         resolved_vocab_files = {}
@@ -1737,45 +1726,28 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         for file_id, file_path in vocab_files.items():
             if file_path is None:
                 resolved_vocab_files[file_id] = None
+            elif os.path.isfile(file_path):
+                resolved_vocab_files[file_id] = file_path
+            elif is_remote_url(file_path):
+                resolved_vocab_files[file_id] = download_url(file_path, proxies=proxies)
             else:
-                try:
-                    resolved_vocab_files[file_id] = cached_path(
-                        file_path,
-                        cache_dir=cache_dir,
-                        force_download=force_download,
-                        proxies=proxies,
-                        resume_download=resume_download,
-                        local_files_only=local_files_only,
-                        use_auth_token=use_auth_token,
-                        user_agent=user_agent,
-                    )
-
-                except FileNotFoundError as error:
-                    if local_files_only:
-                        unresolved_files.append(file_id)
-                    else:
-                        raise error
-
-                except RepositoryNotFoundError:
-                    raise EnvironmentError(
-                        f"{pretrained_model_name_or_path} is not a local folder and is not a valid model identifier "
-                        "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to "
-                        "pass a token having permission to this repo with `use_auth_token` or log in with "
-                        "`huggingface-cli login` and pass `use_auth_token=True`."
-                    )
-                except RevisionNotFoundError:
-                    raise EnvironmentError(
-                        f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
-                        "for this model name. Check the model page at "
-                        f"'https://huggingface.co/{pretrained_model_name_or_path}' for available revisions."
-                    )
-                except EntryNotFoundError:
-                    logger.debug(f"{pretrained_model_name_or_path} does not contain a file named {file_path}.")
-                    resolved_vocab_files[file_id] = None
-
-                except ValueError:
-                    logger.debug(f"Connection problem to access {file_path} and it wasn't found in the cache.")
-                    resolved_vocab_files[file_id] = None
+                resolved_vocab_files[file_id] = cached_file(
+                    pretrained_model_name_or_path,
+                    file_path,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    use_auth_token=use_auth_token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_connection_errors=False,
+                    _commit_hash=commit_hash,
+                )
+                commit_hash = extract_commit_hash(resolved_vocab_files[file_id], commit_hash)
 
         if len(unresolved_files) > 0:
             logger.info(
@@ -1795,7 +1767,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if file_id not in resolved_vocab_files:
                 continue
 
-            if file_path == resolved_vocab_files[file_id]:
+            if is_local:
                 logger.info(f"loading file {file_path}")
             else:
                 logger.info(f"loading file {file_path} from cache at {resolved_vocab_files[file_id]}")
@@ -1807,6 +1779,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             *init_inputs,
             use_auth_token=use_auth_token,
             cache_dir=cache_dir,
+            local_files_only=local_files_only,
+            _commit_hash=commit_hash,
             **kwargs,
         )
 
@@ -1819,6 +1793,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         *init_inputs,
         use_auth_token=None,
         cache_dir=None,
+        local_files_only=False,
+        _commit_hash=None,
         **kwargs
     ):
         # We instantiate fast tokenizers based on a slow tokenizer if we don't have access to the tokenizer.json
@@ -1831,6 +1807,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 pretrained_model_name_or_path,
                 copy.deepcopy(init_configuration),
                 *init_inputs,
+                use_auth_token=use_auth_token,
+                cache_dir=cache_dir,
+                local_files_only=local_files_only,
+                _commit_hash=_commit_hash,
                 **(copy.deepcopy(kwargs)),
             )
         else:
@@ -1862,6 +1842,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     pretrained_model_name_or_path,
                     use_auth_token=use_auth_token,
                     cache_dir=cache_dir,
+                    local_files_only=local_files_only,
+                    _commit_hash=_commit_hash,
                 )
                 config_tokenizer_class = config.tokenizer_class
             except (OSError, ValueError, KeyError):
@@ -2069,15 +2051,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             filename_prefix: (`str`, *optional*):
                 A prefix to add to the names of the files saved by the tokenizer.
             push_to_hub (`bool`, *optional*, defaults to `False`):
-                Whether or not to push your model to the Hugging Face model hub after saving it.
-
-                <Tip warning={true}>
-
-                Using `push_to_hub=True` will synchronize the repository you are pushing to with `save_directory`,
-                which requires `save_directory` to be a local clone of the repo you are pushing to if it's an existing
-                folder. Pass along `temp_dir=True` to use a temporary directory instead.
-
-                </Tip>
+                Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
+                repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
+                namespace).
+            kwargs:
+                Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
 
         Returns:
             A tuple of `str`: The files saved.
@@ -2086,11 +2064,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             logger.error(f"Provided path ({save_directory}) should be a directory, not a file")
             return
 
+        os.makedirs(save_directory, exist_ok=True)
+
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
-            repo = self._create_or_get_repo(save_directory, **kwargs)
-
-        os.makedirs(save_directory, exist_ok=True)
+            repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
+            repo_id, token = self._create_repo(repo_id, **kwargs)
+            files_timestamps = self._get_files_timestamps(save_directory)
 
         special_tokens_map_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + SPECIAL_TOKENS_MAP_FILE
@@ -2159,8 +2139,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         )
 
         if push_to_hub:
-            url = self._push_to_hub(repo, commit_message=commit_message)
-            logger.info(f"Tokenizer pushed to the hub in this commit: {url}")
+            self._upload_modified_files(
+                save_directory, repo_id, files_timestamps, commit_message=commit_message, token=token
+            )
 
         return save_files
 
@@ -2429,8 +2410,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
         text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        text_target: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        text_pair_target: Optional[
+            Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]
+        ] = None,
         add_special_tokens: bool = True,
         padding: Union[bool, str, PaddingStrategy] = False,
         truncation: Union[bool, str, TruncationStrategy] = False,
@@ -2453,15 +2438,85 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         sequences.
 
         Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
+            text (`str`, `List[str]`, `List[List[str]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            text_pair (`str`, `List[str]`, `List[List[str]]`):
+            text_pair (`str`, `List[str]`, `List[List[str]]`, *optional*):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            text_target (`str`, `List[str]`, `List[List[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
+                list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
+                you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            text_pair_target (`str`, `List[str]`, `List[List[str]]`, *optional*):
+                The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
+                list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
+                you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
         """
+        # To avoid duplicating
+        all_kwargs = dict(
+            add_special_tokens=add_special_tokens,
+            padding=padding,
+            truncation=truncation,
+            max_length=max_length,
+            stride=stride,
+            is_split_into_words=is_split_into_words,
+            pad_to_multiple_of=pad_to_multiple_of,
+            return_tensors=return_tensors,
+            return_token_type_ids=return_token_type_ids,
+            return_attention_mask=return_attention_mask,
+            return_overflowing_tokens=return_overflowing_tokens,
+            return_special_tokens_mask=return_special_tokens_mask,
+            return_offsets_mapping=return_offsets_mapping,
+            return_length=return_length,
+            verbose=verbose,
+        )
+        all_kwargs.update(kwargs)
+        if text is None and text_target is None:
+            raise ValueError("You need to specify either `text` or `text_target`.")
+        if text is not None:
+            # The context manager will send the inputs as normal texts and not text_target, but we shouldn't change the
+            # input mode in this case.
+            if not self._in_target_context_manager:
+                self._switch_to_input_mode()
+            encodings = self._call_one(text=text, text_pair=text_pair, **all_kwargs)
+        if text_target is not None:
+            self._switch_to_target_mode()
+            target_encodings = self._call_one(text=text_target, text_pair=text_pair_target, **all_kwargs)
+        # Leave back tokenizer in input mode
+        self._switch_to_input_mode()
+
+        if text_target is None:
+            return encodings
+        elif text is None:
+            return target_encodings
+        else:
+            encodings["labels"] = target_encodings["input_ids"]
+            return encodings
+
+    def _call_one(
+        self,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]],
+        text_pair: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        add_special_tokens: bool = True,
+        padding: Union[bool, str, PaddingStrategy] = False,
+        truncation: Union[bool, str, TruncationStrategy] = False,
+        max_length: Optional[int] = None,
+        stride: int = 0,
+        is_split_into_words: bool = False,
+        pad_to_multiple_of: Optional[int] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_token_type_ids: Optional[bool] = None,
+        return_attention_mask: Optional[bool] = None,
+        return_overflowing_tokens: bool = False,
+        return_special_tokens_mask: bool = False,
+        return_offsets_mapping: bool = False,
+        return_length: bool = False,
+        verbose: bool = True,
+        **kwargs
+    ) -> BatchEncoding:
         # Input type checking for clearer error
         def _is_valid_text_input(t):
             if isinstance(t, str):
@@ -2773,7 +2828,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         in the batch.
 
         Padding side (left/right) padding token ids are defined at the tokenizer level (with `self.padding_side`,
-        `self.pad_token_id` and `self.pad_token_type_id`)
+        `self.pad_token_id` and `self.pad_token_type_id`).
+
+        Please note that with a fast tokenizer, using the `__call__` method is faster than using a method to encode the
+        text followed by a call to the `pad` method to get a padded encoding.
 
         <Tip>
 
@@ -2823,6 +2881,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             verbose (`bool`, *optional*, defaults to `True`):
                 Whether or not to print more information and warnings.
         """
+        if self.__class__.__name__.endswith("Fast"):
+            if not self.deprecation_warnings.get("Asking-to-pad-a-fast-tokenizer", False):
+                logger.warning_advice(
+                    f"You're using a {self.__class__.__name__} tokenizer. Please note that with a fast tokenizer,"
+                    " using the `__call__` method is faster than using a method to encode the text followed by a call"
+                    " to the `pad` method to get a padded encoding."
+                )
+                self.deprecation_warnings["Asking-to-pad-a-fast-tokenizer"] = True
+
         # If we have a list of dicts, let's convert it in a dict of lists
         # We do this to allow using this method as a collate_fn function in PyTorch Dataloader
         if isinstance(encoded_inputs, (list, tuple)) and isinstance(encoded_inputs[0], Mapping):
@@ -3454,13 +3521,34 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 )
             self.deprecation_warnings["sequence-length-is-longer-than-the-specified-maximum"] = True
 
+    def _switch_to_input_mode(self):
+        """
+        Private method to put the tokenizer in input mode (when it has different modes for input/outputs)
+        """
+        pass
+
+    def _switch_to_target_mode(self):
+        """
+        Private method to put the tokenizer in target mode (when it has different modes for input/outputs)
+        """
+        pass
+
     @contextmanager
     def as_target_tokenizer(self):
         """
         Temporarily sets the tokenizer for encoding the targets. Useful for tokenizer associated to
         sequence-to-sequence models that need a slightly different processing for the labels.
         """
+        warnings.warn(
+            "`as_target_tokenizer` is deprecated and will be removed in v5 of Transformers. You can tokenize your "
+            "labels by using the argument `text_target` of the regular `__call__` method (either in the same call as "
+            "your input texts if you use the same keyword arguments, or in a separate call."
+        )
+        self._switch_to_target_mode()
+        self._in_target_context_manager = True
         yield
+        self._in_target_context_manager = False
+        self._switch_to_input_mode()
 
     @classmethod
     def register_for_auto_class(cls, auto_class="AutoTokenizer"):
@@ -3561,14 +3649,17 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         # docstyle-ignore
         formatted_warning = """
 `prepare_seq2seq_batch` is deprecated and will be removed in version 5 of HuggingFace Transformers. Use the regular
-`__call__` method to prepare your inputs and the tokenizer under the `as_target_tokenizer` context manager to prepare
-your targets.
+`__call__` method to prepare your inputs and targets.
 
 Here is a short example:
 
+model_inputs = tokenizer(src_texts, text_target=tgt_texts, ...)
+
+If you either need to use different keyword arguments for the source and target texts, you should do two calls like
+this:
+
 model_inputs = tokenizer(src_texts, ...)
-with tokenizer.as_target_tokenizer():
-    labels = tokenizer(tgt_texts, ...)
+labels = tokenizer(text_target=tgt_texts, ...)
 model_inputs["labels"] = labels["input_ids"]
 
 See the documentation of your specific tokenizer for more details on the specific arguments to the tokenizer of choice.

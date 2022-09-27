@@ -202,27 +202,6 @@ class TFCoreModelTesterMixin:
                 self.assertTrue(not isnan(val_loss))
 
     @slow
-    def test_saved_model_creation(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.output_hidden_states = False
-        config.output_attentions = False
-
-        if hasattr(config, "use_cache"):
-            config.use_cache = False
-
-        model_class = self.all_model_classes[0]
-
-        class_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-        model = model_class(config)
-
-        model(class_inputs_dict)
-
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname, saved_model=True)
-            saved_model_dir = os.path.join(tmpdirname, "saved_model", "1")
-            self.assertTrue(os.path.exists(saved_model_dir))
-
-    @slow
     def test_saved_model_creation_extended(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True

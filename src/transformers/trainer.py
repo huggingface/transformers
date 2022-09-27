@@ -69,9 +69,9 @@ from .deepspeed import deepspeed_init, is_deepspeed_zero3_enabled
 from .dependency_versions_check import dep_version_check
 from .modelcard import TrainingSummary
 from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
-from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
+from .models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES, MODEL_MAPPING_NAMES
 from .optimization import Adafactor, get_scheduler
-from .pytorch_utils import ALL_LAYERNORM_LAYERS
+from .pytorch_utils import ALL_LAYERNORM_LAYERS, is_torch_greater_or_equal_than_1_10, is_torch_less_than_1_11
 from .tokenization_utils_base import PreTrainedTokenizerBase
 from .trainer_callback import (
     CallbackHandler,
@@ -150,9 +150,7 @@ from .utils import (
 from .utils.generic import ContextManagers
 
 
-_is_torch_generator_available = False
-_is_native_cuda_amp_available = False
-_is_native_cpu_amp_available = False
+_is_native_cpu_amp_available = is_torch_greater_or_equal_than_1_10
 
 DEFAULT_CALLBACKS = [DefaultFlowCallback]
 DEFAULT_PROGRESS_CALLBACK = ProgressCallback
@@ -164,13 +162,6 @@ if is_in_notebook():
 
 if is_apex_available():
     from apex import amp
-
-if version.parse(torch.__version__) >= version.parse("1.6"):
-    _is_torch_generator_available = True
-    _is_native_cuda_amp_available = True
-
-if version.parse(torch.__version__) >= version.parse("1.10"):
-    _is_native_cpu_amp_available = True
 
 if is_datasets_available():
     import datasets
@@ -192,8 +183,13 @@ if is_fairscale_available():
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
+    from smdistributed.modelparallel import __version__ as SMP_VERSION
+
+    IS_SAGEMAKER_MP_POST_1_10 = version.parse(SMP_VERSION) >= version.parse("1.10")
 
     from .trainer_pt_utils import smp_forward_backward, smp_forward_only, smp_gather, smp_nested_concat
+else:
+    IS_SAGEMAKER_MP_POST_1_10 = False
 
 
 if TYPE_CHECKING:
@@ -242,9 +238,10 @@ class Trainer:
             `torch.Generator` for the randomization that must be identical on all processes (and the Trainer will
             manually set the seed of this `generator` at each epoch) or have a `set_epoch()` method that internally
             sets the seed of the RNGs used.
-        eval_dataset (`torch.utils.data.Dataset`, *optional*):
+        eval_dataset (Union[`torch.utils.data.Dataset`, Dict[str, `torch.utils.data.Dataset`]), *optional*):
              The dataset to use for evaluation. If it is a [`~datasets.Dataset`], columns not accepted by the
-             `model.forward()` method are automatically removed.
+             `model.forward()` method are automatically removed. If it is a dictionary, it will evaluate on each
+             dataset prepending the dictionary key to the metric name.
         tokenizer ([`PreTrainedTokenizerBase`], *optional*):
             The tokenizer used to preprocess the data. If provided, will be used to automatically pad the inputs the
             maximum length when batching inputs, and it will be saved along the model to make it easier to rerun an
@@ -346,6 +343,14 @@ class Trainer:
                 )
             self.model_init = model_init
 
+        if model.__class__.__name__ in MODEL_MAPPING_NAMES:
+            raise ValueError(
+                f"The model you have picked ({model.__class__.__name__}) cannot be used as is for training: it only "
+                "computes hidden states and does not accept any labels. You should choose a model with a head "
+                "suitable for your task like any of the `AutoModelForXxx` listed at "
+                "https://huggingface.co/docs/transformers/model_doc/auto."
+            )
+
         if hasattr(model, "is_parallelizable") and model.is_parallelizable and model.model_parallel:
             self.is_model_parallel = True
         else:
@@ -392,7 +397,7 @@ class Trainer:
             # Would have to update setup.py with torch>=1.12.0
             # which isn't ideally given that it will force people not using FSDP to also use torch>=1.12.0
             # below is the current alternative.
-            if version.parse(torch.__version__) < version.parse("1.12.0"):
+            if version.parse(version.parse(torch.__version__).base_version) < version.parse("1.12.0"):
                 raise ValueError("FSDP requires PyTorch >= 1.12.0")
 
             from torch.distributed.fsdp.fully_sharded_data_parallel import ShardingStrategy
@@ -447,6 +452,21 @@ class Trainer:
                 "Passing a `model_init` is incompatible with providing the `optimizers` argument. "
                 "You should subclass `Trainer` and override the `create_optimizer_and_scheduler` method."
             )
+        if is_torch_tpu_available() and self.optimizer is not None:
+            for param in self.model.parameters():
+                model_device = param.device
+                break
+            for param_group in self.optimizer.param_groups:
+                if len(param_group["params"]) > 0:
+                    optimizer_device = param_group["params"][0].device
+                    break
+            if model_device != optimizer_device:
+                raise ValueError(
+                    "The model and the optimizer parameters are not on the same device, which probably means you"
+                    " created an optimizer around your model **before** putting on the device and passing it to the"
+                    " `Trainer`. Make sure the lines `import torch_xla.core.xla_model as xm` and"
+                    " `model.to(xm.xla_device())` is performed before the optimizer creation in your script."
+                )
         if ((self.sharded_ddp is not None) or args.deepspeed or (self.fsdp is not None)) and (
             self.optimizer is not None or self.lr_scheduler is not None
         ):
@@ -504,14 +524,23 @@ class Trainer:
             # BF16 + model parallelism in SageMaker: currently not supported, raise an error
             if args.bf16:
                 raise ValueError("SageMaker Model Parallelism does not support BF16 yet. Please use FP16 instead ")
-            # When there's mismatch between SMP config and trainer argument, use SMP config as truth
-            if args.fp16 != smp.state.cfg.fp16:
-                logger.warning(
-                    f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16},"
-                    f"but FP16 provided in trainer argument is {args.fp16},"
-                    f"setting to {smp.state.cfg.fp16}"
-                )
-                args.fp16 = smp.state.cfg.fp16
+
+            if IS_SAGEMAKER_MP_POST_1_10:
+                # When there's mismatch between SMP config and trainer argument, use SMP config as truth
+                if args.fp16 != smp.state.cfg.fp16:
+                    logger.warning(
+                        f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16},"
+                        f"but FP16 provided in trainer argument is {args.fp16},"
+                        f"setting to {smp.state.cfg.fp16}"
+                    )
+                    args.fp16 = smp.state.cfg.fp16
+            else:
+                # smp < 1.10 does not support fp16 in trainer.
+                if hasattr(smp.state.cfg, "fp16"):
+                    logger.warning(
+                        f"FP16 provided in SM_HP_MP_PARAMETERS is {smp.state.cfg.fp16}, "
+                        "but SageMaker Model Parallelism < 1.10 does not support FP16 in trainer."
+                    )
 
         if args.fp16 or args.bf16:
             if args.half_precision_backend == "auto":
@@ -523,12 +552,7 @@ class Trainer:
                     else:
                         raise ValueError("Tried to use cpu amp but native cpu amp is not available")
                 else:
-                    if _is_native_cuda_amp_available:
-                        args.half_precision_backend = "cuda_amp"
-                    elif args.bf16:
-                        raise ValueError("Tried to use `bf16` but native amp is not available")
-                    else:
-                        args.half_precision_backend = "apex"
+                    args.half_precision_backend = "cuda_amp"
 
             logger.info(f"Using {args.half_precision_backend} half precision backend")
 
@@ -543,9 +567,11 @@ class Trainer:
                     self.scaler = ShardedGradScaler()
                 elif self.fsdp is not None:
                     if self.amp_dtype == torch.float16:
-                        from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
+                        from torch.distributed.fsdp.sharded_grad_scaler import (
+                            ShardedGradScaler as FSDPShardedGradScaler,
+                        )
 
-                        self.scaler = ShardedGradScaler()
+                        self.scaler = FSDPShardedGradScaler()
                     else:
                         self.do_grad_scaling = False
                         self.use_cuda_amp = False
@@ -613,14 +639,13 @@ class Trainer:
                 raise RuntimeError("Torchdynamo is not installed.")
             import torchdynamo
             from torchdynamo.optimizations import backends
-            from torchdynamo.optimizations.training import aot_autograd_speedup_strategy
 
             def get_ctx():
                 # Normal
                 if args.torchdynamo == "eager":
                     return torchdynamo.optimize("eager")
                 elif args.torchdynamo == "nvfuser":
-                    return torchdynamo.optimize(aot_autograd_speedup_strategy)
+                    return torchdynamo.optimize("aot_nvfuser")
                 # TensorRT
                 if args.torchdynamo in ["fx2trt-fp16", "fx2trt"]:
                     if not is_torch_tensorrt_fx_available():
@@ -737,7 +762,7 @@ class Trainer:
             return None
 
         generator = None
-        if self.args.world_size <= 1 and _is_torch_generator_available:
+        if self.args.world_size <= 1:
             generator = torch.Generator()
             # for backwards compatibility, we generate a seed here (which is sampled from a generator seeded with
             # `args.seed`) if data_seed isn't provided.
@@ -782,9 +807,7 @@ class Trainer:
 
         else:
             if self.args.world_size <= 1:
-                if _is_torch_generator_available:
-                    return RandomSampler(self.train_dataset, generator=generator)
-                return RandomSampler(self.train_dataset)
+                return RandomSampler(self.train_dataset, generator=generator)
             elif (
                 self.args.parallel_mode in [ParallelMode.TPU, ParallelMode.SAGEMAKER_MODEL_PARALLEL]
                 and not self.args.dataloader_drop_last
@@ -991,10 +1014,12 @@ class Trainer:
         `create_scheduler`) in a subclass.
         """
         self.create_optimizer()
-        self.create_scheduler(
-            num_training_steps=num_training_steps,
-            optimizer=self.optimizer.optimizer if is_sagemaker_mp_enabled() and smp.state.cfg.fp16 else self.optimizer,
-        )
+        if IS_SAGEMAKER_MP_POST_1_10 and smp.state.cfg.fp16:
+            # If smp >= 1.10 and fp16 is enabled, we unwrap the optimizer
+            optimizer = self.optimizer.optimizer
+        else:
+            optimizer = self.optimizer
+        self.create_scheduler(num_training_steps=num_training_steps, optimizer=optimizer)
 
     def create_optimizer(self):
         """
@@ -1164,7 +1189,7 @@ class Trainer:
                 value = type(old_attr)(value)
             setattr(self.args, key, value)
         if self.hp_search_backend == HPSearchBackend.OPTUNA:
-            logger.info("Trial:", trial.params)
+            logger.info(f"Trial: {trial.params}")
         if self.hp_search_backend == HPSearchBackend.SIGOPT:
             logger.info(f"SigOpt Assignments: {trial.assignments}")
         if self.hp_search_backend == HPSearchBackend.WANDB:
@@ -1318,9 +1343,8 @@ class Trainer:
                     reshard_after_forward=zero_3,
                     cpu_offload=cpu_offload,
                 ).to(self.args.device)
-
         # Distributed training using PyTorch FSDP
-        if self.fsdp is not None:
+        elif self.fsdp is not None:
             # PyTorch FSDP!
             from torch.distributed.fsdp.fully_sharded_data_parallel import CPUOffload
             from torch.distributed.fsdp.fully_sharded_data_parallel import FullyShardedDataParallel as FSDP
@@ -1342,6 +1366,8 @@ class Trainer:
                     transformer_cls_to_wrap = get_module_class_from_name(
                         model, self.args.fsdp_transformer_layer_cls_to_wrap
                     )
+                    if transformer_cls_to_wrap is None:
+                        raise Exception("Could not find the transformer layer class to wrap in the model.")
                     auto_wrap_policy = functools.partial(
                         transformer_auto_wrap_policy,
                         # Transformer layer class to wrap
@@ -1366,7 +1392,6 @@ class Trainer:
                 )
                 if FSDPOption.OFFLOAD not in self.args.fsdp:
                     model.to(self.args.device)
-
         elif is_sagemaker_dp_enabled():
             model = nn.parallel.DistributedDataParallel(
                 model, device_ids=[int(os.getenv("SMDATAPARALLEL_LOCAL_RANK"))]
@@ -1442,6 +1467,7 @@ class Trainer:
             raise TypeError(f"train() received got unexpected keyword arguments: {', '.join(list(kwargs.keys()))}.")
         # This might change the seed so needs to run first.
         self._hp_search_setup(trial)
+        self._train_batch_size = self.args.train_batch_size
 
         # Model re-init
         model_reloaded = False
@@ -1650,7 +1676,7 @@ class Trainer:
                 is_random_sampler = hasattr(train_dataloader, "sampler") and isinstance(
                     train_dataloader.sampler, RandomSampler
                 )
-                if version.parse(torch.__version__) < version.parse("1.11") or not is_random_sampler:
+                if is_torch_less_than_1_11 or not is_random_sampler:
                     # We just need to begin an iteration to create the randomization of the sampler.
                     # That was before PyTorch 1.11 however...
                     for _ in train_dataloader:
@@ -1858,7 +1884,6 @@ class Trainer:
 
         if model is None:
             model = self.model
-        strict_load = is_sagemaker_mp_enabled()
 
         if not os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)) and not os.path.isfile(
             os.path.join(resume_from_checkpoint, WEIGHTS_INDEX_NAME)
@@ -1881,24 +1906,45 @@ class Trainer:
             # will be resumed in deepspeed_init
             pass
         elif os.path.isfile(os.path.join(resume_from_checkpoint, WEIGHTS_NAME)):
-            # We load the model state dict on the CPU to avoid an OOM error.
-            state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
             # If the model is on the GPU, it still works!
-            load_result = model.load_state_dict(state_dict, strict=strict_load)
-            if not strict_load:
+            if is_sagemaker_mp_enabled():
+                if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
+                    # If the 'user_content.pt' file exists, load with the new smp api.
+                    # Checkpoint must have been saved with the new smp api.
+                    smp.resume_from_checkpoint(
+                        path=resume_from_checkpoint, tag=WEIGHTS_NAME, partial=False, load_optimizer=False
+                    )
+                else:
+                    # If the 'user_content.pt' file does NOT exist, load with the old smp api.
+                    # Checkpoint must have been saved with the old smp api.
+                    if hasattr(self.args, "fp16") and self.args.fp16 is True:
+                        logger.warning(
+                            "Enabling FP16 and loading from smp < 1.10 checkpoint together is not suppported."
+                        )
+                    state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
+                    # Required for smp to not auto-translate state_dict from hf to smp (is already smp).
+                    state_dict["_smp_is_partial"] = False
+                    load_result = model.load_state_dict(state_dict, strict=True)
+                    # release memory
+                    del state_dict
+            else:
+                # We load the model state dict on the CPU to avoid an OOM error.
+                state_dict = torch.load(os.path.join(resume_from_checkpoint, WEIGHTS_NAME), map_location="cpu")
+                # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
+                # which takes *args instead of **kwargs
+                load_result = model.load_state_dict(state_dict, False)
+                # release memory
+                del state_dict
                 self._issue_warnings_after_load(load_result)
-            # release memory
-            del state_dict
         else:
             # We load the sharded checkpoint
-            load_result = load_sharded_checkpoint(model, resume_from_checkpoint, strict=strict_load)
-            if not strict_load:
+            load_result = load_sharded_checkpoint(model, resume_from_checkpoint, strict=is_sagemaker_mp_enabled())
+            if not is_sagemaker_mp_enabled():
                 self._issue_warnings_after_load(load_result)
 
     def _load_best_model(self):
         logger.info(f"Loading best model from {self.state.best_model_checkpoint} (score: {self.state.best_metric}).")
         best_model_path = os.path.join(self.state.best_model_checkpoint, WEIGHTS_NAME)
-        strict_load = is_sagemaker_mp_enabled()
         model = self.model_wrapped if is_sagemaker_mp_enabled() else self.model
         if os.path.exists(best_model_path):
             if self.deepspeed:
@@ -1920,15 +1966,36 @@ class Trainer:
                 self.optimizer = optimizer
                 self.lr_scheduler = lr_scheduler
             else:
-                # We load the model state dict on the CPU to avoid an OOM error.
-                state_dict = torch.load(best_model_path, map_location="cpu")
-                # If the model is on the GPU, it still works!
-                load_result = model.load_state_dict(state_dict, strict=strict_load)
-                if not strict_load:
+                if is_sagemaker_mp_enabled():
+                    if os.path.isfile(os.path.join(self.state.best_model_checkpoint, "user_content.pt")):
+                        # If the 'user_content.pt' file exists, load with the new smp api.
+                        # Checkpoint must have been saved with the new smp api.
+                        smp.resume_from_checkpoint(
+                            path=self.state.best_model_checkpoint,
+                            tag=WEIGHTS_NAME,
+                            partial=False,
+                            load_optimizer=False,
+                        )
+                    else:
+                        # If the 'user_content.pt' file does NOT exist, load with the old smp api.
+                        # Checkpoint must have been saved with the old smp api.
+                        state_dict = torch.load(best_model_path, map_location="cpu")
+                        state_dict["_smp_is_partial"] = False
+                        load_result = model.load_state_dict(state_dict, strict=True)
+                else:
+                    # We load the model state dict on the CPU to avoid an OOM error.
+                    state_dict = torch.load(best_model_path, map_location="cpu")
+                    # If the model is on the GPU, it still works!
+                    # workaround for FSDP bug https://github.com/pytorch/pytorch/issues/82963
+                    # which takes *args instead of **kwargs
+                    load_result = model.load_state_dict(state_dict, False)
+                if not is_sagemaker_mp_enabled():
                     self._issue_warnings_after_load(load_result)
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)):
-            load_result = load_sharded_checkpoint(model, self.state.best_model_checkpoint, strict=strict_load)
-            if not strict_load:
+            load_result = load_sharded_checkpoint(
+                model, self.state.best_model_checkpoint, strict=is_sagemaker_mp_enabled()
+            )
+            if not is_sagemaker_mp_enabled():
                 self._issue_warnings_after_load(load_result)
         else:
             logger.warning(
@@ -1974,7 +2041,15 @@ class Trainer:
 
         metrics = None
         if self.control.should_evaluate:
-            metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
+            if isinstance(self.eval_dataset, dict):
+                for eval_dataset_name, eval_dataset in self.eval_dataset.items():
+                    metrics = self.evaluate(
+                        eval_dataset=eval_dataset,
+                        ignore_keys=ignore_keys_for_eval,
+                        metric_key_prefix=f"eval_{eval_dataset_name}",
+                    )
+            else:
+                metrics = self.evaluate(ignore_keys=ignore_keys_for_eval)
             self._report_to_hp_search(trial, self.state.global_step, metrics)
 
         if self.control.should_save:
@@ -2174,11 +2249,20 @@ class Trainer:
             else:
                 map_location = "cpu" if is_sagemaker_mp_enabled() else self.args.device
                 if is_sagemaker_mp_enabled():
+                    if os.path.isfile(os.path.join(checkpoint, "user_content.pt")):
+                        # Optimizer checkpoint was saved with smp >= 1.10
+                        def opt_load_hook(mod, opt):
+                            opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
 
-                    def opt_load_hook(mod, opt):
-                        opt.load_state_dict(
-                            smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True), gather_if_shard=False
-                        )
+                    else:
+                        # Optimizer checkpoint was saved with smp < 1.10
+                        def opt_load_hook(mod, opt):
+                            if IS_SAGEMAKER_MP_POST_1_10:
+                                opt.load_state_dict(
+                                    smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True, back_compat=True)
+                                )
+                            else:
+                                opt.load_state_dict(smp.load(os.path.join(checkpoint, OPTIMIZER_NAME), partial=True))
 
                     self.model_wrapped.register_post_step_hook(opt_load_hook)
                 else:
@@ -2225,13 +2309,15 @@ class Trainer:
                 method. Will default to [`~trainer_utils.default_compute_objective`].
             n_trials (`int`, *optional*, defaults to 100):
                 The number of trial runs to test.
-            direction(`str`, *optional*, defaults to `"minimize"`):
+            direction (`str`, *optional*, defaults to `"minimize"`):
                 Whether to optimize greater or lower objects. Can be `"minimize"` or `"maximize"`, you should pick
                 `"minimize"` when optimizing the validation loss, `"maximize"` when optimizing one or several metrics.
-            backend(`str` or [`~training_utils.HPSearchBackend`], *optional*):
+            backend (`str` or [`~training_utils.HPSearchBackend`], *optional*):
                 The backend to use for hyperparameter search. Will default to optuna or Ray Tune or SigOpt, depending
                 on which one is installed. If all are installed, will default to optuna.
-            kwargs:
+            hp_name (`Callable[["optuna.Trial"], str]]`, *optional*):
+                A function that defines the trial/run name. Will default to None.
+            kwargs (`Dict[str, Any]`, *optional*):
                 Additional keyword arguments passed along to `optuna.create_study` or `ray.tune.run`. For more
                 information see:
 
@@ -2358,7 +2444,7 @@ class Trainer:
         arguments, depending on the situation.
         """
         if self.use_cuda_amp or self.use_cpu_amp:
-            if version.parse(torch.__version__) >= version.parse("1.10"):
+            if is_torch_greater_or_equal_than_1_10:
                 ctx_manager = (
                     torch.cpu.amp.autocast(dtype=self.amp_dtype)
                     if self.use_cpu_amp
@@ -2441,6 +2527,11 @@ class Trainer:
             else:
                 loss = self.label_smoother(outputs, labels)
         else:
+            if isinstance(outputs, dict) and "loss" not in outputs:
+                raise ValueError(
+                    "The model did not return a loss from the inputs, only the following keys: "
+                    f"{','.join(outputs.keys())}. For reference, the inputs it received are {','.join(inputs.keys())}."
+                )
             # We don't use .loss here since the model may return tuples instead of ModelOutput.
             loss = outputs["loss"] if isinstance(outputs, dict) else outputs[0]
 
@@ -2479,9 +2570,13 @@ class Trainer:
             self._save_tpu(output_dir)
         elif is_sagemaker_mp_enabled():
             # Calling the state_dict needs to be done on the wrapped model and on all processes.
+            os.makedirs(output_dir, exist_ok=True)
             state_dict = self.model_wrapped.state_dict()
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
+            if IS_SAGEMAKER_MP_POST_1_10:
+                # 'user_content.pt' indicates model state_dict saved with smp >= 1.10
+                Path(os.path.join(output_dir, "user_content.pt")).touch()
         elif (
             ShardedDDPOption.ZERO_DP_2 in self.args.sharded_ddp
             or ShardedDDPOption.ZERO_DP_3 in self.args.sharded_ddp
@@ -2933,13 +3028,15 @@ class Trainer:
             num_samples = len(eval_dataset)
         # The instance check is weird and does not actually check for the type, but whether the dataset has the right
         # methods. Therefore we need to make sure it also has the attribute.
-        elif isinstance(eval_dataset, IterableDatasetShard) and hasattr(eval_dataset, "num_examples"):
+        elif isinstance(eval_dataset, IterableDatasetShard) and getattr(eval_dataset, "num_examples", 0) > 0:
             num_samples = eval_dataset.num_examples
         else:
             if has_length(dataloader):
                 num_samples = self.num_examples(dataloader)
             else:  # both len(dataloader.dataset) and len(dataloader) fail
                 num_samples = observed_num_examples
+        if num_samples == 0 and observed_num_examples > 0:
+            num_samples = observed_num_examples
 
         # Number of losses has been rounded to a multiple of batch_size and in a distributed training, the number of
         # samplers has been rounded to a multiple of batch_size, so we truncate.
@@ -3196,14 +3293,39 @@ class Trainer:
         self,
         language: Optional[str] = None,
         license: Optional[str] = None,
-        tags: Optional[str] = None,
+        tags: Union[str, List[str], None] = None,
         model_name: Optional[str] = None,
         finetuned_from: Optional[str] = None,
-        tasks: Optional[str] = None,
-        dataset_tags: Optional[Union[str, List[str]]] = None,
-        dataset: Optional[Union[str, List[str]]] = None,
-        dataset_args: Optional[Union[str, List[str]]] = None,
+        tasks: Union[str, List[str], None] = None,
+        dataset_tags: Union[str, List[str], None] = None,
+        dataset: Union[str, List[str], None] = None,
+        dataset_args: Union[str, List[str], None] = None,
     ):
+        """
+        Creates a draft of a model card using the information available to the `Trainer`.
+
+        Args:
+            language (`str`, *optional*):
+                The language of the model (if applicable)
+            license (`str`, *optional*):
+                The license of the model. Will default to the license of the pretrained model used, if the original
+                model given to the `Trainer` comes from a repo on the Hub.
+            tags (`str` or `List[str]`, *optional*):
+                Some tags to be included in the metadata of the model card.
+            model_name (`str`, *optional*):
+                The name of the model.
+            finetuned_from (`str`, *optional*):
+                The name of the model used to fine-tune this one (if applicable). Will default to the name of the repo
+                of the original model given to the `Trainer` (if it comes from the Hub).
+            tasks (`str` or `List[str]`, *optional*):
+                One or several task identifiers, to be included in the metadata of the model card.
+            dataset_tags (`str` or `List[str]`, *optional*):
+                One or several dataset tags, to be included in the metadata of the model card.
+            dataset (`str` or `List[str]`, *optional*):
+                One or several dataset identifiers, to be included in the metadata of the model card.
+            dataset_args (`str` or `List[str]`, *optional*):
+               One or several dataset arguments, to be included in the metadata of the model card.
+        """
         if not self.is_world_process_zero():
             return
 

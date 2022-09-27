@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import LEDConfig, is_tf_available
-from transformers.testing_utils import require_tf, slow
+from transformers.testing_utils import require_tf, slow, tooslow
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor
@@ -365,8 +365,8 @@ class TFLEDModelTest(TFModelTesterMixin, unittest.TestCase):
         # TODO JP: Make LED XLA compliant
         pass
 
+    @tooslow
     def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
         pass
 
     def test_generate_with_headmasking(self):
@@ -412,7 +412,7 @@ class TFLEDModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.convert_to_tensor(
             [[2.3050, 2.8279, 0.6531], [-1.8457, -0.1455, -3.5661], [-1.0186, 0.4586, -2.2043]],
         )
-        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE)
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-3)
 
     def test_inference_with_head(self):
         model = TFLEDForConditionalGeneration.from_pretrained("allenai/led-base-16384")
@@ -428,4 +428,4 @@ class TFLEDModelIntegrationTest(unittest.TestCase):
         expected_slice = tf.convert_to_tensor(
             [[33.6507, 6.4572, 16.8089], [5.8739, -2.4238, 11.2902], [-3.2139, -4.3149, 4.2783]],
         )
-        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=TOLERANCE)
+        tf.debugging.assert_near(output[:, :3, :3], expected_slice, atol=1e-3, rtol=1e-3)

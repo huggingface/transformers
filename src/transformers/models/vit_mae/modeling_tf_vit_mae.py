@@ -722,8 +722,8 @@ class TFViTMAEPreTrainedModel(TFPreTrainedModel):
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
-
-        return self.call(inputs)
+        output = self.call(inputs)
+        return self.serving_output(output)
 
 
 VIT_MAE_START_DOCSTRING = r"""
@@ -737,13 +737,27 @@ VIT_MAE_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
+
+    - a single Tensor with `pixel_values` only and nothing else: `model(pixel_values)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([pixel_values, attention_mask])` or `model([pixel_values, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"pixel_values": pixel_values, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -841,6 +855,18 @@ class TFViTMAEModel(TFViTMAEPreTrainedModel):
         )
 
         return outputs
+
+    def serving_output(self, output: TFViTMAEModelOutput) -> TFViTMAEModelOutput:
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFViTMAEModelOutput(
+            last_hidden_state=output.last_hidden_state,
+            mask=output.mask,
+            ids_restore=output.ids_restore,
+            hidden_states=hidden_states,
+            attentions=attentions,
+        )
 
 
 class TFViTMAEDecoder(tf.keras.layers.Layer):
@@ -1073,6 +1099,7 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
         loss = tf.reduce_mean(loss, axis=-1)  # [batch_size, num_patches], mean loss per patch
 
         loss = tf.reduce_sum(loss * mask) / tf.reduce_sum(mask)  # mean loss on removed patches
+        loss = tf.reshape(loss, (1,))
         return loss
 
     @unpack_inputs
@@ -1142,4 +1169,16 @@ class TFViTMAEForPreTraining(TFViTMAEPreTrainedModel):
             ids_restore=ids_restore,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+        )
+
+    def serving_output(self, output: TFViTMAEForPreTrainingOutput) -> TFViTMAEForPreTrainingOutput:
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFViTMAEForPreTrainingOutput(
+            logits=output.logits,
+            mask=output.mask,
+            ids_restore=output.ids_restore,
+            hidden_states=hidden_states,
+            attentions=attentions,
         )

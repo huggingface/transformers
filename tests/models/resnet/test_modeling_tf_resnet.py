@@ -41,7 +41,7 @@ if is_vision_available():
     from transformers import AutoFeatureExtractor
 
 
-class ResNetModelTester:
+class TFResNetModelTester:
     def __init__(
         self,
         parent,
@@ -116,7 +116,7 @@ class ResNetModelTester:
 
 
 @require_tf
-class ResNetModelTest(TFModelTesterMixin, unittest.TestCase):
+class TFResNetModelTest(TFModelTesterMixin, unittest.TestCase):
     """
     Here we also overwrite some of the tests of test_modeling_common.py, as ResNet does not use input_ids, inputs_embeds,
     attention_mask and seq_length.
@@ -131,7 +131,7 @@ class ResNetModelTest(TFModelTesterMixin, unittest.TestCase):
     has_attentions = False
 
     def setUp(self):
-        self.model_tester = ResNetModelTester(self)
+        self.model_tester = TFResNetModelTester(self)
         self.config_tester = ConfigTester(self, config_class=ResNetConfig, has_text_modality=False)
 
     def test_config(self):
@@ -223,7 +223,7 @@ def prepare_img():
 
 @require_tf
 @require_vision
-class ResNetModelIntegrationTest(unittest.TestCase):
+class TFResNetModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
         return (

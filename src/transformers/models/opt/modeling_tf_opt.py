@@ -53,6 +53,9 @@ _TOKENIZER_FOR_DOC = "GPT2Tokenizer"
 # Base model docstring
 _EXPECTED_OUTPUT_SHAPE = [1, 8, 1024]
 
+# Causal LM output
+_CAUSAL_LM_EXPECTED_OUTPUT = "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
+
 LARGE_NEGATIVE = -1e8
 
 
@@ -203,30 +206,24 @@ class TFOPTAttention(tf.keras.layers.Layer):
         src_len = shape_list(key_states)[1]
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
 
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(attn_weights),
-                [bsz * self.num_heads, tgt_len, src_len],
-                message=(
-                    f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                    f" {shape_list(attn_weights)}"
-                ),
-            )
+        tf.debugging.assert_equal(
+            shape_list(attn_weights),
+            [bsz * self.num_heads, tgt_len, src_len],
+            message=(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {shape_list(attn_weights)}"
+            ),
+        )
 
         if attention_mask is not None:
-            # The tf.debugging asserts are not compliant with XLA then they
-            # have to be disabled in other modes than eager.
-            if tf.executing_eagerly():
-                tf.debugging.assert_equal(
-                    shape_list(attention_mask),
-                    [bsz, 1, tgt_len, src_len],
-                    message=(
-                        f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
-                        f" {shape_list(attention_mask)}"
-                    ),
-                )
+            tf.debugging.assert_equal(
+                shape_list(attention_mask),
+                [bsz, 1, tgt_len, src_len],
+                message=(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
+                    f" {shape_list(attention_mask)}"
+                ),
+            )
 
             attention_mask = tf.cast(attention_mask, dtype=attn_weights.dtype)
             attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
@@ -235,17 +232,14 @@ class TFOPTAttention(tf.keras.layers.Layer):
         attn_weights = stable_softmax(attn_weights, axis=-1)
 
         if layer_head_mask is not None:
-            # The tf.debugging asserts are not compliant with XLA then they
-            # have to be disabled in other modes than eager.
-            if tf.executing_eagerly():
-                tf.debugging.assert_equal(
-                    shape_list(layer_head_mask),
-                    [self.num_heads],
-                    message=(
-                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
-                        f" {shape_list(layer_head_mask)}"
-                    ),
-                )
+            tf.debugging.assert_equal(
+                shape_list(layer_head_mask),
+                [self.num_heads],
+                message=(
+                    f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                    f" {shape_list(layer_head_mask)}"
+                ),
+            )
 
             attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
                 attn_weights, (bsz, self.num_heads, tgt_len, src_len)
@@ -255,17 +249,14 @@ class TFOPTAttention(tf.keras.layers.Layer):
         attn_probs = self.dropout(attn_weights, training=training)
         attn_output = tf.matmul(attn_probs, value_states)
 
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(attn_output),
-                [bsz * self.num_heads, tgt_len, self.head_dim],
-                message=(
-                    f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                    f" {shape_list(attn_output)}"
-                ),
-            )
+        tf.debugging.assert_equal(
+            shape_list(attn_output),
+            [bsz * self.num_heads, tgt_len, self.head_dim],
+            message=(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {shape_list(attn_output)}"
+            ),
+        )
 
         attn_output = tf.transpose(
             tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
@@ -375,22 +366,27 @@ OPT_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
-
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
     - a single Tensor with `input_ids` only and nothing else: `model(input_ids)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_ids, attention_mask])` or `model([input_ids, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_ids": input_ids, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -429,8 +425,8 @@ class TFOPTPreTrainedModel(TFPreTrainedModel):
     @tf.function(
         input_signature=[
             {
-                "input_ids": tf.TensorSpec((None, None), tf.int32, name="input_ids"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
+                "input_ids": tf.TensorSpec((None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
             }
         ]
     )
@@ -598,7 +594,7 @@ class TFOPTDecoder(tf.keras.layers.Layer):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all ``decoder_input_ids``` of shape `(batch_size, sequence_length)`.
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
             inputs_embeds (`tf.Tensor` of
                 shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
                 `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
@@ -636,6 +632,16 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         past_key_values_length = shape_list(past_key_values[0][0])[2] if past_key_values is not None else 0
 
         if inputs_embeds is None:
+            # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
+            # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
+            tf.debugging.assert_less(
+                input_ids,
+                tf.cast(self.embed_tokens.vocab_size, dtype=input_ids.dtype),
+                message=(
+                    "input_ids must be smaller than the embedding layer's input dimension (got"
+                    f" {tf.math.reduce_max(input_ids)} >= {self.embed_tokens.vocab_size})"
+                ),
+            )
             inputs_embeds = self.embed_tokens(input_ids)
 
         if attention_mask is None:
@@ -649,7 +655,6 @@ class TFOPTDecoder(tf.keras.layers.Layer):
             inputs_embeds = self.project_in(inputs_embeds)
 
         hidden_states = inputs_embeds + pos_embeds
-        hidden_states = self.dropout(hidden_states, training=training)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -657,10 +662,8 @@ class TFOPTDecoder(tf.keras.layers.Layer):
         present_key_values = () if use_cache else None
 
         # check if head_mask and cross_attn_head_mask have a correct number of layers specified if desired
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
         for attn_mask_name, attn_mask in [("head_mask", head_mask)]:
-            if attn_mask is not None and tf.executing_eagerly():
+            if attn_mask is not None:
                 tf.debugging.assert_equal(
                     shape_list(attn_mask)[0],
                     len(self.layers),
@@ -894,6 +897,13 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
 
     @unpack_inputs
     @replace_return_docstrings(output_type=TFCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFCausalLMOutputWithPast,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_CAUSAL_LM_EXPECTED_OUTPUT,
+    )
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
@@ -964,25 +974,7 @@ class TFOPTForCausalLM(TFOPTPreTrainedModel, TFCausalLanguageModelingLoss):
                 for more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> from transformers import GPT2Tokenizer, TFOPTForCausalLM
-
-        >>> model = TFOPTForCausalLM.from_pretrained("facebook/opt-350m")
-        >>> tokenizer = GPT2Tokenizer.from_pretrained("facebook/opt-350m")
-
-        >>> prompt = "Hey, are you consciours? Can you talk to me?"
-        >>> inputs = tokenizer(prompt, return_tensors="tf")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you consciours? Can you talk to me?\nI'm not consciours, but I can talk to you."
-        ```"""
+        """
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

@@ -17,7 +17,7 @@ import tempfile
 import unittest
 
 from transformers import AutoTokenizer, PegasusConfig, is_tf_available
-from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow
+from transformers.testing_utils import require_sentencepiece, require_tf, require_tokenizers, slow, tooslow
 from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
@@ -244,8 +244,8 @@ class TFPegasusModelTest(TFModelTesterMixin, unittest.TestCase):
                 name = model.get_bias()
                 assert name is None
 
+    @tooslow
     def test_saved_model_creation(self):
-        # This test is too long (>30sec) and makes fail the CI
         pass
 
     def test_resize_token_embeddings(self):

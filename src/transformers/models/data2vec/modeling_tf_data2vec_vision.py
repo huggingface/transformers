@@ -801,8 +801,8 @@ class TFData2VecVisionPreTrainedModel(TFPreTrainedModel):
             inputs (`Dict[str, tf.Tensor]`):
                 The input of the saved model as a dictionary of tensors.
         """
-
-        return self.call(inputs)
+        output = self.call(inputs)
+        return self.serving_output(output)
 
 
 DATA2VEC_VISION_START_DOCSTRING = r"""
@@ -816,13 +816,27 @@ DATA2VEC_VISION_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
+
+    - a single Tensor with `pixel_values` only and nothing else: `model(pixel_values)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([pixel_values, attention_mask])` or `model([pixel_values, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"pixel_values": pixel_values, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -910,6 +924,17 @@ class TFData2VecVisionModel(TFData2VecVisionPreTrainedModel):
 
         return outputs
 
+    def serving_output(self, output: TFData2VecVisionModelOutputWithPooling) -> TFData2VecVisionModelOutputWithPooling:
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFData2VecVisionModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=hidden_states,
+            attentions=attentions,
+        )
+
 
 @add_start_docstrings(
     """
@@ -982,6 +1007,12 @@ class TFData2VecVisionForImageClassification(TFData2VecVisionPreTrainedModel, TF
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)
 
 
 class TFData2VecVisionConvModule(tf.keras.layers.Layer):
@@ -1335,8 +1366,8 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             loss_ = loss_fct(real, pred)
             mask = tf.cast(mask, dtype=loss_.dtype)
             loss_ *= mask
-
-            return tf.reduce_sum(loss_) / tf.reduce_sum(mask)
+            reduced_masked_loss = tf.reduce_sum(loss_) / tf.reduce_sum(mask)
+            return tf.reshape(reduced_masked_loss, (1,))
 
         main_loss = masked_loss(labels, upsampled_logits)
         auxiliary_loss = masked_loss(labels, upsampled_auxiliary_logits)
@@ -1443,3 +1474,9 @@ class TFData2VecVisionForSemanticSegmentation(TFData2VecVisionPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+    def serving_output(self, output: TFSemanticSegmenterOutput) -> TFSemanticSegmenterOutput:
+        hidden_states = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attentions = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSemanticSegmenterOutput(logits=output.logits, hidden_states=hidden_states, attentions=attentions)

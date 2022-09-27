@@ -547,7 +547,6 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
         else:
             past_length = past_key_values[0][0].size(-2)
 
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
         if position_ids is None:
             position_ids = torch.arange(past_length, input_shape[-1] + past_length, dtype=torch.long, device=device)
             position_ids = position_ids.unsqueeze(0).view(-1, input_shape[-1])
@@ -566,7 +565,7 @@ class GPTNeoModel(GPTNeoPreTrainedModel):
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and -10000.0 for masked positions.
+            # positions we want to attend and the dtype's smallest value for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility

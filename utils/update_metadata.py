@@ -80,6 +80,22 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "AutoModelForAudioFrameClassification",
     ),
     ("audio-xvector", "MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES", "AutoModelForAudioXVector"),
+    (
+        "document-question-answering",
+        "MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES",
+        "AutoModelForDocumentQuestionAnswering",
+    ),
+    (
+        "visual-question-answering",
+        "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES",
+        "AutoModelForVisualQuestionAnswering",
+    ),
+    ("image-to-text", "MODEL_FOR_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
+    (
+        "zero-shot-image-classification",
+        "_MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES",
+        "AutoModel",
+    ),
 ]
 
 
@@ -231,10 +247,35 @@ def update_metadata(token, commit_sha):
             repo.push_to_hub(commit_message)
 
 
+def check_pipeline_tags():
+    in_table = {tag: cls for tag, _, cls in PIPELINE_TAGS_AND_AUTO_MODELS}
+    pipeline_tasks = transformers_module.pipelines.SUPPORTED_TASKS
+    missing = []
+    for key in pipeline_tasks:
+        if key not in in_table:
+            model = pipeline_tasks[key]["pt"]
+            if isinstance(model, (list, tuple)):
+                model = model[0]
+            model = model.__name__
+            if model not in in_table.values():
+                missing.append(key)
+
+    if len(missing) > 0:
+        msg = ", ".join(missing)
+        raise ValueError(
+            "The following pipeline tags are not present in the `PIPELINE_TAGS_AND_AUTO_MODELS` constant inside "
+            f"`utils/update_metadata.py`: {msg}. Please add them!"
+        )
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--token", type=str, help="The token to use to push to the transformers-metadata dataset.")
     parser.add_argument("--commit_sha", type=str, help="The sha of the commit going with this update.")
+    parser.add_argument("--check-only", action="store_true", help="Activate to just check all pipelines are present.")
     args = parser.parse_args()
 
-    update_metadata(args.token, args.commit_sha)
+    if args.check_only:
+        check_pipeline_tags()
+    else:
+        update_metadata(args.token, args.commit_sha)

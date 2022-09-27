@@ -40,6 +40,7 @@ else:
         "OPTForCausalLM",
         "OPTModel",
         "OPTPreTrainedModel",
+        "OPTForSequenceClassification",
     ]
 
 try:
@@ -72,7 +73,13 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_opt import OPT_PRETRAINED_MODEL_ARCHIVE_LIST, OPTForCausalLM, OPTModel, OPTPreTrainedModel
+        from .modeling_opt import (
+            OPT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            OPTForCausalLM,
+            OPTForSequenceClassification,
+            OPTModel,
+            OPTPreTrainedModel,
+        )
 
     try:
         if not is_tf_available():

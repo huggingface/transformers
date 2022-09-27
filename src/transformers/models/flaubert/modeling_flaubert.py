@@ -19,7 +19,6 @@ import random
 from typing import Dict, Optional, Tuple, Union
 
 import torch
-from packaging import version
 from torch import nn
 
 from ...modeling_outputs import BaseModelOutput
@@ -139,10 +138,9 @@ class FlaubertModel(XLMModel):
         super().__init__(config)
         self.layerdrop = getattr(config, "layerdrop", 0.0)
         self.pre_norm = getattr(config, "pre_norm", False)
-        if version.parse(torch.__version__) > version.parse("1.6.0"):
-            self.register_buffer(
-                "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-            )
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
 
     @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

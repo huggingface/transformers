@@ -518,7 +518,14 @@ class LongT5Attention(nn.Module):
             if mask is not None:
                 position_bias = position_bias + mask  # (batch_size, n_heads, seq_length, key_length)
 
-        scores += position_bias
+        if self.pruned_heads:
+            mask = torch.ones(position_bias.shape[1])
+            mask[list(self.pruned_heads)] = 0
+            position_bias_masked = position_bias[:, mask.bool()]
+        else:
+            position_bias_masked = position_bias
+
+        scores += position_bias_masked
         attn_weights = nn.functional.softmax(scores.float(), dim=-1).type_as(
             scores
         )  # (batch_size, n_heads, seq_length, key_length)
@@ -1331,8 +1338,6 @@ class LongT5PreTrainedModel(PreTrainedModel):
         # replace possible -100 values in labels by `pad_token_id`
         shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
 
-        assert torch.all(shifted_input_ids >= 0).item(), "Verify that `shifted_input_ids` has only positive values"
-
         return shifted_input_ids
 
 
@@ -1414,7 +1419,7 @@ class LongT5Stack(LongT5PreTrainedModel):
             assert self.is_decoder, f"`use_cache` can only be set to `True` if {self} is used as a decoder"
 
         if attention_mask is None:
-            attention_mask = torch.ones(batch_size, mask_seq_length).to(inputs_embeds.device)
+            attention_mask = torch.ones(batch_size, mask_seq_length, device=inputs_embeds.device)
         if self.is_decoder and encoder_attention_mask is None and encoder_hidden_states is not None:
             encoder_seq_length = encoder_hidden_states.shape[1]
             encoder_attention_mask = torch.ones(
@@ -1968,13 +1973,12 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel):
         ... )
 
         >>> # Let's try a very long input.
-        >>> input_ids = tokenizer(
-        ...     "summarize: " + 100 * "studies have shown that owning a dog is good for you ", return_tensors="pt"
-        ... ).input_ids  # Batch size 1
+        >>> inputs = tokenizer(100 * "studies have shown that owning a dog is good for you ", return_tensors="pt")
+        >>> input_ids = inputs.input_ids
 
         >>> outputs = model.generate(input_ids)
         >>> print(tokenizer.decode(outputs[0], skip_special_tokens=True))
-        abstractthe aim of this article is to summarize the studies have shown that owning a dog
+        abstractthe aim of this article is to provide an overview of the literature on the role of dog
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

@@ -136,7 +136,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
         training (`bool`, *optional*, defaults to `False`):
             Whether or not to use the model in training mode (some modules like dropout modules have different
             behaviors between training and evaluation).
-        kwargs: (*optional*) Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
+        kwargs (*optional*): Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
 
             - Without a prefix which will be input as `**encoder_kwargs` for the encoder forward function.
             - With a *decoder_* prefix which will be input as `**decoder_kwargs` for the decoder forward function.
@@ -161,13 +161,12 @@ def shift_tokens_right(input_ids: tf.Tensor, pad_token_id: int, decoder_start_to
         shifted_input_ids == -100, tf.fill(shape_list(shifted_input_ids), pad_token_id), shifted_input_ids
     )
 
-    if tf.executing_eagerly():
-        # "Verify that `labels` has only positive values and -100"
-        assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=input_ids.dtype))
+    # "Verify that `labels` has only positive values and -100"
+    assert_gte0 = tf.debugging.assert_greater_equal(shifted_input_ids, tf.constant(0, dtype=input_ids.dtype))
 
-        # Make sure the assertion op is called by wrapping the result in an identity no-op
-        with tf.control_dependencies([assert_gte0]):
-            shifted_input_ids = tf.identity(shifted_input_ids)
+    # Make sure the assertion op is called by wrapping the result in an identity no-op
+    with tf.control_dependencies([assert_gte0]):
+        shifted_input_ids = tf.identity(shifted_input_ids)
 
     return shifted_input_ids
 
@@ -663,13 +662,13 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
             warnings.warn(DEPRECATION_WARNING, FutureWarning)
             loss = self.hf_compute_loss(labels, logits)
 
-        past_key_values = None
-        if decoder_inputs["use_cache"]:
-            past_key_values = decoder_outputs[1]
-        # The starting index of the remaining elements in `decoder_outputs`
-        start_index = sum([1 if x is not None else 0 for x in (loss, logits, past_key_values)])
+        if not return_dict:
+            past_key_values = None
+            if use_cache:
+                past_key_values = decoder_outputs[1]
+            # The starting index of the remaining elements in `decoder_outputs`
+            start_index = sum([1 if x is not None else 0 for x in (loss, logits, past_key_values)])
 
-        if not decoder_inputs["return_dict"]:
             if not isinstance(encoder_outputs, tuple):
                 encoder_outputs = encoder_outputs.to_tuple()
             output = (loss, logits, past_key_values) + decoder_outputs[start_index:] + encoder_outputs
@@ -679,7 +678,7 @@ class TFVisionEncoderDecoderModel(TFPreTrainedModel, TFCausalLanguageModelingLos
         return TFSeq2SeqLMOutput(
             loss=loss,
             logits=decoder_outputs.logits,
-            past_key_values=past_key_values,
+            past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,

@@ -39,13 +39,15 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
     [
         ("beit", "BeitFeatureExtractor"),
         ("clip", "CLIPFeatureExtractor"),
+        ("conditional_detr", "ConditionalDetrFeatureExtractor"),
         ("convnext", "ConvNextFeatureExtractor"),
         ("cvt", "ConvNextFeatureExtractor"),
         ("data2vec-audio", "Wav2Vec2FeatureExtractor"),
         ("data2vec-vision", "BeitFeatureExtractor"),
+        ("deformable_detr", "DeformableDetrFeatureExtractor"),
         ("deit", "DeiTFeatureExtractor"),
         ("detr", "DetrFeatureExtractor"),
-        ("detr", "DetrFeatureExtractor"),
+        ("donut", "DonutFeatureExtractor"),
         ("dpt", "DPTFeatureExtractor"),
         ("flava", "FlavaFeatureExtractor"),
         ("glpn", "GLPNFeatureExtractor"),
@@ -58,6 +60,7 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("maskformer", "MaskFormerFeatureExtractor"),
         ("mctct", "MCTCTFeatureExtractor"),
         ("mobilevit", "MobileViTFeatureExtractor"),
+        ("owlvit", "OwlViTFeatureExtractor"),
         ("perceiver", "PerceiverFeatureExtractor"),
         ("poolformer", "PoolFormerFeatureExtractor"),
         ("regnet", "ConvNextFeatureExtractor"),
@@ -65,12 +68,16 @@ FEATURE_EXTRACTOR_MAPPING_NAMES = OrderedDict(
         ("segformer", "SegformerFeatureExtractor"),
         ("speech_to_text", "Speech2TextFeatureExtractor"),
         ("swin", "ViTFeatureExtractor"),
+        ("swinv2", "ViTFeatureExtractor"),
         ("van", "ConvNextFeatureExtractor"),
+        ("videomae", "VideoMAEFeatureExtractor"),
         ("vilt", "ViltFeatureExtractor"),
         ("vit", "ViTFeatureExtractor"),
         ("vit_mae", "ViTFeatureExtractor"),
+        ("vit_msn", "ViTFeatureExtractor"),
         ("wav2vec2", "Wav2Vec2FeatureExtractor"),
         ("wav2vec2-conformer", "Wav2Vec2FeatureExtractor"),
+        ("xclip", "CLIPFeatureExtractor"),
         ("yolos", "YolosFeatureExtractor"),
     ]
 )
@@ -139,7 +146,7 @@ def get_feature_extractor_config(
             'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
         use_auth_token (`str` or *bool*, *optional*):
             The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-            when running `transformers-cli login` (stored in `~/.huggingface`).
+            when running `huggingface-cli login` (stored in `~/.huggingface`).
         revision (`str`, *optional*, defaults to `"main"`):
             The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
             git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -244,7 +251,7 @@ class AutoFeatureExtractor:
                 'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
             use_auth_token (`str` or *bool*, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `transformers-cli login` (stored in `~/.huggingface`).
+                when running `huggingface-cli login` (stored in `~/.huggingface`).
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any

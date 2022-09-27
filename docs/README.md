@@ -43,7 +43,7 @@ Once you have setup the `doc-builder` and additional packages, you can generate 
 typing the following command:
 
 ```bash
-doc-builder build transformers docs/source/ --build_dir ~/tmp/test-build
+doc-builder build transformers docs/source/en/ --build_dir ~/tmp/test-build
 ```
 
 You can adapt the `--build_dir` to set any temporary folder that you prefer. This command will create it and generate
@@ -312,13 +312,13 @@ easily.
 
 # Testing documentation examples
 
-Good documentation oftens comes with an example of how a specific function or class should be used. 
+Good documentation often comes with an example of how a specific function or class should be used. 
 Each model class should contain at least one example showcasing
 how to use this model class in inference. *E.g.* the class [Wav2Vec2ForCTC](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2ForCTC) 
 includes an example of how to transcribe speech to text in the 
 [docstring of its forward function](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2ForCTC.forward).
 
-## Writing documenation examples
+## Writing documentation examples
 
 The syntax for Example docstrings can look as follows:
 
