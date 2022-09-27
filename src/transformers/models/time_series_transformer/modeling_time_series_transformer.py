@@ -1511,8 +1511,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             self._past_length + self.config.prediction_length if future_target is not None else self._past_length
         )
         try:
-            assert (
-                inputs.shape[1] == inputs_length,
+            assert inputs.shape[1] == inputs_length, (
                 f"input length {inputs.shape[1]} and dynamic feature lengths {inputs_length} does not match",
             )
         except AssertionError as e:
