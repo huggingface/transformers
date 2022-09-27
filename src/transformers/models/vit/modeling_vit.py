@@ -163,11 +163,15 @@ class ViTPatchEmbeddings(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
-        torch._assert(num_channels == self.num_channels,
-            "Make sure that the channel dimension of the pixel values match with the one set in the configuration.")
+        torch._assert(
+            num_channels == self.num_channels,
+            "Make sure that the channel dimension of the pixel values match with the one set in the configuration.",
+        )
         if not interpolate_pos_encoding:
             expected_height, expected_width = self.image_size
-            err_message = f"Input image size ({height}*{width}) doesn't match model({self.image_size[0]}*{self.image_size[1]})."
+            err_message = (
+                f"Input image size ({height}*{width}) doesn't match model({self.image_size[0]}*{self.image_size[1]})."
+            )
             torch._assert(height == expected_height, err_message)
             torch._assert(width == expected_width, err_message)
         embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
@@ -246,7 +250,6 @@ class ViTSelfOutput(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
@@ -302,7 +305,6 @@ class ViTIntermediate(nn.Module):
             self.intermediate_act_fn = config.hidden_act
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
 
