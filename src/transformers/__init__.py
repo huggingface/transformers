@@ -31,7 +31,6 @@ from . import dependency_versions_check
 from .utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
-    is_bs4_available,
     is_flax_available,
     is_scatter_available,
     is_sentencepiece_available,
@@ -266,6 +265,7 @@ _import_structure = {
     "models.markuplm": [
         "MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "MarkupLMConfig",
+        "MarkupLMFeatureExtractor",
         "MarkupLMProcessor",
         "MarkupLMTokenizer",
     ],
@@ -492,19 +492,6 @@ _import_structure = {
     ],
     "utils.bitsandbytes": [],
 }
-
-# Beautiful Soup-specific objects
-try:
-    if not is_bs4_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    from .utils import dummy_bs4_objects
-
-    _import_structure["utils.dummy_bs4_objects"] = [
-        name for name in dir(dummy_bs4_objects) if not name.startswith("_")
-    ]
-else:
-    _import_structure["models.markuplm"] = ["MarkupLMFeatureExtractor"]
 
 # sentencepiece-backed objects
 try:
@@ -826,7 +813,6 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
-
     _import_structure["models.albert"].extend(
         [
             "ALBERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3218,6 +3204,7 @@ if TYPE_CHECKING:
     from .models.markuplm import (
         MARKUPLM_PRETRAINED_CONFIG_ARCHIVE_MAP,
         MarkupLMConfig,
+        MarkupLMFeatureExtractor,
         MarkupLMProcessor,
         MarkupLMTokenizer,
     )
@@ -3583,14 +3570,6 @@ if TYPE_CHECKING:
         from .models.vilt import ViltFeatureExtractor, ViltProcessor
         from .models.vit import ViTFeatureExtractor
         from .models.yolos import YolosFeatureExtractor
-
-    try:
-        if not is_bs4_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        from .utils.dummy_bs4_objects import *
-    else:
-        from .models.markuplm import MarkupLMFeatureExtractor
 
     # Modeling
     try:
