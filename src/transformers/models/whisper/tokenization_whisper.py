@@ -285,6 +285,11 @@ class WhisperTokenizer(PreTrainedTokenizer):
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
+    def get_vocab(self):
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
+        
     @property
     @lru_cache()
     def sot_sequence(self) -> Tuple[int]:
@@ -366,7 +371,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
     @property
     def vocab_size(self) -> int:
         return len(self.encoder)
-
 
     def bpe(self, token):
         if token in self.cache:
