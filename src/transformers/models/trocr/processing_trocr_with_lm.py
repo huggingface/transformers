@@ -168,9 +168,7 @@ class TrOCRProcessorWithLM(ProcessorMixin):
         from pyctcdecode.alphabet import (
             BLANK_TOKEN_PTN,
             SPECIAL_TOKEN_PTN,
-            UNK_TOKEN,
             UNK_TOKEN_PTN,
-            _normalize_bpe_alphabet,
         )
 
         # we need to make sure that all of the tokenizer's except the special tokens
