@@ -1296,7 +1296,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
             "encoder_outputs": encoder_outputs,
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
+            "attention_mask": None,
             "use_cache": use_cache,
         }
 
