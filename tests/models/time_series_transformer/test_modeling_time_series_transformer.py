@@ -130,39 +130,6 @@ class TimeSeriesTransformerModelTester:
         config, inputs_dict = self.prepare_config_and_inputs()
         return config, inputs_dict
 
-    # def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
-    #     model = TimeSeriesTransformerModel(config=config).get_decoder().to(torch_device).eval()
-    #     input_ids = inputs_dict["input_ids"]
-    #     attention_mask = inputs_dict["attention_mask"]
-
-    #     # first forward pass
-    #     outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
-
-    #     output, past_key_values = outputs.to_tuple()
-
-    #     # create hypothetical multiple next token and extent to next_input_ids
-    #     next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-    #     next_attn_mask = ids_tensor((self.batch_size, 3), 2)
-
-    #     # append to next input_ids and
-    #     next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-    #     next_attention_mask = torch.cat([attention_mask, next_attn_mask], dim=-1)
-
-    #     output_from_no_past = model(next_input_ids, attention_mask=next_attention_mask)["last_hidden_state"]
-    #     output_from_past = model(next_tokens, attention_mask=next_attention_mask, past_key_values=past_key_values)[
-    #         "last_hidden_state"
-    #     ]
-
-    #     # select random slice
-    #     random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-    #     output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-    #     output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-    #     self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-    #     # test that outputs are equal for slice
-    #     self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-2))
-
     def check_encoder_decoder_model_standalone(self, config, inputs_dict):
         model = TimeSeriesTransformerModel(config=config).to(torch_device).eval()
         outputs = model(**inputs_dict)
@@ -235,16 +202,6 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_encoder_decoder_model_standalone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.check_encoder_decoder_model_standalone(*config_and_inputs)
-
-    # def test_generate_fp16(self):
-    #     config, input_dict = self.model_tester.prepare_config_and_inputs()
-    #     input_ids = input_dict["input_ids"]
-    #     attention_mask = input_ids.ne(1).to(torch_device)
-    #     model = TimeSeriesTransformerForPrediction(config).eval().to(torch_device)
-    #     if torch_device == "cuda":
-    #         model.half()
-    #     model.generate(input_ids, attention_mask=attention_mask)
-    #     model.generate(num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
     # Ignore since we have no tokens embeddings
     def test_resize_tokens_embeddings(self):
@@ -404,12 +361,14 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
-        # model = TimeSeriesTransformerModel.from_pretrained("huggingface/tst-ett").to(torch_device)
+        model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
+            torch_device
+        )
 
         raise NotImplementedError("To do")
 
     def test_inference_head(self):
-        # model = TimeSeriesTransformerForPrediction.from_pretrained("huggingface/tst-ett").to(torch_device)
+        # model = TimeSeriesTransformerForPrediction.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(torch_device)
 
         raise NotImplementedError("To do")
 
