@@ -18,7 +18,6 @@ import sys
 from argparse import ArgumentDefaultsHelpFormatter, ArgumentParser, ArgumentTypeError
 from copy import copy
 from enum import Enum
-from importlib.resources import path
 from inspect import isclass
 from pathlib import Path
 from typing import Any, Dict, Iterable, NewType, Optional, Tuple, Union, get_type_hints
