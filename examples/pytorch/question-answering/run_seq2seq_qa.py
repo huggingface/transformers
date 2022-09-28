@@ -487,7 +487,7 @@ def main():
             return_overflowing_tokens=True,
         )
 
-        # Setup the tokenizer for targets
+        # Tokenize targets with the `text_target` keyword argument
         labels = tokenizer(text_target=targets, max_length=max_answer_length, padding=padding, truncation=True)
 
         # Since one example might give us several features if it has a long context, we need a map from a feature to
