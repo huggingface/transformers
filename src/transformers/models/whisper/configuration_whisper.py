@@ -55,7 +55,7 @@ class WhisperConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`WhisperModel`]. It is used to instantiate an
     Whisper model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Whisper
-    [openai/whisper-base](https://huggingface.co/openai/whisper-base) architecture.
+    [openai/whisper-tiny](https://huggingface.co/openai/whisper-tiny) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -121,7 +121,9 @@ class WhisperConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to True):
             Whether to tie input and output embeddings.
-
+        non_speech_tokens (`List[int]`, *optional*, defaults to None):
+            A list containing the non-speech tokens that will be used by the logit processor in the `generate`
+            function. NON_SPEECH_TOKENS and NON_SPEECH_TOKENS_MULTI can be use here. 
     Example:
 
     ```python
@@ -168,6 +170,7 @@ class WhisperConfig(PretrainedConfig):
         bos_token_id=50257,
         eos_token_id=50257,
         tie_word_embeddings=True,
+        non_speech_tokens=None,
         **kwargs
     ):
         """_summary_
@@ -197,7 +200,7 @@ class WhisperConfig(PretrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
-        self.non_speech_tokens = NON_SPEECH_TOKENS
+        self.non_speech_tokens = non_speech_tokens
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
