@@ -49,16 +49,14 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             The feature dimension of the extracted features.
         sampling_rate (`int`, defaults to 16000):
             The sampling rate at which the audio files should be digitalized expressed in Hertz per second (Hz).
-        num_mel_bins (`int`, defaults to 80):
-            Number of Mel-frequency bins.
+        hop_length (`int`, defaults to 160):
+            Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients. 
+        chunk_length (`int`, defaults to 30):
+            The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio sequences.
+        n_fft (`int`, defaults to 30):
+            Size of the Fourier transform.
         padding_value (`float`, defaults to 0.0):
-            The value that is used to fill the padding vectors.
-        do_ceptral_normalize (`bool`, *optional*, defaults to `True`):
-            Whether or not to apply utterance-level cepstral mean and variance normalization to extracted features.
-        normalize_means (`bool`, *optional*, defaults to `True`):
-            Whether or not to zero-mean normalize the extracted features.
-        normalize_vars (`bool`, *optional*, defaults to `True`):
-            Whether or not to unit-variance normalize the extracted features.
+            Padding value used to pad the audio. Should correspond to silences.
     """
 
     model_input_names = ["input_features", "attention_mask"]
