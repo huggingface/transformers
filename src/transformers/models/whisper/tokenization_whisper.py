@@ -21,7 +21,6 @@ import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
-from .configuration_whisper import NON_SPEECH_TOKENS
 
 
 SPIECE_UNDERLINE = "▁"

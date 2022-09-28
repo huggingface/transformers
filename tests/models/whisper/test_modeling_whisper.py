@@ -23,13 +23,13 @@ import unittest
 from transformers import WhisperConfig
 from transformers.generation_logits_process import LogitsProcessorList, SuppressBlank, SuppressTokens
 from transformers.testing_utils import is_torch_available, require_torch, require_torchaudio, slow, torch_device
-
-from transformers.utils.import_utils import is_datasets_available
 from transformers.utils import cached_property
+from transformers.utils.import_utils import is_datasets_available
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+
 
 if is_datasets_available():
     import datasets
@@ -136,7 +136,7 @@ class WhisperModelTester:
         config = self.get_config()
         inputs_dict = prepare_whisper_inputs_dict(
             config,
-            attention_mask = None,
+            attention_mask=None,
             input_features=input_features,
             decoder_input_ids=decoder_input_ids,
         )
@@ -234,9 +234,7 @@ class WhisperModelTester:
             encoder.save_pretrained(tmpdirname)
             encoder = WhisperEncoder.from_pretrained(tmpdirname).to(torch_device)
 
-        encoder_last_hidden_state_2 = encoder(
-            inputs_dict["input_features"]
-        )[0]
+        encoder_last_hidden_state_2 = encoder(inputs_dict["input_features"])[0]
 
         self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
 
@@ -244,7 +242,6 @@ class WhisperModelTester:
             decoder = model.get_decoder()
             decoder.save_pretrained(tmpdirname)
             decoder = WhisperDecoder.from_pretrained(tmpdirname).to(torch_device)
-
 
         last_hidden_state_2 = decoder(
             input_ids=inputs_dict["decoder_input_ids"],
@@ -302,7 +299,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
         # cut to half length & take max batch_size 3
         max_batch_size = 3
-        sequence_length = input_ids.shape[-1] // 2
         input_ids = input_ids[:max_batch_size, :, :]
 
         # generate max 3 tokens
@@ -609,7 +605,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
     @staticmethod
     def _get_encoder_outputs(
-        model, input_ids,attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
+        model, input_ids, attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
     ):
         encoder = model.get_encoder()
         encoder_outputs = encoder(
@@ -686,9 +682,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 input_features = inputs["input_features"]
                 decoder_input_ids = inputs["decoder_input_ids"]
                 decoder_attention_mask = inputs["decoder_attention_mask"]
-                traced_model = torch.jit.trace(
-                    model, (input_features, decoder_input_ids, decoder_attention_mask)
-                )
+                traced_model = torch.jit.trace(model, (input_features, decoder_input_ids, decoder_attention_mask))
             except RuntimeError:
                 self.fail("Couldn't trace module.")
 
@@ -724,6 +718,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
             self.assertTrue(models_equal)
 
+
 @require_torch
 @require_torchaudio
 class WhisperModelIntegrationTests(unittest.TestCase):
@@ -732,7 +727,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         return WhisperProcessor.from_pretrained("openai/whisper-base")
 
     def _load_datasamples(self, num_samples):
-        
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
@@ -940,7 +934,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-
     @slow
     def test_large_generation_multilingual(self):
         torch_device = "cuda"
@@ -965,7 +958,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                 SuppressTokens(model.config.non_speech_tokens),
             ]
         )
-        decoder_input_ids = torch.tensor([[50258,50359, 50357, 50363]]).long().to(torch_device)
+        decoder_input_ids = torch.tensor([[50258, 50359, 50357, 50363]]).long().to(torch_device)
         generated_ids = model.generate(
             input_features,
             do_sample=True,
@@ -977,7 +970,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         EXPECTED_TRANSCRIPT = "昨日は8時間寝ました"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-        decoder_input_ids = torch.tensor([[50258,50359, 50357]]).long().to(torch_device)
+        decoder_input_ids = torch.tensor([[50258, 50359, 50357]]).long().to(torch_device)
         generated_ids = model.generate(
             input_features,
             do_sample=False,
@@ -989,8 +982,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         EXPECTED_TRANSCRIPT = " Kimura san ni denwa wo kashite moraimashita."
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-
-        decoder_input_ids = torch.tensor([[50258,50357]]).long().to(torch_device)
+        decoder_input_ids = torch.tensor([[50258, 50357]]).long().to(torch_device)
         generated_ids = model.generate(
             input_features,
             do_sample=False,
@@ -1001,5 +993,3 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         EXPECTED_TRANSCRIPT = "I borrowed a phone from Kimura san"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
-
-
