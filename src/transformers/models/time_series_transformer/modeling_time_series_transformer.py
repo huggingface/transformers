@@ -948,7 +948,7 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             - 1 for values that are **observed**,
             - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
-        past_time_featuresuresures (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`, *optional*):
+        past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`, *optional*):
             Optional time features, which the model internally will add to `past_values`. These could be things like "month of year",
             "day of the month", etc. encoded as vectors (for instance as Fourier features). These could also be so-called "age" features,
             which basically help the model know "at which point in life" a time-series is. Age features have small values for distant past
@@ -982,7 +982,7 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
 
             Missing values need to be replaced with zeros.
 
-        future_time_featuresuresures (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`, *optional*):
+        future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`, *optional*):
             Optional time features, which the model internally will add to `future_values`. These could be things like "month of year",
             "day of the month", etc. encoded as vectors (for instance as Fourier features). These could also be so-called "age" features,
             which basically help the model know "at which point in life" a time-series is. Age features have small values for distant past
@@ -992,7 +992,24 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             are learned from scratch internally as parameters of the model, the Time Series Transformer requires to provide additional features.
 
             The Time Series Transformer only learns additional embeddings for `static_categorical_features`.
+        
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Provide for translation and summarization training. By default, the model will create this tensor by
+            shifting the `input_ids` to the right, following the paper.
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
+            be used by default.
+
+            If you want to change padding behavior, you should read
+            [`modeling_time_series_transformer._prepare_decoder_attention_mask`] and modify to your needs. See diagram
+            1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
         head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -1275,17 +1292,21 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
 
                 If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those
                 that don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of
-                all `decoder_input_ids` of shape `(batch_size, sequence_length)`. inputs_embeds (`torch.FloatTensor` of
-                shape `(batch_size, sequence_length, hidden_size)`, *optional*): Optionally, instead of passing
-                `input_ids` you can choose to directly pass an embedded representation. This is useful if you want more
-                control over how to convert `input_ids` indices into associated vectors than the model's internal
-                embedding lookup matrix.
+                all `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+
+            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
+                This is useful if you want more control over how to convert `input_ids` indices into associated vectors
+                than the model's internal embedding lookup matrix.
+
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
+
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
                 for more detail.
+
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
@@ -1444,23 +1465,28 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
     ) -> torch.Tensor:
         """
-        Returns lagged subsequences of a given sequence. Parameters ---------- sequence : Tensor
-            the sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
-        subsequences_length : int
-            length of the subsequences to be extracted.
-        shift: int
-            shift the lags by this amount back.
-        Returns -------- lagged : Tensor
-            a tensor of shape (N, S, C, I), where S = subsequences_length and I = len(indices), containing lagged
-            subsequences. Specifically, lagged[i, j, :, k] = sequence[i, -indices[k]-S+j, :].
+        Returns lagged subsequences of a given sequence. Returns a tensor of shape (N, S, C, I),
+            where S = subsequences_length and I = len(indices), containing lagged subsequences. Specifically, lagged[i,
+            j, :, k] = sequence[i, -indices[k]-S+j, :].
+        Args:
+            sequence : Tensor
+                the sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
+            subsequences_length : int
+                length of the subsequences to be extracted.
+            shift: int
+                shift the lags by this amount back.
         """
         sequence_length = sequence.shape[1]
         indices = [lag - shift for lag in self.config.lags_seq]
 
-        assert max(indices) + subsequences_length <= sequence_length, (
-            f"lags cannot go further than history length, found lag {max(indices)} "
-            f"while history length is only {sequence_length}"
-        )
+        try:
+            assert max(indices) + subsequences_length <= sequence_length, (
+                f"lags cannot go further than history length, found lag {max(indices)} "
+                f"while history length is only {sequence_length}"
+            )
+        except AssertionError as e:
+            e.args += (max(indices), sequence_length)
+            raise
 
         lagged_values = []
         for lag_index in indices:
@@ -1506,7 +1532,13 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         inputs_length = (
             self._past_length + self.config.prediction_length if future_values is not None else self._past_length
         )
-        assert inputs.shape[1] == inputs_length
+        try:
+            assert inputs.shape[1] == inputs_length, (
+                f"input length {inputs.shape[1]} and dynamic feature lengths {inputs_length} does not match",
+            )
+        except AssertionError as e:
+            e.args += (inputs.shape[1], inputs_length)
+            raise
 
         subsequences_length = (
             self.config.context_length + self.config.prediction_length
