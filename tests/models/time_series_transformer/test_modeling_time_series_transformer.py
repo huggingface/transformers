@@ -14,13 +14,11 @@
 # limitations under the License.
 """ Testing suite for the PyTorch TimeSeriesTransformer model. """
 
-import copy
 import inspect
 import tempfile
 import unittest
 
-from transformers import MODEL_MAPPING, is_torch_available
-from transformers.models.auto import get_values
+from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -60,7 +58,7 @@ class TimeSeriesTransformerModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        lags_seq=[1, 2, 3, 4, 5],
+        lags_sequence=[1, 2, 3, 4, 5],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -68,7 +66,7 @@ class TimeSeriesTransformerModelTester:
         self.context_length = context_length
         self.cardinality = cardinality
         self.num_time_features = num_time_features
-        self.lags_seq = lags_seq
+        self.lags_sequence = lags_sequence
         self.embedding_dimension = embedding_dimension
         self.is_training = is_training
         self.hidden_size = hidden_size
@@ -80,22 +78,21 @@ class TimeSeriesTransformerModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
         self.encoder_seq_length = context_length
-        self.key_length = context_length
         self.decoder_seq_length = prediction_length
 
     def prepare_config_and_inputs(self):
-        _past_length = self.context_length + max(self.lags_seq)
+        _past_length = self.context_length + max(self.lags_sequence)
 
-        feat_static_cat = ids_tensor([self.batch_size, 1], self.cardinality)
-        feat_static_real = floats_tensor([self.batch_size, 1])
+        static_categorical_features = ids_tensor([self.batch_size, 1], self.cardinality)
+        static_real_features = floats_tensor([self.batch_size, 1])
 
-        past_time_feat = floats_tensor([self.batch_size, _past_length, self.num_time_features])
-        past_target = floats_tensor([self.batch_size, _past_length])
-        past_observed_values = floats_tensor([self.batch_size, _past_length])
+        past_time_features = floats_tensor([self.batch_size, _past_length, self.num_time_features])
+        past_values = floats_tensor([self.batch_size, _past_length])
+        past_observed_mask = floats_tensor([self.batch_size, _past_length])
 
         # decoder inputs
-        future_time_feat = floats_tensor([self.batch_size, self.prediction_length, self.num_time_features])
-        future_target = floats_tensor([self.batch_size, self.prediction_length])
+        future_time_features = floats_tensor([self.batch_size, self.prediction_length, self.num_time_features])
+        future_values = floats_tensor([self.batch_size, self.prediction_length])
 
         config = TimeSeriesTransformerConfig(
             encoder_layers=self.num_hidden_layers,
@@ -108,21 +105,21 @@ class TimeSeriesTransformerModelTester:
             attention_dropout=self.attention_probs_dropout_prob,
             prediction_length=self.prediction_length,
             context_length=self.context_length,
-            lags_seq=self.lags_seq,
+            lags_sequence=self.lags_sequence,
             num_time_features=self.num_time_features,
-            num_feat_static_cat=1,
+            num_static_categorical_features=1,
             cardinality=[self.cardinality],
             embedding_dimension=[self.embedding_dimension],
         )
 
         inputs_dict = {
-            "past_target": past_target,
-            "feat_static_cat": feat_static_cat,
-            "feat_static_real": feat_static_real,
-            "past_time_feat": past_time_feat,
-            "future_time_feat": future_time_feat,
-            "past_observed_values": past_observed_values,
-            "future_target": future_target,
+            "past_values": past_values,
+            "static_categorical_features": static_categorical_features,
+            "static_real_features": static_real_features,
+            "past_time_features": past_time_features,
+            "past_observed_mask": past_observed_mask,
+            "future_time_features": future_time_features,
+            "future_values": future_values,
         }
         return config, inputs_dict
 
@@ -202,7 +199,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_resize_tokens_embeddings(self):
         pass
 
-    # # Input is 'feat_static_cat' not 'input_ids'
+    # # Input is 'static_categorical_features' not 'input_ids'
     def test_model_main_input_name(self):
         model_signature = inspect.signature(getattr(TimeSeriesTransformerModel, "forward"))
         # The main input is the name of the argument after `self`
@@ -219,25 +216,25 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = [
-                "past_target",
-                "feat_static_cat",
-                "feat_static_real",
-                "past_time_feat",
-                "past_observed_values",
-                "future_time_feat",
-                "future_target",
+                "past_values",
+                "past_time_features",
+                "past_observed_mask",
+                "static_categorical_features",
+                "static_real_features",
+                "future_values",
+                "future_time_features",
             ]
 
             expected_arg_names.extend(
                 [
-                    "future_observed_values",
+                    "future_observed_mask",
                     "encoder_outputs",
                     "use_cache",
                     "output_attentions",
                     "output_hidden_states",
                     "return_dict",
                 ]
-                if "future_observed_values" in arg_names
+                if "future_observed_mask" in arg_names
                 else [
                     "attention_mask",
                     "decoder_attention_mask",
@@ -262,8 +259,6 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -290,7 +285,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
             )
             out_len = len(outputs)
 
@@ -316,7 +311,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_seq_length],
             )
 
             # cross attentions
@@ -328,7 +323,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
                 [
                     self.model_tester.num_attention_heads,
                     decoder_seq_length,
-                    encoder_key_length,
+                    encoder_seq_length,
                 ],
             )
 
@@ -348,7 +343,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
         self.assertListEqual(
             list(self_attentions[0].shape[-3:]),
-            [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
         )
 
 
@@ -356,9 +351,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
-        model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
-            torch_device
-        )
+        # model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(torch_device)
 
         raise NotImplementedError("To do")
 
