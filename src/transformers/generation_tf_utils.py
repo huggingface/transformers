@@ -581,6 +581,8 @@ class TFGenerationMixin:
             input_ids = tf.cast(input_ids, tf.int32)
         if attention_mask is not None:
             attention_mask = tf.cast(attention_mask, tf.int32)
+        if "decoder_input_ids" in model_kwargs:
+            model_kwargs["decoder_input_ids"] = tf.cast(model_kwargs["decoder_input_ids"], tf.int32)
 
         if do_sample is False or num_beams == 1:
             seed = model_kwargs.pop("seed", None)
