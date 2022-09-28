@@ -104,11 +104,6 @@ jobs:
             - checkout
             - attach_workspace:
                 at: ~/transformers/test_preparation
-            - run: |
-                if [ ! -s test_preparation/test_list.txt ]; then
-                    echo "No tests to run, exiting early!"
-                    circleci-agent step halt
-                fi
             - restore_cache:
                   keys:
                       - v0.5-torch_and_tf-{{ checksum "setup.py" }}
@@ -157,10 +152,7 @@ workflows:
     version: 2
     build_and_test:
         jobs:
-            - fetch_tests
             - run_tests_torch_and_tf:
-                requires:
-                  - fetch_tests
 
 #    tpu_testing_jobs:
 #        triggers:
