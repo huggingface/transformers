@@ -385,7 +385,7 @@ def get_task(model: str, use_auth_token: Optional[str] = None) -> str:
     return task
 
 
-def check_task(task: str) -> Tuple[Dict, Any]:
+def check_task(task: str) -> Tuple[str, Dict, Any]:
     """
     Checks an incoming task string, to validate it's correct and return the default Pipeline and Model classes, and
     default models if they exist.

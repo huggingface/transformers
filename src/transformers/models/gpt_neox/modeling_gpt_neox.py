@@ -300,6 +300,7 @@ class GPTNeoXMLP(nn.Module):
 class GPTNeoXLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.use_parallel_residual = config.use_parallel_residual
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attention = GPTNeoXAttention(config)
@@ -314,28 +315,37 @@ class GPTNeoXLayer(nn.Module):
         layer_past=None,
         output_attentions=False,
     ):
-        residual = hidden_states
-        ln_out = self.input_layernorm(hidden_states)
+
         attention_layer_outputs = self.attention(
-            ln_out,
+            self.input_layernorm(hidden_states),
             attention_mask=attention_mask,
             layer_past=layer_past,
             head_mask=head_mask,
             use_cache=use_cache,
             output_attentions=output_attentions,
         )
-        attn_output = attention_layer_outputs[0]  # output_attn: a, present, (attentions)
+        attn_output = attention_layer_outputs[0]  # output_attn: attn_output, present, (attn_weights)
         outputs = attention_layer_outputs[1:]
 
-        mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
-        hidden_states = mlp_output + attn_output + residual
+        if self.use_parallel_residual:
+            # pseudocode:
+            # x = x + attn(ln1(x)) + mlp(ln2(x))
+            mlp_output = self.mlp(self.post_attention_layernorm(hidden_states))
+            hidden_states = mlp_output + attn_output + hidden_states
+        else:
+            # pseudocode:
+            # x = x + attn(ln1(x))
+            # x = x + mlp(ln2(x))
+            attn_output = attn_output + hidden_states
+            mlp_output = self.mlp(self.post_attention_layernorm(attn_output))
+            hidden_states = mlp_output + attn_output
 
         if use_cache:
-            outputs = (hidden_states,) + outputs
+            outputs = (hidden_states,) + outputs  # hidden_states, present, (attn_weights)
         else:
-            outputs = (hidden_states,) + outputs[1:]
+            outputs = (hidden_states,) + outputs[1:]  # hidden_states, (attn_weights)
 
-        return outputs  # hidden_states, present, (attentions)
+        return outputs
 
 
 GPT_NEOX_START_DOCSTRING = r"""
@@ -484,7 +494,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
 
             # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
             # masked positions, this operation will create a tensor which is 0.0 for
-            # positions we want to attend and -10000.0 for masked positions.
+            # positions we want to attend and the dtype's smallest value for masked positions.
             # Since we are adding it to the raw scores before the softmax, this is
             # effectively the same as removing these entirely.
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility

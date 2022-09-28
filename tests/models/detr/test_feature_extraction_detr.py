@@ -240,8 +240,12 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         encoded_images_with_method = feature_extractor_1.pad_and_create_pixel_mask(image_inputs, return_tensors="pt")
         encoded_images = feature_extractor_2(image_inputs, return_tensors="pt")
 
-        assert torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
-        assert torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4)
+        self.assertTrue(
+            torch.allclose(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], atol=1e-4)
+        )
+        self.assertTrue(
+            torch.allclose(encoded_images_with_method["pixel_mask"], encoded_images["pixel_mask"], atol=1e-4)
+        )
 
     @slow
     def test_call_pytorch_with_coco_detection_annotations(self):
@@ -261,31 +265,31 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         self.assertEqual(encoding["pixel_values"].shape, expected_shape)
 
         expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
-        assert torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-4)
+        self.assertTrue(torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-4))
 
         # verify area
         expected_area = torch.tensor([5887.9600, 11250.2061, 489353.8438, 837122.7500, 147967.5156, 165732.3438])
-        assert torch.allclose(encoding["labels"][0]["area"], expected_area)
+        self.assertTrue(torch.allclose(encoding["labels"][0]["area"], expected_area))
         # verify boxes
         expected_boxes_shape = torch.Size([6, 4])
         self.assertEqual(encoding["labels"][0]["boxes"].shape, expected_boxes_shape)
         expected_boxes_slice = torch.tensor([0.5503, 0.2765, 0.0604, 0.2215])
-        assert torch.allclose(encoding["labels"][0]["boxes"][0], expected_boxes_slice, atol=1e-3)
+        self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"][0], expected_boxes_slice, atol=1e-3))
         # verify image_id
         expected_image_id = torch.tensor([39769])
-        assert torch.allclose(encoding["labels"][0]["image_id"], expected_image_id)
+        self.assertTrue(torch.allclose(encoding["labels"][0]["image_id"], expected_image_id))
         # verify is_crowd
         expected_is_crowd = torch.tensor([0, 0, 0, 0, 0, 0])
-        assert torch.allclose(encoding["labels"][0]["iscrowd"], expected_is_crowd)
+        self.assertTrue(torch.allclose(encoding["labels"][0]["iscrowd"], expected_is_crowd))
         # verify class_labels
         expected_class_labels = torch.tensor([75, 75, 63, 65, 17, 17])
-        assert torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels)
+        self.assertTrue(torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels))
         # verify orig_size
         expected_orig_size = torch.tensor([480, 640])
-        assert torch.allclose(encoding["labels"][0]["orig_size"], expected_orig_size)
+        self.assertTrue(torch.allclose(encoding["labels"][0]["orig_size"], expected_orig_size))
         # verify size
         expected_size = torch.tensor([800, 1066])
-        assert torch.allclose(encoding["labels"][0]["size"], expected_size)
+        self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
 
     @slow
     def test_call_pytorch_with_coco_panoptic_annotations(self):
@@ -299,8 +303,7 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         masks_path = pathlib.Path("./tests/fixtures/tests_samples/COCO/coco_panoptic")
 
         # encode them
-        # TODO replace by .from_pretrained facebook/detr-resnet-50-panoptic
-        feature_extractor = DetrFeatureExtractor(format="coco_panoptic")
+        feature_extractor = DetrFeatureExtractor.from_pretrained("facebook/detr-resnet-50-panoptic")
         encoding = feature_extractor(images=image, annotations=target, masks_path=masks_path, return_tensors="pt")
 
         # verify pixel values
@@ -308,31 +311,31 @@ class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
         self.assertEqual(encoding["pixel_values"].shape, expected_shape)
 
         expected_slice = torch.tensor([0.2796, 0.3138, 0.3481])
-        assert torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-4)
+        self.assertTrue(torch.allclose(encoding["pixel_values"][0, 0, 0, :3], expected_slice, atol=1e-4))
 
         # verify area
         expected_area = torch.tensor([147979.6875, 165527.0469, 484638.5938, 11292.9375, 5879.6562, 7634.1147])
-        assert torch.allclose(encoding["labels"][0]["area"], expected_area)
+        self.assertTrue(torch.allclose(encoding["labels"][0]["area"], expected_area))
         # verify boxes
         expected_boxes_shape = torch.Size([6, 4])
         self.assertEqual(encoding["labels"][0]["boxes"].shape, expected_boxes_shape)
         expected_boxes_slice = torch.tensor([0.2625, 0.5437, 0.4688, 0.8625])
-        assert torch.allclose(encoding["labels"][0]["boxes"][0], expected_boxes_slice, atol=1e-3)
+        self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"][0], expected_boxes_slice, atol=1e-3))
         # verify image_id
         expected_image_id = torch.tensor([39769])
-        assert torch.allclose(encoding["labels"][0]["image_id"], expected_image_id)
+        self.assertTrue(torch.allclose(encoding["labels"][0]["image_id"], expected_image_id))
         # verify is_crowd
         expected_is_crowd = torch.tensor([0, 0, 0, 0, 0, 0])
-        assert torch.allclose(encoding["labels"][0]["iscrowd"], expected_is_crowd)
+        self.assertTrue(torch.allclose(encoding["labels"][0]["iscrowd"], expected_is_crowd))
         # verify class_labels
         expected_class_labels = torch.tensor([17, 17, 63, 75, 75, 93])
-        assert torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels)
+        self.assertTrue(torch.allclose(encoding["labels"][0]["class_labels"], expected_class_labels))
         # verify masks
         expected_masks_sum = 822338
         self.assertEqual(encoding["labels"][0]["masks"].sum().item(), expected_masks_sum)
         # verify orig_size
         expected_orig_size = torch.tensor([480, 640])
-        assert torch.allclose(encoding["labels"][0]["orig_size"], expected_orig_size)
+        self.assertTrue(torch.allclose(encoding["labels"][0]["orig_size"], expected_orig_size))
         # verify size
         expected_size = torch.tensor([800, 1066])
-        assert torch.allclose(encoding["labels"][0]["size"], expected_size)
+        self.assertTrue(torch.allclose(encoding["labels"][0]["size"], expected_size))
