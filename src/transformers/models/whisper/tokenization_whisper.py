@@ -471,22 +471,3 @@ class WhisperTokenizer(PreTrainedTokenizer):
         if len(input_ids) > self.model_max_length:
             input_ids = input_ids[-self.model_max_length :]
         return input_ids
-
-    # TODO move to the logit processor
-    def _get_suppress_tokens(self, suppress_tokens=[]) -> Tuple[int]:
-
-        if isinstance(suppress_tokens, str):
-            suppress_tokens = [int(t) for t in suppress_tokens.split(",")]
-
-        if -1 in suppress_tokens:
-            suppress_tokens = [t for t in suppress_tokens if t >= 0]
-            suppress_tokens.extend(NON_SPEECH_TOKENS)
-        elif suppress_tokens is None or len(suppress_tokens) == 0:
-            suppress_tokens = []  # interpret empty string as an empty list
-
-        suppress_tokens.extend([self.sot, self.sot_prev, self.sot_lm])
-        if self.no_captions is not None:
-            # no-captions probability is collected separately
-            suppress_tokens.append(self.no_captions)
-
-        return tuple(sorted(set(suppress_tokens)))
