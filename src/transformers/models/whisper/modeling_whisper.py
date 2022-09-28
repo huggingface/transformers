@@ -901,7 +901,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
-        
+
         encoder_attention_mask = None
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
