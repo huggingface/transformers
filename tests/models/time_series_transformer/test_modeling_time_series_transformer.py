@@ -223,12 +223,12 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
 
             expected_arg_names = [
                 "past_values",
-                "static_categorical_features",
-                "static_real_features",
                 "past_time_features",
                 "past_observed_mask",
-                "future_time_features",
+                "static_categorical_features",
+                "static_real_features",
                 "future_values",
+                "future_time_features",
             ]
 
             expected_arg_names.extend(

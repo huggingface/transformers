@@ -1471,13 +1471,13 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
     def create_network_inputs(
         self,
+        past_values: torch.Tensor,
+        past_time_features: torch.Tensor,
+        past_observed_mask: torch.Tensor,
         static_categorical_features: torch.Tensor,
         static_real_features: torch.Tensor,
-        past_time_features: torch.Tensor,
-        past_values: torch.Tensor,
-        past_observed_mask: torch.Tensor,
-        future_time_features: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
+        future_time_features: Optional[torch.Tensor] = None,
     ):
         # time feature
         time_feat = (
@@ -1555,12 +1555,12 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        static_categorical_features: torch.Tensor,
-        static_real_features: torch.Tensor,
         past_time_features: torch.Tensor,
         past_observed_mask: torch.Tensor,
-        future_time_features: Optional[torch.Tensor] = None,
+        static_categorical_features: torch.Tensor,
+        static_real_features: torch.Tensor,
         future_values: Optional[torch.Tensor] = None,
+        future_time_features: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -1615,13 +1615,13 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         transformer_inputs, scale, static_feat = self.create_network_inputs(
+            past_values=past_values,
+            past_time_features=past_time_features,
+            past_observed_mask=past_observed_mask,
             static_categorical_features=static_categorical_features,
             static_real_features=static_real_features,
-            past_time_features=past_time_features,
-            past_values=past_values,
-            past_observed_mask=past_observed_mask,
-            future_time_features=future_time_features,
             future_values=future_values,
+            future_time_features=future_time_features,
         )
 
         if encoder_outputs is None:
@@ -1721,12 +1721,12 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
     def forward(
         self,
         past_values: torch.Tensor,
-        static_categorical_features: torch.Tensor,
-        static_real_features: torch.Tensor,
         past_time_features: torch.Tensor,
         past_observed_mask: torch.Tensor,
-        future_time_features: Optional[torch.Tensor] = None,
+        static_categorical_features: torch.Tensor,
+        static_real_features: torch.Tensor,
         future_values: Optional[torch.Tensor] = None,
+        future_time_features: Optional[torch.Tensor] = None,
         future_observed_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
@@ -1775,12 +1775,12 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
 
         outputs = self.model(
             past_values=past_values,
-            static_categorical_features=static_categorical_features,
-            static_real_features=static_real_features,
             past_time_features=past_time_features,
             past_observed_mask=past_observed_mask,
-            future_time_features=future_time_features,
+            static_categorical_features=static_categorical_features,
+            static_real_features=static_real_features,
             future_values=future_values,
+            future_time_features=future_time_features,
             encoder_outputs=encoder_outputs,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1792,9 +1792,9 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         params = None
         if future_values is not None:
             params = self.output_params(outputs[0])  # outputs.last_hidden_state
-            distr = self.output_distribution(params, outputs[-2])  # outputs.scale
+            distribution = self.output_distribution(params, outputs[-2])  # outputs.scale
 
-            loss = self.loss(distr, future_values)
+            loss = self.loss(distribution, future_values)
 
             if future_observed_mask is None:
                 future_observed_mask = torch.ones_like(future_values)
