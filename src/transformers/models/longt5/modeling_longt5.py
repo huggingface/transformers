@@ -1198,7 +1198,7 @@ class LongT5Block(nn.Module):
         )
         hidden_states, present_key_value_state = self_attention_outputs[:2]
         attention_outputs = self_attention_outputs[2:]  # Keep self-attention outputs and relative position weights
-        
+
         # clamp inf values to enable fp16 training
         if torch.isinf(hidden_states).any():
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
@@ -1225,8 +1225,8 @@ class LongT5Block(nn.Module):
                 output_attentions=output_attentions,
             )
             hidden_states = cross_attention_outputs[0]
-            
-             # clamp inf values to enable fp16 training
+
+            # clamp inf values to enable fp16 training
             if torch.isinf(hidden_states).any():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
@@ -1240,7 +1240,7 @@ class LongT5Block(nn.Module):
 
         # Apply Feed Forward layer
         hidden_states = self.layer[-1](hidden_states)
-        
+
         # clamp inf values to enable fp16 training
         if torch.isinf(hidden_states).any():
             clamp_value = torch.finfo(hidden_states.dtype).max - 1000
