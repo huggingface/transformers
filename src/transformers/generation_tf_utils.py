@@ -2918,6 +2918,7 @@ class TFGenerationMixin:
             # Update sequences for the 2*K top-k new sequences.
             beams_to_keep = 2 * num_beams
             topk_log_probs, topk_indices = tf.math.top_k(log_probs, k=beams_to_keep)
+            topk_indices = tf.cast(topk_indices, tf.int64)
             topk_beam_indices = topk_indices // vocab_size
             topk_running_sequences = gather_beams(running_sequences, topk_beam_indices)
             topk_ids = topk_indices % vocab_size
