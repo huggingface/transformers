@@ -901,7 +901,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         attention_mask = self._prepare_decoder_attention_mask(
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
-        attention_mask = None
+        
         encoder_attention_mask = None
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
@@ -1085,6 +1085,8 @@ class WhisperModel(WhisperPreTrainedModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        attention_mask = None
 
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
