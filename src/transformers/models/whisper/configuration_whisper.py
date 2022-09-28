@@ -62,62 +62,65 @@ class WhisperConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50265):
+        vocab_size (`int`, *optional*, defaults to 51865):
             Vocabulary size of the Whisper model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`WhisperModel`]
-        d_model (`int`, *optional*, defaults to 1024):
-            Dimensionality of the layers and the pooler layer.
-        encoder_layers (`int`, *optional*, defaults to 12):
+        num_mel_bins (`int`, *optional*, defaults to 80):
+            Number of mel features used per input features. Should correspond to the value used in the `WhisperProcessor``
+            class. 
+        encoder_layers (`int`, *optional*, defaults to 6):
             Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 12):
+        decoder_layers (`int`, *optional*, defaults to 6):
             Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 16):
+        encoder_attention_heads (`int`, *optional*, defaults to 4):
             Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 16):
+        decoder_attention_heads (`int`, *optional*, defaults to 4):
             Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 4096):
+        decoder_ffn_dim (`int`, *optional*, defaults to 1536):
             Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 4096):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-        activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"silu"` and `"gelu_new"` are supported.
-        dropout (`float`, *optional*, defaults to 0.1):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        activation_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for activations inside the fully connected layer.
-        classifier_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for classifier.
-        init_std (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        encoder_ffn_dim (`int`, *optional*, defaults to 1536):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in encoder.
         encoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        use_cache (`bool`, *optional*, defaults to `True`):
+        decoder_start_token_id (`int`, *optional*, defaults to 50258):
+            Corresponds to the "<|startoftranscript|>" token, which is automatically used when no `decoder_input_ids` 
+            are provided to the `generate`function
+        use_cache (`bool`, *optional*, defaults to True):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        max_source_positions (`int`, *optional*, defaults to 6000):
+        is_encoder_decoder (`bool`, *optional*, defaults to True):
+            _description_
+        activation_function (`str`, *optional*, defaults to "gelu"):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        d_model (`int`, *optional*, defaults to 256):
+            Dimensionality of the layers and the pooler layer.
+        dropout (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        activation_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for activations inside the fully connected layer.
+        init_std (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        scale_embedding (`bool`, *optional*, defaults to False):
+            _description_
+        max_source_positions (`int`, *optional*, defaults to 1500):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-        max_target_positions (`int`, *optional*, defaults to 1024):
+        max_target_positions (`int`, *optional*, defaults to 448):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        num_conv_layers (`int`, *optional*, defaults to 2):
-            Number of 1D convolutional layers in the conv module.
-        conv_kernel_sizes (`Tuple[int]`, *optional*, defaults to `(5, 5)`):
-            A tuple of integers defining the kernel size of each 1D convolutional layer in the conv module. The length
-            of `conv_kernel_sizes` has to match `num_conv_layers`.
-        conv_channels (`int`, *optional*, defaults to 1024):
-            An integer defining the number of output channels of each convolution layers except the final one in the
-            conv module.
-        input_feat_per_channel (`int`, *optional*, defaults to 80):
-            An integer specifying the size of feature vector. This is also the dimensions of log-mel filter-bank
-            features.
-        input_channels (`int`, *optional*, defaults to 1):
-            An integer specifying number of input channels of the input feature vector.
+        pad_token_id (`int`, *optional*, defaults to 50256):
+            Padding token id.
+        bos_token_id (`int`, *optional*, defaults to 50256):
+            Begin of stream token id.
+        eos_token_id (`int`, *optional*, defaults to 50257):
+            End of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to True):
+            Whether to tie input and output embeddings.
 
     Example:
 
@@ -140,7 +143,6 @@ class WhisperConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=51865,
-        feature_size=1,
         num_mel_bins=80,
         encoder_layers=6,
         encoder_attention_heads=4,
@@ -165,10 +167,14 @@ class WhisperConfig(PretrainedConfig):
         pad_token_id=0,
         bos_token_id=50257,
         eos_token_id=50257,
-        input_channels=1,
         tie_word_embeddings=True,
         **kwargs
     ):
+        """_summary_
+
+        Args:
+
+        """
         self.vocab_size = vocab_size
         self.num_mel_bins = num_mel_bins
         self.d_model = d_model
@@ -189,10 +195,8 @@ class WhisperConfig(PretrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.tie_word_embeddings = tie_word_embeddings
-        self.input_channels = input_channels
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
-        self.feature_size = feature_size
         self.non_speech_tokens = NON_SPEECH_TOKENS
         super().__init__(
             pad_token_id=pad_token_id,
