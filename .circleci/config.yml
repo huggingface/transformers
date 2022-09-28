@@ -99,6 +99,7 @@ jobs:
                 root: test_preparation/
                 paths:
                     test_list.txt
+                    examples_test_list.txt
 
     # To run all tests for the nightly build
     fetch_all_tests:
