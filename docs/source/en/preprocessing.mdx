@@ -18,11 +18,11 @@ Before you can train a model on a dataset, it needs to be preprocessed into the 
 
 * Text, use a [Tokenizer](./main_classes/tokenizer) to convert text into a sequence of tokens, create a numerical representation of the tokens, and assemble them into tensors.
 * Computer vision and speech, use a [Feature extractor](./main_classes/feature_extractor) to extract sequential features from audio waveforms and images and convert them into tensors.
-* Multimodal inputs, use a [Processor](./main_classes/processor) to combine a tokenizer and a feature extractor.
+* Multimodal inputs, use a [Processor](./main_classes/processors) to combine a tokenizer and a feature extractor.
 
 <Tip>
 
-Loading each preprocessing class as an `AutoClass` -  `AutoTokenizer`, `AutoFeatureExtractor`, and `AutoProcessor` - **always** works and automatically chooses the correct class for the model you're using.
+`AutoProcessor` **always** works and automatically chooses the correct class for the model you're using, whether you're using a tokenizer, feature extractor or processor.
 
 </Tip>
 
