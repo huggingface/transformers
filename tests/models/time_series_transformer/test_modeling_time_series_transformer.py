@@ -24,6 +24,7 @@ from transformers.testing_utils import require_torch, slow, torch_device
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
+TOLERANCE = 1e-4
 
 if is_torch_available():
     import torch
@@ -80,21 +81,8 @@ class TimeSeriesTransformerModelTester:
         self.encoder_seq_length = context_length
         self.decoder_seq_length = prediction_length
 
-    def prepare_config_and_inputs(self):
-        _past_length = self.context_length + max(self.lags_sequence)
-
-        static_categorical_features = ids_tensor([self.batch_size, 1], self.cardinality)
-        static_real_features = floats_tensor([self.batch_size, 1])
-
-        past_time_features = floats_tensor([self.batch_size, _past_length, self.num_time_features])
-        past_values = floats_tensor([self.batch_size, _past_length])
-        past_observed_mask = floats_tensor([self.batch_size, _past_length])
-
-        # decoder inputs
-        future_time_features = floats_tensor([self.batch_size, self.prediction_length, self.num_time_features])
-        future_values = floats_tensor([self.batch_size, self.prediction_length])
-
-        config = TimeSeriesTransformerConfig(
+    def get_config(self):
+        return TimeSeriesTransformerConfig(
             encoder_layers=self.num_hidden_layers,
             decoder_layers=self.num_hidden_layers,
             encoder_attention_heads=self.num_attention_heads,
@@ -112,6 +100,20 @@ class TimeSeriesTransformerModelTester:
             embedding_dimension=[self.embedding_dimension],
         )
 
+    def prepare_time_series_transformer_inputs_dict(self, config):
+        _past_length = config.context_length + max(config.lags_sequence)
+
+        static_categorical_features = ids_tensor([self.batch_size, 1], config.cardinality[0])
+        static_real_features = floats_tensor([self.batch_size, 1])
+
+        past_time_features = floats_tensor([self.batch_size, _past_length, config.num_time_features])
+        past_values = floats_tensor([self.batch_size, _past_length])
+        past_observed_mask = floats_tensor([self.batch_size, _past_length])
+
+        # decoder inputs
+        future_time_features = floats_tensor([self.batch_size, config.prediction_length, config.num_time_features])
+        future_values = floats_tensor([self.batch_size, config.prediction_length])
+
         inputs_dict = {
             "past_values": past_values,
             "static_categorical_features": static_categorical_features,
@@ -121,6 +123,11 @@ class TimeSeriesTransformerModelTester:
             "future_time_features": future_time_features,
             "future_values": future_values,
         }
+        return inputs_dict
+
+    def prepare_config_and_inputs(self):
+        config = self.get_config()
+        inputs_dict = self.prepare_time_series_transformer_inputs_dict(config)
         return config, inputs_dict
 
     def prepare_config_and_inputs_for_common(self):
@@ -351,14 +358,31 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
-        # model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(torch_device)
+        model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
+            torch_device
+        )
+        inputs_dict = prepare_time_series_transformer_inputs_dict(model.config)
+        with torch.no_grad():
+            output = model(**inputs_dict)
 
-        raise NotImplementedError("To do")
+        expected_shape = torch.Size((1, 11, 1024))
+        self.assertEqual(output.shape, expected_shape)
+        # change to expected output here
+        expected_slice = torch.tensor(
+            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
+        )
+        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
 
     def test_inference_head(self):
-        # model = TimeSeriesTransformerForPrediction.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(torch_device)
-
+        model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
+            torch_device
+        )
+    
         raise NotImplementedError("To do")
 
     def test_seq_to_seq_generation(self):
+         model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
+            torch_device
+        )
+
         raise NotImplementedError("Generation not implemented yet")
