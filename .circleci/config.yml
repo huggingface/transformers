@@ -110,6 +110,7 @@ jobs:
                       - v0.5-{{ checksum "setup.py" }}
             - run: pip cache info
             - run: pip cache list
+            - run: ls -l /home/circleci/.cache/pip/http
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng git-lfs
             - run: git lfs install
             - run: pip install --upgrade pip
@@ -120,12 +121,14 @@ jobs:
             - run: pip install git+https://github.com/huggingface/accelerate
             - run: pip cache info
             - run: pip cache list
+            - run: ls -l /home/circleci/.cache/pip/http
             - save_cache:
                 key: v0.5-torch_and_tf-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
             - run: pip cache info
             - run: pip cache list
+            - run: ls -l /home/circleci/.cache/pip/http
 
 
 # TPU JOBS
