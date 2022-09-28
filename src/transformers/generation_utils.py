@@ -392,8 +392,6 @@ class GenerationMixin:
           `do_sample=False`.
         - *multinomial sampling* by calling [`~generation_utils.GenerationMixin.sample`] if `num_beams=1` and
           `do_sample=True`.
-        - *typical decoding* by calling [`~generation_utils.GenerationMixin.sample`] if `typical_p` between 0 and 1,
-          and `do_sample=True`.
         - *beam-search decoding* by calling [`~generation_utils.GenerationMixin.beam_search`] if `num_beams>1` and
           `do_sample=False`.
         - *beam-search multinomial sampling* by calling [`~generation_utils.GenerationMixin.beam_sample`] if
@@ -1318,17 +1316,6 @@ class GenerationMixin:
                 "Diverse beam search cannot be used in sampling mode. Make sure that `do_sample` is set to `False`."
             )
 
-        if typical_p is not None:
-            if typical_p < 0 or typical_p > 1:
-                raise ValueError("Value of typical_p must be between 0 and 1.")
-            elif do_sample is False:
-                raise ValueError(
-                    "Decoder argument `typical_p` must be used in sampling mode. "
-                    "Make sure that `do_sample` is set to `True`."
-                )
-            elif is_group_beam_gen_mode is True:
-                raise ValueError("Decoder argument `typical_p` is not supported with beam groups.")
-
         # 7. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
@@ -1498,6 +1485,9 @@ class GenerationMixin:
 
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
+
+            if typical_p is not None:
+                raise ValueError("Decoder argument `typical_p` is not supported with beam groups.")
 
             # 10. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
