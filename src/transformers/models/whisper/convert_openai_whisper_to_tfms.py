@@ -207,8 +207,6 @@ def convert_every_model(save_dir="whisper"):
             model.save_pretrained(f"{save_dir}/{n}")
 
 
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     # # Required parameters
