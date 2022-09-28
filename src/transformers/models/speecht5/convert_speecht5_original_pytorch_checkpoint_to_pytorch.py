@@ -26,6 +26,7 @@ from transformers import (
     SpeechT5Config,
     # SpeechT5CTCTokenizer,
     # Wav2Vec2FeatureExtractor,
+    SpeechT5ForConditionalGeneration,
     SpeechT5ForCTC,
     # SpeechT5ForPreTraining,
     # SpeechT5Processor,
@@ -37,10 +38,10 @@ logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.speecht5")
 
 MAPPING = {
-    "speech_encoder_prenet.layer_norm": "speech_encoder_prenet.feature_projection.layer_norm",
-    "speech_encoder_prenet.post_extract_proj": "speech_encoder_prenet.feature_projection.projection",
-    "speech_encoder_prenet.pos_conv.0": "speech_encoder_prenet.pos_conv_embed.conv",
-    "speech_encoder_prenet.mask_emb": "speech_encoder_prenet.masked_spec_embed",
+    "speech_encoder_prenet.layer_norm": "speecht5.encoder.speech_encoder_prenet.feature_projection.layer_norm",
+    "speech_encoder_prenet.post_extract_proj": "speecht5.encoder.speech_encoder_prenet.feature_projection.projection",
+    "speech_encoder_prenet.pos_conv.0": "speecht5.encoder.speech_encoder_prenet.pos_conv_embed.conv",
+    "speech_encoder_prenet.mask_emb": "speecht5.encoder.speech_encoder_prenet.masked_spec_embed",
     "encoder.layers.*.self_attn.k_proj": "speecht5.encoder.layers.*.attention.k_proj",
     "encoder.layers.*.self_attn.v_proj": "speecht5.encoder.layers.*.attention.v_proj",
     "encoder.layers.*.self_attn.q_proj": "speecht5.encoder.layers.*.attention.q_proj",
@@ -51,7 +52,7 @@ MAPPING = {
     "encoder.layers.*.final_layer_norm": "speecht5.encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "speecht5.encoder.layer_norm",
     "encoder.pos_emb.pe_k": "speecht5.encoder.pos_emb.pe_k",
-    "encoder.proj": "encoder_ctc_proj",
+    "encoder.proj": "speecht5.encoder.ctc_proj",
     # "quantizer.weight_proj": "quantizer.weight_proj",
     # "quantizer.vars": "quantizer.codevectors",
     # "project_q": "project_q",
@@ -128,7 +129,7 @@ def recursively_load_weights(fairseq_dict, hf_model):
             load_conv_layer(
                 name,
                 value,
-                hf_model.speech_encoder_prenet.feature_encoder,
+                hf_model.speecht5.encoder.speech_encoder_prenet.feature_encoder,
                 unused_weights,
                 hf_model.config.feat_extract_norm == "group",
             )
@@ -265,7 +266,7 @@ def convert_speecht5_checkpoint(
     #         processor = SpeechT5Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
     #         processor.save_pretrained(pytorch_dump_folder_path)
 
-        model = SpeechT5ForCTC(config)
+        model = SpeechT5ForConditionalGeneration(config)
     # elif task == "pretrain":
     #     _model = SpeechT5ForPreTraining(config)
     else:

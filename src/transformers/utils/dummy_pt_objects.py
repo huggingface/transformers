@@ -5515,6 +5515,13 @@ class SpeechT5ForAudioFrameClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class SpeechT5ForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class SpeechT5ForCTC(metaclass=DummyObject):
     _backends = ["torch"]
 

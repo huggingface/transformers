@@ -188,6 +188,10 @@ class SpeechT5Config(PretrainedConfig):
         max_source_positions (`int`, *optional*, defaults to 4000):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
             TODO: they're not actually log-mel features in this model!
+        max_target_positions (`int`, *optional*, defaults to 1024):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+            TODO: still need this?
         encoder_max_relative_position (`int`, *optional*, defaults to 160):
             Maximum distance for relative position embedding in the encoder.
         encoder_layerdrop (`float`, *optional*, defaults to 0.1):
@@ -196,6 +200,8 @@ class SpeechT5Config(PretrainedConfig):
         decoder_layerdrop (`float`, *optional*, defaults to 0.1):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
+        scale_embedding (`bool`, *optional*, defaults to `False`):
+            Scale embeddings by diving by sqrt(d_model).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
@@ -242,6 +248,7 @@ class SpeechT5Config(PretrainedConfig):
         decoder_ffn_dim=3072,
         decoder_attention_heads=12,
         decoder_layerdrop=0.1,
+        scale_embedding=False,
 
         # initializer_range=0.02,
         layer_norm_eps=1e-5,
@@ -280,8 +287,10 @@ class SpeechT5Config(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         max_source_positions=4000,
+        max_target_positions=1024,
         encoder_max_relative_position=160,
         use_cache=True,
+        is_encoder_decoder=True,
         **kwargs
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
@@ -311,8 +320,11 @@ class SpeechT5Config(PretrainedConfig):
         # self.do_stable_layer_norm = do_stable_layer_norm
         # self.use_weighted_layer_sum = use_weighted_layer_sum
         self.max_source_positions = max_source_positions
+        self.max_target_positions = max_target_positions
         self.encoder_max_relative_position = encoder_max_relative_position
         self.use_cache = use_cache
+        self.is_encoder_decoder = is_encoder_decoder
+        self.scale_embedding = scale_embedding  # scale factor will be sqrt(hidden_size) if True
 
         self.decoder_layers = decoder_layers
         self.decoder_ffn_dim = decoder_ffn_dim
