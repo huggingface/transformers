@@ -1076,7 +1076,7 @@ class WhisperModel(WhisperPreTrainedModel):
          >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
          >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
          >>> list(last_hidden_state.shape)
-         [1, 2, 256]
+         [1, 2, 512]
          ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1221,10 +1221,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         >>> from transformers import WhisperProcessor, WhisperForConditionalGeneration
         >>> from datasets import load_dataset
 
-        >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-base")
-        >>> processor = WhisperProcessor.from_pretrained("openai/whisper-base")
-
-
+        >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         >>> inputs = processor(
@@ -1234,9 +1233,9 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         >>> generated_ids = model.generate(inputs=input_features)
 
-        >>> transcription = processor.batch_decode(generated_ids)[0]
+        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
-        'mister quilter is the apostle of the middle classes and we are glad to welcome his gospel'
+        ' The quilter is the apostle of the middle classes and we are glad to welcome his'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
