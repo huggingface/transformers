@@ -2267,7 +2267,7 @@ class TFGenerationMixin:
             if eos_token_id is not None:
                 if pad_token_id is None:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
-                unfinished_seq = 1 - tf.cast(finished_sequences, tf.int64)
+                unfinished_seq = 1 - tf.cast(finished_sequences, generated.dtype)
                 next_tokens = next_tokens * unfinished_seq + pad_token_id * (1 - unfinished_seq)
             finished_sequences = finished_sequences | (next_tokens == eos_token_id)
 
@@ -2800,11 +2800,11 @@ class TFGenerationMixin:
         batch_size, num_beams, cur_len = shape_list(input_ids)
 
         # per batch, beam-item holding current token in loop, pre-populated with `pad_token_id`
-        input_ids_padding = tf.ones((batch_size, num_beams, max_length - cur_len), dtype=tf.int64) * (
+        input_ids_padding = tf.ones((batch_size, num_beams, max_length - cur_len), dtype=input_ids.dtype) * (
             pad_token_id or 0
         )
         running_sequences = tf.concat([input_ids, input_ids_padding], axis=-1)
-        sequences = tf.ones((batch_size, num_beams, max_length), dtype=tf.int64) * (pad_token_id or 0)
+        sequences = tf.ones((batch_size, num_beams, max_length), dtype=input_ids.dtype) * (pad_token_id or 0)
 
         # per batch,beam-item state bit indicating if sentence has finished.
         is_sent_finished = tf.zeros((batch_size, num_beams), dtype=tf.bool)
