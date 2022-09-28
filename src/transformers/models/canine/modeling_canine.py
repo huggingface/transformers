@@ -56,6 +56,34 @@ CANINE_PRETRAINED_MODEL_ARCHIVE_LIST = [
 # Support up to 16 hash functions.
 _PRIMES = [31, 43, 59, 61, 73, 97, 103, 113, 137, 149, 157, 173, 181, 193, 211, 223]
 
+TOKEN_CLASSIFICATION_SAMPLE_DOC_TESTS = r"""
+    Example:
+
+    ```python
+    >>> from transformers import {processor_class}, {model_class}
+    >>> import torch
+
+    >>> tokenizer = {processor_class}.from_pretrained("{checkpoint}")
+    >>> model = {model_class}.from_pretrained("{checkpoint}")
+
+    >>> inputs = tokenizer(
+    ...     "HuggingFace is a company based in Paris and New York", add_special_tokens=False, return_tensors="pt"
+    ... )
+
+    >>> with torch.no_grad():
+    ...     logits = model(**inputs).logits
+
+    >>> predicted_token_class_ids = logits.argmax(-1)
+    ```
+
+    ```python
+    >>> labels = predicted_token_class_ids
+    >>> loss = model(**inputs, labels=labels).loss
+    >>> round(loss.item(), 2)
+    {expected_loss}
+    ```
+"""
+
 
 @dataclass
 class CanineModelOutputWithPooling(ModelOutput):
@@ -1472,61 +1500,8 @@ class CanineForTokenClassification(CaninePreTrainedModel):
         checkpoint="aliosm/sha3bor-poetry-diacritizer-canine-s",
         output_type=TokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=[
-            "LABEL_0",
-            "LABEL_1",
-            "LABEL_0",
-            "LABEL_3",
-            "LABEL_0",
-            "LABEL_2",
-            "LABEL_2",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_1",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_1",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_3",
-            "LABEL_0",
-            "LABEL_3",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_3",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_1",
-            "LABEL_0",
-            "LABEL_3",
-            "LABEL_0",
-            "LABEL_1",
-            "LABEL_0",
-            "LABEL_1",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_3",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_0",
-            "LABEL_1",
-            "LABEL_0",
-            "LABEL_3",
-            "LABEL_3",
-        ],
         expected_loss=0.46,
+        custom_code_sample=TOKEN_CLASSIFICATION_SAMPLE_DOC_TESTS,
     )
     def forward(
         self,

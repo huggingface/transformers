@@ -1061,6 +1061,7 @@ def add_code_sample_docstrings(
     modality=None,
     expected_output="",
     expected_loss="",
+    custom_code_sample=None,
 ):
     def docstring_decorator(fn):
         # model_class defaults to function's class if not specified otherwise
@@ -1087,7 +1088,9 @@ def add_code_sample_docstrings(
             expected_loss=expected_loss,
         )
 
-        if "SequenceClassification" in model_class and modality == "audio":
+        if custom_code_sample:
+            code_sample = custom_code_sample
+        elif "SequenceClassification" in model_class and modality == "audio":
             code_sample = sample_docstrings["AudioClassification"]
         elif "SequenceClassification" in model_class:
             code_sample = sample_docstrings["SequenceClassification"]
