@@ -143,7 +143,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
     def test_tokenizer_special(self):
         multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny.en")
-        text = "<|startoftranscript|> Hey! How are you feeling? J'ai l'impression que 郷さん est prêt<|endoftext|>"
+        text = "<|startoftranscript|>Hey! How are you feeling? J'ai l'impression que 郷さん est prêt<|endoftext|>"
 
         multilingual_tokens = multilingual_tokenizer.encode(text)
 
