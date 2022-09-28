@@ -1063,7 +1063,7 @@ class GenerationMixin:
             exponential_decay_length_penalty (`tuple(int, float)`, *optional*, defaults to `model.config.exponential_decay_length_penalty`):
                 This Tuple adds an exponentially increasing length penalty, after a certain amount of tokens have been
                 generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates
-                where penalty starts and `decay_factor` represents the factor of exponential decays
+                where penalty starts and `decay_factor` represents the factor of exponential decay
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model

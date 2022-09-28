@@ -149,7 +149,7 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
 
     def test_stop_sequence_stopping_criteria(self):
         prompt = """Hello I believe in"""
-        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-bart")
+        text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
         output = text_generator(prompt)
         self.assertEqual(
             output,
