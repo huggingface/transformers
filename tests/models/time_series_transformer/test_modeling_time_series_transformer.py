@@ -411,9 +411,25 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
-    # def test_seq_to_seq_generation(self):
-    #      model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
-    #         torch_device
-    #     )
-
-    #     raise NotImplementedError("Generation not implemented yet")
+    def test_seq_to_seq_generation(self):
+        model = TimeSeriesTransformerForPrediction.from_pretrained(
+            "huggingface/time-series-transformer-tourism-monthly"
+        ).to(torch_device)
+        batch = prepare_batch("val-batch.pt")
+        with torch.no_grad():
+            outputs = model.generate(
+                static_categorical_features=batch["static_categorical_features"],
+                static_real_features=batch["static_real_features"],
+                past_time_features=batch["past_time_features"],
+                past_values=batch["past_values"],
+                future_time_features=batch["future_time_features"],
+                past_observed_mask=batch["past_observed_mask"],
+            )
+        expected_shape = torch.Size(
+            (
+                64,
+                model.config.num_parallel_samples,
+                model.config.prediction_length,
+            )
+        )
+        self.assertEqual(outputs.sequences.shape, expected_shape)
