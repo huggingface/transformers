@@ -143,7 +143,7 @@
   title: Conceptual guides
 - sections:
   - sections:
-    - local: main_classes/auto
+    - local: model_doc/auto
       title: Auto Classes
     - local: main_classes/callback
       title: Callbacks
