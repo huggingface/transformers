@@ -15,13 +15,14 @@
 """Tokenization classes for Whisper."""
 import json
 import os
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Union
 
 import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
+from .english_normalizer import EnglishTextNormalizer
 
 SPIECE_UNDERLINE = "▁"
 
@@ -417,6 +418,48 @@ class WhisperTokenizer(PreTrainedTokenizer):
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index, self.decoder.get(self.unk_token_id))
+
+    def _normalize(self, text):
+        normalizer = EnglishTextNormalizer()
+        return normalizer(text)
+
+    def _decode(
+        self,
+        token_ids: Union[int, List[int]],
+        skip_special_tokens: bool = False,
+        normalize: bool = False,
+        **kwargs
+    ) -> str:
+        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
+
+        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
+
+        # To avoid mixing byte-level and unicode for byte-level BPT
+        # we need to build string separately for added tokens and byte-level tokens
+        # cf. https://github.com/huggingface/transformers/issues/1133
+        sub_texts = []
+        current_sub_text = []
+        for token in filtered_tokens:
+            if skip_special_tokens and token in self.all_special_ids:
+                continue
+            if token in self.added_tokens_encoder:
+                if current_sub_text:
+                    sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+                    current_sub_text = []
+                sub_texts.append(token)
+            else:
+                current_sub_text.append(token)
+        if current_sub_text:
+            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
+
+        text = "".join(sub_texts)
+
+        if normalize:
+            clean_text = self._normalize(text)
+            return clean_text
+        else:
+            return text
+
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.convert_tokens_to_string with GPT2 -> Whisper
     def convert_tokens_to_string(self, tokens):
