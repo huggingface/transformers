@@ -88,8 +88,10 @@ jobs:
                 path: ~/transformers/examples_tests_fetched_summary.txt
             - run: |
                 if [ -f test_list.txt ]; then
+                    echo cat test_list.txt
                     mv test_list.txt test_preparation/examples_test_list.txt
                 else
+                    echo "No file named test_list found"
                     touch test_preparation/examples_test_list.txt
                 fi
 
