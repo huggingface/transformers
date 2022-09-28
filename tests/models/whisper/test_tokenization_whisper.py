@@ -25,7 +25,7 @@ ES_CODE = 50256
 
 
 
-class WhisperTokenizeirTest(TokenizerTesterMixin, unittest.TestCase):
+class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = WhisperTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = False
