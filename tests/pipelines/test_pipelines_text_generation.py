@@ -153,13 +153,7 @@ class TextGenerationPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseM
         output = text_generator(prompt)
         self.assertEqual(
             output,
-            [
-                {
-                    "generated_text": (
-                        "Hello I believe in fe fe fe fe fe fe fe fe fe fe fe fe"
-                    )
-                }
-            ],
+            [{"generated_text": "Hello I believe in fe fe fe fe fe fe fe fe fe fe fe fe"}],
         )
 
         output = text_generator(prompt, stop_sequence=" fe")
