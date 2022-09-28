@@ -162,59 +162,6 @@ workflows:
                 requires:
                   - fetch_tests
 
-    nightly:
-        triggers:
-            - schedule:
-                cron: "0 0 * * *"
-                filters:
-                    branches:
-                        only:
-                            - main
-        jobs:
-            - fetch_all_tests
-            - run_examples_torch:
-                requires:
-                  - fetch_all_tests
-            - run_examples_tensorflow:
-                requires:
-                  - fetch_all_tests
-            - run_examples_flax:
-                requires:
-                  - fetch_all_tests
-            - run_tests_custom_tokenizers:
-                requires:
-                  - fetch_all_tests
-            - run_tests_torch_and_tf:
-                requires:
-                  - fetch_all_tests
-            - run_tests_torch_and_flax:
-                requires:
-                  - fetch_all_tests
-            - run_tests_torch:
-                requires:
-                  - fetch_all_tests
-            - run_tests_tf:
-                requires:
-                  - fetch_all_tests
-            - run_tests_flax:
-                requires:
-                  - fetch_all_tests
-            - run_tests_pipelines_torch:
-                requires:
-                  - fetch_all_tests
-            - run_tests_pipelines_tf:
-                requires:
-                  - fetch_all_tests
-            - run_tests_onnxruntime:
-                requires:
-                  - fetch_all_tests
-            - run_tests_hub:
-                requires:
-                  - fetch_all_tests
-            - run_tests_layoutlmv2_and_v3:
-                requires:
-                  - fetch_all_tests
-
 #    tpu_testing_jobs:
 #        triggers:
 #            - schedule:
