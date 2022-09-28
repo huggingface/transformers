@@ -936,7 +936,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_generation_multilingual(self):
-        torch_device = "cuda"
+        torch_device = "cpu"
         set_seed(0)
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
@@ -967,7 +967,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = "昨日は8時間寝ました。 "
+        EXPECTED_TRANSCRIPT = " 木村さんに電話を貸してもらいましょう。 I"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         decoder_input_ids = torch.tensor([[50258, 50359, 50357]]).long().to(torch_device)
