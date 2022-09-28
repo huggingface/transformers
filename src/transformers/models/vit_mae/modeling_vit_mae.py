@@ -665,13 +665,13 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
     @replace_return_docstrings(output_type=ViTMAEModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values=None,
-        noise=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        pixel_values: Optional[torch.FloatTensor] = None,
+        noise: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, ViTMAEModelOutput]:
         r"""
         Returns:
 
@@ -837,7 +837,16 @@ class ViTMAEDecoder(nn.Module):
 
 
 @add_start_docstrings(
-    "The ViTMAE Model transformer with the decoder on top for self-supervised pre-training.",
+    """The ViTMAE Model transformer with the decoder on top for self-supervised pre-training.
+
+    <Tip>
+
+    Note that we provide a script to pre-train this model on custom data in our [examples
+    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
+
+    </Tip>
+
+    """,
     VIT_MAE_START_DOCSTRING,
 )
 class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
@@ -957,13 +966,13 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
     @replace_return_docstrings(output_type=ViTMAEForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        pixel_values=None,
-        noise=None,
-        head_mask=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-    ):
+        pixel_values: Optional[torch.FloatTensor] = None,
+        noise: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, ViTMAEForPreTrainingOutput]:
         r"""
         Returns:
 

@@ -355,7 +355,7 @@ SPECIAL_MODULE_TO_TEST_MAP = {
     "file_utils.py": ["utils/test_file_utils.py", "utils/test_model_output.py"],
     "image_transforms.py": "test_image_transforms.py",
     "utils/generic.py": ["utils/test_file_utils.py", "utils/test_model_output.py", "utils/test_generic.py"],
-    "utils/hub.py": "utils/test_file_utils.py",
+    "utils/hub.py": "utils/test_hub_utils.py",
     "modelcard.py": "utils/test_model_card.py",
     "modeling_flax_utils.py": "test_modeling_flax_common.py",
     "modeling_tf_utils.py": ["test_modeling_tf_common.py", "utils/test_modeling_tf_core.py"],
@@ -435,10 +435,10 @@ def module_to_test_file(module_fname):
         return "tests/utils/test_cli.py"
     # Special case for onnx submodules
     elif len(splits) >= 2 and splits[-2] == "onnx":
-        return ["tests/onnx/test_onnx.py", "tests/onnx/test_onnx_v2.py"]
+        return ["tests/onnx/test_features.py", "tests/onnx/test_onnx.py", "tests/onnx/test_onnx_v2.py"]
     # Special case for utils (not the one in src/transformers, the ones at the root of the repo).
     elif len(splits) > 0 and splits[0] == "utils":
-        default_test_file = f"tests/utils/test_utils_{module_name}"
+        default_test_file = f"tests/repo_utils/test_{module_name}"
     elif len(splits) > 4 and splits[2] == "models":
         default_test_file = f"tests/models/{splits[3]}/test_{module_name}"
     elif len(splits) > 2 and splits[2].startswith("generation"):

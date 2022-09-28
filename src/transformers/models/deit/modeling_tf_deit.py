@@ -852,6 +852,7 @@ class TFDeiTForMaskedImageModeling(TFDeiTPreTrainedModel):
             total_loss = tf.reduce_sum(reconstruction_loss * mask)
             num_masked_pixels = (tf.reduce_sum(mask) + 1e-5) * self.config.num_channels
             masked_im_loss = total_loss / num_masked_pixels
+            masked_im_loss = tf.reshape(masked_im_loss, (1,))
 
         if not return_dict:
             output = (reconstructed_pixel_values,) + outputs[1:]

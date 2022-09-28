@@ -816,30 +816,24 @@ class TFHubertAttention(tf.keras.layers.Layer):
         src_len = shape_list(key_states)[1]
         attn_weights = tf.matmul(query_states, key_states, transpose_b=True)
 
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(attn_weights),
-                [bsz * self.num_heads, tgt_len, src_len],
-                message=(
-                    f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
-                    f" {shape_list(attn_weights)}"
-                ),
-            )
+        tf.debugging.assert_equal(
+            shape_list(attn_weights),
+            [bsz * self.num_heads, tgt_len, src_len],
+            message=(
+                f"Attention weights should be of size {(bsz * self.num_heads, tgt_len, src_len)}, but is"
+                f" {shape_list(attn_weights)}"
+            ),
+        )
 
         if attention_mask is not None:
-            # The tf.debugging asserts are not compliant with XLA then they
-            # have to be disabled in other modes than eager.
-            if tf.executing_eagerly():
-                tf.debugging.assert_equal(
-                    shape_list(attention_mask),
-                    [bsz, 1, tgt_len, src_len],
-                    message=(
-                        f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
-                        f" {shape_list(attention_mask)}"
-                    ),
-                )
+            tf.debugging.assert_equal(
+                shape_list(attention_mask),
+                [bsz, 1, tgt_len, src_len],
+                message=(
+                    f"Attention mask should be of size {(bsz, 1, tgt_len, src_len)}, but is"
+                    f" {shape_list(attention_mask)}"
+                ),
+            )
 
             attention_mask = tf.cast(attention_mask, dtype=attn_weights.dtype)
             attn_weights = tf.reshape(attn_weights, (bsz, self.num_heads, tgt_len, src_len)) + attention_mask
@@ -848,17 +842,14 @@ class TFHubertAttention(tf.keras.layers.Layer):
         attn_weights = stable_softmax(attn_weights, axis=-1)
 
         if layer_head_mask is not None:
-            # The tf.debugging asserts are not compliant with XLA then they
-            # have to be disabled in other modes than eager.
-            if tf.executing_eagerly():
-                tf.debugging.assert_equal(
-                    shape_list(layer_head_mask),
-                    [self.num_heads],
-                    message=(
-                        f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
-                        f" {shape_list(layer_head_mask)}"
-                    ),
-                )
+            tf.debugging.assert_equal(
+                shape_list(layer_head_mask),
+                [self.num_heads],
+                message=(
+                    f"Head mask for a single layer should be of size {(self.num_heads)}, but is"
+                    f" {shape_list(layer_head_mask)}"
+                ),
+            )
 
             attn_weights = tf.reshape(layer_head_mask, (1, -1, 1, 1)) * tf.reshape(
                 attn_weights, (bsz, self.num_heads, tgt_len, src_len)
@@ -868,17 +859,14 @@ class TFHubertAttention(tf.keras.layers.Layer):
         attn_probs = self.dropout(attn_weights, training=training)
         attn_output = tf.matmul(attn_probs, value_states)
 
-        # The tf.debugging asserts are not compliant with XLA then they
-        # have to be disabled in other modes than eager.
-        if tf.executing_eagerly():
-            tf.debugging.assert_equal(
-                shape_list(attn_output),
-                [bsz * self.num_heads, tgt_len, self.head_dim],
-                message=(
-                    f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                    f" {shape_list(attn_output)}"
-                ),
-            )
+        tf.debugging.assert_equal(
+            shape_list(attn_output),
+            [bsz * self.num_heads, tgt_len, self.head_dim],
+            message=(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {shape_list(attn_output)}"
+            ),
+        )
 
         attn_output = tf.transpose(
             tf.reshape(attn_output, (bsz, self.num_heads, tgt_len, self.head_dim)), (0, 2, 1, 3)
@@ -1324,8 +1312,8 @@ class TFHubertPreTrainedModel(TFPreTrainedModel):
         input_signature=[
             {
                 "input_values": tf.TensorSpec((None, None), tf.float32, name="input_values"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int32, name="attention_mask"),
-                "token_type_ids": tf.TensorSpec((None, None), tf.int32, name="token_type_ids"),
+                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
+                "token_type_ids": tf.TensorSpec((None, None), tf.int64, name="token_type_ids"),
             }
         ]
     )
@@ -1347,22 +1335,27 @@ HUBERT_START_DOCSTRING = r"""
 
     <Tip>
 
-    TF 2.0 models accepts two formats as inputs:
+    TensorFlow models and layers in `transformers` accept two formats as input:
 
     - having all inputs as keyword arguments (like PyTorch models), or
-    - having all inputs as a list, tuple or dict in the first positional arguments.
+    - having all inputs as a list, tuple or dict in the first positional argument.
 
-    This second option is useful when using [`tf.keras.Model.fit`] method which currently requires having all the
-    tensors in the first argument of the model call function: `model(inputs)`.
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
 
-    If you choose this second option, there are three possibilities you can use to gather all the input Tensors in the
-    first positional argument :
-
-    - a single Tensor with `input_values` only and nothing else: `model(inputs_ids)`
+    - a single Tensor with `input_values` only and nothing else: `model(input_values)`
     - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
     `model([input_values, attention_mask])` or `model([input_values, attention_mask, token_type_ids])`
     - a dictionary with one or several input Tensors associated to the input names given in the docstring:
     `model({"input_values": input_values, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
 
     </Tip>
 
@@ -1677,8 +1670,10 @@ class TFHubertForCTC(TFHubertPreTrainedModel):
 
             if self.config.ctc_loss_reduction == "sum":
                 loss = tf.reduce_sum(loss)
+                loss = tf.reshape(loss, (1,))
             if self.config.ctc_loss_reduction == "mean":
                 loss = tf.reduce_mean(loss)
+                loss = tf.reshape(loss, (1,))
         else:
             loss = None
 

@@ -31,8 +31,10 @@ from .utils import (
     TensorType,
     cached_file,
     copy_func,
+    download_url,
     is_flax_available,
     is_offline_mode,
+    is_remote_url,
     is_tf_available,
     is_torch_available,
     logging,
@@ -386,6 +388,9 @@ class FeatureExtractionMixin(PushToHubMixin):
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_feature_extractor_file = pretrained_model_name_or_path
             is_local = True
+        elif is_remote_url(pretrained_model_name_or_path):
+            feature_extractor_file = pretrained_model_name_or_path
+            resolved_feature_extractor_file = download_url(pretrained_model_name_or_path)
         else:
             feature_extractor_file = FEATURE_EXTRACTOR_NAME
             try:
