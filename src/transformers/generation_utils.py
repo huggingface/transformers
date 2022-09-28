@@ -1486,6 +1486,9 @@ class GenerationMixin:
             if stopping_criteria.max_length is None:
                 raise ValueError("`max_length` needs to be a stopping_criteria for now.")
 
+            if typical_p is not None:
+                raise ValueError("Decoder argument `typical_p` is not supported with beam groups.")
+
             # 10. prepare beam search scorer
             beam_scorer = BeamSearchScorer(
                 batch_size=batch_size,
