@@ -96,11 +96,6 @@ jobs:
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
 
-      - name: Checkout transformers
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 2
-
       - name: Update clone using environment variables
         working-directory: /transformers
         run: |
@@ -111,12 +106,14 @@ jobs:
           echo "log = $(git log -n 1)"
 
       - name: Cleanup
+        working-directory: /transformers
         run: |
           rm -rf tests/__pycache__
           rm -rf tests/models/__pycache__
           rm -rf reports
 
       - name: Fetch the tests to run
+        working-directory: /transformers
         # TODO: add `git-python` in the docker images
         run: |
           pip install --upgrade git-python
@@ -126,10 +123,11 @@ jobs:
         uses: actions/upload-artifact@v2
         with:
           name: test_fetched
-          path: test_preparation.txt
+          path: /transformers/test_preparation.txt
 
       - id: set-matrix
         name: Organize tests into models
+        working-directory: /transformers
         # The `keys` is used as GitHub actions matrix for jobs, i.e. `models/bert`, `tokenization`, `pipeline`, etc.
         # The `test_map` is used to get the actual identified test files under each key.
         # If no test to run (so no `test_map.json` file), create a dummy map (empty matrix will fail)
