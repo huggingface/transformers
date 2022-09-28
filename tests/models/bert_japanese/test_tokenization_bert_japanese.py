@@ -29,7 +29,7 @@ from transformers.models.bert_japanese.tokenization_bert_japanese import (
     SudachiTokenizer,
     WordpieceTokenizer,
 )
-from transformers.testing_utils import custom_tokenizers
+from transformers.testing_utils import custom_tokenizers, require_jumanpp, require_sudachi
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -174,6 +174,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ["ｱｯﾌﾟﾙストア", "で", "iPhone", "８", "が", "発売", "さ", "れ", "た", "　", "。"],
         )
 
+    @require_sudachi
     def test_pickle_sudachi_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="sudachi")
         self.assertIsNotNone(tokenizer)
@@ -194,6 +195,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(tokens, tokens_loaded)
 
+    @require_sudachi
     def test_sudachi_tokenizer_small(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="small")
 
@@ -204,6 +206,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # fmt: on
         )
 
+    @require_sudachi
     def test_sudachi_tokenizer_core(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="core")
 
@@ -214,6 +217,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # fmt: on
         )
 
+    @require_sudachi
     def test_sudachi_tokenizer_full(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="full")
 
@@ -224,21 +228,25 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # fmt: on
         )
 
+    @require_sudachi
     def test_sudachi_tokenizer_split_mode_A(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="core", sudachi_split_mode="A")
 
         self.assertListEqual(tokenizer.tokenize("外国人参政権"), ["外国", "人", "参政", "権"])
 
+    @require_sudachi
     def test_sudachi_tokenizer_split_mode_B(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="core", sudachi_split_mode="B")
 
         self.assertListEqual(tokenizer.tokenize("外国人参政権"), ["外国人", "参政権"])
 
+    @require_sudachi
     def test_sudachi_tokenizer_split_mode_C(self):
         tokenizer = SudachiTokenizer(sudachi_dict_type="core", sudachi_split_mode="C")
 
         self.assertListEqual(tokenizer.tokenize("外国人参政権"), ["外国人参政権"])
 
+    @require_sudachi
     def test_sudachi_tokenizer_lower(self):
         tokenizer = SudachiTokenizer(do_lower_case=True, sudachi_dict_type="core")
 
@@ -249,6 +257,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # fmt: on
         )
 
+    @require_sudachi
     def test_sudachi_tokenizer_no_normalize(self):
         tokenizer = SudachiTokenizer(normalize_text=False, sudachi_dict_type="core")
 
@@ -259,6 +268,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # fmt: on
         )
 
+    @require_sudachi
     def test_sudachi_tokenizer_trim_whitespace(self):
         tokenizer = SudachiTokenizer(trim_whitespace=True, sudachi_dict_type="core")
 
@@ -267,6 +277,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             ["アップル", "ストア", "で", "iPhone", "8", "が", "発売", "さ", "れ", "た", "。"],
         )
 
+    @require_jumanpp
     def test_pickle_jumanpp_tokenizer(self):
         tokenizer = self.tokenizer_class(self.vocab_file, word_tokenizer_type="jumanpp")
         self.assertIsNotNone(tokenizer)
@@ -287,6 +298,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         self.assertListEqual(tokens, tokens_loaded)
 
+    @require_jumanpp
     def test_jumanpp_tokenizer(self):
         tokenizer = JumanppTokenizer()
 
@@ -297,6 +309,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # fmt: on
         )
 
+    @require_jumanpp
     def test_jumanpp_tokenizer_lower(self):
         tokenizer = JumanppTokenizer(do_lower_case=True)
 
@@ -307,6 +320,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # fmt: on
         )
 
+    @require_jumanpp
     def test_jumanpp_tokenizer_no_normalize(self):
         tokenizer = JumanppTokenizer(normalize_text=False)
 
@@ -317,6 +331,7 @@ class BertJapaneseTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             # fmt: on
         )
 
+    @require_jumanpp
     def test_jumanpp_tokenizer_trim_whitespace(self):
         tokenizer = JumanppTokenizer(trim_whitespace=True)
 
