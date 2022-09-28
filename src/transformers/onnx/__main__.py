@@ -38,7 +38,15 @@ def main():
         "--atol", type=float, default=None, help="Absolute difference tolerence when validating the model."
     )
     parser.add_argument(
-        "--framework", type=str, choices=["pt", "tf"], default="pt", help="The framework to use for the ONNX export."
+        "--framework",
+        type=str,
+        choices=["pt", "tf"],
+        default=None,
+        help=(
+            "The framework to use for the ONNX export."
+            " If not provided, will attempt to use the local checkpoint's original framework"
+            " or what is available in the environment."
+        ),
     )
     parser.add_argument("output", type=Path, help="Path indicating where to store generated ONNX model.")
     parser.add_argument("--cache_dir", type=str, default=None, help="Path indicating where to store cache.")

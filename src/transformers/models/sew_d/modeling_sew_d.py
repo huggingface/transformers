@@ -1194,11 +1194,11 @@ class SEWDEncoder(nn.Module):
 
     def forward(
         self,
-        hidden_states,
-        attention_mask=None,
-        output_attentions=False,
-        output_hidden_states=False,
-        return_dict=True,
+        hidden_states: torch.tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
     ):
         max_encoder_length = hidden_states.shape[1] // self.config.squeeze_factor
         if attention_mask is None:

@@ -137,7 +137,7 @@ VISION_ENCODER_DECODER_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             If set to `True`, the model will return a [`~utils.Seq2SeqLMOutput`] instead of a plain tuple.
-        kwargs: (*optional*) Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
+        kwargs (*optional*): Remaining dictionary of keyword arguments. Keyword arguments come in two flavors:
 
             - Without a prefix which will be input as `**encoder_kwargs` for the encoder forward function.
             - With a *decoder_* prefix which will be input as `**decoder_kwargs` for the decoder forward function.
@@ -155,6 +155,7 @@ class VisionEncoderDecoderModel(PreTrainedModel):
     config_class = VisionEncoderDecoderConfig
     base_model_prefix = "vision_encoder_decoder"
     main_input_name = "pixel_values"
+    supports_gradient_checkpointing = True
 
     def __init__(
         self,
@@ -220,6 +221,11 @@ class VisionEncoderDecoderModel(PreTrainedModel):
             raise ValueError(
                 f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
+
+    def _set_gradient_checkpointing(self, module, value=False):
+        # call both encoder and decoder function on gradient checkpointing
+        self.encoder._set_gradient_checkpointing(module, value=value)
+        self.decoder._set_gradient_checkpointing(module, value=value)
 
     def get_encoder(self):
         return self.encoder

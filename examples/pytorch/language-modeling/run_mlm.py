@@ -53,7 +53,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.22.0.dev0")
+check_min_version("4.23.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/language-modeling/requirements.txt")
 
@@ -72,7 +72,7 @@ class ModelArguments:
         default=None,
         metadata={
             "help": (
-                "The model checkpoint for weights initialization.Don't set if you want to train a model from scratch."
+                "The model checkpoint for weights initialization. Don't set if you want to train a model from scratch."
             )
         },
     )
