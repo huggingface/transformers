@@ -150,7 +150,7 @@ class DistributionOutput:
         """
         return 0.0
 
-    def get_param_proj(self, in_features: int) -> nn.Module:
+    def get_parameter_projection(self, in_features: int) -> nn.Module:
         r"""
         Return the parameter projection layer that maps the input to the appropriate parameters of the distribution.
         """
@@ -416,7 +416,7 @@ def _expand_mask(mask: torch.Tensor, dtype: torch.dtype, tgt_len: Optional[int] 
 
 
 @dataclass
-class Seq2SeqTSModelOutput(ModelOutput):
+class Seq2SeqTimeSeriesModelOutput(ModelOutput):
     """
     Base class for model encoder's outputs that also contains pre-computed hidden states that can speed up sequential
     decoding.
@@ -484,7 +484,7 @@ class Seq2SeqTSModelOutput(ModelOutput):
 
 
 @dataclass
-class Seq2SeqTSPredictionOutput(ModelOutput):
+class Seq2SeqTimeSeriesPredictionOutput(ModelOutput):
     """
     Base class for model's predictions outputs that also contain the loss as well parameters of the chosen
     distribution.
@@ -552,7 +552,7 @@ class Seq2SeqTSPredictionOutput(ModelOutput):
 
 
 @dataclass
-class SampleTSPredictionOutput(ModelOutput):
+class SampleTimeSeriesPredictionOutput(ModelOutput):
     sequences: torch.FloatTensor = None
 
 
@@ -1432,7 +1432,7 @@ class TimeSeriesTransformerDecoder(TimeSeriesTransformerPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The bare TimeSeriesTransformer Model outputting raw hidden-states without any specific head on top.",
+    "The bare Time Series Transformer Model outputting raw hidden-states without any specific head on top.",
     TIME_SERIES_TRANSFORMER_START_DOCSTRING,
 )
 class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
@@ -1449,7 +1449,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             embedding_dims=config.embedding_dimension,
         )
 
-        # transformer enc-decoder and mask initializer
+        # transformer encoder-decoder and mask initializer
         self.encoder = TimeSeriesTransformerEncoder(config)
         self.decoder = TimeSeriesTransformerDecoder(config)
 
@@ -1467,13 +1467,14 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         Returns lagged subsequences of a given sequence. Returns a tensor of shape (N, S, C, I),
             where S = subsequences_length and I = len(indices), containing lagged subsequences. Specifically, lagged[i,
             j, :, k] = sequence[i, -indices[k]-S+j, :].
+        
         Args:
-            sequence : Tensor
-                the sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
+            sequence: Tensor
+                The sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
             subsequences_length : int
-                length of the subsequences to be extracted.
+                Length of the subsequences to be extracted.
             shift: int
-                shift the lags by this amount back.
+                Shift the lags by this amount back.
         """
         sequence_length = sequence.shape[1]
         indices = [lag - shift for lag in self.config.lags_sequence]
@@ -1582,7 +1583,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Seq2SeqTimeSeriesModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1691,7 +1692,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         if not return_dict:
             return decoder_outputs + encoder_outputs + (scale, static_feat)
 
-        return Seq2SeqTSModelOutput(
+        return Seq2SeqTimeSeriesModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
             past_key_values=decoder_outputs.past_key_values,
             decoder_hidden_states=decoder_outputs.hidden_states,
@@ -1722,7 +1723,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         else:
             raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
-        self.param_proj = self.distribution_output.get_param_proj(self.model.config.d_model)
+        self.parameter_projection = self.distribution_output.get_parameter_projection(self.model.config.d_model)
         self.target_shape = self.distribution_output.event_shape
 
         if config.loss == "nll":
@@ -1734,7 +1735,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         self.post_init()
 
     def output_params(self, dec_output):
-        return self.param_proj(dec_output)
+        return self.parameter_projection(dec_output)
 
     def get_encoder(self):
         return self.model.get_encoder()
@@ -1750,7 +1751,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         return self.distribution_output.distribution(sliced_params, scale=scale)
 
     @add_start_docstrings_to_model_forward(TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqTSModelOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=Seq2SeqTimeSeriesModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         past_values: torch.Tensor,
@@ -1843,7 +1844,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             outputs = ((params,) + outputs[1:]) if params is not None else outputs[1:]
             return ((prediction_loss,) + outputs) if prediction_loss is not None else outputs
 
-        return Seq2SeqTSPredictionOutput(
+        return Seq2SeqTimeSeriesPredictionOutput(
             loss=prediction_loss,
             params=params,
             past_key_values=outputs.past_key_values,
@@ -1917,7 +1918,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             dec_output = decoder(inputs_embeds=decoder_input, encoder_hidden_states=repeated_enc_last_hidden)
             dec_last_hidden = dec_output.last_hidden_state
 
-            params = self.param_proj(dec_last_hidden[:, -1:])
+            params = self.parameter_projection(dec_last_hidden[:, -1:])
             distr = self.output_distribution(params, scale=repeated_scale)
             next_sample = distr.sample()
 
@@ -1926,7 +1927,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
 
         concat_future_samples = torch.cat(future_samples, dim=1)
 
-        return SampleTSPredictionOutput(
+        return SampleTimeSeriesPredictionOutput(
             sequences=concat_future_samples.reshape(
                 (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
             )
