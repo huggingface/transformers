@@ -1145,7 +1145,7 @@ class TFGenerationMixin:
             # extend attention_mask for new generated input if only decoder
             if self.config.is_encoder_decoder is False:
                 attention_mask = tf.concat(
-                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int64)], axis=-1
+                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=attention_mask.dtype)], axis=-1
                 )
 
         # finalize all open beam hypotheses and end to generated hypotheses
@@ -1899,7 +1899,7 @@ class TFGenerationMixin:
             if "attention_mask" in model_kwargs:
                 attention_mask = model_kwargs["attention_mask"]
                 model_kwargs["attention_mask"] = tf.concat(
-                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int64)], axis=-1
+                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=attention_mask.dtype)], axis=-1
                 )
 
         return model_kwargs
