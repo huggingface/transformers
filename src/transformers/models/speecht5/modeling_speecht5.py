@@ -1461,6 +1461,71 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         )
 
 
+class SpeechT5TextDecoder(SpeechT5PreTrainedModel):
+    """
+    TODO
+    """
+
+    def __init__(self, config: SpeechT5Config):
+        super().__init__(config)
+        # TODO: add these!
+        # self.prenet = SpeechT5TextDecoderPrenet(config)
+        # self.postnet = SpeechT5TextDecoderPostnet(config)
+        self.decoder = SpeechT5Decoder(config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        input_ids: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+
+        # TODO: run the TextDecoderPrenet on the input_ids
+        # (this line is from the original code)
+        # incremental_state is similar to our past_key_values
+        #prev_output_tokens, tgt_mask, incremental_state = self.text_decoder_prenet(tokens, incremental_state)
+
+        outputs = self.decoder(
+            input_ids=input_ids,   #TODO: pass hidden_states instead of input_ids
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            inputs_embeds=inputs_embeds,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        #TODO: run the TextDecoderPostnet afterwards -- this is our equivalent of a language head
+        #logits = self.text_decoder_postnet(decoder_output)
+        #
+        # Note that in other HF models, the lm_head lives in the ForConditionalGeneration model
+        # but for us it would live in SpeechT5TextDecoder, which means it should have its own
+        # output class to return the logits as well as the BaseModel stuff
+
+        return outputs
+
+
+# TODO: add class SpeechT5SpeechDecoder that works on log-mel spectrograms
+
+
 SPEECHT5_START_DOCSTRING = r"""
     TODO
 """
@@ -1515,8 +1580,14 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         super().__init__(config)
         self.config = config
 
+        # TODO: which encoder/decoder is used depends on the task, maybe they
+        # should be defined in the ForXYZ class instead and passed into SpeechT5Model
+
         self.speech_encoder = SpeechT5SpeechEncoder(config)
-        self.decoder = SpeechT5Decoder(config)
+        #self.text_encoder = SpeechT5TextEncoder(config)
+
+        self.text_decoder = SpeechT5TextDecoder(config)
+        #self.speech_decoder = SpeechT5SpeechDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1525,7 +1596,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         return self.speech_encoder
 
     def get_decoder(self):
-        return self.decoder
+        return self.text_decoder
 
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1738,23 +1809,6 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=True,
         )
-
-        # TODO: create a SpeechT5TextDecoder that is used as our decoder
-        # it will have the following:
-        #   self.text_decoder_prenet = SpeechT5TextDecoderPrenet(config)
-        #   self.text_decoder_postnet = SpeechT5TextDecoderPostnet(config)
-        #
-        # run the TextDecoderPrenet on the decoder_input_ids
-        # (this line is from the original code)
-        # incremental_state is similar to our past_key_values
-        #prev_output_tokens, tgt_mask, incremental_state = self.text_decoder_prenet(tokens, incremental_state)
-        #
-        # run the TextDecoderPostnet afterwards -- this is our equivalent of a language head
-        #logits = self.text_decoder_postnet(decoder_output)
-        #
-        # Note that in other HF models, the lm_head lives in the ForConditionalGeneration model
-        # but for us it would live in SpeechT5TextDecoder, which means it should have its own
-        # output class to return the logits as well as the BaseModel stuff
 
         # TODO: just for testing, should use TextDecoderPostnet for this
         logits = self.lm_head(outputs[0])
