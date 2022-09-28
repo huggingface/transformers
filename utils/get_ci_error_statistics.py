@@ -88,23 +88,22 @@ def get_errors_from_single_artifact(artifact_zip_path):
             " problem."
         )
 
-    return errors, failed_tests
+    # A list with elements of the form (line of error, error, failed test)
+    result = [x + [y] for x, y in zip(errors, failed_tests)]
+
+    return result
 
 
 def get_all_errors(artifact_dir):
     """Extract errors from all artifact files"""
 
     errors = []
-    failed_tests = []
 
     paths = [os.path.join(artifact_dir, p) for p in os.listdir(artifact_dir) if p.endswith(".zip")]
-
     for p in paths:
-        _errors, _failed_tests = get_errors_from_single_artifact(p)
-        errors.extend(_errors)
-        failed_tests.extend(_failed_tests)
+        errors.extend(get_errors_from_single_artifact(p))
 
-    return errors, failed_tests
+    return errors
 
 
 def reduce_by_error(logs, error_filter=None):
@@ -210,8 +209,9 @@ if __name__ == "__main__":
         # Be gentle to GitHub
         time.sleep(1)
 
-    errors, failed_tests = get_all_errors(args.output_dir)
+    errors = get_all_errors(args.output_dir)
 
+    # `e[1]` is the error
     counter = Counter()
     counter.update([e[1] for e in errors])
 
@@ -223,14 +223,8 @@ if __name__ == "__main__":
     with open(os.path.join(args.output_dir, "errors.json"), "w", encoding="UTF-8") as fp:
         json.dump(errors, fp, ensure_ascii=False, indent=4)
 
-    with open(os.path.join(args.output_dir, "failed_tests.json"), "w", encoding="UTF-8") as fp:
-        json.dump(failed_tests, fp, ensure_ascii=False, indent=4)
-
-    # Produce tables for GitHub issue.
-    logs = [(error_line, error, failed_test) for (error_line, error), failed_test in zip(errors, failed_tests)]
-
-    reduced_by_error = reduce_by_error(logs)
-    reduced_by_model = reduce_by_model(logs)
+    reduced_by_error = reduce_by_error(errors)
+    reduced_by_model = reduce_by_model(errors)
 
     s1 = make_github_table(reduced_by_error)
     s2 = make_github_table_per_model(reduced_by_model)
