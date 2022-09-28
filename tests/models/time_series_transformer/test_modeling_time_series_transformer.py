@@ -384,7 +384,7 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
 
         expected_shape = torch.Size((64, model.config.prediction_length, model.config.d_model))
         self.assertEqual(output.shape, expected_shape)
-        # change to expected output here
+
         expected_slice = torch.tensor(
             [[-0.3125, -1.2884, -1.1118], [-0.5801, -1.4907, -0.7782], [0.0849, -1.6557, -0.9755]], device=torch_device
         )
@@ -406,7 +406,7 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
             )[1]
         expected_shape = torch.Size((64, model.config.prediction_length, model.config.d_model))
         self.assertEqual(output.shape, expected_shape)
-        # change to expected output here
+
         expected_slice = torch.tensor(
             [[0.9127, -0.2056, -0.5259], [1.0572, 1.4104, -0.1964], [0.1358, 2.0348, 0.5739]], device=torch_device
         )
