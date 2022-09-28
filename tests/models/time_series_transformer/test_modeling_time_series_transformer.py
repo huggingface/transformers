@@ -428,3 +428,7 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
             )
         expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
         self.assertEqual(outputs.sequences.shape, expected_shape)
+
+        expected_slice = torch.tensor([2289.5203, 2778.3054, 4648.1313], device=torch_device)
+        mean_prediction = outputs.sequences.mean(dim=1)
+        self.assertTrue(torch.allclose(mean_prediction[0, -3:], expected_slice, rtol=1e-1))
