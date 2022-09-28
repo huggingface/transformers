@@ -128,7 +128,7 @@ jobs:
             - restore_cache:
                   keys:
                       - v0.5-torch_and_tf-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+                      - v0.5-torch_and_tf-
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng git-lfs
             - run: git lfs install
             - run: pip install --upgrade pip
@@ -138,7 +138,7 @@ jobs:
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
-                key: v0.5-{{ checksum "setup.py" }}
+                key: v0.5-torch_and_tf-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
             - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf $(cat test_preparation/test_list.txt) -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
@@ -170,7 +170,7 @@ jobs:
             - restore_cache:
                   keys:
                       - v0.5-torch_and_flax-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+                      - v0.5-torch_and_flax-
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,flax,torch,testing,sentencepiece,torch-speech,vision]
@@ -178,7 +178,7 @@ jobs:
             - run: pip install https://github.com/kpu/kenlm/archive/master.zip
             - run: pip install git+https://github.com/huggingface/accelerate
             - save_cache:
-                key: v0.5-{{ checksum "setup.py" }}
+                key: v0.5-torch_and_flax-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
             - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax $(cat test_preparation/test_list.txt) -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
@@ -209,7 +209,7 @@ jobs:
             - restore_cache:
                   keys:
                       - v0.5-torch-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+                      - v0.5-torch-
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng time
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
@@ -248,7 +248,7 @@ jobs:
             - restore_cache:
                   keys:
                       - v0.5-tf-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+                      - v0.5-tf-
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece,tf-speech,vision]
@@ -286,7 +286,7 @@ jobs:
             - restore_cache:
                 keys:
                     - v0.5-flax-{{ checksum "setup.py" }}
-                    - v0.5-{{ checksum "setup.py" }}
+                    - v0.5-flax-
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[flax,testing,sentencepiece,flax-speech,vision]
@@ -324,7 +324,7 @@ jobs:
             - restore_cache:
                   keys:
                       - v0.5-torch-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+                      - v0.5-torch-
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,testing,sentencepiece,torch-speech,vision,timm]
@@ -363,7 +363,7 @@ jobs:
             - restore_cache:
                   keys:
                       - v0.5-tf-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+                      - v0.5-tf-
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tf-cpu,testing,sentencepiece]
             - run: pip install tensorflow_probability
@@ -397,7 +397,7 @@ jobs:
             - restore_cache:
                   keys:
                       - v0.5-custom_tokenizers-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+                      - v0.5-custom_tokenizers-
             - run: pip install --upgrade pip
             - run: pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]
             - run: python -m unidic download
@@ -433,7 +433,7 @@ jobs:
             - restore_cache:
                   keys:
                       - v0.5-torch_examples-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+                      - v0.5-torch_examples-
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,torch,sentencepiece,testing,torch-speech]
@@ -470,7 +470,7 @@ jobs:
             - restore_cache:
                   keys:
                       - v0.5-tensorflow_examples-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+                      - v0.5-tensorflow_examples-
             - run: pip install --upgrade pip
             - run: pip install .[sklearn,tensorflow,sentencepiece,testing]
             - run: pip install -r examples/tensorflow/_tests_requirements.txt
@@ -506,7 +506,7 @@ jobs:
             - restore_cache:
                 keys:
                     - v0.5-flax_examples-{{ checksum "setup.py" }}
-                    - v0.5-{{ checksum "setup.py" }}
+                    - v0.5-flax_examples-
             - run: pip install --upgrade pip
             - run: pip install .[flax,testing,sentencepiece]
             - run: pip install -r examples/flax/_tests_requirements.txt
@@ -543,7 +543,7 @@ jobs:
             - restore_cache:
                   keys:
                       - v0.5-hub-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+                      - v0.5-hub-
             - run: sudo apt-get -y update && sudo apt-get install git-lfs
             - run: |
                 git config --global user.email "ci@dummy.com"
@@ -581,8 +581,8 @@ jobs:
                 fi
             - restore_cache:
                   keys:
-                      - v0.5-torch-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+                      - v0.5-onnx-{{ checksum "setup.py" }}
+                      - v0.5-onnx-
             - run: pip install --upgrade pip
             - run: pip install .[torch,tf,testing,sentencepiece,onnxruntime,vision,rjieba]
             - save_cache:
@@ -610,7 +610,7 @@ jobs:
             - restore_cache:
                   keys:
                       - v0.5-code_quality-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+                      - v0.5-code_quality-
             - run: pip install --upgrade pip
             - run: pip install .[all,quality]
             - save_cache:
@@ -639,7 +639,7 @@ jobs:
             - restore_cache:
                   keys:
                       - v0.5-repository_consistency-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+                      - v0.5-repository_consistency-
             - run: pip install --upgrade pip
             - run: pip install .[all,quality]
             - save_cache:
@@ -678,7 +678,7 @@ jobs:
             - restore_cache:
                   keys:
                       - v0.5-torch-{{ checksum "setup.py" }}
-                      - v0.5-{{ checksum "setup.py" }}
+                      - v0.5-torch-
             - run: sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev
             - run: pip install --upgrade pip
             - run: pip install .[torch,testing,vision]
