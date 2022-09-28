@@ -958,7 +958,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                 SuppressTokens(model.config.non_speech_tokens),
             ]
         )
-        decoder_input_ids = torch.tensor([[50258, 50359, 50357, 50363]]).long().to(torch_device)
+        decoder_input_ids = torch.tensor([[50258, 50359, 50266, 50363]]).long().to(torch_device)
         generated_ids = model.generate(
             input_features,
             do_sample=True,
@@ -967,7 +967,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = "昨日は8時間寝ました"
+        EXPECTED_TRANSCRIPT = "昨日は8時間寝ました。 "
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         decoder_input_ids = torch.tensor([[50258, 50359, 50357]]).long().to(torch_device)
