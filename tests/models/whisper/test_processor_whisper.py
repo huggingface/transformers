@@ -13,13 +13,14 @@
 # limitations under the License.
 
 import shutil
+import tempfile
 import unittest
 
 from transformers import WhisperTokenizer, is_speech_available
 from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 
 from .test_feature_extraction_whisper import floats_list
-import tempfile
+
 
 if is_speech_available():
     from transformers import WhisperFeatureExtractor, WhisperProcessor
