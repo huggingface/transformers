@@ -23,12 +23,17 @@ import unittest
 from transformers import WhisperConfig
 from transformers.generation_logits_process import LogitsProcessorList, SuppressBlank, SuppressTokens
 from transformers.testing_utils import is_torch_available, require_torch, require_torchaudio, slow, torch_device
+
+from transformers.utils.import_utils import is_datasets_available
 from transformers.utils import cached_property
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
 
+if is_datasets_available():
+    import datasets
+    from datasets import load_dataset
 
 if is_torch_available():
     import torch
@@ -719,7 +724,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
             self.assertTrue(models_equal)
 
-
 @require_torch
 @require_torchaudio
 class WhisperModelIntegrationTests(unittest.TestCase):
@@ -728,7 +732,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         return WhisperProcessor.from_pretrained("openai/whisper-base")
 
     def _load_datasamples(self, num_samples):
-        from datasets import load_dataset
+        
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
@@ -935,3 +939,67 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+
+    @slow
+    def test_large_generation_multilingual(self):
+        torch_device = "cuda"
+        set_seed(0)
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
+        model.to(torch_device)
+
+        ds = load_dataset("common_voice", "ja", split="test", streaming=True)
+        ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
+        ds_iter = iter(ds)
+        input_speech = next(ds_iter)["audio"]["array"]
+
+        feaure_extractor = WhisperFeatureExtractor()
+
+        input_features = feaure_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(torch_device)
+
+        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-large")
+
+        logits_processor = LogitsProcessorList(
+            [
+                SuppressBlank(tokenizer.encode(" "), 50256),
+                SuppressTokens(model.config.non_speech_tokens),
+            ]
+        )
+        decoder_input_ids = torch.tensor([[50258,50359, 50357, 50363]]).long().to(torch_device)
+        generated_ids = model.generate(
+            input_features,
+            do_sample=True,
+            logits_processor=logits_processor,
+            decoder_input_ids=decoder_input_ids,
+        )
+        transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        EXPECTED_TRANSCRIPT = "昨日は8時間寝ました"
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+        decoder_input_ids = torch.tensor([[50258,50359, 50357]]).long().to(torch_device)
+        generated_ids = model.generate(
+            input_features,
+            do_sample=False,
+            logits_processor=logits_processor,
+            decoder_input_ids=decoder_input_ids,
+        )
+        transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        EXPECTED_TRANSCRIPT = " Kimura san ni denwa wo kashite moraimashita."
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+
+        decoder_input_ids = torch.tensor([[50258,50357]]).long().to(torch_device)
+        generated_ids = model.generate(
+            input_features,
+            do_sample=False,
+            logits_processor=logits_processor,
+            decoder_input_ids=decoder_input_ids,
+        )
+        transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        EXPECTED_TRANSCRIPT = "I borrowed a phone from Kimura san"
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+

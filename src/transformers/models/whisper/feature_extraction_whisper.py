@@ -158,7 +158,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         truncation: bool = True,
         pad_to_multiple_of: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
-        sampling_rate: Optional[int] = None,
         return_attention_mask: Optional[bool] = None,
         padding: Optional[str] = "max_length",
         max_length: Optional[int] = None,
@@ -231,7 +230,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             max_length=max_length if max_length else self.n_samples,
             truncation=truncation,
             pad_to_multiple_of=pad_to_multiple_of,
-            return_attention_mask=return_attention_mask,
+            return_attention_mask=False,
             **kwargs,
         )
         # make sure list is in array format
@@ -243,10 +242,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
         else:
             padded_inputs["input_features"] = input_features
-
-        attention_mask = np.asarray(padded_inputs.get("attention_mask"))[:, : self.nb_max_frame]
-        if attention_mask is not None:
-            padded_inputs["attention_mask"] = [attention_mask]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
