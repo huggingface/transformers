@@ -18,6 +18,7 @@ import inspect
 import tempfile
 import unittest
 
+from huggingface_hub import hf_hub_download
 from transformers import is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -354,6 +355,12 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
         )
 
 
+def prepare_batch(filename="train-batch.pt"):
+    file = hf_hub_download(repo_id="kashif/tourism-monthly-batch", filename=filename, repo_type="dataset")
+    batch = torch.load(file, map_location=torch_device)
+    return batch
+
+
 @require_torch
 @slow
 class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
@@ -361,28 +368,37 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
             torch_device
         )
-        inputs_dict = prepare_time_series_transformer_inputs_dict(model.config)
-        with torch.no_grad():
-            output = model(**inputs_dict)
+        batch = prepare_batch()
 
-        expected_shape = torch.Size((1, 11, 1024))
+        with torch.no_grad():
+            output = model(
+                past_values=batch["past_values"],
+                past_time_features=batch["past_time_features"],
+                past_observed_mask=batch["past_observed_mask"],
+                static_categorical_features=batch["static_categorical_features"],
+                static_real_features=batch["static_real_features"],
+                future_values=batch["future_values"],
+                future_time_features=batch["future_time_features"],
+            )[0]
+
+        expected_shape = torch.Size((64, model.config.prediction_length, model.config.d_model))
         self.assertEqual(output.shape, expected_shape)
         # change to expected output here
         expected_slice = torch.tensor(
-            [[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]], device=torch_device
+            [[-0.3125, -1.2884, -1.1118], [-0.5801, -1.4907, -0.7782], [0.0849, -1.6557, -0.9755]], device=torch_device
         )
-        self.assertTrue(torch.allclose(output[:, :3, :3], expected_slice, atol=TOLERANCE))
+        self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
-    def test_inference_head(self):
-        model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
-            torch_device
-        )
-    
-        raise NotImplementedError("To do")
+    # def test_inference_head(self):
+    #     model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
+    #         torch_device
+    #     )
 
-    def test_seq_to_seq_generation(self):
-         model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
-            torch_device
-        )
+    #     raise NotImplementedError("To do")
 
-        raise NotImplementedError("Generation not implemented yet")
+    # def test_seq_to_seq_generation(self):
+    #      model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
+    #         torch_device
+    #     )
+
+    #     raise NotImplementedError("Generation not implemented yet")
