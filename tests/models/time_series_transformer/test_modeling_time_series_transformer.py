@@ -78,7 +78,6 @@ class TimeSeriesTransformerModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
 
         self.encoder_seq_length = context_length
-        self.key_length = context_length
         self.decoder_seq_length = prediction_length
 
     def prepare_config_and_inputs(self):
@@ -260,8 +259,6 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
         seq_len = getattr(self.model_tester, "seq_length", None)
         decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", decoder_seq_length)
-        encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -288,7 +285,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+                [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
             )
             out_len = len(outputs)
 
@@ -314,7 +311,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertEqual(len(decoder_attentions), self.model_tester.num_hidden_layers)
             self.assertListEqual(
                 list(decoder_attentions[0].shape[-3:]),
-                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_key_length],
+                [self.model_tester.num_attention_heads, decoder_seq_length, decoder_seq_length],
             )
 
             # cross attentions
@@ -326,7 +323,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
                 [
                     self.model_tester.num_attention_heads,
                     decoder_seq_length,
-                    encoder_key_length,
+                    encoder_seq_length,
                 ],
             )
 
@@ -346,7 +343,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
         self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
         self.assertListEqual(
             list(self_attentions[0].shape[-3:]),
-            [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
+            [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
         )
 
 
