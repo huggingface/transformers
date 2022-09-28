@@ -45,7 +45,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-# check_min_version("4.23.0.dev0")
+check_min_version("4.23.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/question-answering/requirements.txt")
 
@@ -484,7 +484,7 @@ def main():
             padding=padding,
             truncation=True,
             return_offsets_mapping=True,
-            # return_overflowing_tokens=True,
+            return_overflowing_tokens=True,
         )
 
         # Setup the tokenizer for targets
@@ -492,8 +492,7 @@ def main():
 
         # Since one example might give us several features if it has a long context, we need a map from a feature to
         # its corresponding example. This key gives us just that.
-        # sample_mapping = model_inputs.pop("overflow_to_sample_mapping")
-        sample_mapping = list(range(len(model_inputs["input_ids"])))
+        sample_mapping = model_inputs.pop("overflow_to_sample_mapping")
 
         # For evaluation, we will need to convert our predictions to substrings of the context, so we keep the
         # corresponding example_id and we will store the offset mappings.
