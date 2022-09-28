@@ -924,11 +924,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
                 SuppressTokens(model.config.non_speech_tokens),
             ]
         )
-        tokenizer.eos_token_id = 50257
-        tokenizer.eos_token = "<|endoftext|>"
-        model.config.eos_token_id = 50257
-        model.config.decoder_start_token_id = 50258
-
         decoder_input_ids = torch.tensor([[50258]]).long()
         generated_ids = model.generate(
             input_features,
@@ -938,5 +933,5 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we're glad"
+        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
