@@ -289,7 +289,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
-        
+
     @property
     @lru_cache()
     def sot_sequence(self) -> Tuple[int]:

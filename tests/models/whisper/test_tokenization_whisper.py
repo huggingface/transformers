@@ -14,7 +14,6 @@
 
 import unittest
 
-from transformers import SPIECE_UNDERLINE
 from transformers.models.whisper import WhisperTokenizer
 from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
 
@@ -35,8 +34,8 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     def setUp(self):
         super().setUp()
         tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny")
-        tokenizer.pad_token_id=50256
-        tokenizer.pad_token="<|endoftext|>"
+        tokenizer.pad_token_id = 50256
+        tokenizer.pad_token = "<|endoftext|>"
         tokenizer.save_pretrained(self.tmpdirname)
 
     def test_convert_token_and_id(self):
@@ -51,7 +50,7 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         vocab_keys = list(self.get_tokenizer().get_vocab().keys())
 
         self.assertEqual(vocab_keys[0], "!")
-        self.assertEqual(vocab_keys[1], "\"")
+        self.assertEqual(vocab_keys[1], '"')
         self.assertEqual(vocab_keys[-1], "<|notimestamps|>")
         self.assertEqual(len(vocab_keys), 50364)
 
@@ -62,7 +61,7 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizer = WhisperTokenizer.from_pretrained(self.tmpdirname)
 
         tokens = tokenizer.tokenize("This is a test")
-        self.assertListEqual(tokens, ['This', 'Ġis', 'Ġa', 'Ġ', 'test'])
+        self.assertListEqual(tokens, ["This", "Ġis", "Ġa", "Ġ", "test"])
 
         self.assertListEqual(
             tokenizer.convert_tokens_to_ids(tokens),
@@ -73,7 +72,7 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             tokens,
             # fmt: off
-            ['I', 'Ġwas','Ġborn', 'Ġin', 'Ġ9', '2000', ',', 'Ġand', 'Ġ', 'this', 'Ġis', 'Ġfals', 'Ã©', '.' ],
+            ['I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ9', '2000', ',', 'Ġand', 'Ġ', 'this', 'Ġis', 'Ġfals', 'Ã©', '.'],
             # fmt: on
         )
         ids = tokenizer.convert_tokens_to_ids(tokens)
@@ -83,7 +82,7 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             back_tokens,
             # fmt: off
-            ['I', 'Ġwas','Ġborn', 'Ġin', 'Ġ9', '2000', ',', 'Ġand', 'Ġ', 'this', 'Ġis', 'Ġfals', 'Ã©', '.' ],
+            ['I', 'Ġwas', 'Ġborn', 'Ġin', 'Ġ9', '2000', ',', 'Ġand', 'Ġ', 'this', 'Ġis', 'Ġfals', 'Ã©', '.'],
             # fmt: on
         )
 
@@ -93,13 +92,11 @@ class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     @slow
     def test_tokenizer_integration(self):
         # fmt: off
-        expected_encoding = {'input_ids': [[41762, 364, 357, 36234, 1900, 355, 12972, 13165, 354, 12, 35636, 364, 290, 12972, 13165, 354, 12, 5310, 13363, 12, 4835, 8, 3769, 2276, 12, 29983, 45619, 357, 13246, 51, 11, 402, 11571, 12, 17, 11, 5564, 13246, 38586, 11, 16276, 44, 11, 4307, 346, 33, 861, 11, 16276, 7934, 23029, 329, 12068, 15417, 28491, 357, 32572, 52, 8, 290, 12068, 15417, 16588, 357, 32572, 38, 8, 351, 625, 3933, 10, 2181, 13363, 4981, 287, 1802, 10, 8950, 290, 2769, 48817, 1799, 1022, 449, 897, 11, 9485, 15884, 354, 290, 309, 22854, 37535, 13], [13246, 51, 318, 3562, 284, 662, 12, 27432, 2769, 8406, 4154, 282, 24612, 422, 9642, 9608, 276, 2420, 416, 26913, 21143, 319, 1111, 1364, 290, 826, 4732, 287, 477, 11685, 13], [464, 2068, 7586, 21831, 18045, 625, 262, 16931, 3290, 13]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]} # noqa: E501
+        expected_encoding = {'input_ids': [[41762, 364, 357, 36234, 1900, 355, 12972, 13165, 354, 12, 35636, 364, 290, 12972, 13165, 354, 12, 5310, 13363, 12, 4835, 8, 3769, 2276, 12, 29983, 45619, 357, 13246, 51, 11, 402, 11571, 12, 17, 11, 5564, 13246, 38586, 11, 16276, 44, 11, 4307, 346, 33, 861, 11, 16276, 7934, 23029, 329, 12068, 15417, 28491, 357, 32572, 52, 8, 290, 12068, 15417, 16588, 357, 32572, 38, 8, 351, 625, 3933, 10, 2181, 13363, 4981, 287, 1802, 10, 8950, 290, 2769, 48817, 1799, 1022, 449, 897, 11, 9485, 15884, 354, 290, 309, 22854, 37535, 13], [13246, 51, 318, 3562, 284, 662, 12, 27432, 2769, 8406, 4154, 282, 24612, 422, 9642, 9608, 276, 2420, 416, 26913, 21143, 319, 1111, 1364, 290, 826, 4732, 287, 477, 11685, 13], [464, 2068, 7586, 21831, 18045, 625, 262, 16931, 3290, 13]], 'attention_mask': [[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1], [1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]}  # noqa: E501
         # fmt: on
 
         self.tokenizer_integration_test_util(
-            expected_encoding=expected_encoding,
-            model_name="openai/whisper-tiny.en",
-            padding=False
+            expected_encoding=expected_encoding, model_name="openai/whisper-tiny.en", padding=False
         )
 
 
@@ -113,6 +110,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     )
     clean_transcript = "  Nor is Mr. Quilters manner less interesting than his matter."
     french_text = "Bonjour! Il me semble que Mrs Quilters n'était pas présente"
+
     @classmethod
     def setUpClass(cls):
         cls.tokenizer: WhisperTokenizer = WhisperTokenizer.from_pretrained(cls.checkpoint_name)
@@ -131,7 +129,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         assert len(gpt2_tokens) > len(multilingual_tokens)
 
         # fmt: off
-        EXPECTED_ENG= [
+        EXPECTED_ENG = [
             46695, 97, 167, 252, 234, 168, 98, 238, 220, 169,
             245, 234, 23821, 111, 229, 167, 108, 242, 169, 222,
             112, 168, 245, 238, 220, 169, 225, 222, 166, 111,
@@ -154,9 +152,9 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
         # fmt: off
         EXPECTED_MULTI = [
-            50257, 10814,     0,  1374,   389,   345,  4203,    30,   449,     6,
-            1872,   300,     6, 11011,  2234,  8358, 16268,   225,   115, 43357,
-            22174,  1556,   778, 25792,    83, 50256
+            50257, 10814, 0, 1374, 389, 345, 4203, 30, 449, 6,
+            1872, 300, 6, 11011, 2234, 8358, 16268, 225, 115, 43357,
+            22174, 1556, 778, 25792, 83, 50256
         ]
         # fmt: on
 
@@ -164,7 +162,7 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
 
         self.assertEqual(text, multilingual_tokenizer.decode(multilingual_tokens))
 
-        transcript = multilingual_tokenizer.decode(multilingual_tokens, skip_special_tokens = True)
+        transcript = multilingual_tokenizer.decode(multilingual_tokens, skip_special_tokens=True)
 
         EXPECTED_JAP = "Hey! How are you feeling? J'ai l'impression que 郷さん est prêt"
         self.assertEqual(transcript, EXPECTED_JAP)

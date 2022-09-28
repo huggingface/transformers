@@ -68,7 +68,6 @@ class WhisperFeatureExtractionTester(unittest.TestCase):
         sampling_rate=4_000,
         return_attention_mask=True,
         do_normalize=True,
-
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -85,9 +84,9 @@ class WhisperFeatureExtractionTester(unittest.TestCase):
 
     def prepare_feat_extract_dict(self):
         return {
-            "feature_size":self.feature_size,
+            "feature_size": self.feature_size,
             "hop_length": self.hop_length,
-            "chunk_length":self.chunk_length,
+            "chunk_length": self.chunk_length,
             "padding_value": self.padding_value,
             "sampling_rate": self.sampling_rate,
             "return_attention_mask": self.return_attention_mask,
@@ -132,9 +131,9 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         dict_second = feat_extract_second.to_dict()
         mel_1 = dict_first.pop("mel_filters")
         mel_2 = dict_second.pop("mel_filters")
-        self.assertTrue(np.allclose(mel_1,mel_2))
+        self.assertTrue(np.allclose(mel_1, mel_2))
         self.assertEqual(dict_first, dict_second)
-    
+
     def test_feat_extract_to_json_file(self):
         feat_extract_first = self.feature_extraction_class(**self.feat_extract_dict)
 
@@ -147,7 +146,7 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         dict_second = feat_extract_second.to_dict()
         mel_1 = dict_first.pop("mel_filters")
         mel_2 = dict_second.pop("mel_filters")
-        self.assertTrue(np.allclose(mel_1,mel_2))
+        self.assertTrue(np.allclose(mel_1, mel_2))
         self.assertEqual(dict_first, dict_second)
 
     def test_call(self):
@@ -173,13 +172,13 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         encoded_sequences_2 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
-        
+
         # Test truncation required
-        speech_inputs = [floats_list((1, x))[0] for x in range(200, (feature_extractor.n_samples+500), 200)]
+        speech_inputs = [floats_list((1, x))[0] for x in range(200, (feature_extractor.n_samples + 500), 200)]
         np_speech_inputs = [np.asarray(speech_input) for speech_input in speech_inputs]
 
-        speech_inputs_truncated = [ x[:feature_extractor.n_samples] for x in speech_inputs]
-        np_speech_inputs_truncated  = [np.asarray(speech_input) for speech_input in speech_inputs_truncated]
+        speech_inputs_truncated = [x[: feature_extractor.n_samples] for x in speech_inputs]
+        np_speech_inputs_truncated = [np.asarray(speech_input) for speech_input in speech_inputs_truncated]
 
         encoded_sequences_1 = feature_extractor(np_speech_inputs, return_tensors="np").input_features
         encoded_sequences_2 = feature_extractor(np_speech_inputs_truncated, return_tensors="np").input_features
@@ -198,7 +197,7 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
             self.assertTrue(np_processed.input_features.dtype == np.float32)
             pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
             self.assertTrue(pt_processed.input_features.dtype == torch.float32)
-    
+
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
@@ -208,19 +207,19 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
 
         return [x["array"] for x in speech_samples]
 
-    def test_integration(self): 
+    def test_integration(self):
         # fmt: off
         EXPECTED_INPUT_FEATURES = torch.tensor(
-            [   
-                0.1193, -0.0946, -0.1098, -0.0196,  0.0225, -0.0690, -0.1736,  0.0951,
-                0.0971, -0.0817, -0.0702,  0.0162,  0.0260,  0.0017, -0.0192, -0.1678,
+            [
+                0.1193, -0.0946, -0.1098, -0.0196, 0.0225, -0.0690, -0.1736, 0.0951,
+                0.0971, -0.0817, -0.0702, 0.0162, 0.0260, 0.0017, -0.0192, -0.1678,
                 0.0709, -0.1867, -0.0655, -0.0274, -0.0234, -0.1884, -0.0516, -0.0554,
-                -0.0274, -0.1425, -0.1423,  0.0837,  0.0377, -0.0854
+                -0.0274, -0.1425, -0.1423, 0.0837, 0.0377, -0.0854
             ]
         )
         # fmt: on
 
         input_speech = self._load_datasamples(1)
         feaure_extractor = WhisperFeatureExtractor()
-        input_features = feaure_extractor(input_speech,return_tensors="pt").input_features
-        self.assertTrue(torch.allclose(input_features[0,0,:30],EXPECTED_INPUT_FEATURES, atol = 1e-4))
+        input_features = feaure_extractor(input_speech, return_tensors="pt").input_features
+        self.assertTrue(torch.allclose(input_features[0, 0, :30], EXPECTED_INPUT_FEATURES, atol=1e-4))
