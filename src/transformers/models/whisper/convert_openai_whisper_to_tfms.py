@@ -23,14 +23,7 @@ import torch
 from torch import nn
 from tqdm import tqdm
 
-from transformers import (
-    WhisperConfig,
-    WhisperFeatureExtractor,
-    WhisperForConditionalGeneration,
-    WhisperModel,
-    WhisperProcessor,
-    WhisperTokenizer,
-)
+from transformers import WhisperConfig, WhisperForConditionalGeneration
 
 
 def remove_ignore_keys_(state_dict):
@@ -184,10 +177,10 @@ def _download(url: str, root: str) -> bytes:
 
 
 def convert_every_model(save_dir="whisper"):
-    layers = [4, 6, 12, 24, 32]
-    width = [384, 512, 768, 1024, 1280]
-    heads = [6, 8, 12, 16, 20]
-    name = ["tiny", "base", "small", "medium", "large"]
+    layers = [4, 6, 12, 24, 32, 4, 6, 12, 24]
+    width = [384, 512, 768, 1024, 1280, 384, 512, 768, 1024]
+    heads = [6, 8, 12, 16, 20, 6, 8, 12, 16]
+    name = ["tiny", "base", "small", "medium", "large", "tiny.en", "base.en", "small.en", "medium.en"]
     for l, w, h, n in zip(layers, width, heads, name):
 
         config = WhisperConfig(
@@ -200,13 +193,12 @@ def convert_every_model(save_dir="whisper"):
             decoder_ffn_dim=4 * w,
             encoder_ffn_dim=4 * w,
         )
-        model = WhisperModel(config)
+        model = WhisperForConditionalGeneration(config)
 
         model_bytes, _ = _download(_MODELS[n], "original-weights")
         with io.BytesIO(model_bytes) as fp:
             original = torch.load(fp, map_location="cpu")["model_state_dict"]
 
-        # original = torch.load(f"/home/arthur_huggingface_co/whisper/tiny.pt")
         new = rename_keys(original.copy())
 
         missing, unexpected = model.load_state_dict(new, strict=False)
@@ -214,53 +206,7 @@ def convert_every_model(save_dir="whisper"):
             print("succesfully loaded")
             model.save_pretrained(f"{save_dir}/{n}")
 
-        checkpoint_path = f"openai/whisper-{n}"
-        model.push_to_hub(checkpoint_path, use_auth_token="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")
 
-        tokenizer = WhisperTokenizer.from_pretrained("ArthurZ/whisper-small.en")
-        # tokenizer.push_to_hub(checkpoint_path, use_auth_token = "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")
-
-        feature_extractor = WhisperFeatureExtractor()
-        processor = WhisperProcessor(feature_extractor, tokenizer)
-        processor.push_to_hub(checkpoint_path, use_auth_token="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")
-
-    # for en only, decoder input_ids = 50257
-
-    for l, w, h, n in zip(layers, width, heads, name):
-        n += ".en"
-        config = WhisperConfig(
-            vocab_size=51864,
-            encoder_layers=l,
-            encoder_attention_heads=h,
-            decoder_attention_heads=h,
-            decoder_layers=l,
-            d_model=w,
-            decoder_ffn_dim=4 * w,
-            encoder_ffn_dim=4 * w,
-        )
-        model = WhisperModel(config)
-
-        model_bytes, _ = _download(_MODELS[n], "original-weights")
-        with io.BytesIO(model_bytes) as fp:
-            original = torch.load(fp, map_location="cpu")["model_state_dict"]
-
-        # original = torch.load(f"/home/arthur_huggingface_co/whisper/tiny.pt")
-        new = rename_keys(original.copy())
-
-        missing, unexpected = model.load_state_dict(new, strict=False)
-        if missing == []:
-            print("succesfully loaded")
-            model.save_pretrained(f"{save_dir}/{n}")
-
-        checkpoint_path = f"openai/whisper-{n}"
-        model.push_to_hub(checkpoint_path, use_auth_token="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")
-
-        tokenizer = WhisperTokenizer.from_pretrained("/home/arthur_huggingface_co/transformers/whisper-any.en")
-        # tokenizer.push_to_hub(checkpoint_path, use_auth_token = "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")
-
-        feature_extractor = WhisperFeatureExtractor()
-        processor = WhisperProcessor(feature_extractor, tokenizer)
-        processor.push_to_hub(checkpoint_path, use_auth_token="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")
 
 
 if __name__ == "__main__":
