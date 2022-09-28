@@ -404,7 +404,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_padding(self, max_length=50):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, from_slow=True, **kwargs)
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, **kwargs)
                 tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
 
                 self.assertEqual(tokenizer_p.pad_token_id, tokenizer_r.pad_token_id)
@@ -1327,7 +1327,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 if self.test_slow_tokenizer:
                     tokenizer_cr = self.rust_tokenizer_class.from_pretrained(
-                        pretrained_name, additional_special_tokens=added_tokens, **kwargs, from_slow=True
+                        pretrained_name, additional_special_tokens=added_tokens, **kwargs
                     )
                     tokenizer_p = self.tokenizer_class.from_pretrained(
                         pretrained_name, additional_special_tokens=added_tokens, **kwargs
@@ -2166,12 +2166,18 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         encoding = tokenizer_p(nodes, xpaths=xpaths, node_labels=node_labels)
         self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
 
-        # TODO test fast tokenizer (see test in LayoutLMv2)
+        # test fast tokenizer
+        tokenizer_r = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base")
+        encoding = tokenizer_r(nodes, xpaths=xpaths, node_labels=node_labels)
+        self.assertListEqual(encoding.labels, [-100, 0, 1, -100, -100])
+
+        tokenizer_r = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base", only_label_first_subword=False)
+        encoding = tokenizer_r(nodes, xpaths=xpaths, node_labels=node_labels)
+        self.assertListEqual(encoding.labels, [-100, 0, 1, 1, -100])
 
     def test_markuplm_integration_test(self):
         tokenizer_p = MarkupLMTokenizer.from_pretrained("microsoft/markuplm-base")
-        # no fast tokenizer for now
-        tokenizer_r = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base", from_slow=True)
+        tokenizer_r = MarkupLMTokenizerFast.from_pretrained("microsoft/markuplm-base")
 
         # There are 3 cases:
         # CASE 1: document image classification (training + inference), document image token classification (inference),
@@ -2305,35 +2311,3 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
             "Dummy warning",
             cm.records[0].message,
         )
-
-    def test_max_length_equal(self):
-        if not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
-
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, from_slow=True, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-
-                # Check we have the correct max_length for both pair and non-pair inputs.
-                self.assertEqual(tokenizer_r.max_len_single_sentence, tokenizer_p.max_len_single_sentence)
-                self.assertEqual(tokenizer_r.max_len_sentences_pair, tokenizer_p.max_len_sentences_pair)
-
-    def test_num_special_tokens_to_add_equal(self):
-        if not self.test_slow_tokenizer:
-            # as we don't have a slow version, we can't compare the outputs between slow and fast versions
-            return
-
-        for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
-            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
-                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name, from_slow=True, **kwargs)
-                tokenizer_p = self.tokenizer_class.from_pretrained(pretrained_name, **kwargs)
-
-                # Check we have the same number of added_tokens for both pair and non-pair inputs.
-                self.assertEqual(
-                    tokenizer_r.num_special_tokens_to_add(False), tokenizer_p.num_special_tokens_to_add(False)
-                )
-                self.assertEqual(
-                    tokenizer_r.num_special_tokens_to_add(True), tokenizer_p.num_special_tokens_to_add(True)
-                )
