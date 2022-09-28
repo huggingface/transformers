@@ -19,25 +19,26 @@ import tempfile
 import unittest
 from typing import List
 
-# TODO add dependency check
 from transformers import (
-    MarkupLMFeatureExtractor,
     MarkupLMProcessor,
     MarkupLMTokenizer,
     PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
-    is_tokenizers_available,
 )
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_tokenizers, require_torch, slow
-from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property
+from transformers.testing_utils import require_tokenizers, require_torch, slow, require_bs4
+from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_bs4_available, is_tokenizers_available
 
+
+if is_bs4_available():
+    from transformers import MarkupLMFeatureExtractor
 
 if is_tokenizers_available():
     from transformers import MarkupLMTokenizerFast
 
 
+@require_bs4
 @require_tokenizers
 class MarkupLMProcessorTest(unittest.TestCase):
     tokenizer_class = MarkupLMTokenizer
@@ -134,6 +135,7 @@ class MarkupLMProcessorTest(unittest.TestCase):
 
 
 # different use cases tests
+@require_bs4
 @require_torch
 class MarkupLMProcessorIntegrationTests(unittest.TestCase):
     @cached_property
