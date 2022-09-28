@@ -690,7 +690,7 @@ class TFGroupViTModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "nvidia/groupvit-gcc-yfcc"
-        model = TFGroupViTModel.from_pretrained(model_name, from_pt=True)
+        model = TFGroupViTModel.from_pretrained(model_name)
         processor = CLIPProcessor.from_pretrained(model_name)
 
         image = prepare_img()
