@@ -1130,8 +1130,8 @@ class TFGenerationMixin:
             # sanity check / prepare next batch
             assert len(next_batch_beam) == batch_size * num_beams
             beam_scores = tf.convert_to_tensor([x[0] for x in next_batch_beam], dtype=tf.float32)
-            beam_tokens = tf.convert_to_tensor([x[1] for x in next_batch_beam], dtype=tf.int64)
-            beam_idx = tf.convert_to_tensor([x[2] for x in next_batch_beam], dtype=tf.int64)
+            beam_tokens = tf.convert_to_tensor([x[1] for x in next_batch_beam], dtype=input_ids.dtype)
+            beam_idx = tf.convert_to_tensor([x[2] for x in next_batch_beam], dtype=input_ids.dtype)
 
             # re-order batch and update current length
             input_ids = tf.stack([tf.identity(input_ids[x, :]) for x in beam_idx])
