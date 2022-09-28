@@ -24,7 +24,6 @@ EN_CODE = 50258
 ES_CODE = 50256
 
 
-
 class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = WhisperTokenizer
     test_rust_tokenizer = False
@@ -99,7 +98,6 @@ class WhisperTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
         )
 
 
-@require_sentencepiece
 class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
     checkpoint_name = "openai/whisper-small.en"
 

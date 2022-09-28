@@ -67,7 +67,7 @@ class WhisperConfig(PretrainedConfig):
             `inputs_ids` passed when calling [`WhisperModel`]
         num_mel_bins (`int`, *optional*, defaults to 80):
             Number of mel features used per input features. Should correspond to the value used in the `WhisperProcessor``
-            class. 
+            class.
         encoder_layers (`int`, *optional*, defaults to 6):
             Number of encoder layers.
         decoder_layers (`int`, *optional*, defaults to 6):
@@ -87,7 +87,7 @@ class WhisperConfig(PretrainedConfig):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
         decoder_start_token_id (`int`, *optional*, defaults to 50258):
-            Corresponds to the "<|startoftranscript|>" token, which is automatically used when no `decoder_input_ids` 
+            Corresponds to the "<|startoftranscript|>" token, which is automatically used when no `decoder_input_ids`
             are provided to the `generate`function
         use_cache (`bool`, *optional*, defaults to True):
             Whether or not the model should return the last key/values attentions (not used by all models).
@@ -123,7 +123,7 @@ class WhisperConfig(PretrainedConfig):
             Whether to tie input and output embeddings.
         non_speech_tokens (`List[int]`, *optional*, defaults to None):
             A list containing the non-speech tokens that will be used by the logit processor in the `generate`
-            function. NON_SPEECH_TOKENS and NON_SPEECH_TOKENS_MULTI can be use here. 
+            function. NON_SPEECH_TOKENS and NON_SPEECH_TOKENS_MULTI can be use here.
     Example:
 
     ```python
