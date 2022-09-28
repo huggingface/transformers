@@ -466,7 +466,7 @@ class TFGenerationMixin:
                 should not appear in the generated text, use `tokenizer.encode(bad_word, add_prefix_space=True)`.
             num_return_sequences(`int`, *optional*, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch.
-            attention_mask (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
+            attention_mask (`tf.Tensor` of `dtype=tf.int64` and shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values are in `[0, 1]`, 1 for tokens
                 that are not masked, and 0 for masked tokens.
 
@@ -729,9 +729,9 @@ class TFGenerationMixin:
         accepts_attention_mask = "attention_mask" in set(inspect.signature(self.call).parameters.keys())
         if accepts_attention_mask:
             if (attention_mask is None) and (pad_token_id is not None) and (pad_token_id in input_ids.numpy()):
-                attention_mask = tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=tf.int32)
+                attention_mask = tf.cast(tf.math.not_equal(input_ids, pad_token_id), dtype=tf.int64)
             elif attention_mask is None:
-                attention_mask = tf.ones(shape_list(input_ids)[:2], dtype=tf.int32)
+                attention_mask = tf.ones(shape_list(input_ids)[:2], dtype=tf.int64)
 
         if pad_token_id is None and eos_token_id is not None:
             logger.warning(f"Setting `pad_token_id` to {eos_token_id} (first `eos_token_id`) to generate sequence")
@@ -797,7 +797,7 @@ class TFGenerationMixin:
             input_ids = (
                 tf.ones(
                     (effective_batch_size * num_beams, 1),
-                    dtype=tf.int32,
+                    dtype=tf.int64,
                 )
                 * decoder_start_token_id
             )
@@ -1130,8 +1130,8 @@ class TFGenerationMixin:
             # sanity check / prepare next batch
             assert len(next_batch_beam) == batch_size * num_beams
             beam_scores = tf.convert_to_tensor([x[0] for x in next_batch_beam], dtype=tf.float32)
-            beam_tokens = tf.convert_to_tensor([x[1] for x in next_batch_beam], dtype=tf.int32)
-            beam_idx = tf.convert_to_tensor([x[2] for x in next_batch_beam], dtype=tf.int32)
+            beam_tokens = tf.convert_to_tensor([x[1] for x in next_batch_beam], dtype=tf.int64)
+            beam_idx = tf.convert_to_tensor([x[2] for x in next_batch_beam], dtype=tf.int64)
 
             # re-order batch and update current length
             input_ids = tf.stack([tf.identity(input_ids[x, :]) for x in beam_idx])
@@ -1145,7 +1145,7 @@ class TFGenerationMixin:
             # extend attention_mask for new generated input if only decoder
             if self.config.is_encoder_decoder is False:
                 attention_mask = tf.concat(
-                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
+                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int64)], axis=-1
                 )
 
         # finalize all open beam hypotheses and end to generated hypotheses
@@ -1191,7 +1191,7 @@ class TFGenerationMixin:
             best
         ), f"Output batch size {output_batch_size} must match output beam hypotheses {len(best)}"
 
-        sent_lengths = tf.convert_to_tensor(sent_lengths_list, dtype=tf.int32)
+        sent_lengths = tf.convert_to_tensor(sent_lengths_list, dtype=tf.int64)
 
         # shorter batches are filled with pad_token
         if tf.reduce_min(sent_lengths).numpy() != tf.reduce_max(sent_lengths).numpy():
@@ -1208,14 +1208,14 @@ class TFGenerationMixin:
                 else:
                     # else pad to sent_max_len
                     num_pad_tokens = sent_max_len - sent_lengths[i]
-                    padding = pad_token_id * tf.ones((num_pad_tokens,), dtype=tf.int32)
+                    padding = pad_token_id * tf.ones((num_pad_tokens,), dtype=tf.int64)
                     decoded_slice = tf.concat([hypo, padding], axis=-1)
 
                     # finish sentence with EOS token
                     if sent_lengths[i] < max_length:
                         decoded_slice = tf.where(
-                            tf.range(sent_max_len, dtype=tf.int32) == sent_lengths[i],
-                            eos_token_id * tf.ones((sent_max_len,), dtype=tf.int32),
+                            tf.range(sent_max_len, dtype=tf.int64) == sent_lengths[i],
+                            eos_token_id * tf.ones((sent_max_len,), dtype=tf.int64),
                             decoded_slice,
                         )
                 # add to list
@@ -1385,7 +1385,7 @@ class TFGenerationMixin:
         post](https://huggingface.co/blog/how-to-generate).
 
         Parameters:
-            input_ids (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
+            input_ids (`tf.Tensor` of `dtype=tf.int64` and shape `(batch_size, sequence_length)`, *optional*):
                 The sequence used as a prompt for the generation. If `None` the method initializes it with
                 `bos_token_id` and a batch size of 1.
             max_length (`int`, *optional*, defaults to `model.config.max_length`):
@@ -1430,7 +1430,7 @@ class TFGenerationMixin:
                 should not appear in the generated text, use `tokenizer.encode(bad_word, add_prefix_space=True)`.
             num_return_sequences(`int`, *optional*, defaults to 1):
                 The number of independently computed returned sequences for each element in the batch.
-            attention_mask (`tf.Tensor` of `dtype=tf.int32` and shape `(batch_size, sequence_length)`, *optional*):
+            attention_mask (`tf.Tensor` of `dtype=tf.int64` and shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values are in `[0, 1]`, 1 for tokens
                 that are not masked, and 0 for masked tokens.
 
@@ -1769,9 +1769,9 @@ class TFGenerationMixin:
 
         # Check if input is input_ids and padded -> only then is attention_mask defined
         if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
-            return tf.cast(tf.math.not_equal(inputs, pad_token_id), dtype=tf.int32)
+            return tf.cast(tf.math.not_equal(inputs, pad_token_id), dtype=tf.int64)
         else:
-            return tf.ones(inputs.shape[:2], dtype=tf.int32)
+            return tf.ones(inputs.shape[:2], dtype=tf.int64)
 
     def _prepare_encoder_decoder_kwargs_for_generation(self, inputs_tensor: tf.Tensor, model_kwargs) -> Dict[str, Any]:
         # get encoder and store encoder outputs
@@ -1806,7 +1806,7 @@ class TFGenerationMixin:
             return model_kwargs.pop("decoder_input_ids")
         else:
             decoder_start_token_id = self._get_decoder_start_token_id(decoder_start_token_id, bos_token_id)
-            return tf.ones((batch_size, 1), dtype=tf.int32) * decoder_start_token_id
+            return tf.ones((batch_size, 1), dtype=tf.int64) * decoder_start_token_id
 
     def _get_decoder_start_token_id(self, decoder_start_token_id: int = None, bos_token_id: int = None) -> int:
         # retrieve decoder_start_token_id for encoder-decoder models
@@ -1876,7 +1876,7 @@ class TFGenerationMixin:
                     "you should either supply a context to complete as `input_ids` input "
                     "or a `bos_token_id` (integer >= 0) as a first token to start the generation."
                 )
-            return tf.cast(tf.fill((1, 1), bos_token_id), dtype=tf.int32)
+            return tf.cast(tf.fill((1, 1), bos_token_id), dtype=tf.int64)
 
         return inputs
 
@@ -1899,7 +1899,7 @@ class TFGenerationMixin:
             if "attention_mask" in model_kwargs:
                 attention_mask = model_kwargs["attention_mask"]
                 model_kwargs["attention_mask"] = tf.concat(
-                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int32)], axis=-1
+                    [attention_mask, tf.ones((shape_list(attention_mask)[0], 1), dtype=tf.int64)], axis=-1
                 )
 
         return model_kwargs
@@ -1921,9 +1921,9 @@ class TFGenerationMixin:
                 # 1s for the actual input_ids
                 decoder_attention_mask = tf.concat(
                     [
-                        tf.ones((batch_size, 1), dtype=tf.int32),
-                        tf.zeros((batch_size, num_padding_values), dtype=tf.int32),
-                        tf.ones((batch_size, 1), dtype=tf.int32),
+                        tf.ones((batch_size, 1), dtype=tf.int64),
+                        tf.zeros((batch_size, num_padding_values), dtype=tf.int64),
+                        tf.ones((batch_size, 1), dtype=tf.int64),
                     ],
                     axis=1,
                 )
@@ -1944,7 +1944,7 @@ class TFGenerationMixin:
 
         def _update_attention(model_kwargs, new_past_index, is_encoder_decoder):
             """updates the appropriate attention mask -- encoder-decoder models use `decoder_attention_mask`"""
-            update_start = tf.constant([0, 1], dtype=tf.int32) * new_past_index
+            update_start = tf.constant([0, 1], dtype=tf.int64) * new_past_index
             if is_encoder_decoder:
                 decoder_attention_mask = model_kwargs.pop("decoder_attention_mask")
                 decoder_attention_mask_update_slice = tf.ones((batch_size, 1), dtype=decoder_attention_mask.dtype)
@@ -2215,7 +2215,7 @@ class TFGenerationMixin:
         batch_size, cur_len = shape_list(input_ids)
 
         # initialize `generated` (`input_ids` padded with `pad_token_id`), `finished_sequences`
-        input_ids_padding = tf.ones((batch_size, max_length - cur_len), dtype=tf.int32) * (pad_token_id or 0)
+        input_ids_padding = tf.ones((batch_size, max_length - cur_len), dtype=input_ids.dtype) * (pad_token_id or 0)
         generated = tf.concat([input_ids, input_ids_padding], axis=-1)
         finished_sequences = tf.zeros((batch_size,), dtype=tf.bool)
 
@@ -2262,12 +2262,12 @@ class TFGenerationMixin:
             next_tokens_scores = logits_processor(generated, next_token_logits, cur_len)
 
             # argmax
-            next_tokens = tf.argmax(next_tokens_scores, axis=-1, output_type=tf.int32)
+            next_tokens = tf.argmax(next_tokens_scores, axis=-1, output_type=tf.int64)
 
             if eos_token_id is not None:
                 if pad_token_id is None:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
-                unfinished_seq = 1 - tf.cast(finished_sequences, tf.int32)
+                unfinished_seq = 1 - tf.cast(finished_sequences, tf.int64)
                 next_tokens = next_tokens * unfinished_seq + pad_token_id * (1 - unfinished_seq)
             finished_sequences = finished_sequences | (next_tokens == eos_token_id)
 
@@ -2484,7 +2484,7 @@ class TFGenerationMixin:
         batch_size, cur_len = shape_list(input_ids)
 
         # initialize `generated` (pre-populated with `pad_token_id`), `finished_sequences`
-        input_ids_padding = tf.ones((batch_size, max_length - cur_len), dtype=tf.int32) * (pad_token_id or 0)
+        input_ids_padding = tf.ones((batch_size, max_length - cur_len), dtype=input_ids.dtype) * (pad_token_id or 0)
         generated = tf.concat([input_ids, input_ids_padding], axis=-1)
         finished_sequences = tf.zeros((batch_size,), dtype=tf.bool)
 
@@ -2531,10 +2531,10 @@ class TFGenerationMixin:
             if seed is not None:
                 sample_seed = seed
             else:
-                sample_seed = tf.cast(self.seed_generator.make_seeds(count=1)[:, 0], dtype=tf.int32)
+                sample_seed = tf.cast(self.seed_generator.make_seeds(count=1)[:, 0], dtype=tf.int64)
             next_tokens = tf.squeeze(
                 tf.random.stateless_categorical(
-                    logits=next_tokens_scores, num_samples=1, seed=sample_seed, dtype=tf.int32
+                    logits=next_tokens_scores, num_samples=1, seed=sample_seed, dtype=tf.int64
                 ),
                 axis=1,
             )
@@ -2542,7 +2542,7 @@ class TFGenerationMixin:
             if eos_token_id is not None:
                 if pad_token_id is None:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
-                unfinished_seq = 1 - tf.cast(finished_sequences, tf.int32)
+                unfinished_seq = 1 - tf.cast(finished_sequences, tf.int64)
                 next_tokens = next_tokens * unfinished_seq + pad_token_id * (1 - unfinished_seq)
             finished_sequences = finished_sequences | (next_tokens == eos_token_id)
 
@@ -2800,11 +2800,11 @@ class TFGenerationMixin:
         batch_size, num_beams, cur_len = shape_list(input_ids)
 
         # per batch, beam-item holding current token in loop, pre-populated with `pad_token_id`
-        input_ids_padding = tf.ones((batch_size, num_beams, max_length - cur_len), dtype=tf.int32) * (
+        input_ids_padding = tf.ones((batch_size, num_beams, max_length - cur_len), dtype=tf.int64) * (
             pad_token_id or 0
         )
         running_sequences = tf.concat([input_ids, input_ids_padding], axis=-1)
-        sequences = tf.ones((batch_size, num_beams, max_length), dtype=tf.int32) * (pad_token_id or 0)
+        sequences = tf.ones((batch_size, num_beams, max_length), dtype=tf.int64) * (pad_token_id or 0)
 
         # per batch,beam-item state bit indicating if sentence has finished.
         is_sent_finished = tf.zeros((batch_size, num_beams), dtype=tf.bool)
