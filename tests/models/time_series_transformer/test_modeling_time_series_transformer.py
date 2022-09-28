@@ -426,11 +426,5 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
                 future_time_features=batch["future_time_features"],
                 past_observed_mask=batch["past_observed_mask"],
             )
-        expected_shape = torch.Size(
-            (
-                64,
-                model.config.num_parallel_samples,
-                model.config.prediction_length,
-            )
-        )
+        expected_shape = torch.Size((64, model.config.num_parallel_samples, model.config.prediction_length))
         self.assertEqual(outputs.sequences.shape, expected_shape)
