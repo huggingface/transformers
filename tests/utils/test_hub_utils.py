@@ -15,8 +15,10 @@ import json
 import os
 import tempfile
 import unittest
+import unittest.mock as mock
 from pathlib import Path
 
+from requests.exceptions import HTTPError
 from transformers.utils import (
     CONFIG_NAME,
     FLAX_WEIGHTS_NAME,
@@ -78,6 +80,19 @@ class GetFromCacheTests(unittest.TestCase):
 
         path = cached_file(RANDOM_BERT, "conf", local_files_only=True, _raise_exceptions_for_missing_entries=False)
         self.assertIsNone(path)
+
+        response_mock = mock.Mock()
+        response_mock.status_code = 500
+        response_mock.headers = {}
+        response_mock.raise_for_status.side_effect = HTTPError
+        response_mock.json.return_value = {}
+
+        # Under the mock environment we get a 500 error when trying to reach the tokenizer.
+        with mock.patch("requests.request", return_value=response_mock) as mock_head:
+            path = cached_file(RANDOM_BERT, "conf", _raise_exceptions_for_connection_errors=False)
+            self.assertIsNone(path)
+            # This check we did call the fake head request
+            mock_head.assert_called()
 
     def test_has_file(self):
         self.assertTrue(has_file("hf-internal-testing/tiny-bert-pt-only", WEIGHTS_NAME))

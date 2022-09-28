@@ -101,6 +101,8 @@
       title: Instantiating a big model
     - local: debugging
       title: Debugging
+    - local: hpo_train
+      title: Hyperparameter Search using Trainer API
     title: Performance and scalability
   - sections:
     - local: contributing
