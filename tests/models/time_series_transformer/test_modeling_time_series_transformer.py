@@ -58,7 +58,7 @@ class TimeSeriesTransformerModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        lags_seq=[1, 2, 3, 4, 5],
+        lags_sequence=[1, 2, 3, 4, 5],
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -66,7 +66,7 @@ class TimeSeriesTransformerModelTester:
         self.context_length = context_length
         self.cardinality = cardinality
         self.num_time_features = num_time_features
-        self.lags_seq = lags_seq
+        self.lags_sequence = lags_sequence
         self.embedding_dimension = embedding_dimension
         self.is_training = is_training
         self.hidden_size = hidden_size
@@ -82,7 +82,7 @@ class TimeSeriesTransformerModelTester:
         self.decoder_seq_length = prediction_length
 
     def prepare_config_and_inputs(self):
-        _past_length = self.context_length + max(self.lags_seq)
+        _past_length = self.context_length + max(self.lags_sequence)
 
         static_categorical_features = ids_tensor([self.batch_size, 1], self.cardinality)
         static_real_features = floats_tensor([self.batch_size, 1])
@@ -106,7 +106,7 @@ class TimeSeriesTransformerModelTester:
             attention_dropout=self.attention_probs_dropout_prob,
             prediction_length=self.prediction_length,
             context_length=self.context_length,
-            lags_seq=self.lags_seq,
+            lags_sequence=self.lags_sequence,
             num_time_features=self.num_time_features,
             num_static_categorical_features=1,
             cardinality=[self.cardinality],

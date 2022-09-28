@@ -38,7 +38,6 @@ from .configuration_time_series_transformer import TimeSeriesTransformerConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "huggingface/time-series-transformer-tourism-monthly"
 _CONFIG_FOR_DOC = "TimeSeriesTransformerConfig"
 
 
@@ -1459,7 +1458,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
 
     @property
     def _past_length(self) -> int:
-        return self.config.context_length + max(self.config.lags_seq)
+        return self.config.context_length + max(self.config.lags_sequence)
 
     def get_lagged_subsequences(
         self, sequence: torch.Tensor, subsequences_length: int, shift: int = 0
@@ -1477,7 +1476,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
                 shift the lags by this amount back.
         """
         sequence_length = sequence.shape[1]
-        indices = [lag - shift for lag in self.config.lags_seq]
+        indices = [lag - shift for lag in self.config.lags_sequence]
 
         try:
             assert max(indices) + subsequences_length <= sequence_length, (
@@ -1622,8 +1621,8 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         >>> num_time_features = 10
         >>> content_length = 8
         >>> prediction_length = 2
-        >>> lags_seq = [2, 3]
-        >>> past_length = context_length + max(lags_seq)
+        >>> lags_sequence = [2, 3]
+        >>> past_length = context_length + max(lags_sequence)
 
         >>> # encoder inputs
         >>> inputs["static_categorical_features"] = ids_tensor([batch_size, 1], cardinality)
@@ -1728,6 +1727,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
 
         if config.loss == "nll":
             self.loss = NegativeLogLikelihood()
+        else:
+            raise ValueError(f"Unknown loss function {config.loss}")
 
         # Initialize weights of distribution_output and apply final processing
         self.post_init()
@@ -1783,8 +1784,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         >>> num_time_features = 10
         >>> content_length = 8
         >>> prediction_length = 2
-        >>> lags_seq = [2, 3]
-        >>> past_length = context_length + max(lags_seq)
+        >>> lags_sequence = [2, 3]
+        >>> past_length = context_length + max(lags_sequence)
 
         >>> # encoder inputs
         >>> inputs["static_categorical_features"] = ids_tensor([batch_size, 1], cardinality)
