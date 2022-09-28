@@ -578,29 +578,6 @@ class TFGenerationMixin:
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         do_sample = do_sample if do_sample is not None else self.config.do_sample
 
-        # Cast input dtypes to tf.int32 unless they're floats (which happens for some image models)
-        if input_ids is not None:
-            if isinstance(input_ids, tf.Tensor) and input_ids.dtype.is_floating:
-                pass
-            elif isinstance(input_ids, np.ndarray) and np.issubdtype(input_ids.dtype, np.floating):
-                pass
-            else:
-                input_ids = tf.cast(input_ids, tf.int32)
-        if attention_mask is not None:
-            attention_mask = tf.cast(attention_mask, tf.int32)
-        if "decoder_input_ids" in model_kwargs:
-            if (
-                isinstance(model_kwargs["decoder_input_ids"], tf.Tensor)
-                and model_kwargs["decoder_input_ids"].dtype.is_floating
-            ):
-                pass
-            elif isinstance(model_kwargs["decoder_input_ids"], np.ndarray) and np.issubdtype(
-                model_kwargs["decoder_input_ids"].dtype, np.floating
-            ):
-                pass
-            else:
-                model_kwargs["decoder_input_ids"] = tf.cast(model_kwargs["decoder_input_ids"], tf.int32)
-
         if do_sample is False or num_beams == 1:
             seed = model_kwargs.pop("seed", None)
             return self._generate(
@@ -1556,6 +1533,30 @@ class TFGenerationMixin:
         # generate sequences without allowing bad_words to be generated
         outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)
         ```"""
+
+        # -1. Cast input dtypes to tf.int32 unless they're floats (which happens for some image models)
+        if input_ids is not None:
+            if isinstance(input_ids, tf.Tensor) and input_ids.dtype.is_floating:
+                pass
+            elif isinstance(input_ids, np.ndarray) and np.issubdtype(input_ids.dtype, np.floating):
+                pass
+            else:
+                input_ids = tf.cast(input_ids, tf.int32)
+        if attention_mask is not None:
+            attention_mask = tf.cast(attention_mask, tf.int32)
+        if "decoder_input_ids" in model_kwargs:
+            if (
+                isinstance(model_kwargs["decoder_input_ids"], tf.Tensor)
+                and model_kwargs["decoder_input_ids"].dtype.is_floating
+            ):
+                pass
+            elif isinstance(model_kwargs["decoder_input_ids"], np.ndarray) and np.issubdtype(
+                model_kwargs["decoder_input_ids"].dtype, np.floating
+            ):
+                pass
+            else:
+                model_kwargs["decoder_input_ids"] = tf.cast(model_kwargs["decoder_input_ids"], tf.int32)
+
         # 0. Validate the `.generate()` call
         self._validate_model_class()
         self._validate_model_kwargs(model_kwargs.copy())
