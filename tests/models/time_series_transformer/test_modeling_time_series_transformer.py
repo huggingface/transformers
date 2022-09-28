@@ -389,12 +389,27 @@ class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
         )
         self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
-    # def test_inference_head(self):
-    #     model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
-    #         torch_device
-    #     )
-
-    #     raise NotImplementedError("To do")
+    def test_inference_head(self):
+        model = TimeSeriesTransformerForPrediction.from_pretrained(
+            "huggingface/time-series-transformer-tourism-monthly"
+        ).to(torch_device)
+        batch = prepare_batch("val-batch.pt")
+        with torch.no_grad():
+            output = model(
+                past_values=batch["past_values"],
+                past_time_features=batch["past_time_features"],
+                past_observed_mask=batch["past_observed_mask"],
+                static_categorical_features=batch["static_categorical_features"],
+                static_real_features=batch["static_real_features"],
+                future_time_features=batch["future_time_features"],
+            )[1]
+        expected_shape = torch.Size((64, model.config.prediction_length, model.config.d_model))
+        self.assertEqual(output.shape, expected_shape)
+        # change to expected output here
+        expected_slice = torch.tensor(
+            [[0.9127, -0.2056, -0.5259], [1.0572, 1.4104, -0.1964], [0.1358, 2.0348, 0.5739]], device=torch_device
+        )
+        self.assertTrue(torch.allclose(output[0, :3, :3], expected_slice, atol=TOLERANCE))
 
     # def test_seq_to_seq_generation(self):
     #      model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
