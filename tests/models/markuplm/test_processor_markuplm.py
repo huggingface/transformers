@@ -27,7 +27,7 @@ from transformers import (
     PreTrainedTokenizerFast,
 )
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES
-from transformers.testing_utils import require_tokenizers, require_torch, slow, require_bs4
+from transformers.testing_utils import require_bs4, require_tokenizers, require_torch, slow
 from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_bs4_available, is_tokenizers_available
 
 
