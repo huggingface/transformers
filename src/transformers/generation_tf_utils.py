@@ -1944,7 +1944,7 @@ class TFGenerationMixin:
 
         def _update_attention(model_kwargs, new_past_index, is_encoder_decoder):
             """updates the appropriate attention mask -- encoder-decoder models use `decoder_attention_mask`"""
-            update_start = tf.constant([0, 1], dtype=tf.int64) * new_past_index
+            update_start = tf.constant([0, 1]) * new_past_index
             if is_encoder_decoder:
                 decoder_attention_mask = model_kwargs.pop("decoder_attention_mask")
                 decoder_attention_mask_update_slice = tf.ones((batch_size, 1), dtype=decoder_attention_mask.dtype)
