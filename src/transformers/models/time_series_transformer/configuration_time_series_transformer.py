@@ -23,7 +23,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "huggingface/time-series-transformer-tourism-monthly": "https://huggingface.co/huggingface/time-series-transformer-tourism-monthly/resolve/main/config.json",
+    "huggingface/time-series-transformer-tourism-monthly": (
+        "https://huggingface.co/huggingface/time-series-transformer-tourism-monthly/resolve/main/config.json"
+    ),
     # See all TimeSeriesTransformer models at https://huggingface.co/models?filter=time_series_transformer
 }
 
@@ -33,7 +35,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`TimeSeriesTransformerModel`]. It is used to
     instantiate a Time Series Transformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Time Series
-    Transformer [huggingface/time-series-transformer-tourism-monthly](https://huggingface.co/huggingface/time-series-transformer-tourism-monthly)
+    Transformer
+    [huggingface/time-series-transformer-tourism-monthly](https://huggingface.co/huggingface/time-series-transformer-tourism-monthly)
     architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] can be used to control the model outputs. Read the
@@ -51,7 +54,8 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
             The loss function for the model corresponding to the `distribution_output` head. For parametric
             distributions it is the negative log likelihood (nll) - which currently is the only supported one.
         input_size (`int`, *optional*, defaults to 1):
-            The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of multivarate targets. 
+            The size of the target variable which by default is 1 for univariate targets. Would be > 1 in case of
+            multivarate targets.
         scaling (`bool`, *optional* defaults to `True`):
             Whether to scale the input targets.
         lags_sequence (`list[int]`, *optional*, defaults to [1, 2, 3, 4, 5, 6, 7]):
@@ -66,11 +70,13 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         num_static_real_features (`int`, *optional*, defaults to 0):
             The number of static real valued features.
         cardinality (`list[int]`, *optional*):
-            The cardinality (number of different values) for each of the static categorical features. Should be a list of integers, having the same
-            length as `num_static_categorical_features`. Cannot be `None` if `num_static_categorical_features` is > 0.
+            The cardinality (number of different values) for each of the static categorical features. Should be a list
+            of integers, having the same length as `num_static_categorical_features`. Cannot be `None` if
+            `num_static_categorical_features` is > 0.
         embedding_dimension (`list[int]`, *optional*):
-            The dimension of the embedding for each of the static categorical features. Should be a list of integers, having the same
-            length as `num_static_categorical_features`. Cannot be `None` if `num_static_categorical_features` is > 0.
+            The dimension of the embedding for each of the static categorical features. Should be a list of integers,
+            having the same length as `num_static_categorical_features`. Cannot be `None` if
+            `num_static_categorical_features` is > 0.
         encoder_layers (`int`, *optional*, defaults to 2):
             Number of encoder layers.
         decoder_layers (`int`, *optional*, defaults to 2):
@@ -171,13 +177,18 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         self.num_static_categorical_features = num_static_categorical_features
         if cardinality and num_static_categorical_features > 0:
             if len(cardinality) != num_static_categorical_features:
-                raise ValueError("The cardinality should be a list having the same length as `num_static_categorical_features`")
+                raise ValueError(
+                    "The cardinality should be a list having the same length as `num_static_categorical_features`"
+                )
             self.cardinality = cardinality
         else:
             self.cardinality = [1]
         if embedding_dimension and num_static_categorical_features > 0:
             if len(embedding_dimension) != num_static_categorical_features:
-                raise ValueError("The embedding dimension should be a list having the same length as `num_static_categorical_features`")
+                raise ValueError(
+                    "The embedding dimension should be a list having the same length as"
+                    " `num_static_categorical_features`"
+                )
             self.embedding_dimension = embedding_dimension
         else:
             self.embedding_dimension = [min(50, (cat + 1) // 2) for cat in self.cardinality]

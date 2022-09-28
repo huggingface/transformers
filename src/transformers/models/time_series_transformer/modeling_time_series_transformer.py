@@ -932,35 +932,38 @@ TIME_SERIES_TRANSFORMER_START_DOCSTRING = r"""
 TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
     Args:
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
-            Past values of the time series, that serve as context in order to predict the future. These values may contain lags,
-            i.e. additional values from the past which are added in order to serve as "extra context". The `past_values` is what
-            the Transformer encoder gets as input (with optional additional features, such as `static_categorical_features`, `static_real_features`,
-            `past_time_featuresuresures`).
+            Past values of the time series, that serve as context in order to predict the future. These values may
+            contain lags, i.e. additional values from the past which are added in order to serve as "extra context".
+            The `past_values` is what the Transformer encoder gets as input (with optional additional features, such as
+            `static_categorical_features`, `static_real_features`, `past_time_featuresuresures`).
 
-            See the demo notebook and code snippets for details.
+            The sequence length here is equal to `context_length` + `max(config.lags_sequence)`.
 
             Missing values need to be replaced with zeros.
 
+        past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`, *optional*):
+            Optional time features, which the model internally will add to `past_values`. These could be things like
+            "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
+            could also be so-called "age" features, which basically help the model know "at which point in life" a
+            time-series is. Age features have small values for distant past time steps and increase monotonically the
+            more we approach the current time step.
+
+            These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT, where
+            the position encodings are learned from scratch internally as parameters of the model, the Time Series
+            Transformer requires to provide additional time features.
+
+            The Time Series Transformer only learns additional embeddings for `static_categorical_features`.
+
         past_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Boolean mask to indicate which `past_values` values were observed and which were missing. Mask values selected in `[0, 1]`:
+            Boolean mask to indicate which `past_values` were observed and which were missing. Mask values selected in
+            `[0, 1]`:
 
             - 1 for values that are **observed**,
             - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
-        past_time_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, num_features)`, *optional*):
-            Optional time features, which the model internally will add to `past_values`. These could be things like "month of year",
-            "day of the month", etc. encoded as vectors (for instance as Fourier features). These could also be so-called "age" features,
-            which basically help the model know "at which point in life" a time-series is. Age features have small values for distant past
-            time steps and increase monotonically the more we approach the current time step.
-
-            These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT, where the position encodings
-            are learned from scratch internally as parameters of the model, the Time Series Transformer requires to provide additional time features.
-
-            The Time Series Transformer only learns additional embeddings for `static_categorical_features`.
-
         static_categorical_features (`torch.LongTensor` of shape `(batch_size, number of static categorical features)`, *optional*):
-            Optional static categorical features for which the model will learn an embedding, which it will add to the values
-            of the time series.
+            Optional static categorical features for which the model will learn an embedding, which it will add to the
+            values of the time series.
 
             Static categorical features are features which have the same value for all time steps (static over time).
 
@@ -974,41 +977,38 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             A typical example of a static real feature is promotion information.
 
         future_values (`torch.FloatTensor` of shape `(batch_size, prediction_length)`):
-            Future values of the time series, that serve as labels for the model. The `future_values` is what the Transformer
-            needs to learn to output, given the `past_values`.
+            Future values of the time series, that serve as labels for the model. The `future_values` is what the
+            Transformer needs to learn to output, given the `past_values`.
 
             See the demo notebook and code snippets for details.
 
             Missing values need to be replaced with zeros.
 
         future_time_features (`torch.FloatTensor` of shape `(batch_size, prediction_length, num_features)`, *optional*):
-            Optional time features, which the model internally will add to `future_values`. These could be things like "month of year",
-            "day of the month", etc. encoded as vectors (for instance as Fourier features). These could also be so-called "age" features,
-            which basically help the model know "at which point in life" a time-series is. Age features have small values for distant past
-            time steps and increase monotonically the more we approach the current time step.
+            Optional time features, which the model internally will add to `future_values`. These could be things like
+            "month of year", "day of the month", etc. encoded as vectors (for instance as Fourier features). These
+            could also be so-called "age" features, which basically help the model know "at which point in life" a
+            time-series is. Age features have small values for distant past time steps and increase monotonically the
+            more we approach the current time step.
 
-            These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT, where the position encodings
-            are learned from scratch internally as parameters of the model, the Time Series Transformer requires to provide additional features.
+            These features serve as the "positional encodings" of the inputs. So contrary to a model like BERT, where
+            the position encodings are learned from scratch internally as parameters of the model, the Time Series
+            Transformer requires to provide additional features.
 
             The Time Series Transformer only learns additional embeddings for `static_categorical_features`.
-        
+
         attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+            Mask to avoid performing attention on certain token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Provide for translation and summarization training. By default, the model will create this tensor by
-            shifting the `input_ids` to the right, following the paper.
-        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
-            Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
-            be used by default.
 
-            If you want to change padding behavior, you should read
-            [`modeling_time_series_transformer._prepare_decoder_attention_mask`] and modify to your needs. See diagram
-            1 in [the paper](https://arxiv.org/abs/1910.13461) for more information on the default strategy.
+        decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
+            Mask to avoid performing attention on certain token indices. By default, a causal mask will be used, to
+            make sure the model can only look at previous inputs in order to predict the future.
+
         head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
             Mask to nullify selected heads of the attention modules in the encoder. Mask values selected in `[0, 1]`:
 
@@ -1467,7 +1467,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         Returns lagged subsequences of a given sequence. Returns a tensor of shape (N, S, C, I),
             where S = subsequences_length and I = len(indices), containing lagged subsequences. Specifically, lagged[i,
             j, :, k] = sequence[i, -indices[k]-S+j, :].
-        
+
         Args:
             sequence: Tensor
                 The sequence from which lagged subsequences should be extracted. Shape: (N, T, C).
@@ -1770,6 +1770,15 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
     ):
         r"""
         Returns:
+
+        future_observed_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Boolean mask to indicate which `future_values` were observed and which were missing. Mask values selected
+            in `[0, 1]`:
+
+            - 1 for values that are **observed**,
+            - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
+
+            This mask is used to filter out missing values for the final loss calculation.
 
         Examples:
 

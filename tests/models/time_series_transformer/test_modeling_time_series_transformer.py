@@ -354,9 +354,7 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
 @slow
 class TimeSeriesTransformerModelIntegrationTests(unittest.TestCase):
     def test_inference_no_head(self):
-        model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(
-            torch_device
-        )
+        # model = TimeSeriesTransformerModel.from_pretrained("huggingface/time-series-transformer-tourism-monthly").to(torch_device)
 
         raise NotImplementedError("To do")
 
