@@ -127,8 +127,8 @@ except importlib_metadata.PackageNotFoundError:
 
 _bs4_available = importlib.util.find_spec("bs4") is not None
 try:
-    _bs4_version = importlib_metadata.version("bs4")
-    logger.debug(f"Successfully imported bs4 version {_bs4_version}")
+    _bs4_version = importlib_metadata.version("beautifulsoup4")
+    logger.debug(f"Successfully imported Beautiful Soup 4 version {_bs4_version}")
 except importlib_metadata.PackageNotFoundError:
     _bs4_available = False
 

@@ -46,6 +46,7 @@ from .utils import (
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
+    is_bs4_available,
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
@@ -237,6 +238,13 @@ def custom_tokenizers(test_case):
     environment variable to a truthy value to run them.
     """
     return unittest.skipUnless(_run_custom_tokenizers, "test of custom tokenizers")(test_case)
+
+
+def require_bs4(test_case):
+    """
+    Decorator marking a test that requires BeautifulSoup4. These tests are skipped when BeautifulSoup4 isn't installed.
+    """
+    return unittest.skipUnless(is_bs4_available(), "test requires BeautifulSoup4")(test_case)
 
 
 def require_git_lfs(test_case):

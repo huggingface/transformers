@@ -16,10 +16,14 @@
 
 import unittest
 
-# TODO add soft dependency check
-from transformers import MarkupLMFeatureExtractor
+from transformers.testing_utils import require_bs4
+from transformers.utils import is_bs4_available
 
 from ...test_feature_extraction_common import FeatureExtractionSavingTestMixin
+
+
+if is_bs4_available():
+    from transformers import MarkupLMFeatureExtractor
 
 
 class MarkupLMFeatureExtractionTester(unittest.TestCase):
@@ -68,8 +72,8 @@ def get_html_strings():
     return [html_string_1, html_string_2]
 
 
+@require_bs4
 class MarkupLMFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-    # TODO add dependency check (see LayoutLMv2)
     feature_extraction_class = MarkupLMFeatureExtractor
 
     def setUp(self):
