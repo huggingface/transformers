@@ -577,6 +577,10 @@ class TFGenerationMixin:
         ```"""
         num_beams = num_beams if num_beams is not None else self.config.num_beams
         do_sample = do_sample if do_sample is not None else self.config.do_sample
+        if input_ids is not None:
+            input_ids = tf.cast(input_ids, tf.int32)
+        if attention_mask is not None:
+            attention_mask = tf.cast(attention_mask, tf.int32)
 
         if do_sample is False or num_beams == 1:
             seed = model_kwargs.pop("seed", None)
