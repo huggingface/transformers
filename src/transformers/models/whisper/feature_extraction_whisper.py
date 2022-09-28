@@ -60,7 +60,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             Padding value used to pad the audio. Should correspond to silences.
     """
 
-    model_input_names = ["input_features", "attention_mask"]
+    model_input_names = ["input_features"]
 
     def __init__(
         self,
