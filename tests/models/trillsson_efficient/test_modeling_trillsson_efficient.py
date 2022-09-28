@@ -16,18 +16,15 @@
 
 import unittest
 
-from transformers.testing_utils import (
-    is_torch_available,
-    require_torch,
-    slow,
-    torch_device
-)
-
 from datasets import load_dataset
+
+from transformers.testing_utils import is_torch_available, require_torch, slow, torch_device
+
 
 if is_torch_available():
     import torch
-    from transformers import Trillsson_efficientModel, Trillsson_efficientFeatureExtractor
+
+    from transformers import Trillsson_efficientFeatureExtractor, Trillsson_efficientModel
 
 
 @require_torch

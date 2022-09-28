@@ -20,15 +20,11 @@ import torch
 from torch import nn
 
 from ...activations import ACT2FN
-from ...modeling_utils import PreTrainedModel
-from .configuration_trillsson_efficient import Trillsson_efficientConfig
 from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging
-)
+from ...modeling_utils import PreTrainedModel
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from .configuration_trillsson_efficient import Trillsson_efficientConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -63,10 +59,10 @@ def make_divisible(filters, divisor=8, min_value=None) -> int:
 def loaf_tf_weights_in_trillsson_efficient(self, model, tf_saved_model_path):
     """Load TensorFlow model in a pytorch model."""
     try:
-        import tensorflow as tf
         import numpy as np
+        import tensorflow as tf
     except ImportError:
-        logger.error('Tensorflow is not installed. Please install it to load the weights.')
+        logger.error("Tensorflow is not installed. Please install it to load the weights.")
         raise
     # load the weights from the tensorflow checkpoint
     init_vars = tf.saved_model.load(tf_saved_model_path)
@@ -128,7 +124,7 @@ def loaf_tf_weights_in_trillsson_efficient(self, model, tf_saved_model_path):
 
         try:
             assert (
-                    pointer.shape == array.shape
+                pointer.shape == array.shape
             ), f"Pointer shape {pointer.shape} and array shape {array.shape} mismatched"
         except AssertionError as e:
             e.args += (pointer.shape, array.shape)
@@ -181,32 +177,20 @@ class Conv2DSamePadding(nn.Conv2d):
 
 class SELayer(nn.Module):
     def __init__(
-        self,
-        config: Trillsson_efficientConfig,
-        in_channels: int,
-        out_channels: int,
-        reduction: int = 4
+        self, config: Trillsson_efficientConfig, in_channels: int, out_channels: int, reduction: int = 4
     ) -> None:
         super().__init__()
         self.config = config
         self.se_squeeze = nn.AdaptiveAvgPool2d(1)
         self.se_reduce = Conv2DSamePadding(
             in_channels=out_channels,
-            out_channels=make_divisible(
-                in_channels // reduction,
-                config.depth_divisible_by,
-                config.min_depth
-            ),
-            kernel_size=1
+            out_channels=make_divisible(in_channels // reduction, config.depth_divisible_by, config.min_depth),
+            kernel_size=1,
         )
         self.se_expand = Conv2DSamePadding(
-            in_channels=make_divisible(
-                in_channels // reduction,
-                config.depth_divisible_by,
-                config.min_depth
-            ),
+            in_channels=make_divisible(in_channels // reduction, config.depth_divisible_by, config.min_depth),
             out_channels=out_channels,
-            kernel_size=1
+            kernel_size=1,
         )
         self.activation = ACT2FN[config.hidden_act]
 
@@ -227,23 +211,14 @@ class StemLayer(nn.Module):
         out_channels: int,
         stride: int,
         norm_eps: float,
-        norm_momentum: float
+        norm_momentum: float,
     ) -> None:
         super().__init__()
         self.config = config
         self.stem_conv = Conv2DSamePadding(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=3,
-            stride=stride,
-            padding=0,
-            bias=False
+            in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=stride, padding=0, bias=False
         )
-        self.stem_bn = nn.BatchNorm2d(
-            num_features=out_channels,
-            eps=norm_eps,
-            momentum=norm_momentum
-        )
+        self.stem_bn = nn.BatchNorm2d(num_features=out_channels, eps=norm_eps, momentum=norm_momentum)
         self.activation = ACT2FN[config.hidden_act]
 
     def forward(self, x):
@@ -260,23 +235,14 @@ class TopLayer(nn.Module):
         in_channels: int,
         out_channels: int,
         norm_eps: float,
-        norm_momentum: float
+        norm_momentum: float,
     ) -> None:
         super().__init__()
         self.config = config
         self.top_conv = Conv2DSamePadding(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=1,
-            stride=1,
-            padding=0,
-            bias=False
+            in_channels=in_channels, out_channels=out_channels, kernel_size=1, stride=1, padding=0, bias=False
         )
-        self.top_bn = nn.BatchNorm2d(
-            num_features=out_channels,
-            eps=norm_eps,
-            momentum=norm_momentum
-        )
+        self.top_bn = nn.BatchNorm2d(num_features=out_channels, eps=norm_eps, momentum=norm_momentum)
         self.activation = ACT2FN[config.hidden_act]
 
     def forward(self, x):
@@ -297,7 +263,7 @@ class MBConvBlock(nn.Module):
         use_se: int,
         survival_probability: int,
         norm_eps: float,
-        norm_momentum: float
+        norm_momentum: float,
     ) -> None:
         """MBConv block: Mobile Inverted Residual Bottleneck."""
         super().__init__()
@@ -311,18 +277,9 @@ class MBConvBlock(nn.Module):
         self.dropout = nn.Dropout(self.survival_probability)
         if self.expand_ratio != 1:
             self.expand_conv = Conv2DSamePadding(
-                in_channels=in_channels,
-                out_channels=hidden_dim,
-                kernel_size=1,
-                stride=1,
-                padding=0,
-                bias=False
+                in_channels=in_channels, out_channels=hidden_dim, kernel_size=1, stride=1, padding=0, bias=False
             )
-            self.expand_bn = nn.BatchNorm2d(
-                num_features=hidden_dim,
-                eps=norm_eps,
-                momentum=norm_momentum
-            )
+            self.expand_bn = nn.BatchNorm2d(num_features=hidden_dim, eps=norm_eps, momentum=norm_momentum)
         self.dwconv2 = Conv2DSamePadding(
             in_channels=hidden_dim,
             out_channels=hidden_dim,
@@ -330,32 +287,15 @@ class MBConvBlock(nn.Module):
             stride=stride,
             padding=0,
             groups=hidden_dim,
-            bias=False
+            bias=False,
         )
-        self.bn = nn.BatchNorm2d(
-            num_features=hidden_dim,
-            eps=norm_eps,
-            momentum=norm_momentum
-        )
+        self.bn = nn.BatchNorm2d(num_features=hidden_dim, eps=norm_eps, momentum=norm_momentum)
         if self.use_se:
-            self.se = SELayer(
-                config=self.config,
-                in_channels=in_channels,
-                out_channels=hidden_dim
-            )
+            self.se = SELayer(config=self.config, in_channels=in_channels, out_channels=hidden_dim)
             self.project_conv = Conv2DSamePadding(
-                in_channels=hidden_dim,
-                out_channels=out_channels,
-                kernel_size=1,
-                stride=1,
-                padding=0,
-                bias=False
+                in_channels=hidden_dim, out_channels=out_channels, kernel_size=1, stride=1, padding=0, bias=False
             )
-            self.project_bn = nn.BatchNorm2d(
-                num_features=out_channels,
-                eps=norm_eps,
-                momentum=norm_momentum
-            )
+            self.project_bn = nn.BatchNorm2d(num_features=out_channels, eps=norm_eps, momentum=norm_momentum)
 
     def forward(self, input):
         if self.expand_ratio != 1:
@@ -389,7 +329,7 @@ class FusedMBConvBlock(nn.Module):
         use_se: int,
         survival_probability: float,
         norm_eps: float,
-        norm_momentum: float
+        norm_momentum: float,
     ) -> None:
         """Fused MBConv Block: Fusing the proj conv1x1 and depthwise_conv into a conv2d."""
         super().__init__()
@@ -404,52 +344,21 @@ class FusedMBConvBlock(nn.Module):
 
         if self.expand_ratio != 1:
             self.expand_conv = Conv2DSamePadding(
-                in_channels=in_channels,
-                out_channels=hidden_dim,
-                kernel_size=3,
-                stride=stride,
-                padding=0,
-                bias=False
+                in_channels=in_channels, out_channels=hidden_dim, kernel_size=3, stride=stride, padding=0, bias=False
             )
-            self.expand_bn = nn.BatchNorm2d(
-                num_features=hidden_dim,
-                eps=norm_eps,
-                momentum=norm_momentum
-            )
+            self.expand_bn = nn.BatchNorm2d(num_features=hidden_dim, eps=norm_eps, momentum=norm_momentum)
             self.project_conv = Conv2DSamePadding(
-                in_channels=hidden_dim,
-                out_channels=out_channels,
-                kernel_size=1,
-                stride=1,
-                padding=0,
-                bias=False
+                in_channels=hidden_dim, out_channels=out_channels, kernel_size=1, stride=1, padding=0, bias=False
             )
-            self.project_bn = nn.BatchNorm2d(
-                num_features=out_channels,
-                eps=norm_eps,
-                momentum=norm_momentum
-            )
+            self.project_bn = nn.BatchNorm2d(num_features=out_channels, eps=norm_eps, momentum=norm_momentum)
         else:
             self.project_conv = Conv2DSamePadding(
-                in_channels=in_channels,
-                out_channels=hidden_dim,
-                kernel_size=3,
-                stride=stride,
-                padding=0,
-                bias=False
+                in_channels=in_channels, out_channels=hidden_dim, kernel_size=3, stride=stride, padding=0, bias=False
             )
-            self.project_bn = nn.BatchNorm2d(
-                num_features=hidden_dim,
-                eps=norm_eps,
-                momentum=norm_momentum
-            )
+            self.project_bn = nn.BatchNorm2d(num_features=hidden_dim, eps=norm_eps, momentum=norm_momentum)
 
         if self.use_se:
-            self.se = SELayer(
-                config=self.config,
-                in_channels=in_channels,
-                out_channels=hidden_dim
-            )
+            self.se = SELayer(config=self.config, in_channels=in_channels, out_channels=hidden_dim)
 
     def forward(self, input):
         if self.expand_ratio != 1:
@@ -485,7 +394,7 @@ class Trillsson_efficientPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d]) -> None:
-        """ Initialize the weights """
+        """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
@@ -496,10 +405,10 @@ class Trillsson_efficientPreTrainedModel(PreTrainedModel):
 
 
 TRILLSSON_EFFICIENT_START_DOCSTRING = r"""
+    Parameters:
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
-    Parameters:
         config ([`Trillsson_efficientConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -538,9 +447,8 @@ class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
         ]
         # building first layer
         input_channel = make_divisible(
-            24 * self.config.depth_multiplier,
-            self.config.depth_divisible_by,
-            self.config.min_depth)
+            24 * self.config.depth_multiplier, self.config.depth_divisible_by, self.config.min_depth
+        )
 
         self.stem = StemLayer(
             config=self.config,
@@ -548,7 +456,7 @@ class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
             out_channels=input_channel,
             stride=2,
             norm_eps=self.config.norm_eps,
-            norm_momentum=self.config.norm_momentum
+            norm_momentum=self.config.norm_momentum,
         )
 
         # building inverted residual blocks
@@ -557,9 +465,7 @@ class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
         total_blocks = float(sum(blocks_args[0] for blocks_args in block_configs))
         for expand_ratio, output_filters, num_repeat, stride, use_se, conv_type in block_configs:
             output_channel = make_divisible(
-                output_filters * config.depth_multiplier,
-                self.config.depth_divisible_by,
-                self.config.min_depth
+                output_filters * config.depth_multiplier, self.config.depth_divisible_by, self.config.min_depth
             )
             conv_block = MBConvBlock if conv_type == 0 else FusedMBConvBlock
             for i in range(num_repeat):
@@ -576,7 +482,7 @@ class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
                         use_se=use_se,
                         survival_probability=survival_probability,
                         norm_eps=config.norm_eps,
-                        norm_momentum=config.norm_momentum
+                        norm_momentum=config.norm_momentum,
                     )
                 )
                 input_channel = output_channel
@@ -585,7 +491,9 @@ class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
 
         # building last several layers
         if config.depth_multiplier > 1.0:
-            output_channel = make_divisible(1280 * config.depth_multiplier, config.depth_divisible_by, config.min_depth)
+            output_channel = make_divisible(
+                1280 * config.depth_multiplier, config.depth_divisible_by, config.min_depth
+            )
         else:
             output_channel = 1280
 
@@ -594,7 +502,7 @@ class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
             in_channels=input_channel,
             out_channels=output_channel,
             norm_eps=self.config.norm_eps,
-            norm_momentum=self.config.norm_momentum
+            norm_momentum=self.config.norm_momentum,
         )
         self.pooler = nn.AdaptiveAvgPool2d((1, 1))
         self.dense = nn.Linear(output_channel, config.output_size)

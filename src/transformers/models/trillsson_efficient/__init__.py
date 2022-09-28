@@ -17,12 +17,7 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_speech_available,
-    is_torch_available,
-)
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_speech_available, is_torch_available
 
 
 _import_structure = {
@@ -57,7 +52,7 @@ else:
 if TYPE_CHECKING:
     from .configuration_trillsson_efficient import (
         TRILLSSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP,
-        Trillsson_efficientConfig
+        Trillsson_efficientConfig,
     )
 
     try:

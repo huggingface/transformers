@@ -15,13 +15,13 @@
 """Feature extraction class for Trillsson_efficient."""
 from typing import List, Optional, Union
 
-import tensorflow as tf
 import numpy as np
-
+import tensorflow as tf
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -97,20 +97,20 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
     def pad_symmetric(cls, raw_speech: np.ndarray, padding: int):
         """Symmetric pad a 2D Tensor"""
         if raw_speech.ndim != 2:
-            raise ValueError(f'Raw speech must be rank 2 got {raw_speech.shape}')
+            raise ValueError(f"Raw speech must be rank 2 got {raw_speech.shape}")
         raw_speech_len = raw_speech.shape[1]
         if padding > raw_speech_len:
             pad_raw_speech = cls.repeat_n_times_with_extra(raw_speech, padding, raw_speech_len)
         else:
-            pad_raw_speech = np.pad(raw_speech, [(0, 0), (0, padding)], mode='symmetric')
+            pad_raw_speech = np.pad(raw_speech, [(0, 0), (0, padding)], mode="symmetric")
         return pad_raw_speech
 
     @classmethod
     def pad_waveform(cls, raw_speech: np.ndarray, padding: int, mode: str, padding_value: float):
         """Pad waveform"""
         if raw_speech.ndim != 2:
-            raise ValueError(f'Raw speech must be rank 2 got {raw_speech.shape}')
-        if mode == 'symmetric':
+            raise ValueError(f"Raw speech must be rank 2 got {raw_speech.shape}")
+        if mode == "symmetric":
             return cls.pad_symmetric(raw_speech, padding)
         else:
             pad_raw_speech = np.pad(raw_speech, [(0, 0), (0, padding)], mode=mode, constant_values=padding_value)
@@ -120,7 +120,7 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
     def repeat_n_times_with_extra(raw_speech: np.ndarray, padding: int, raw_speech_len: int):
         """Pad symmetric longer than the original raw speech"""
         if raw_speech.ndim != 2:
-            raise ValueError(f'Raw speech must be rank 2 got {raw_speech.shape}')
+            raise ValueError(f"Raw speech must be rank 2 got {raw_speech.shape}")
         num_copies = np.floor_divide(padding, raw_speech_len)
         r = np.fliplr(raw_speech)
         f = np.concatenate((r, raw_speech), axis=1)
@@ -129,7 +129,7 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
             copies = np.concatenate((copies, r), axis=1)
         pre_pad = np.concatenate([raw_speech, copies], axis=1)
         extra = padding % raw_speech_len
-        pad_raw_speech = np.pad(pre_pad, [(0, 0), (0, extra)], mode='symmetric')
+        pad_raw_speech = np.pad(pre_pad, [(0, 0), (0, extra)], mode="symmetric")
         return pad_raw_speech
 
     @staticmethod
@@ -138,7 +138,7 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
         return np.log(np.maximum(data, floor) + additive_offset)
 
     @staticmethod
-    def rescale(input_array: np.ndarray, rate: float = 1. / 128.0, offset: int = -1):
+    def rescale(input_array: np.ndarray, rate: float = 1.0 / 128.0, offset: int = -1):
         """Rescale the input array"""
         return input_array * rate + offset
 
@@ -169,7 +169,7 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
             sample_rate=audio_sample_rate,
             lower_edge_hertz=self.f_min,
             upper_edge_hertz=self.f_max,
-            dtype=tf.dtypes.float64
+            dtype=tf.dtypes.float64,
         )
 
         mel = spectrogram @ to_mel
@@ -196,7 +196,7 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
 
         for raw_speech in input_values:
             if raw_speech.ndim != 1:
-                raise ValueError(f'Raw speech must be rank 1 got {raw_speech.shape}')
+                raise ValueError(f"Raw speech must be rank 1 got {raw_speech.shape}")
             raw_speech = np.expand_dims(raw_speech, axis=0)
 
             # pad to max length
@@ -207,8 +207,7 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
                     raw_speech = self.pad_waveform(raw_speech, delta, mode=pad_mode, padding_value=self.padding_value)
 
             mel_speech = self.log_mel_spectrogram(raw_speech, sampling_rate)
-            mel_speech = tf.signal.frame(
-                mel_speech, frame_length=frame_width, frame_step=frame_hop, axis=2).numpy()
+            mel_speech = tf.signal.frame(mel_speech, frame_length=frame_width, frame_step=frame_hop, axis=2).numpy()
             mel_speech = np.squeeze(mel_speech, axis=0)
 
             # rescale
@@ -226,7 +225,7 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
         required_length: Optional[int] = 32000,
         num_mel_bins: Optional[int] = 80,
         frame_width: Optional[int] = 195,
-        pad_mode: Optional[str] = 'symmetric',
+        pad_mode: Optional[str] = "symmetric",
         return_tensors: Optional[Union[str, TensorType]] = None,
         padding: Optional[bool] = False,
         **kwargs
@@ -280,9 +279,9 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
         if not isinstance(raw_speech[0], np.ndarray):
             raw_speech = [np.asarray(array, dtype=np.float32) for array in raw_speech]
         elif (
-                not isinstance(raw_speech, np.ndarray)
-                and isinstance(raw_speech[0], np.ndarray)
-                and raw_speech[0].dtype is np.dtype(np.float64)
+            not isinstance(raw_speech, np.ndarray)
+            and isinstance(raw_speech[0], np.ndarray)
+            and raw_speech[0].dtype is np.dtype(np.float64)
         ):
             raw_speech = [array.astype(np.float32) for array in raw_speech]
         elif isinstance(raw_speech, np.ndarray) and raw_speech.dtype is np.dtype(np.float64):

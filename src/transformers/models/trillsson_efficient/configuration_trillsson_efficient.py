@@ -21,8 +21,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 TRILLSSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "vumichien/nonsemantic-speech-trillsson3": "https://huggingface.co/vumichien/nonsemantic-speech-trillsson3"
-                                               "/resolve/main/config.json",
+    "vumichien/nonsemantic-speech-trillsson3": (
+        "https://huggingface.co/vumichien/nonsemantic-speech-trillsson3/resolve/main/config.json"
+    ),
 }
 
 
@@ -30,7 +31,8 @@ class Trillsson_efficientConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Trillsson_efficientModel`]. It is used to
     instantiate an Trillsson_efficient model according to the specified arguments, defining the model architecture.
-    Instantiating a configuration with the defaults will yield a similar configuration to that of the Trillson_efficient
+    Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    Trillson_efficient
     [vumichien/nonsemantic-speech-trillsson3](https://huggingface.co/vumichien/nonsemantic-speech-trillsson3)
     architecture.
 
@@ -48,8 +50,8 @@ class Trillsson_efficientConfig(PretrainedConfig):
         min_depth (:obj:`int`, `optional`, defaults to 8):
             The minimum depth of the network.
         hidden_act (:obj:`str`, `optional`, defaults to "swish"):
-            The non-linear activation function (function or string) in the encoder and pooler. If string,
-            "gelu", "relu", "silu", "swish", "gelu_new" and "tanh" are supported.
+            The non-linear activation function (function or string) in the encoder and pooler. If string, "gelu",
+            "relu", "silu", "swish", "gelu_new" and "tanh" are supported.
         drop_connect_rate (:obj:`float`, `optional`, defaults to 0.2):
             The dropout ratio for drop connect.
         initializer_range (:obj:`float`, `optional`, defaults to 0.02):
@@ -76,6 +78,7 @@ class Trillsson_efficientConfig(PretrainedConfig):
     Example:
     ```python
     >>> from transformers import Trillsson_efficientConfig, Trillsson_efficientModel
+
     >>> # Initializing a "nonsemantic-speech-trillsson3" style configuration
     >>> configuration = Trillsson_efficientConfig()
     >>> # Initializing a model from the "nonsemantic-speech-trillsson3" style configuration
