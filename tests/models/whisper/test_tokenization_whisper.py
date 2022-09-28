@@ -15,7 +15,7 @@
 import unittest
 
 from transformers.models.whisper import WhisperTokenizer
-from transformers.testing_utils import require_sentencepiece, require_tokenizers, slow
+from transformers.testing_utils import slow
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
@@ -24,8 +24,7 @@ EN_CODE = 50258
 ES_CODE = 50256
 
 
-@require_sentencepiece
-@require_tokenizers
+
 class WhisperTokenizeirTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = WhisperTokenizer
     test_rust_tokenizer = False
