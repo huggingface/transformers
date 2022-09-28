@@ -438,7 +438,6 @@ class WhisperDecoderLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.speech_to_text.modeling_speech_to_text.Speech2TextPreTrainedModel with Speech2Text->Whisper
 class WhisperPreTrainedModel(PreTrainedModel):
     config_class = WhisperConfig
     base_model_prefix = "model"
@@ -460,8 +459,13 @@ class WhisperPreTrainedModel(PreTrainedModel):
         if isinstance(module, (WhisperDecoder, WhisperEncoder)):
             module.gradient_checkpointing = value
 
-    def _get_feat_extract_output_lengths(self, input: int):
-        return (input - 1) // 2 + 1
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
+        """
+        Computes the output length of the convolutional layers
+        """
+        input_lengths = (input_lengths - 1) // 2 + 1
+
+        return input_lengths
 
     def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
         # generate creates 3D attention mask, because of the shape of input_features
@@ -469,7 +473,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
         if len(attention_mask.shape) > 2:
             attention_mask = attention_mask[:, 0, :]
 
-        subsampled_lengths = ((attention_mask.sum(-1) - 1) // 2) + 1
+        subsampled_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
         bsz = attention_mask.size()[0]
         attention_mask = torch.zeros(
             (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
@@ -1223,7 +1227,7 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
-        
+
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         >>> inputs = processor(
