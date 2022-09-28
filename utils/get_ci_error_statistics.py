@@ -240,7 +240,6 @@ if __name__ == "__main__":
                 index = k.find(" / ")
                 k = k[index + len(" / "):]
             job_links[k] = v
-
     with open(os.path.join(args.output_dir, "job_links.json"), "w", encoding="UTF-8") as fp:
         json.dump(job_links, fp, ensure_ascii=False, indent=4)
 
