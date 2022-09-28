@@ -159,6 +159,7 @@ TO_LANGUAGE_CODE = {
     "castilian": "es",
 }
 
+
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
@@ -185,6 +186,7 @@ def bytes_to_unicode():
 
 
 logger = logging.get_logger(__name__)
+
 
 # Copied from transformers.models.gpt2.tokenization_gpt2.get_pairs
 def get_pairs(word):
@@ -303,7 +305,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
     def all_language_codes(self) -> Tuple[str]:
         return tuple(self.decode([l]).strip("<|>") for l in self.all_language_tokens)
 
-    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.vocab_size with GPT2 -> Whisper
     @property
     def vocab_size(self) -> int:
         return len(self.encoder)

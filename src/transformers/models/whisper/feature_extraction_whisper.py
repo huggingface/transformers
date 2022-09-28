@@ -52,7 +52,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         hop_length (`int`, defaults to 160):
             Length of the overlaping windows for the STFT used to obtain the Mel Frequency coefficients.
         chunk_length (`int`, defaults to 30):
-            The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio sequences.
+            The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
+            sequences.
         n_fft (`int`, defaults to 30):
             Size of the Fourier transform.
         padding_value (`float`, defaults to 0.0):

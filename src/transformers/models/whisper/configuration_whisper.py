@@ -66,8 +66,8 @@ class WhisperConfig(PretrainedConfig):
             Vocabulary size of the Whisper model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`WhisperModel`]
         num_mel_bins (`int`, *optional*, defaults to 80):
-            Number of mel features used per input features. Should correspond to the value used in the `WhisperProcessor``
-            class.
+            Number of mel features used per input features. Should correspond to the value used in the
+            `WhisperProcessor`` class.
         encoder_layers (`int`, *optional*, defaults to 6):
             Number of encoder layers.
         decoder_layers (`int`, *optional*, defaults to 6):
@@ -175,9 +175,7 @@ class WhisperConfig(PretrainedConfig):
     ):
         """_summary_
 
-        Args:
-
-        """
+        Args:"""
         self.vocab_size = vocab_size
         self.num_mel_bins = num_mel_bins
         self.d_model = d_model
