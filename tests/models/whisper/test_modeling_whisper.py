@@ -761,7 +761,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         return [x["array"] for x in speech_samples]
 
-    def test_inference_tiny(self):
+    def test_tiny_logits_librispeech(self):
         torch_device = "cpu"
         set_seed(0)
         model = WhisperModel.from_pretrained("openai/whisper-tiny")
@@ -783,10 +783,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
             [
-                2.9892, -6.7607,  5.7348,  3.6095,  0.2152, -5.7321,  4.8855, -1.6407,
-                0.2823, -1.5718, 10.4269,  3.4427,  0.0219, -8.0612,  3.4784,  8.4246,
-                4.0575, -2.2864, 11.1084,  0.9963,  0.9884, -8.5154, -3.5469, -9.3714,
-                0.9786,  3.5435,  7.4850, -5.2579, -1.4366, 10.4841
+                2.9892, -6.7607, 5.7348, 3.6095, 0.2152, -5.7321, 4.8855, -1.6407,
+                0.2823, -1.5718, 10.4269, 3.4427, 0.0219, -8.0612, 3.4784, 8.4246,
+                4.0575, -2.2864, 11.1084, 0.9963, 0.9884, -8.5154, -3.5469, -9.3714,
+                0.9786, 3.5435, 7.4850, -5.2579, -1.4366, 10.4841
             ]
         )
         # fmt: on
@@ -795,10 +795,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_GENERATION = torch.tensor(
             [
-                -1.4651, -2.6944,  2.7821,  2.3793,  4.0738,  0.0188, -3.3204,  1.9836,
-                0.0520,  0.7095,  1.1063,  0.2952, -3.6786, -0.5249,  0.3105,  4.7691,
-                1.1562,  1.3046,  0.5810, -0.3624,  1.7006,  1.3424,  0.9817,  2.1958,
-                1.8775, -5.7046, -0.7679,  4.0113,  2.6848,  2.8609
+                -1.4651, -2.6944, 2.7821, 2.3793, 4.0738, 0.0188, -3.3204, 1.9836,
+                0.0520, 0.7095, 1.1063, 0.2952, -3.6786, -0.5249, 0.3105, 4.7691,
+                1.1562, 1.3046, 0.5810, -0.3624, 1.7006, 1.3424, 0.9817, 2.1958,
+                1.8775, -5.7046, -0.7679, 4.0113, 2.6848, 2.8609
             ]
         )
         # fmt: on
@@ -806,7 +806,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         head_logits = logits[0] @ model.decoder.embed_tokens.weight.T
         self.assertTrue(torch.allclose(head_logits[0, 0, :30].cpu(), EXPECTED_GENERATION, atol=1e-4))
 
-    def test_small_logits_librispeech(self):
+    def test_small_en_logits_librispeech(self):
         set_seed(0)
         torch_device = "cpu"
         model = WhisperModel.from_pretrained("openai/whisper-small.en")
@@ -830,11 +830,11 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
             [
-                -3.6784,  -7.7212,  -9.5070, -11.9286,  -7.6489,  -9.7026,  -5.6188,
-                -8.0104,  -4.6239,  -5.1833,  -9.0485,  -3.4079,  -5.4874,  -2.6935,
-                -6.3479,  -7.3398,  -6.9558,  -7.6867,  -7.4748,  -8.3463,  -9.9781,
-                -10.8389, -10.3105, -11.7201,  -9.7261,  -7.1590,  -5.9272, -12.4509,
-                -11.1147,  -8.1918
+                -3.6784, -7.7212, -9.5070, -11.9286, -7.6489, -9.7026, -5.6188,
+                -8.0104, -4.6239, -5.1833, -9.0485, -3.4079, -5.4874, -2.6935,
+                -6.3479, -7.3398, -6.9558, -7.6867, -7.4748, -8.3463, -9.9781,
+                -10.8389, -10.3105, -11.7201, -9.7261, -7.1590, -5.9272, -12.4509,
+                -11.1147, -8.1918
             ]
         )
         # fmt: on
@@ -855,7 +855,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         input_features = processed_inputs.input_features.to(torch_device)
         labels = processed_inputs.labels.to(torch_device)
 
-       
         logits = model(
             input_features,
             decoder_input_ids=labels,
@@ -869,17 +868,17 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
             [
-                2.1382,  0.9381,  4.4671,  3.5589,  2.4022,  3.8577, -0.6521,  2.5472,
-                1.8301,  1.9957,  2.3432,  1.4678,  0.5459,  2.2597,  1.5179,  2.5357,
-                1.1624,  0.6194,  1.0757,  1.8259,  2.4076,  1.6601,  2.3503,  1.3376,
-                1.9891,  1.8635,  3.8931,  5.3699,  4.4772,  3.9184
+                2.1382, 0.9381, 4.4671, 3.5589, 2.4022, 3.8577, -0.6521, 2.5472,
+                1.8301, 1.9957, 2.3432, 1.4678, 0.5459, 2.2597, 1.5179, 2.5357,
+                1.1624, 0.6194, 1.0757, 1.8259, 2.4076, 1.6601, 2.3503, 1.3376,
+                1.9891, 1.8635, 3.8931, 5.3699, 4.4772, 3.9184
             ]
         )
         # fmt: on
 
         self.assertTrue(torch.allclose(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
 
-    def test_generation_en_only(self):
+    def test_tiny_en_generation(self):
 
         torch_device = "cpu"
         set_seed(0)
@@ -903,7 +902,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
-    def test_generation(self):
+    def test_tiny_generation(self):
 
         torch_device = "cpu"
         set_seed(0)
@@ -918,9 +917,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-large")
 
         decoder_input_ids = torch.tensor([[50258]]).long()
-        generated_ids = model.generate(
-            input_features, num_beams=5, decoder_input_ids=decoder_input_ids
-        )
+        generated_ids = model.generate(input_features, num_beams=5, decoder_input_ids=decoder_input_ids)
         transcript = tokenizer.decode(generated_ids[0])
 
         EXPECTED_TRANSCRIPT = (

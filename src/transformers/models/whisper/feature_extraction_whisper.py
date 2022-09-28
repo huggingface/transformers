@@ -205,7 +205,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 The value that is used to fill the padding values / vectors.
         """
 
-
         is_batched = bool(
             isinstance(raw_speech, (list, tuple))
             and (isinstance(raw_speech[0], np.ndarray) or isinstance(raw_speech[0], (tuple, list)))
