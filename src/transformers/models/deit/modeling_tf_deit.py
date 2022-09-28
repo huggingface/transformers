@@ -922,7 +922,6 @@ class TFDeiTForImageClassification(TFDeiTPreTrainedModel, TFSequenceClassificati
         >>> from PIL import Image
         >>> import requests
 
-        >>> tf.random.set_seed(3)  # doctest: +IGNORE_RESULT
         >>> tf.keras.utils.set_random_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
