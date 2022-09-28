@@ -153,7 +153,7 @@ workflows:
     build_and_test:
         jobs:
             - fetch_tests
-            - run_tests_torch_and_tf:
+            - run_tests_torch_and_tf
 
 #    tpu_testing_jobs:
 #        triggers:
