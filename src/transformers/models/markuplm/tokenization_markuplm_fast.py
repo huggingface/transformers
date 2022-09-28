@@ -608,11 +608,8 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         )
 
         # Convert encoding to dict
-        # `Tokens` has type: Tuple[
-        #                       List[Dict[str, List[List[int]]]] or List[Dict[str, 2D-Tensor]],
-        #                       List[EncodingFast]
-        #                    ]
-        # with nested dimensions corresponding to batch, overflows, sequence length
+        # `Tokens` is a tuple of (List[Dict[str, List[List[int]]]] or List[Dict[str, 2D-Tensor]],
+        #  List[EncodingFast]) with nested dimensions corresponding to batch, overflows, sequence length
         tokens_and_encodings = [
             self._convert_encoding(
                 encoding=encoding,

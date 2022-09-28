@@ -45,30 +45,9 @@ class MarkupLMProcessorTest(unittest.TestCase):
 
     def setUp(self):
         # Adapted from Sennrich et al. 2015 and https://github.com/rsennrich/subword-nmt
-        vocab = [
-            "l",
-            "o",
-            "w",
-            "e",
-            "r",
-            "s",
-            "t",
-            "i",
-            "d",
-            "n",
-            "\u0120",
-            "\u0120l",
-            "\u0120n",
-            "\u0120lo",
-            "\u0120low",
-            "er",
-            "\u0120lowest",
-            "\u0120newer",
-            "\u0120wider",
-            "\u0120hello",
-            "\u0120world",
-            "<unk>",
-        ]
+        # fmt: off
+        vocab = ["l", "o", "w", "e", "r", "s", "t", "i", "d", "n", "\u0120", "\u0120l", "\u0120n", "\u0120lo", "\u0120low", "er", "\u0120lowest", "\u0120newer", "\u0120wider", "\u0120hello", "\u0120world", "<unk>",]  # noqa
+        # fmt: on
         self.tmpdirname = tempfile.mkdtemp()
         vocab_tokens = dict(zip(vocab, range(len(vocab))))
         merges = ["#version: 0.2", "\u0120 l", "\u0120l o", "\u0120lo w", "e r", ""]
