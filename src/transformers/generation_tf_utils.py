@@ -2262,7 +2262,7 @@ class TFGenerationMixin:
             next_tokens_scores = logits_processor(generated, next_token_logits, cur_len)
 
             # argmax
-            next_tokens = tf.argmax(next_tokens_scores, axis=-1, output_type=tf.int64)
+            next_tokens = tf.argmax(next_tokens_scores, axis=-1, output_type=generated.dtype)
 
             if eos_token_id is not None:
                 if pad_token_id is None:
@@ -2531,10 +2531,10 @@ class TFGenerationMixin:
             if seed is not None:
                 sample_seed = seed
             else:
-                sample_seed = tf.cast(self.seed_generator.make_seeds(count=1)[:, 0], dtype=tf.int64)
+                sample_seed = tf.cast(self.seed_generator.make_seeds(count=1)[:, 0], dtype=generated.dtype)
             next_tokens = tf.squeeze(
                 tf.random.stateless_categorical(
-                    logits=next_tokens_scores, num_samples=1, seed=sample_seed, dtype=tf.int64
+                    logits=next_tokens_scores, num_samples=1, seed=sample_seed, dtype=generated.dtype
                 ),
                 axis=1,
             )
@@ -2542,7 +2542,7 @@ class TFGenerationMixin:
             if eos_token_id is not None:
                 if pad_token_id is None:
                     raise ValueError("If `eos_token_id` is defined, make sure that `pad_token_id` is defined.")
-                unfinished_seq = 1 - tf.cast(finished_sequences, tf.int64)
+                unfinished_seq = 1 - tf.cast(finished_sequences, generated.dtype)
                 next_tokens = next_tokens * unfinished_seq + pad_token_id * (1 - unfinished_seq)
             finished_sequences = finished_sequences | (next_tokens == eos_token_id)
 
