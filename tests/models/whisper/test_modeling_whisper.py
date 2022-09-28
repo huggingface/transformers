@@ -22,15 +22,7 @@ import unittest
 
 from transformers import WhisperConfig
 from transformers.generation_logits_process import LogitsProcessorList, SuppressBlank, SuppressTokens
-from transformers.testing_utils import (
-    is_torch_available,
-    require_sentencepiece,
-    require_tokenizers,
-    require_torch,
-    require_torchaudio,
-    slow,
-    torch_device,
-)
+from transformers.testing_utils import is_torch_available, require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import cached_property
 
 from ...generation.test_generation_utils import GenerationTesterMixin
@@ -62,8 +54,6 @@ def prepare_whisper_inputs_dict(
     decoder_head_mask=None,
     cross_attn_head_mask=None,
 ):
-    if attention_mask is None:
-        attention_mask = input_features.ne(0)
     if decoder_attention_mask is None:
         decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
     if head_mask is None:
@@ -76,8 +66,7 @@ def prepare_whisper_inputs_dict(
         # "input_ids": input_features,
         "input_features": input_features,
         "decoder_input_ids": decoder_input_ids,
-        "attention_mask": attention_mask,
-        "decoder_attention_mask": attention_mask,
+        "decoder_attention_mask": decoder_attention_mask,
         "head_mask": head_mask,
         "decoder_head_mask": decoder_head_mask,
         "cross_attn_head_mask": cross_attn_head_mask,
@@ -136,17 +125,15 @@ class WhisperModelTester:
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
-        attention_mask = torch.ones(
-            [self.batch_size, self.max_source_positions], dtype=torch.long, device=torch_device
-        )
+
         decoder_input_ids = torch.tensor(self.batch_size * [[self.decoder_start_token_id]], device=torch_device)
 
         config = self.get_config()
         inputs_dict = prepare_whisper_inputs_dict(
             config,
+            attention_mask = None,
             input_features=input_features,
             decoder_input_ids=decoder_input_ids,
-            attention_mask=attention_mask,
         )
         return config, inputs_dict
 
@@ -243,7 +230,7 @@ class WhisperModelTester:
             encoder = WhisperEncoder.from_pretrained(tmpdirname).to(torch_device)
 
         encoder_last_hidden_state_2 = encoder(
-            inputs_dict["input_features"], attention_mask=inputs_dict["attention_mask"]
+            inputs_dict["input_features"]
         )[0]
 
         self.parent.assertTrue((encoder_last_hidden_state_2 - encoder_last_hidden_state).abs().max().item() < 1e-3)
@@ -253,15 +240,11 @@ class WhisperModelTester:
             decoder.save_pretrained(tmpdirname)
             decoder = WhisperDecoder.from_pretrained(tmpdirname).to(torch_device)
 
-        encoder_attention_mask = encoder._get_feature_vector_attention_mask(
-            encoder_last_hidden_state.shape[1], inputs_dict["attention_mask"]
-        )
 
         last_hidden_state_2 = decoder(
             input_ids=inputs_dict["decoder_input_ids"],
             attention_mask=inputs_dict["decoder_attention_mask"],
             encoder_hidden_states=encoder_last_hidden_state,
-            encoder_attention_mask=encoder_attention_mask,
         )[0]
 
         self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)
@@ -323,9 +306,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             # hack to allow generate for models such as GPT2 as is done in `generate()`
             config.pad_token_id = config.eos_token_id
 
-        attention_mask = torch.ones_like(input_ids, dtype=torch.long)[:max_batch_size, :sequence_length]
-
-        return config, input_ids, attention_mask, max_length
+        return config, input_ids, None, max_length
 
     # not implemented currently
     def test_inputs_embeds(self):
@@ -345,12 +326,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         config.max_target_positions = 400
         input_features = input_dict["input_features"]
-        attention_mask = input_dict["attention_mask"]
         model = WhisperForConditionalGeneration(config).eval().to(torch_device)
         if torch_device == "cuda":
             input_features = input_features.half()
             model.half()
-        model.generate(input_features, attention_mask=attention_mask)
+        model.generate(input_features)
         model.generate(input_features, num_beams=4, do_sample=True, early_stopping=False, num_return_sequences=3)
 
     def test_forward_signature(self):
@@ -364,7 +344,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
             expected_arg_names = [
                 "input_features",
-                "attention_mask",
                 "decoder_input_ids",
                 "decoder_attention_mask",
             ]
@@ -625,12 +604,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
     @staticmethod
     def _get_encoder_outputs(
-        model, input_ids, attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
+        model, input_ids,attention_mask, output_attentions=None, output_hidden_states=None, num_interleave=1
     ):
         encoder = model.get_encoder()
         encoder_outputs = encoder(
             input_ids,
-            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
@@ -701,11 +679,10 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             try:
                 model.config.use_cache = False  # FSTM still requires this hack -> FSTM should probably be refactored similar to BART afterward
                 input_features = inputs["input_features"]
-                attention_mask = inputs["attention_mask"]
                 decoder_input_ids = inputs["decoder_input_ids"]
                 decoder_attention_mask = inputs["decoder_attention_mask"]
                 traced_model = torch.jit.trace(
-                    model, (input_features, attention_mask, decoder_input_ids, decoder_attention_mask)
+                    model, (input_features, decoder_input_ids, decoder_attention_mask)
                 )
             except RuntimeError:
                 self.fail("Couldn't trace module.")
@@ -745,8 +722,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
 @require_torch
 @require_torchaudio
-@require_sentencepiece
-@require_tokenizers
 class WhisperModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
@@ -761,6 +736,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         return [x["array"] for x in speech_samples]
 
+    @slow
     def test_tiny_logits_librispeech(self):
         torch_device = "cpu"
         set_seed(0)
@@ -806,6 +782,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         head_logits = logits[0] @ model.decoder.embed_tokens.weight.T
         self.assertTrue(torch.allclose(head_logits[0, 0, :30].cpu(), EXPECTED_GENERATION, atol=1e-4))
 
+    @slow
     def test_small_en_logits_librispeech(self):
         set_seed(0)
         torch_device = "cpu"
@@ -878,6 +855,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         self.assertTrue(torch.allclose(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
 
+    @slow
     def test_tiny_en_generation(self):
 
         torch_device = "cpu"
@@ -943,7 +921,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         logits_processor = LogitsProcessorList(
             [
                 SuppressBlank(tokenizer.encode(" "), 50256),
-                SuppressTokens(tokenizer._get_suppress_tokens("-1")),
+                SuppressTokens(model.config.non_speech_tokens),
             ]
         )
         tokenizer.eos_token_id = 50257

@@ -467,23 +467,7 @@ class WhisperPreTrainedModel(PreTrainedModel):
 
         return input_lengths
 
-    def _get_feature_vector_attention_mask(self, feature_vector_length, attention_mask):
-        # generate creates 3D attention mask, because of the shape of input_features
-        # convert it to 2D if thats the case
-        if len(attention_mask.shape) > 2:
-            attention_mask = attention_mask[:, 0, :]
 
-        subsampled_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1))
-        bsz = attention_mask.size()[0]
-        attention_mask = torch.zeros(
-            (bsz, feature_vector_length), dtype=attention_mask.dtype, device=attention_mask.device
-        )
-
-        # these two operations makes sure that all values
-        # before the output lengths indices are attended to
-        attention_mask[(torch.arange(bsz, device=attention_mask.device), subsampled_lengths - 1)] = 1
-        attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).long()
-        return attention_mask
 
 
 WHISPER_START_DOCSTRING = r"""
@@ -627,7 +611,6 @@ class WhisperEncoder(WhisperPreTrainedModel):
     def forward(
         self,
         input_features,
-        attention_mask=None,
         head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -679,15 +662,6 @@ class WhisperEncoder(WhisperPreTrainedModel):
         hidden_states = inputs_embeds + embed_pos
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
-        attention_mask = None
-        # subsample attention mask if necessary
-        if attention_mask is not None:
-            attention_mask = self._get_feature_vector_attention_mask(inputs_embeds.shape[1], attention_mask)
-            attention_mask = attention_mask.ne(1).long()
-            attention_mask = _expand_mask(attention_mask, inputs_embeds.dtype)
-        # else:
-        #     attention_mask = torch.ones([], dtype=torch.long, device=inputs_embeds.device)
-
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -716,13 +690,13 @@ class WhisperEncoder(WhisperPreTrainedModel):
                     layer_outputs = torch.utils.checkpoint.checkpoint(
                         create_custom_forward(encoder_layer),
                         hidden_states,
-                        attention_mask,
+                        None,
                         (head_mask[idx] if head_mask is not None else None),
                     )
                 else:
                     layer_outputs = encoder_layer(
                         hidden_states,
-                        attention_mask,
+                        None,
                         layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                         output_attentions=output_attentions,
                     )
@@ -803,7 +777,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
         input_ids=None,
         attention_mask=None,
         encoder_hidden_states=None,
-        encoder_attention_mask=None,
         head_mask=None,
         cross_attn_head_mask=None,
         past_key_values=None,
@@ -906,12 +879,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
             attention_mask, input_shape, inputs_embeds, past_key_values_length
         )
 
-        encoder_attention_mask = None
-        # expand encoder attention mask
-        if encoder_hidden_states is not None and encoder_attention_mask is not None:
-            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
-
         # embed positions
         positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
 
@@ -962,7 +929,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
                     hidden_states,
                     attention_mask,
                     encoder_hidden_states,
-                    encoder_attention_mask,
                     head_mask[idx] if head_mask is not None else None,
                     cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None,
                     None,
@@ -973,7 +939,6 @@ class WhisperDecoder(WhisperPreTrainedModel):
                     hidden_states,
                     attention_mask=attention_mask,
                     encoder_hidden_states=encoder_hidden_states,
-                    encoder_attention_mask=encoder_attention_mask,
                     layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                     cross_attn_layer_head_mask=(
                         cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
@@ -1046,7 +1011,6 @@ class WhisperModel(WhisperPreTrainedModel):
     def forward(
         self,
         input_features=None,
-        attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         head_mask=None,
@@ -1090,12 +1054,9 @@ class WhisperModel(WhisperPreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        attention_mask = None
-
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_features,
-                attention_mask=attention_mask,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1110,22 +1071,13 @@ class WhisperModel(WhisperPreTrainedModel):
             )
 
         # downsample encoder attention mask
-        if attention_mask is not None:
-            encoder_attention_mask = self._get_feature_vector_attention_mask(
-                encoder_outputs[0].shape[1], attention_mask
-            )
-        else:
-            encoder_attention_mask = None
-
-        encoder_attention_mask = None
-        decoder_attention_mask = None
+        # decoder_attention_mask = None
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=encoder_attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
@@ -1195,7 +1147,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
     def forward(
         self,
         input_features=None,
-        attention_mask=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
         head_mask=None,
@@ -1251,7 +1202,6 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         outputs = self.model(
             input_features,
-            attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
@@ -1289,17 +1239,17 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past=None, use_cache=None, encoder_outputs=None, **kwargs
+        self, decoder_input_ids,  past=None, use_cache=None, encoder_outputs=None, attention_mask = None, **kwargs
     ):
         # cut decoder_input_ids if past is used
         if past is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
 
+
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
-            "attention_mask": None,
             "use_cache": use_cache,
             "decoder_attention_mask": None,
         }
