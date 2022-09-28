@@ -15,7 +15,6 @@
 """Tokenization classes for Whisper."""
 import json
 import os
-from functools import lru_cache
 from typing import List, Optional, Tuple
 
 import regex as re
@@ -37,7 +36,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 }
 
 MAX_MODEL_INPUT_SIZES = {
-    "openai/whisper-base": 1024,
+    "openai/whisper-base": 448,
 }
 
 
@@ -160,8 +159,7 @@ TO_LANGUAGE_CODE = {
     "castilian": "es",
 }
 
-
-@lru_cache()
+# Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
@@ -188,7 +186,7 @@ def bytes_to_unicode():
 
 logger = logging.get_logger(__name__)
 
-
+# Copied from transformers.models.gpt2.tokenization_gpt2.get_pairs
 def get_pairs(word):
     """
     Return set of symbol pairs in a word.
@@ -284,70 +282,13 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
-
+    
     def get_vocab(self):
         vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
         vocab.update(self.added_tokens_encoder)
         return vocab
 
     @property
-    @lru_cache()
-    def sot_sequence(self) -> Tuple[int]:
-        translate = self.all_special_ids[-6]
-        transcribe = self.all_special_ids[-5]
-        sot_sequence = [self.all_special_ids[1]]
-
-        if self.language is not None:
-            additional_tokens = dict(
-                zip(
-                    self.additional_special_tokens,
-                    self.additional_special_tokens_ids,
-                )
-            )
-            self.language_token = additional_tokens[f"<|{self.language}|>"]
-            langs = tuple(LANGUAGES.keys())
-            sot_sequence.append(self.all_special_ids[1] + 1 + langs.index(self.language))
-
-        if self.task is not None:
-            sot_sequence.append(transcribe if self.task == "transcribe" else translate)
-        return sot_sequence
-
-    def _get_single_token_id(self, text) -> int:
-        tokens = self.encode(text)
-        return tokens[0]
-
-    @property
-    @lru_cache()
-    def sot(self) -> int:
-        return self._get_single_token_id("<|startoftranscript|>")
-
-    @property
-    @lru_cache()
-    def sot_lm(self) -> int:
-        return self._get_single_token_id("<|startoflm|>")
-
-    @property
-    @lru_cache()
-    def sot_prev(self) -> int:
-        return self._get_single_token_id("<|startofprev|>")
-
-    @property
-    @lru_cache()
-    def no_captions(self) -> int:
-        return self._get_single_token_id("<|nocaptions|>")
-
-    @property
-    @lru_cache()
-    def no_timestamps(self) -> int:
-        return self._get_single_token_id("<|notimestamps|>")
-
-    @property
-    @lru_cache()
-    def timestamp_begin(self) -> int:
-        return self.tokenizer.all_special_ids[-1] + 1
-
-    @property
-    @lru_cache()
     def all_language_tokens(self) -> Tuple[int]:
         result = []
         for token, token_id in zip(
@@ -359,19 +300,15 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return tuple(result)
 
     @property
-    @lru_cache()
     def all_language_codes(self) -> Tuple[str]:
         return tuple(self.decode([l]).strip("<|>") for l in self.all_language_tokens)
 
-    @property
-    @lru_cache()
-    def sot_sequence_including_notimestamps(self) -> Tuple[int]:
-        return tuple(list(self.sot_sequence) + [self.no_timestamps])
-
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.vocab_size with GPT2 -> Whisper
     @property
     def vocab_size(self) -> int:
         return len(self.encoder)
 
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.bpe with GPT2 -> Whisper
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
@@ -414,6 +351,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.build_inputs_with_special_tokens with GPT2 -> Whisper
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         if self.add_bos_token:
             bos_token_ids = [self.bos_token_id]
@@ -427,6 +365,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         return output + bos_token_ids + token_ids_1
 
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.get_special_tokens_mask with GPT2 -> Whisper
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
@@ -459,6 +398,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             return [1] + ([0] * len(token_ids_0))
         return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
 
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._tokenize with GPT2 -> Whisper
     def _tokenize(self, text):
         """Tokenize a string."""
         bpe_tokens = []
@@ -469,6 +409,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
         return bpe_tokens
 
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._convert_token_to_id with GPT2 -> Whisper
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         return self.encoder.get(token, self.encoder.get(self.unk_token))
@@ -477,12 +418,14 @@ class WhisperTokenizer(PreTrainedTokenizer):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index, self.decoder.get(self.unk_token_id))
 
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.convert_tokens_to_string with GPT2 -> Whisper
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
         return text
 
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.save_vocabulary with GPT2 -> Whisper
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
@@ -512,28 +455,14 @@ class WhisperTokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file
 
-    def decode_with_timestamps(self, tokens) -> str:
-        """
-        Timestamp tokens are above the special tokens' id range and are ignored by `decode()`. This method decodes
-        given tokens with timestamps tokens annotated, e.g. "<|1.08|>".
-        """
-        outputs = [[]]
-        for token in tokens:
-            if token >= self.timestamp_begin:
-                timestamp = f"<|{(token - self.timestamp_begin) * 0.02:.2f}|>"
-                outputs.append(timestamp)
-                outputs.append([])
-            else:
-                outputs[-1].append(token)
-        outputs = [s if isinstance(s, str) else self.tokenizer.decode(s) for s in outputs]
-        return "".join(outputs)
-
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.prepare_for_tokenization with GPT2 -> Whisper
     def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
         add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
         if is_split_into_words or add_prefix_space:
             text = " " + text
         return (text, kwargs)
 
+    # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer._build_conversation_input_ids with GPT2 -> Whisper
     def _build_conversation_input_ids(self, conversation) -> List[int]:
         input_ids = []
         for is_user, text in conversation.iter_texts():
