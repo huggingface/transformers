@@ -26,7 +26,7 @@ ES_CODE = 50256
 
 @require_sentencepiece
 @require_tokenizers
-class SpeechToTextTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
+class WhisperTokenizeirTest(TokenizerTesterMixin, unittest.TestCase):
     tokenizer_class = WhisperTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = False
