@@ -283,10 +283,12 @@ class OnnxExportTestCaseV2(TestCase):
     Integration tests ensuring supported models are correctly exported
     """
 
-    def _onnx_export(self, test_name, name, model_name, feature, onnx_config_class_constructor, device="cpu"):
+    def _onnx_export(
+        self, test_name, name, model_name, feature, onnx_config_class_constructor, device="cpu", framework="pt"
+    ):
         from transformers.onnx import export
 
-        model_class = FeaturesManager.get_model_class_for_feature(feature)
+        model_class = FeaturesManager.get_model_class_for_feature(feature, framework=framework)
         config = AutoConfig.from_pretrained(model_name)
         model = model_class.from_config(config)
 
@@ -363,13 +365,13 @@ class OnnxExportTestCaseV2(TestCase):
     @require_tf
     @require_vision
     def test_tensorflow_export(self, test_name, name, model_name, feature, onnx_config_class_constructor):
-        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor, framework="tf")
 
     @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_WITH_PAST_MODELS), skip_on_empty=True)
     @slow
     @require_tf
     def test_tensorflow_export_with_past(self, test_name, name, model_name, feature, onnx_config_class_constructor):
-        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor, framework="tf")
 
     @parameterized.expand(_get_models_to_test(TENSORFLOW_EXPORT_SEQ2SEQ_WITH_PAST_MODELS), skip_on_empty=True)
     @slow
@@ -377,7 +379,7 @@ class OnnxExportTestCaseV2(TestCase):
     def test_tensorflow_export_seq2seq_with_past(
         self, test_name, name, model_name, feature, onnx_config_class_constructor
     ):
-        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor)
+        self._onnx_export(test_name, name, model_name, feature, onnx_config_class_constructor, framework="tf")
 
 
 class StableDropoutTestCase(TestCase):
