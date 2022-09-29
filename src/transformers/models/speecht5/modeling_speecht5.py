@@ -546,7 +546,7 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
         position_embeddings = self.embed_positions(padding_mask)
         hidden_states = hidden_states + position_embeddings
 
-        return hidden_states, extract_features, attention_mask
+        return hidden_states, attention_mask
 
     # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel._get_feature_vector_attention_mask
     def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
@@ -629,6 +629,57 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
             hidden_states[mask_feature_indices] = 0
 
         return hidden_states
+
+
+class SpeechT5TextDecoderPrenet(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.padding_idx = config.pad_token_id
+        self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
+
+        # TODO: this is not the real prenet, just something hacky to test the decoder
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+
+    # def get_input_embeddings(self):
+    #     return self.embed_tokens
+
+    # def set_input_embeddings(self, value):
+    #     self.embed_tokens = value
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        mask_time_indices: Optional[torch.FloatTensor] = None,
+    ):
+        if input_ids is not None:
+            input = input_ids
+            input_shape = input.shape
+            input_ids = input_ids.view(-1, input_shape[-1])
+        else:
+            raise ValueError("You have to specify decoder_input_ids")
+
+        inputs_embeds = self.embed_tokens(input) * self.embed_scale
+
+        # TODO: maybe also do something with attention_mask?
+
+        return inputs_embeds
+
+
+class SpeechT5TextDecoderPostnet(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        # TODO: this is not the final postnet, just a placeholder for now
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+    ):
+        return self.lm_head(hidden_states)
 
 
 class SpeechT5Attention(nn.Module):
@@ -1142,46 +1193,6 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
         )
 
 
-class SpeechT5SpeechEncoder(SpeechT5PreTrainedModel):
-    """
-    TODO
-    """
-
-    def __init__(self, config: SpeechT5Config):
-        super().__init__(config)
-        self.prenet = SpeechT5SpeechEncoderPrenet(config)
-        self.encoder = SpeechT5Encoder(config)
-        self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def forward(
-        self,
-        input_values: torch.FloatTensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutput]:
-
-        # TODO: not sure if speech_encoder_prenet needs to return extract_features
-        hidden_states, extract_features, attention_mask = self.prenet(input_values, attention_mask)
-
-        outputs = self.encoder(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        return outputs
-
-
-# TODO: add class SpeechT5TextEncoder that works on input_ids
-
-
 class SpeechT5Decoder(SpeechT5PreTrainedModel):
     """
     TODO
@@ -1191,15 +1202,13 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         super().__init__(config)
         self.dropout = config.hidden_dropout
         self.layerdrop = config.decoder_layerdrop
-        self.padding_idx = config.pad_token_id
         self.max_target_positions = config.max_target_positions
-        self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
         # if embed_tokens is not None:
         #     self.embed_tokens = embed_tokens
         # else:
         #     self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        # self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
 
         # self.embed_positions = BartLearnedPositionalEmbedding(
         #     config.max_position_embeddings,
@@ -1213,12 +1222,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    # def get_input_embeddings(self):
-    #     return self.embed_tokens
-
-    # def set_input_embeddings(self, value):
-    #     self.embed_tokens = value
 
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
@@ -1242,13 +1245,12 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.FloatTensor] = None,
+        hidden_states: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
         encoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         cross_attn_head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1329,38 +1331,24 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
-            raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
-            input = input_ids
-            input_shape = input.shape
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
-            input = inputs_embeds[:, :, -1]
-        else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+        input_shape = hidden_states.size()[:-1]
 
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-        if inputs_embeds is None:
-            inputs_embeds = self.embed_tokens(input) * self.embed_scale
-
         attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
+            attention_mask, input_shape, hidden_states, past_key_values_length
         )
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-            encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
+            encoder_attention_mask = _expand_mask(encoder_attention_mask, hidden_states.dtype, tgt_len=input_shape[-1])
 
         # embed positions
         # positions = self.embed_positions(input, past_key_values_length)
 
-        hidden_states = inputs_embeds #+ positions
+        #hidden_states = hidden_states #+ positions
         hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -1461,71 +1449,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         )
 
 
-class SpeechT5TextDecoder(SpeechT5PreTrainedModel):
-    """
-    TODO
-    """
-
-    def __init__(self, config: SpeechT5Config):
-        super().__init__(config)
-        # TODO: add these!
-        # self.prenet = SpeechT5TextDecoderPrenet(config)
-        # self.postnet = SpeechT5TextDecoderPostnet(config)
-        self.decoder = SpeechT5Decoder(config)
-        self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def forward(
-        self,
-        input_ids: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
-
-        # TODO: run the TextDecoderPrenet on the input_ids
-        # (this line is from the original code)
-        # incremental_state is similar to our past_key_values
-        #prev_output_tokens, tgt_mask, incremental_state = self.text_decoder_prenet(tokens, incremental_state)
-
-        outputs = self.decoder(
-            input_ids=input_ids,   #TODO: pass hidden_states instead of input_ids
-            attention_mask=attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            head_mask=head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
-            inputs_embeds=inputs_embeds,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        #TODO: run the TextDecoderPostnet afterwards -- this is our equivalent of a language head
-        #logits = self.text_decoder_postnet(decoder_output)
-        #
-        # Note that in other HF models, the lm_head lives in the ForConditionalGeneration model
-        # but for us it would live in SpeechT5TextDecoder, which means it should have its own
-        # output class to return the logits as well as the BaseModel stuff
-
-        return outputs
-
-
-# TODO: add class SpeechT5SpeechDecoder that works on log-mel spectrograms
-
-
 SPEECHT5_START_DOCSTRING = r"""
     TODO
 """
@@ -1576,27 +1499,28 @@ SPEECHT5_INPUTS_DOCSTRING = r"""
     SPEECHT5_START_DOCSTRING,
 )
 class SpeechT5Model(SpeechT5PreTrainedModel):
-    def __init__(self, config: SpeechT5Config):
+    def __init__(
+        self,
+        config: SpeechT5Config,
+        encoder_prenet: Optional[nn.Module] = None,
+        decoder_prenet: Optional[nn.Module] = None,
+    ):
         super().__init__(config)
         self.config = config
+        self.encoder_prenet = encoder_prenet
+        self.decoder_prenet = decoder_prenet
 
-        # TODO: which encoder/decoder is used depends on the task, maybe they
-        # should be defined in the ForXYZ class instead and passed into SpeechT5Model
-
-        self.speech_encoder = SpeechT5SpeechEncoder(config)
-        #self.text_encoder = SpeechT5TextEncoder(config)
-
-        self.text_decoder = SpeechT5TextDecoder(config)
-        #self.speech_decoder = SpeechT5SpeechDecoder(config)
+        self.encoder = SpeechT5Encoder(config)
+        self.decoder = SpeechT5Decoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_encoder(self):
-        return self.speech_encoder
+        return self.encoder
 
     def get_decoder(self):
-        return self.text_decoder
+        return self.decoder
 
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -1604,13 +1528,12 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         self,
         input_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.Tensor] = None,
+        decoder_input_values: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.BoolTensor] = None,
         #TODO head_mask: Optional[torch.FloatTensor] = None,
         # decoder_head_mask: Optional[torch.FloatTensor] = None,
         # cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        # decoder_inputs_embeds: Optional[torch.Tensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1619,6 +1542,10 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     ) -> Union[Tuple[torch.FloatTensor], Seq2SeqModelOutput]:
         r"""
         TODO: write this
+
+        input_values can be input_ids or raw audio
+        decoder_input_values can be input_ids or raw audio
+
         Return:
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1630,9 +1557,13 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
-            encoder = self.get_encoder()
-            encoder_outputs = encoder(
-                input_values=input_values,
+            if self.encoder_prenet is not None:
+                hidden_states, attention_mask = self.encoder_prenet(input_values, attention_mask)
+            else:
+                hidden_states = input_values
+
+            encoder_outputs = self.encoder(
+                hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 # head_mask=head_mask,  #TODO: do we have this?
                 output_attentions=output_attentions,
@@ -1650,22 +1581,29 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         #       can we return this downsampled attention mask from the Encoder instead?
         #       may need to change BaseModelOutput to a different class then
         # downsample encoder attention mask
-        if attention_mask is not None:
-            encoder_attention_mask = self.speech_encoder.prenet._get_feature_vector_attention_mask(
-                encoder_outputs[0].shape[1], attention_mask
-            )
-        else:
-            encoder_attention_mask = None
+        # if attention_mask is not None:
+        #     encoder_attention_mask = self.speech_encoder.prenet._get_feature_vector_attention_mask(
+        #         encoder_outputs[0].shape[1], attention_mask
+        #     )
+        # else:
+        #     encoder_attention_mask = None
 
-        decoder = self.get_decoder()
-        decoder_outputs = decoder(
-            input_ids=decoder_input_ids,
+        # TODO: if the encoder isn't called, we still need to resize the attention mask
+        # so either put it into encoder_outputs or recompute it like Speech2Text does
+        encoder_attention_mask = attention_mask
+
+        if self.decoder_prenet is not None:
+            decoder_hidden_states = self.decoder_prenet(decoder_input_values)
+        else:
+            decoder_hidden_states = decoder_input_values
+
+        decoder_outputs = self.decoder(
+            hidden_states=decoder_hidden_states,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=encoder_attention_mask,
             # head_mask=decoder_head_mask,
             # cross_attn_head_mask=cross_attn_head_mask,
-            # inputs_embeds=decoder_inputs_embeds,
             past_key_values=past_key_values,
             use_cache=use_cache,
             output_attentions=output_attentions,
@@ -1704,8 +1642,14 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.speecht5 = SpeechT5Model(config)
-        # self.dropout = nn.Dropout(config.final_dropout)
+        speech_encoder_prenet = SpeechT5SpeechEncoderPrenet(config)
+        text_decoder_prenet = SpeechT5TextDecoderPrenet(config)
+
+        self.speecht5 = SpeechT5Model(config, speech_encoder_prenet, text_decoder_prenet)
+
+        #TODO? self.dropout = nn.Dropout(config.final_dropout)
+
+        self.text_decoder_postnet = SpeechT5TextDecoderPostnet(config)
 
         if config.vocab_size is None:
             raise ValueError(
@@ -1714,9 +1658,6 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
                 "instantiate the model as follows: `SpeechT5ForCTC.from_pretrained(..., vocab_size=vocab_size)`. "
                 "or define `vocab_size` of your model's configuration."
             )
-
-        # TODO: just for testing, will be replaced by TextDecoderPostnet
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1796,7 +1737,7 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
         outputs = self.speecht5(
             input_values=input_values,
             attention_mask=attention_mask,
-            decoder_input_ids=decoder_input_ids,
+            decoder_input_values=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
             # head_mask=head_mask,
             # decoder_head_mask=decoder_head_mask,
@@ -1810,8 +1751,7 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
             return_dict=True,
         )
 
-        # TODO: just for testing, should use TextDecoderPostnet for this
-        logits = self.lm_head(outputs[0])
+        logits = self.text_decoder_postnet(outputs[0])
 
         loss = None
         # if labels is not None:
@@ -1880,7 +1820,7 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past,
-            "decoder_input_ids": decoder_input_ids,
+            "decoder_input_values": decoder_input_ids,
             "attention_mask": attention_mask,
             # "head_mask": head_mask,
             # "decoder_head_mask": decoder_head_mask,

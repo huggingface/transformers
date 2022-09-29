@@ -38,20 +38,20 @@ logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.speecht5")
 
 MAPPING = {
-    "speech_encoder_prenet.layer_norm": "speecht5.speech_encoder.prenet.feature_projection.layer_norm",
-    "speech_encoder_prenet.post_extract_proj": "speecht5.speech_encoder.prenet.feature_projection.projection",
-    "speech_encoder_prenet.pos_conv.0": "speecht5.speech_encoder.prenet.pos_conv_embed.conv",
-    "speech_encoder_prenet.mask_emb": "speecht5.speech_encoder.prenet.masked_spec_embed",
-    "encoder.layers.*.self_attn.k_proj": "speecht5.speech_encoder.encoder.layers.*.attention.k_proj",
-    "encoder.layers.*.self_attn.v_proj": "speecht5.speech_encoder.encoder.layers.*.attention.v_proj",
-    "encoder.layers.*.self_attn.q_proj": "speecht5.speech_encoder.encoder.layers.*.attention.q_proj",
-    "encoder.layers.*.self_attn.out_proj": "speecht5.speech_encoder.encoder.layers.*.attention.out_proj",
-    "encoder.layers.*.self_attn_layer_norm": "speecht5.speech_encoder.encoder.layers.*.layer_norm",
-    "encoder.layers.*.fc1": "speecht5.speech_encoder.encoder.layers.*.feed_forward.intermediate_dense",
-    "encoder.layers.*.fc2": "speecht5.speech_encoder.encoder.layers.*.feed_forward.output_dense",
-    "encoder.layers.*.final_layer_norm": "speecht5.speech_encoder.encoder.layers.*.final_layer_norm",
-    "encoder.layer_norm": "speecht5.speech_encoder.encoder.layer_norm",
-    "encoder.pos_emb.pe_k": "speecht5.speech_encoder.encoder.pos_emb.pe_k",
+    "speech_encoder_prenet.layer_norm": "speecht5.encoder_prenet.feature_projection.layer_norm",
+    "speech_encoder_prenet.post_extract_proj": "speecht5.encoder_prenet.feature_projection.projection",
+    "speech_encoder_prenet.pos_conv.0": "speecht5.encoder_prenet.pos_conv_embed.conv",
+    "speech_encoder_prenet.mask_emb": "speecht5.encoder_prenet.masked_spec_embed",
+    "encoder.layers.*.self_attn.k_proj": "speecht5.encoder.layers.*.attention.k_proj",
+    "encoder.layers.*.self_attn.v_proj": "speecht5.encoder.layers.*.attention.v_proj",
+    "encoder.layers.*.self_attn.q_proj": "speecht5.encoder.layers.*.attention.q_proj",
+    "encoder.layers.*.self_attn.out_proj": "speecht5.encoder.layers.*.attention.out_proj",
+    "encoder.layers.*.self_attn_layer_norm": "speecht5.encoder.layers.*.layer_norm",
+    "encoder.layers.*.fc1": "speecht5.encoder.layers.*.feed_forward.intermediate_dense",
+    "encoder.layers.*.fc2": "speecht5.encoder.layers.*.feed_forward.output_dense",
+    "encoder.layers.*.final_layer_norm": "speecht5.encoder.layers.*.final_layer_norm",
+    "encoder.layer_norm": "speecht5.encoder.layer_norm",
+    "encoder.pos_emb.pe_k": "speecht5.encoder.pos_emb.pe_k",
     # "encoder.proj": "speecht5.encoder.ctc_proj",  #TODO: CTC model only?
     # "quantizer.weight_proj": "quantizer.weight_proj",
     # "quantizer.vars": "quantizer.codevectors",
@@ -129,7 +129,7 @@ def recursively_load_weights(fairseq_dict, hf_model):
             load_conv_layer(
                 name,
                 value,
-                hf_model.speecht5.speech_encoder.prenet.feature_encoder,
+                hf_model.speecht5.encoder_prenet.feature_encoder,
                 unused_weights,
                 hf_model.config.feat_extract_norm == "group",
             )
