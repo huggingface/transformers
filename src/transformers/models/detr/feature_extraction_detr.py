@@ -120,6 +120,54 @@ def id_to_rgb(id_map):
     return color
 
 
+def binary_mask_to_rle(mask):
+    """
+    Args:
+    Converts given binary mask of shape (height, width) to the run-length encoding (RLE) format.
+        mask (`torch.Tensor` or `numpy.array`):
+            A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
+            segment_id or class_id.
+    Returns:
+        `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
+        format.
+    """
+    if is_torch_tensor(mask):
+        mask = mask.numpy()
+
+    pixels = mask.flatten()
+    pixels = np.concatenate([[0], pixels, [0]])
+    runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
+    runs[1::2] -= runs[::2]
+    return [x for x in runs]
+
+
+def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
+    """
+    Args:
+    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores`
+    and `labels`.
+        masks (`torch.Tensor`):
+            A tensor of shape `(num_queries, height, width)`.
+        scores (`torch.Tensor`):
+            A tensor of shape `(num_queries)`.
+        labels (`torch.Tensor`):
+            A tensor of shape `(num_queries)`.
+        object_mask_threshold (`float`):
+            A number between 0 and 1 used to binarize the masks.
+    Raises:
+        `ValueError`: Raised when the first dimension doesn't match in all input tensors.
+    Returns:
+        `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
+        < `object_mask_threshold`.
+    """
+    if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
+        raise ValueError("mask, scores and labels must have the same shape!")
+
+    to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
+
+    return masks[to_keep], scores[to_keep], labels[to_keep]
+
+
 class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a DETR feature extractor.
@@ -400,52 +448,6 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             target["boxes"] = boxes
 
         return image, target
-
-    def binary_mask_to_rle(self, mask):
-        """
-        Args:
-        Converts given binary mask of shape (height, width) to the run-length encoding (RLE) format.
-            mask (`torch.Tensor` or `numpy.array`):
-                A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
-                segment_id or class_id.
-        Returns:
-            `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
-            format.
-        """
-        if is_torch_tensor(mask):
-            mask = mask.numpy()
-
-        pixels = mask.flatten()
-        pixels = np.concatenate([[0], pixels, [0]])
-        runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
-        runs[1::2] -= runs[::2]
-        return [x for x in runs]
-
-    def remove_low_and_no_objects(self, masks, scores, labels, object_mask_threshold, num_labels):
-        """
-        Args:
-        Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores`
-        and `labels`.
-            masks (`torch.Tensor`):
-                A tensor of shape `(num_queries, height, width)`.
-            scores (`torch.Tensor`):
-                A tensor of shape `(num_queries)`.
-            labels (`torch.Tensor`):
-                A tensor of shape `(num_queries)`.
-            object_mask_threshold (`float`):
-                A number between 0 and 1 used to binarize the masks.
-        Raises:
-            `ValueError`: Raised when the first dimension doesn't match in all input tensors.
-        Returns:
-            `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the
-            region < `object_mask_threshold`.
-        """
-        if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
-            raise ValueError("mask, scores and labels must have the same shape!")
-
-        to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
-
-        return masks[to_keep], scores[to_keep], labels[to_keep]
 
     def __call__(
         self,
@@ -1153,7 +1155,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         results: List[Dict[str, TensorType]] = []
 
         for i in range(batch_size):
-            mask_probs_item, pred_scores_item, pred_labels_item = self.remove_low_and_no_objects(
+            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
                 mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
             )
 
@@ -1221,7 +1223,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 run_length_encodings = []
                 for idx in segment_ids:
                     mask = torch.where(segmentation == idx, 1, 0)
-                    rle = self.binary_mask_to_rle(mask)
+                    rle = binary_mask_to_rle(mask)
                     run_length_encodings.append(rle)
 
                 segmentation = run_length_encodings
@@ -1286,7 +1288,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         results: List[Dict[str, TensorType]] = []
 
         for i in range(batch_size):
-            mask_probs_item, pred_scores_item, pred_labels_item = self.remove_low_and_no_objects(
+            mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
                 mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
             )
 
