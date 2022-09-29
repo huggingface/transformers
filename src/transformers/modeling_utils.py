@@ -307,6 +307,9 @@ def shard_checkpoint(
     shards = {}
     for idx, shard in enumerate(sharded_state_dicts):
         shard_file = weights_name.replace(".bin", f"-{idx+1:05d}-of-{len(sharded_state_dicts):05d}.bin")
+        shard_file = shard_file.replace(
+            ".safetensors", f"-{idx + 1:05d}-of-{len(sharded_state_dicts):05d}.safetensors"
+        )
         shards[shard_file] = shard
         for key in shard.keys():
             weight_map[key] = shard_file
@@ -1599,8 +1602,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             full_filename = os.path.join(save_directory, filename)
             # If we have a shard file that is not going to be replaced, we delete it, but only from the main process
             # in distributed settings to avoid race conditions.
+            weights_no_suffix = weights_name.replace(".bin", "").replace(".safetensors", "")
             if (
-                filename.startswith(WEIGHTS_NAME[:-4])
+                filename.startswith(weights_no_suffix)
                 and os.path.isfile(full_filename)
                 and filename not in shards.keys()
                 and is_main_process
@@ -1619,7 +1623,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if index is None:
             logger.info(f"Model weights saved in {os.path.join(save_directory, WEIGHTS_NAME)}")
         else:
-            save_index_file = os.path.join(save_directory, WEIGHTS_INDEX_NAME)
+            save_index_file = SAFE_WEIGHTS_INDEX_NAME if safe_serialization else WEIGHTS_INDEX_NAME
+            save_index_file = os.path.join(save_directory, SAFE_WEIGHTS_INDEX_NAME)
             # Save the index as well
             with open(save_index_file, "w", encoding="utf-8") as f:
                 content = json.dumps(index, indent=2, sort_keys=True) + "\n"

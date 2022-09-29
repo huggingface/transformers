@@ -62,6 +62,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
+    SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
@@ -2990,6 +2991,24 @@ class ModelUtilsTest(TestCasePlus):
             # No pytorch_model.bin file, only a model.safetensors
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
             self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
+
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.allclose(p1, p2))
+
+    @require_safetensors
+    def test_safetensors_save_and_load_sharded(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="100kB")
+            # No pytorch_model.bin index file, only a model.safetensors index
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_INDEX_NAME)))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
+            # No regular weights file
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
 
             new_model = BertModel.from_pretrained(tmp_dir)
 
