@@ -2994,11 +2994,8 @@ class ModelUtilsTest(TestCasePlus):
             new_model = BertModel.from_pretrained(tmp_dir)
 
             # Check models are equal
-            state = model.state_dict()
-            new_state = new_model.state_dict()
-            for key in state.keys():
-                self.assertIn(key, new_state)
-                self.assertTrue(torch.allclose(state[key], new_state[key]))
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.allclose(p1, p2))
 
 
 @require_torch
