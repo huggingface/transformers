@@ -63,7 +63,7 @@ class WhisperFeatureExtractionTester(unittest.TestCase):
         max_seq_length=2000,
         feature_size=10,
         hop_length=160,
-        chunk_length=5,
+        chunk_length=8,
         padding_value=0.0,
         sampling_rate=4_000,
         return_attention_mask=True,
@@ -159,7 +159,7 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         # Test feature size
         input_features = feature_extractor(np_speech_inputs, padding="max_length", return_tensors="np").input_features
         self.assertTrue(input_features.ndim == 3)
-        self.assertTrue(input_features.shape[-1] == feature_extractor.nb_max_frame)
+        self.assertTrue(input_features.shape[-1] == feature_extractor.nb_max_frames)
         self.assertTrue(input_features.shape[-2] == feature_extractor.feature_size)
 
         # Test not batched input

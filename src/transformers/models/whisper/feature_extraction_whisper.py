@@ -73,7 +73,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         self.chunk_length = chunk_length
         self.return_attention_mask = True
         self.n_samples = chunk_length * sampling_rate
-        self.nb_max_frame = self.n_samples // hop_length
+        self.nb_max_frames = self.n_samples // hop_length
         self.sampling_rate = sampling_rate
         self.mel_filters = self.get_mel_filters(sampling_rate, n_fft, n_mels=feature_size)
 
@@ -128,7 +128,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
     def fram_wave(self, waveform, center=True):
         frames = []
-        for i in range(0, waveform.shape[0], self.hop_length):
+        for i in range(0, waveform.shape[0]+1, self.hop_length):
             half_window = (self.n_fft - 1) // 2 + 1
             if center:
                 start = i - half_window if i > half_window else 0
