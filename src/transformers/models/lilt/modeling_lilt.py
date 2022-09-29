@@ -925,7 +925,7 @@ class LiltModel(LiltPreTrainedModel):
 
         if bbox is None:
             bbox = torch.zeros(input_shape + (4,), dtype=torch.long, device=device)
-        
+
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 
@@ -968,9 +968,6 @@ class LiltModel(LiltPreTrainedModel):
         )
 
         layout_embedding_output = self.layout_embeddings(bbox=bbox, position_ids=position_ids)
-
-        print("Shape of embedding output:", embedding_output.shape)
-        print("Shape of layout embedding output:", layout_embedding_output.shape)
 
         encoder_outputs = self.encoder(
             embedding_output,
