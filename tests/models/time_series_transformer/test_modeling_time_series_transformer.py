@@ -237,15 +237,6 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names.extend(
                 [
                     "future_observed_mask",
-                    "encoder_outputs",
-                    "use_cache",
-                    "output_attentions",
-                    "output_hidden_states",
-                    "return_dict",
-                ]
-                if "future_observed_mask" in arg_names
-                else [
-                    "attention_mask",
                     "decoder_attention_mask",
                     "head_mask",
                     "decoder_head_mask",
@@ -253,8 +244,21 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, unittest.TestCase):
                     "encoder_outputs",
                     "past_key_values",
                     "output_hidden_states",
-                    "use_cache",
                     "output_attentions",
+                    "use_cache",
+                    "return_dict",
+                ]
+                if "future_observed_mask" in arg_names
+                else [
+                    "decoder_attention_mask",
+                    "head_mask",
+                    "decoder_head_mask",
+                    "cross_attn_head_mask",
+                    "encoder_outputs",
+                    "past_key_values",
+                    "output_hidden_states",
+                    "output_attentions",
+                    "use_cache",
                     "return_dict",
                 ]
             )

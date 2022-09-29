@@ -1659,7 +1659,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             enc_input = transformer_inputs[:, : self.config.context_length, ...]
             encoder_outputs = self.encoder(
                 inputs_embeds=enc_input,
-                attention_mask=attention_mask,
                 head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1678,7 +1677,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
             inputs_embeds=dec_input,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
-            encoder_attention_mask=attention_mask,
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
@@ -1828,11 +1826,16 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             static_real_features=static_real_features,
             future_values=future_values,
             future_time_features=future_time_features,
+            decoder_attention_mask=decoder_attention_mask,
+            head_mask=head_mask,
+            decoder_head_mask=decoder_head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
-            output_attentions=output_attentions,
+            past_key_values=past_key_values,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            output_attentions=output_attentions,
             use_cache=use_cache,
+            return_dict=return_dict,
         )
 
         prediction_loss = None
