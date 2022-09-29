@@ -21,7 +21,6 @@ import tempfile
 import unittest
 
 from transformers import WhisperConfig
-from transformers.generation_logits_process import LogitsProcessorList, SuppressBlank, SuppressTokens
 from transformers.testing_utils import is_torch_available, require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
@@ -37,7 +36,7 @@ if is_datasets_available():
 
 if is_torch_available():
     import torch
-
+    from transformers.generation_logits_process import LogitsProcessorList, SuppressBlank, SuppressTokens
     from transformers import (
         WhisperFeatureExtractor,
         WhisperForConditionalGeneration,
@@ -979,7 +978,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = " Kimura san ni denwa wo kashite moraimashita."
+        EXPECTED_TRANSCRIPT = " Kimura san ni denwa wo kaite moraimashita."
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         decoder_input_ids = torch.tensor([[50258, 50357]]).long().to(torch_device)
