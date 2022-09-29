@@ -1,5 +1,6 @@
 from transformers import LiltConfig, LiltModel
 
+
 config = LiltConfig()
 
 model = LiltModel(config)

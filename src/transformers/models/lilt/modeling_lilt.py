@@ -376,12 +376,16 @@ class LiltSelfOutput(nn.Module):
 
 
 class LiltAttention(nn.Module):
-    # Copied from transformers.models.bert.modeling_bert.BertAttention.__init__ with Bert->Lilt
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         self.self = LiltSelfAttention(config, position_embedding_type=position_embedding_type)
         self.output = LiltSelfOutput(config)
         self.pruned_heads = set()
+
+        ori_hidden_size = config.hidden_size
+        config.hidden_size = config.hidden_size // config.channel_shrink_ratio
+        self.layout_output = LiltSelfOutput(config)
+        config.hidden_size = ori_hidden_size
 
     # Copied from transformers.models.bert.modeling_bert.BertAttention.prune_heads
     def prune_heads(self, heads):
@@ -424,7 +428,8 @@ class LiltAttention(nn.Module):
             output_attentions,
         )
         attention_output = self.output(self_outputs[0], hidden_states)
-        outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
+        layout_attention_output = self.layout_output(self_outputs[0][1], layout_inputs)
+        outputs = (attention_output, layout_attention_output) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
 
@@ -460,7 +465,6 @@ class LiltOutput(nn.Module):
 
 
 class LiltLayer(nn.Module):
-    # Copied from transformers.models.bert.modeling_bert.BertLayer.__init__ with Bert->Lilt
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
@@ -474,6 +478,15 @@ class LiltLayer(nn.Module):
             self.crossattention = LiltAttention(config, position_embedding_type="absolute")
         self.intermediate = LiltIntermediate(config)
         self.output = LiltOutput(config)
+
+        ori_hidden_size = config.hidden_size
+        ori_intermediate_size = config.intermediate_size
+        config.hidden_size = config.hidden_size // config.channel_shrink_ratio
+        config.intermediate_size = config.intermediate_size // config.channel_shrink_ratio
+        self.layout_intermediate = LiltIntermediate(config)
+        self.layout_output = LiltOutput(config)
+        config.hidden_size = ori_hidden_size
+        config.intermediate_size = ori_intermediate_size
 
     def forward(
         self,
@@ -497,6 +510,7 @@ class LiltLayer(nn.Module):
             past_key_value=self_attn_past_key_value,
         )
         attention_output = self_attention_outputs[0]
+        layout_attention_output = self_attention_outputs[0][1]
 
         # if decoder, the last output is tuple of self-attn cache
         if self.is_decoder:
@@ -534,7 +548,10 @@ class LiltLayer(nn.Module):
         layer_output = apply_chunking_to_forward(
             self.feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, attention_output
         )
-        outputs = (layer_output,) + outputs
+        layout_layer_output = apply_chunking_to_forward(
+            self.layout_feed_forward_chunk, self.chunk_size_feed_forward, self.seq_len_dim, layout_attention_output
+        )
+        outputs = ((layer_output, layout_layer_output),) + outputs
 
         # if decoder, return the attn key/values as the last output
         if self.is_decoder:
@@ -546,6 +563,11 @@ class LiltLayer(nn.Module):
     def feed_forward_chunk(self, attention_output):
         intermediate_output = self.intermediate(attention_output)
         layer_output = self.output(intermediate_output, attention_output)
+        return layer_output
+
+    def layout_feed_forward_chunk(self, attention_output):
+        intermediate_output = self.layout_intermediate(attention_output)
+        layer_output = self.layout_output(intermediate_output, attention_output)
         return layer_output
 
 
