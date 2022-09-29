@@ -166,7 +166,9 @@ class LiltModelTester:
         model = LiltForTokenClassification(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, bbox=bbox, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
+        result = model(
+            input_ids, bbox=bbox, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels
+        )
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
     def create_and_check_for_question_answering(
@@ -204,7 +206,12 @@ class LiltModelTester:
             sequence_labels,
             token_labels,
         ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "bbox": bbox, "token_type_ids": token_type_ids, "attention_mask": input_mask}
+        inputs_dict = {
+            "input_ids": input_ids,
+            "bbox": bbox,
+            "token_type_ids": token_type_ids,
+            "attention_mask": input_mask,
+        }
         return config, inputs_dict
 
 

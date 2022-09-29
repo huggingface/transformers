@@ -1008,7 +1008,7 @@ class LiltModel(LiltPreTrainedModel):
 class LiltForSequenceClassification(LiltPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->Lilt
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->Lilt, roberta->lilt
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1112,7 +1112,7 @@ class LiltForTokenClassification(LiltPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->Lilt
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->Lilt, roberta->lilt
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1225,7 +1225,7 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->Lilt
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->Lilt, roberta->lilt
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
