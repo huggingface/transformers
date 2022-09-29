@@ -130,7 +130,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         frames = []
         for i in range(0, waveform.shape[0], self.hop_length):
             half_window = (self.n_fft - 1) // 2 + 1
-            if center == True:
+            if center:
                 start = i - half_window if i > half_window else 0
                 end = i + half_window if i < waveform.shape[0] - half_window else waveform.shape[0]
 
@@ -157,8 +157,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
     def stft(self, frames, window):
         """
-        Calculates the complex Short-Time Fourier Transform (STFT) of the given
-        framed signal. Should give the same results as torch.stft
+        Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
+        results as torch.stft
         """
         frame_size = frames.shape[1]
         fft_size = self.n_fft
@@ -184,8 +184,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
     def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
         """
-        Compute the log-Mel spectrogram of the provided audio, gives similar
-        results to a torch implementation at 1e-5 tolerance.
+        Compute the log-Mel spectrogram of the provided audio, gives similar results to a torch implementation at 1e-5
+        tolerance.
         """
         window = np.hanning(self.n_fft + 1)[:-1]
 
