@@ -125,6 +125,7 @@ class WhisperConfig(PretrainedConfig):
         non_speech_tokens (`List[int]`, *optional*, defaults to None):
             A list containing the non-speech tokens that will be used by the logit processor in the `generate`
             function. NON_SPEECH_TOKENS and NON_SPEECH_TOKENS_MULTI can be use here.
+
     Example:
 
     ```python
