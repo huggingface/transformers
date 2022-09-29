@@ -103,6 +103,7 @@ class WhisperPositionalEmbedding(nn.Embedding):
 
         return self.weight[past_key_values_length : past_key_values_length + input_ids.shape[-1]]
 
+
 class WhisperAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
