@@ -90,7 +90,9 @@ if is_accelerate_available():
         get_balanced_memory = None
 
 if is_safetensors_available():
-    from safetensors.torch import load_file
+    from safetensors import safe_open
+    from safetensors.torch import load_file as safe_load_file
+    from safetensors.torch import save_file as safe_save_file
 
 logger = logging.get_logger(__name__)
 
@@ -373,7 +375,19 @@ def load_state_dict(checkpoint_file: Union[str, os.PathLike]):
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
     """
     if checkpoint_file.endswith(".safetensors") and is_safetensors_available():
-        return load_file(checkpoint_file)
+        # Check format of the archive
+        with safe_open(checkpoint_file, framework="pt") as f:
+            metadata = f.metadata()
+        if metadata.get("format") not in ["pt", "tf", "flax"]:
+            raise OSError(
+                f"The safetensors archive passed at {checkpoint_file} does not contain the valid metadata. Make sure "
+                "you save your model with the `save_pretrained` method."
+            )
+        elif metadata["format"] != "pt":
+            raise NotImplementedError(
+                f"Conversion from a {metadata['format']} safetensors archive to PyTorch is not implemented yet."
+            )
+        return safe_load_file(checkpoint_file)
     try:
         return torch.load(checkpoint_file, map_location="cpu")
     except Exception as e:
@@ -1475,6 +1489,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         save_function: Callable = torch.save,
         push_to_hub: bool = False,
         max_shard_size: Union[int, str] = "10GB",
+        safe_serialization: bool = False,
         **kwargs,
     ):
         """
@@ -1509,6 +1524,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 which will be bigger than `max_shard_size`.
 
                 </Tip>
+
+            safe_serialization (`bool`, *optional*, defaults to `False`):
+                Whether to save the model using `safetensors` or the traditional PyTorch way (that uses `pickle`).
 
             kwargs:
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
@@ -1584,7 +1602,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Save the model
         for shard_file, shard in shards.items():
-            save_function(shard, os.path.join(save_directory, shard_file))
+            if safe_serialization:
+                # At some point we will need to deal better with save_function (used for TPU and other distributed
+                # joyfulness), but for now this enough.
+                safe_save_file(shard, os.path.join(save_directory, shard_file), metadata={"format": "pt"})
+            else:
+                save_function(shard, os.path.join(save_directory, shard_file))
 
         if index is None:
             logger.info(f"Model weights saved in {os.path.join(save_directory, WEIGHTS_NAME)}")
