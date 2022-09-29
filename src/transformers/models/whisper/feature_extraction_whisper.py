@@ -21,6 +21,7 @@ from typing import List, Optional, Union
 import numpy as np
 
 from transformers import is_torch_available
+from transformers.testing_utils import require_torch
 
 
 if is_torch_available():
@@ -33,7 +34,7 @@ from ...utils import TensorType, logging
 
 logger = logging.get_logger(__name__)
 
-
+@require_torch
 class WhisperFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Whisper feature extractor.
