@@ -97,6 +97,7 @@ class FANConfig(PretrainedConfig):
         patch_size=16,
         embed_dim=384,
         depth=12,
+        depths=None,
         num_heads=8,
         eta=1.0,
         tokens_norm=True,
@@ -122,6 +123,9 @@ class FANConfig(PretrainedConfig):
         hybrid_patch_size=2,
         head_init_scale=1.0,
         channel_dims=None,
+        feat_downsample=False,
+        out_index=-1,
+        rounding_mode="floor",
         **kwargs
     ):
 
@@ -129,6 +133,7 @@ class FANConfig(PretrainedConfig):
         self.embed_dim = embed_dim
         head_init_scale = head_init_scale
         self.depth = depth
+        self.depths = depths
         self.num_heads = num_heads
         self.eta = eta
         self.tokens_norm = tokens_norm
@@ -154,4 +159,7 @@ class FANConfig(PretrainedConfig):
         self.c_head_num = c_head_num
         self.hybrid_patch_size = hybrid_patch_size
         self.channel_dims = channel_dims
+        self.out_index = out_index
+        self.feat_downsample = feat_downsample
+        self.rounding_mode = rounding_mode
         super().__init__(**kwargs)

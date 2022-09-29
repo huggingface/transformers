@@ -17,6 +17,7 @@
 
 import math
 import os
+from collections import OrderedDict
 from functools import partial
 from typing import Optional, Tuple, Union
 
@@ -24,9 +25,15 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn import functional as F
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, ImageClassifierOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPastAndCrossAttentions,
+    ImageClassifierOutput,
+    SemanticSegmenterOutput,
+)
 from ...modeling_utils import PreTrainedModel, SequenceSummary
 from ...pytorch_utils import (
     apply_chunking_to_forward,
@@ -73,7 +80,7 @@ class PositionalEncodingFourier(nn.Module):
     Positional encoding relying on a fourier kernel matching the one used in the "Attention is all of Need" paper.
     """
 
-    def __init__(self, hidden_dim=32, dim=768, temperature=10000):
+    def __init__(self, hidden_dim=32, dim=768, temperature=10000, rounding_mode=None):
         super().__init__()
         self.token_projection = nn.Conv2d(hidden_dim * 2, dim, kernel_size=1)
         self.scale = 2 * math.pi
@@ -81,6 +88,8 @@ class PositionalEncodingFourier(nn.Module):
         self.hidden_dim = hidden_dim
         self.dim = dim
         self.eps = 1e-6
+        self.rounding_mode = rounding_mode  # Uses Floor for Classifier and None for Segmentation
+        # Segmentation Positional Encoder link https://github.com/NVlabs/FAN/blob/master/segmentation/mmseg/models/backbones/fan.py
 
     def forward(self, B: int, H: int, W: int):
         device = self.token_projection.weight.device
@@ -89,7 +98,7 @@ class PositionalEncodingFourier(nn.Module):
         y_embed = y_embed / (y_embed[:, -1:, :] + self.eps) * self.scale
         x_embed = x_embed / (x_embed[:, :, -1:] + self.eps) * self.scale
         dim_t = torch.arange(self.hidden_dim, dtype=torch.float32, device=device)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.hidden_dim)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode=self.rounding_mode) / self.hidden_dim)
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
         pos_x = torch.stack([pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()], dim=4).flatten(3)
@@ -522,13 +531,16 @@ class HybridEmbed(nn.Module):
         self.num_patches = self.grid_size[0] * self.grid_size[1]
         self.proj = nn.Conv2d(feature_dim, embed_dim, kernel_size=patch_size, stride=patch_size)
 
-    def forward(self, x):
-        x = self.backbone.forward_features(x)
+    def forward(self, x, return_feat=False):
+        x, out_list = self.backbone.forward_features(x, return_feat=return_feat)
         B, C, H, W = x.shape
         if isinstance(x, (list, tuple)):
             x = x[-1]  # last feature if backbone outputs list/tuple of features
         x = self.proj(x).flatten(2).transpose(1, 2)
-        return x, (H // self.patch_size[0], W // self.patch_size[1])
+        if return_feat:
+            return x, (H // self.patch_size[0], W // self.patch_size[1]), out_list
+        else:
+            return x, (H // self.patch_size[0], W // self.patch_size[1])
 
 
 class ChannelProcessing(nn.Module):
@@ -802,6 +814,334 @@ class OverlapPatchEmbed(nn.Module):
         return x, H, W
 
 
+# ConvNext Utils for Hybrid Backbones
+
+
+def _is_contiguous(tensor: torch.Tensor) -> bool:
+    # jit is oh so lovely :/
+    # if torch.jit.is_tracing():
+    #     return True
+    if torch.jit.is_scripting():
+        return tensor.is_contiguous()
+    else:
+        return tensor.is_contiguous(memory_format=torch.contiguous_format)
+
+
+class LayerNorm2d(nn.LayerNorm):
+    r"""LayerNorm for channels_first tensors with 2d spatial dimensions (ie N, C, H, W)."""
+
+    def __init__(self, normalized_shape, eps=1e-6):
+        super().__init__(normalized_shape, eps=eps)
+
+    def forward(self, x) -> torch.Tensor:
+        if _is_contiguous(x):
+            return F.layer_norm(
+                x.permute(0, 2, 3, 1),
+                self.normalized_shape,
+                self.weight,
+                self.bias,
+                self.eps,
+            ).permute(0, 3, 1, 2)
+        else:
+            s, u = torch.var_mean(x, dim=1, keepdim=True)
+            x = (x - u) * torch.rsqrt(s + self.eps)
+            x = x * self.weight[:, None, None] + self.bias[:, None, None]
+            return x
+
+
+class ConvMlp(nn.Module):
+    """MLP using 1x1 convs that keeps spatial dims"""
+
+    def __init__(
+        self,
+        in_features,
+        hidden_features=None,
+        out_features=None,
+        act_layer=nn.ReLU,
+        norm_layer=None,
+        drop=0.0,
+    ):
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        self.fc1 = nn.Conv2d(in_features, hidden_features, kernel_size=1, bias=True)
+        self.norm = norm_layer(hidden_features) if norm_layer else nn.Identity()
+        self.act = act_layer()
+        self.fc2 = nn.Conv2d(hidden_features, out_features, kernel_size=1, bias=True)
+        self.drop = nn.Dropout(drop)
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.norm(x)
+        x = self.act(x)
+        x = self.drop(x)
+        x = self.fc2(x)
+        return x
+
+
+class ConvNeXtBlock(nn.Module):
+    """ConvNeXt Block
+    There are two equivalent implementations:
+      (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv -> GELU -> 1x1 Conv; all in (N, C, H, W)
+      (2) DwConv -> Permute to (N, H, W, C); LayerNorm (channels_last) -> Linear -> GELU -> Linear; Permute back
+
+    Unlike the official impl, this one allows choice of 1 or 2, 1x1 conv can be faster with appropriate
+    choice of LayerNorm impl, however as model size increases the tradeoffs appear to change and nn.Linear
+    is a better choice. This was observed with PyTorch 1.10 on 3090 GPU, it could change over time & w/ different HW.
+
+    Args:
+        dim (int): Number of input channels.
+        drop_path (float): Stochastic depth rate. Default: 0.0
+        ls_init_value (float): Init value for Layer Scale. Default: 1e-6.
+    """
+
+    def __init__(
+        self,
+        dim,
+        drop_path=0.0,
+        ls_init_value=1e-6,
+        conv_mlp=True,
+        mlp_ratio=4,
+        norm_layer=None,
+    ):
+        super().__init__()
+        if not norm_layer:
+            norm_layer = partial(LayerNorm2d, eps=1e-6) if conv_mlp else partial(nn.LayerNorm, eps=1e-6)
+        mlp_layer = ConvMlp if conv_mlp else Mlp
+        self.use_conv_mlp = conv_mlp
+        self.conv_dw = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
+        self.norm = norm_layer(dim)
+        self.mlp = mlp_layer(dim, int(mlp_ratio * dim), act_layer=nn.GELU)
+        self.gamma = nn.Parameter(ls_init_value * torch.ones(dim)) if ls_init_value > 0 else None
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
+
+    def forward(self, x):
+        shortcut = x
+        x = self.conv_dw(x)
+        if self.use_conv_mlp:
+            x = self.norm(x)
+            x = self.mlp(x)
+        else:
+            x = x.permute(0, 2, 3, 1)
+            x = self.norm(x)
+            x = self.mlp(x)
+            x = x.permute(0, 3, 1, 2)
+        if self.gamma is not None:
+            x = x.mul(self.gamma.reshape(1, -1, 1, 1))
+        x = self.drop_path(x) + shortcut
+        return x
+
+
+class ConvNeXtStage(nn.Module):
+    def __init__(
+        self,
+        in_chs,
+        out_chs,
+        stride=2,
+        depth=2,
+        dp_rates=None,
+        ls_init_value=1.0,
+        conv_mlp=True,
+        norm_layer=None,
+        cl_norm_layer=None,
+        cross_stage=False,
+    ):
+        super().__init__()
+
+        if in_chs != out_chs or stride > 1:
+            self.downsample = nn.Sequential(
+                norm_layer(in_chs),
+                nn.Conv2d(in_chs, out_chs, kernel_size=stride, stride=stride),
+            )
+        else:
+            self.downsample = nn.Identity()
+
+        dp_rates = dp_rates or [0.0] * depth
+        self.blocks = nn.Sequential(
+            *[
+                ConvNeXtBlock(
+                    dim=out_chs,
+                    drop_path=dp_rates[j],
+                    ls_init_value=ls_init_value,
+                    conv_mlp=conv_mlp,
+                    norm_layer=norm_layer if conv_mlp else cl_norm_layer,
+                )
+                for j in range(depth)
+            ]
+        )
+
+    def forward(self, x):
+        x = self.downsample(x)
+        x = self.blocks(x)
+        return x
+
+
+class ConvNeXt(nn.Module):
+    r"""ConvNeXt
+        A PyTorch impl of : `A ConvNet for the 2020s`  - https://arxiv.org/pdf/2201.03545.pdf
+
+    Args:
+        in_chans (int): Number of input image channels. Default: 3
+        num_classes (int): Number of classes for classification head. Default: 1000
+        depths (tuple(int)): Number of blocks at each stage. Default: [3, 3, 9, 3]
+        dims (tuple(int)): Feature dimension at each stage. Default: [96, 192, 384, 768]
+        drop_rate (float): Head dropout rate
+        drop_path_rate (float): Stochastic depth rate. Default: 0.
+        ls_init_value (float): Init value for Layer Scale. Default: 1e-6.
+        head_init_scale (float): Init scaling value for classifier weights and biases. Default: 1.
+    """
+
+    def __init__(
+        self,
+        in_chans=3,
+        num_classes=1000,
+        global_pool="avg",
+        output_stride=32,
+        patch_size=4,
+        depths=(3, 3, 9, 3),
+        dims=(96, 192, 384, 768),
+        ls_init_value=1e-6,
+        conv_mlp=True,
+        use_head=True,
+        head_init_scale=1.0,
+        head_norm_first=False,
+        norm_layer=None,
+        drop_rate=0.0,
+        drop_path_rate=0.0,
+    ):
+        super().__init__()
+        assert output_stride == 32
+        if norm_layer is None:
+            norm_layer = partial(LayerNorm2d, eps=1e-6)
+            cl_norm_layer = norm_layer if conv_mlp else partial(nn.LayerNorm, eps=1e-6)
+        else:
+            assert (
+                conv_mlp
+            ), "If a norm_layer is specified, conv MLP must be used so all norm expect rank-4, channels-first input"
+            cl_norm_layer = norm_layer
+
+        self.num_classes = num_classes
+        self.drop_rate = drop_rate
+        self.feature_info = []
+
+        # NOTE: this stem is a minimal form of ViT PatchEmbed, as used in SwinTransformer w/ patch_size = 4
+        self.stem = nn.Sequential(
+            nn.Conv2d(in_chans, dims[0], kernel_size=patch_size, stride=patch_size),
+            norm_layer(dims[0]),
+        )
+
+        self.stages = nn.Sequential()
+        dp_rates = [x.tolist() for x in torch.linspace(0, drop_path_rate, sum(depths)).split(depths)]
+        curr_stride = patch_size
+        prev_chs = dims[0]
+        stages = []
+        # 4 feature resolution stages, each consisting of multiple residual blocks
+        for i in range(len(depths)):
+            stride = 2 if i > 0 else 1
+            # FIXME support dilation / output_stride
+            curr_stride *= stride
+            out_chs = dims[i]
+            stages.append(
+                ConvNeXtStage(
+                    prev_chs,
+                    out_chs,
+                    stride=stride,
+                    depth=depths[i],
+                    dp_rates=dp_rates[i],
+                    ls_init_value=ls_init_value,
+                    conv_mlp=conv_mlp,
+                    norm_layer=norm_layer,
+                    cl_norm_layer=cl_norm_layer,
+                )
+            )
+            prev_chs = out_chs
+            # NOTE feature_info use currently assumes stage 0 == stride 1, rest are stride 2
+            self.feature_info += [dict(num_chs=prev_chs, reduction=curr_stride, module=f"stages.{i}")]
+        self.stages = nn.Sequential(*stages)
+
+        self.num_features = prev_chs
+
+        if head_norm_first:
+            # norm -> global pool -> fc ordering, like most other nets (not compat with FB weights)
+            self.norm_pre = norm_layer(self.num_features)  # final norm layer, before pooling
+            if use_head:
+                self.head = ClassifierHead(
+                    self.num_features,
+                    num_classes,
+                    pool_type=global_pool,
+                    drop_rate=drop_rate,
+                )
+        else:
+            # pool -> norm -> fc, the default ConvNeXt ordering (pretrained FB weights)
+            self.norm_pre = nn.Identity()
+            if use_head:
+                self.head = nn.Sequential(
+                    OrderedDict(
+                        [
+                            (
+                                "global_pool",
+                                SelectAdaptivePool2d(pool_type=global_pool),
+                            ),
+                            ("norm", norm_layer(self.num_features)),
+                            (
+                                "flatten",
+                                nn.Flatten(1) if global_pool else nn.Identity(),
+                            ),
+                            ("drop", nn.Dropout(self.drop_rate)),
+                            (
+                                "fc",
+                                nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity(),
+                            ),
+                        ]
+                    )
+                )
+
+    def get_classifier(self):
+        return self.head.fc
+
+    def reset_classifier(self, num_classes=0, global_pool="avg"):
+        if isinstance(self.head, ClassifierHead):
+            # norm -> global pool -> fc
+            self.head = ClassifierHead(
+                self.num_features,
+                num_classes,
+                pool_type=global_pool,
+                drop_rate=self.drop_rate,
+            )
+        else:
+            # pool -> norm -> fc
+            self.head = nn.Sequential(
+                OrderedDict(
+                    [
+                        ("global_pool", SelectAdaptivePool2d(pool_type=global_pool)),
+                        ("norm", self.head.norm),
+                        ("flatten", nn.Flatten(1) if global_pool else nn.Identity()),
+                        ("drop", nn.Dropout(self.drop_rate)),
+                        (
+                            "fc",
+                            nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity(),
+                        ),
+                    ]
+                )
+            )
+
+    def forward_features(self, x, return_feat=False):
+        x = self.stem(x)
+        out_list = []
+        # import pdb; pdb.set_trace()
+        for i in range(len(self.stages)):
+            x = self.stages[i](x)
+            out_list.append(x)
+        x = self.norm_pre(x)
+
+        return x, out_list if return_feat else x
+
+    def forward(self, x):
+        x = self.forward_features(x)
+        x = self.head(x)
+        return x
+
+
 class FAN(nn.Module):
     """
     Based on timm code bases
@@ -1061,14 +1401,14 @@ FAN_START_DOCSTRING = r"""
 """
 
 # TODO: Update FAN Inputs Docstring
+# TODO: Create FAN Feature Extractor
 FAN_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
-            Indices of input sequence tokens in the vocabulary.
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Padding will be ignored by default should you provide it.
 
-            Indices can be obtained using [`FANTokenizer`].
-            See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
+            Pixel values can be obtained using [`FANFeatureExtractor`]. See [`FANFeatureExtractor.__call__`] for
+            details.
 
             [What are input IDs?](../glossary#input-ids)
         attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
@@ -1162,6 +1502,7 @@ class FANEmbeddings(FANPreTrainedModel):
         return hidden_states
 
 
+# TODO: Update Docstring
 class FANEncoder(FANPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -1199,13 +1540,15 @@ class FANEncoder(FANPreTrainedModel):
                 embed_dim=config.embed_dim,
                 act_layer=act_layer,
             )
-        else:
+        elif config.backbone == "hybrid":
+            backbone = ConvNeXt(depths=self.config.depths, dims=self.config.dims, use_head=False)
             self.patch_embed = HybridEmbed(
-                backbone=config.backbone, patch_size=config.hybrid_patch_size, embed_dim=config.embed_dim
+                backbone=backbone, patch_size=config.hybrid_patch_size, embed_dim=config.embed_dim
             )
-
+        else:
+            raise ValueError(f"{config.backbone} has to be either hybrid or None")
         if config.use_pos_embed:
-            self.pos_embed = PositionalEncodingFourier(dim=config.embed_dim)
+            self.pos_embed = PositionalEncodingFourier(dim=config.embed_dim, rounding_mode=self.config.rounding_mode)
         self.pos_drop = nn.Dropout(p=config.drop_rate)
 
         if config.se_mlp:
@@ -1260,8 +1603,17 @@ class FANEncoder(FANPreTrainedModel):
                 for _ in range(config.cls_attn_layers)
             ]
         )
-
-        # in the original DETR, no layernorm is used at the end of the encoder, as "normalize_before" is set to False by default
+        if isinstance(self.patch_embed, HybridEmbed) and self.config.feat_downsample:
+            self.learnable_downsample = nn.Conv2d(
+                in_channels=self.config.embed_dim,
+                out_channels=768,
+                kernel_size=3,
+                stride=2,
+                padding=1,
+                dilation=1,
+                groups=1,
+                bias=True,
+            )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1275,39 +1627,58 @@ class FANEncoder(FANPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        B = inputs_embeds.shape[0]
-        inputs_embeds, (Hp, Wp) = self.patch_embed(inputs_embeds)
-        hidden_states = inputs_embeds
+        Bs = inputs_embeds.shape[0]
+        out_index = [4, 7, 11]
+        outs = []
+        encoder_states = () if output_hidden_states else None
+        all_attentions = () if output_attentions else None
+        if isinstance(self.patch_embed, HybridEmbed):
+            hidden_states, (Hp, Wp), out_list = self.patch_embed(inputs_embeds, return_feat=True)
+            if output_hidden_states:
+                encoder_states = encoder_states + tuple(out_list)
+                out_index = [self.config.out_index]
+        else:
+            hidden_states, (Hp, Wp) = self.patch_embed(inputs_embeds)
 
         if self.config.use_pos_embed:
-            pos_encoding = self.pos_embed(B, Hp, Wp).reshape(B, -1, hidden_states.shape[1]).permute(0, 2, 1)
+            pos_encoding = self.pos_embed(Bs, Hp, Wp).reshape(Bs, -1, hidden_states.shape[1]).permute(0, 2, 1)
             hidden_states = hidden_states + pos_encoding
 
         hidden_states = self.pos_drop(hidden_states)
-        H, W = Hp, Wp
 
-        for blk in self.blocks:
-            blk.H, blk.W = H, W
+        for idx, blk in enumerate(self.blocks):
+            blk.H, blk.W = Hp, Wp
 
             if self.use_checkpoint:
-                hidden_states = torch.utils.checkpoint.checkpoint(blk, hidden_states)
+                hidden_states = torch.utils.checkpoint.checkpoint(
+                    blk, hidden_states
+                )  # TODO: Check Forward pass for SE with checkpoints
+            elif isinstance(blk, FANBlock_SE):
+                (hidden_states, Hp, Wp) = blk(hidden_states, Hp, Wp)
             else:
                 hidden_states = blk(hidden_states)
-            H, W = blk.H, blk.W
 
-        cls_tokens = self.cls_token.expand(B, -1, -1)
+            if idx in out_index and output_hidden_states:
+                hidden_state_reshaped = hidden_states.reshape(Bs, Hp, Wp, -1).permute(0, 3, 1, 2).contiguous()
+                encoder_states = encoder_states + (hidden_state_reshaped,)
+            Hp, Wp = blk.H, blk.W
+
+        cls_tokens = self.cls_token.expand(Bs, -1, -1)
         hidden_states = torch.cat((cls_tokens, hidden_states), dim=1)
 
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-
         for blk in self.cls_attn_blocks:
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
             hidden_states = blk(hidden_states)
 
         if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
+            if isinstance(self.patch_embed, HybridEmbed) and self.config.feat_downsample:
+                tmp = hidden_states[:, 1:, :].reshape(Bs, Hp, Wp, -1).permute(0, 3, 1, 2).contiguous()
+                tmp = self.learnable_downsample(tmp)
+                encoder_states + (tmp,)
+            else:
+                hidden_state_reshaped = (
+                    hidden_states[:, 1:, :].reshape(Bs, Hp, Wp, -1).permute(0, 3, 1, 2).contiguous()
+                )
+                encoder_states = encoder_states + (hidden_state_reshaped,)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
@@ -1460,7 +1831,7 @@ class FANForImageClassification(FANPreTrainedModel):
         super().__init__(config)
 
         # DETR encoder-decoder model
-        self.model = FANModel(config)
+        self.fan = FANModel(config)
 
         num_features = config.embed_dim if config.channel_dims is None else config.channel_dims[-1]
         # Object detection heads
@@ -1515,7 +1886,7 @@ class FANForImageClassification(FANPreTrainedModel):
         Predicted class: maillot
         ```"""
 
-        outputs = self.model(
+        outputs = self.fan(
             pixel_values, pixel_mask=None, output_attentions=None, output_hidden_states=None, return_dict=None
         )
         logits = self.head(outputs.last_hidden_state)
@@ -1527,4 +1898,172 @@ class FANForImageClassification(FANPreTrainedModel):
 
         return ImageClassifierOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+        )
+
+
+## Copied from modeling_segformer.py, Since FAN Model uses the segformer head
+class SegformerMLP(nn.Module):
+    """
+    Linear Embedding.
+    """
+
+    def __init__(self, config: FANConfig, input_dim):
+        super().__init__()
+        self.proj = nn.Linear(input_dim, config.decoder_hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor):
+        hidden_states = hidden_states.flatten(2).transpose(1, 2)
+        hidden_states = self.proj(hidden_states)
+        return hidden_states
+
+
+class FANDecodeHead(FANPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        # linear layers which will unify the channel dimension of each of the encoder blocks to the same config.decoder_hidden_size
+        mlps = []
+        for i in range(config.num_encoder_blocks):
+            mlp = SegformerMLP(config, input_dim=config.hidden_sizes[i])
+            mlps.append(mlp)
+        self.linear_c = nn.ModuleList(mlps)
+
+        # the following 3 layers implement the ConvModule of the original implementation
+        self.linear_fuse = nn.Conv2d(
+            in_channels=config.decoder_hidden_size * config.num_encoder_blocks,
+            out_channels=config.decoder_hidden_size,
+            kernel_size=1,
+            bias=False,
+        )
+        self.batch_norm = nn.BatchNorm2d(config.decoder_hidden_size)
+        self.activation = nn.ReLU()
+
+        self.dropout = nn.Dropout(config.classifier_dropout_prob)
+        self.classifier = nn.Conv2d(config.decoder_hidden_size, config.num_labels, kernel_size=1)
+
+        self.config = config
+
+    def forward(self, encoder_hidden_states):
+        batch_size = encoder_hidden_states[-1].shape[0]
+
+        all_hidden_states = ()
+        for encoder_hidden_state, mlp in zip(encoder_hidden_states, self.linear_c):
+            if self.config.reshape_last_stage is False and encoder_hidden_state.ndim == 3:
+                height = width = int(math.sqrt(encoder_hidden_state.shape[-1]))
+                encoder_hidden_state = (
+                    encoder_hidden_state.reshape(batch_size, height, width, -1).permute(0, 3, 1, 2).contiguous()
+                )
+
+            # unify channel dimension
+            height, width = encoder_hidden_state.shape[2], encoder_hidden_state.shape[3]
+            encoder_hidden_state = mlp(encoder_hidden_state)
+            encoder_hidden_state = encoder_hidden_state.permute(0, 2, 1)
+            encoder_hidden_state = encoder_hidden_state.reshape(batch_size, -1, height, width)
+            # upsample
+            encoder_hidden_state = nn.functional.interpolate(
+                encoder_hidden_state, size=encoder_hidden_states[0].size()[2:], mode="bilinear", align_corners=False
+            )
+            all_hidden_states += (encoder_hidden_state,)
+
+        hidden_states = self.linear_fuse(torch.cat(all_hidden_states[::-1], dim=1))
+        hidden_states = self.batch_norm(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+
+        # logits are of shape (batch_size, num_labels, height/4, width/4)
+        logits = self.classifier(hidden_states)
+
+        return logits
+
+
+# TODO: Fix Docstrings
+@add_start_docstrings(
+    """FAN Model transformer with an all-MLP decode head on top e.g. for ADE20k, CityScapes.""",
+    FAN_START_DOCSTRING,
+)
+class FANForSemanticSegmentation(FANPreTrainedModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self.fan = FANModel(config)
+        self.decode_head = FANDecodeHead(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(FAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @replace_return_docstrings(output_type=SemanticSegmenterOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        labels: Optional[torch.LongTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, SemanticSegmenterOutput]:
+        # TODO: Update Docstring
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
+            Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels > 1`, a classification loss is computed (Cross-Entropy).
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import SegformerFeatureExtractor, SegformerForSemanticSegmentation
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> feature_extractor = SegformerFeatureExtractor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+        >>> model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = feature_extractor(images=image, return_tensors="pt")
+        >>> outputs = model(**inputs)
+        >>> logits = outputs.logits  # shape (batch_size, num_labels, height/4, width/4)
+        >>> list(logits.shape)
+        [1, 150, 128, 128]
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        outputs = self.fan(
+            pixel_values,
+            output_attentions=output_attentions,
+            output_hidden_states=True,  # we need the intermediate hidden states
+            return_dict=return_dict,
+        )
+
+        encoder_hidden_states = outputs.hidden_states if return_dict else outputs[1]
+
+        logits = self.decode_head(encoder_hidden_states)
+
+        loss = None
+        if labels is not None:
+            if not self.config.num_labels > 1:
+                raise ValueError("The number of labels should be greater than one")
+            else:
+                # upsample logits to the images' original size
+                upsampled_logits = nn.functional.interpolate(
+                    logits, size=labels.shape[-2:], mode="bilinear", align_corners=False
+                )
+                loss_fct = CrossEntropyLoss(ignore_index=self.config.semantic_loss_ignore_index)
+                loss = loss_fct(upsampled_logits, labels)
+
+        if not return_dict:
+            if output_hidden_states:
+                output = (logits,) + outputs[1:]
+            else:
+                output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SemanticSegmenterOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=outputs.attentions,
         )
