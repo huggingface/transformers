@@ -36,7 +36,7 @@ if is_datasets_available():
 
 if is_torch_available():
     import torch
-    from transformers.generation_logits_process import LogitsProcessorList, SuppressBlank, SuppressTokens
+
     from transformers import (
         WhisperFeatureExtractor,
         WhisperForConditionalGeneration,
@@ -45,6 +45,7 @@ if is_torch_available():
         WhisperTokenizer,
         set_seed,
     )
+    from transformers.generation_logits_process import LogitsProcessorList, SuppressBlank, SuppressTokens
     from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder
 
 
