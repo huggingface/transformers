@@ -1354,7 +1354,7 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         # Test we can use the new tokenizer with something not seen during training
         text = [["this", "is", "the"], ["how", "are", "you"]]
-        xpaths = [["html/body"] * 4, ["html/body"] * 3]
+        xpaths = [["html/body"] * 3, ["html/body"] * 3]
         inputs = new_tokenizer(text, xpaths=xpaths)
         self.assertEqual(len(inputs["input_ids"]), 2)
         decoded_input = new_tokenizer.decode(inputs["input_ids"][0], skip_special_tokens=True)

@@ -364,16 +364,14 @@ class MarkupLMTokenizerFast(PreTrainedTokenizerFast):
         else:
             is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
 
-        # nodes = text if text_pair is None else text_pair
-        # assert xpaths is not None, "You must provide corresponding xpaths"
-        # if is_batched:
-        #     assert len(nodes) == len(xpaths), "You must provide nodes and xpaths for an equal amount of examples"
-        #     for nodes_example, xpaths_example in zip(nodes, xpaths):
-        #         assert len(nodes_example) == len(
-        #             xpaths_example
-        #         ), "You must provide as many nodes as there are xpaths"
-        # else:
-        #     assert len(nodes) == len(xpaths), "You must provide as many nodes as there are xpaths"
+        nodes = text if text_pair is None else text_pair
+        assert xpaths is not None, "You must provide corresponding xpaths"
+        if is_batched:
+            assert len(nodes) == len(xpaths), "You must provide nodes and xpaths for an equal amount of examples"
+            for nodes_example, xpaths_example in zip(nodes, xpaths):
+                assert len(nodes_example) == len(xpaths_example), "You must provide as many nodes as there are xpaths"
+        else:
+            assert len(nodes) == len(xpaths), "You must provide as many nodes as there are xpaths"
 
         if is_batched:
             if text_pair is not None and len(text) != len(text_pair):

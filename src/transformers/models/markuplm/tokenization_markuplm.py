@@ -589,16 +589,14 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
         else:
             is_batched = isinstance(text, (list, tuple)) and text and isinstance(text[0], (list, tuple))
 
-        # nodes = text if text_pair is None else text_pair
-        # assert xpaths is not None, "You must provide corresponding xpaths"
-        # if is_batched:
-        #     assert len(nodes) == len(xpaths), "You must provide nodes and xpaths for an equal amount of examples"
-        #     for nodes_example, xpaths_example in zip(nodes, xpaths):
-        #         assert len(nodes_example) == len(
-        #             xpaths_example
-        #         ), "You must provide as many nodes as there are xpaths"
-        # else:
-        #     assert len(nodes) == len(xpaths), "You must provide as many nodes as there are xpaths"
+        nodes = text if text_pair is None else text_pair
+        assert xpaths is not None, "You must provide corresponding xpaths"
+        if is_batched:
+            assert len(nodes) == len(xpaths), "You must provide nodes and xpaths for an equal amount of examples"
+            for nodes_example, xpaths_example in zip(nodes, xpaths):
+                assert len(nodes_example) == len(xpaths_example), "You must provide as many nodes as there are xpaths"
+        else:
+            assert len(nodes) == len(xpaths), "You must provide as many nodes as there are xpaths"
 
         if is_batched:
             if text_pair is not None and len(text) != len(text_pair):
@@ -1072,7 +1070,6 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                         continue
                     word_tokens = self.tokenize(word)
                     tokens.extend(word_tokens)
-                    # TODO properly create xpath_tags_seq and xpath_subs_seq
                     xpath_tags_list, xpath_subs_list = self.get_xpath_seq(xpath)
                     xpath_tags_seq.extend([xpath_tags_list] * len(word_tokens))
                     xpath_subs_seq.extend([xpath_subs_list] * len(word_tokens))
@@ -1083,7 +1080,6 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                         continue
                     word_tokens = self.tokenize(word)
                     tokens.extend(word_tokens)
-                    # TODO properly create xpath_tags_seq and xpath_subs_seq
                     xpath_tags_list, xpath_subs_list = self.get_xpath_seq(xpath)
                     xpath_tags_seq.extend([xpath_tags_list] * len(word_tokens))
                     xpath_subs_seq.extend([xpath_subs_list] * len(word_tokens))
@@ -1097,7 +1093,6 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
             # text = question
             # text_pair = nodes
             tokens = self.tokenize(text)
-            # TODO properly create xpath_tags_seq and xpath_subs_seq
             xpath_tags_seq = [self.pad_xpath_tags_seq for _ in range(len(tokens))]
             xpath_subs_seq = [self.pad_xpath_subs_seq for _ in range(len(tokens))]
 
@@ -1106,7 +1101,6 @@ class MarkupLMTokenizer(PreTrainedTokenizer):
                     continue
                 word_tokens = self.tokenize(word)
                 pair_tokens.extend(word_tokens)
-                # TODO properly create pair_xpath_tags_seq and pair_xpath_subs_seq
                 xpath_tags_list, xpath_subs_list = self.get_xpath_seq(xpath)
                 pair_xpath_tags_seq.extend([xpath_tags_list] * len(word_tokens))
                 pair_xpath_subs_seq.extend([xpath_subs_list] * len(word_tokens))
