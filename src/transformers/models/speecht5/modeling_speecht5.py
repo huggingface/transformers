@@ -1901,8 +1901,7 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        # TODO: just instantiate the SpeechT5Encoder here
-        # self.speecht5 = SpeechT5Model(config)
+        self.encoder = SpeechT5SpeechEncoder(config)
         self.dropout = nn.Dropout(config.final_dropout)
 
         if config.vocab_size is None:
@@ -1913,7 +1912,7 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
                 "or define `vocab_size` of your model's configuration."
             )
 
-        self.encoder_ctc_proj = nn.Linear(config.hidden_size, config.vocab_size)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1939,8 +1938,6 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         self,
         input_values: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        # past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-        # use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1956,35 +1953,20 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # TODO: maybe this model should be SpeechT5ForSpeechSeq2Seq?
-
-        # TODO: not sure if speech_encoder_prenet needs to return extract_features
-        hidden_states, extract_features, attention_mask = self.speech_encoder_prenet(input_values, attention_mask)
-
-        # TODO: run the TextDecoderPrenet (this line is from the original code)
-        #       incremental_state is similar to our past_key_values
-        #prev_output_tokens, tgt_mask, incremental_state = self.text_decoder_prenet(tokens, incremental_state)
-
-        outputs = self.speecht5(
-            inputs_embeds=hidden_states,
+        outputs = self.encoder(
+            input_values=input_values,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=True,
         )
 
-        # TODO: not sure yet if this is the best place for it
-        encoder_ctc = self.encoder_ctc_proj(self.dropout(outputs["encoder_last_hidden_state"]))
-        print("encoder_ctc", encoder_ctc.shape, encoder_ctc)
+        hidden_states = outputs[0]
+        hidden_states = self.dropout(hidden_states)
 
-        return (encoder_ctc,)  # TODO: for testing
+        logits = self.lm_head(hidden_states)
 
-        # hidden_states = outputs[0]
-        # hidden_states = self.dropout(hidden_states)
-
-        # logits = self.lm_head(hidden_states)
-
-        # loss = None
+        loss = None
         # if labels is not None:
 
         #     if labels.max() >= self.config.vocab_size:
@@ -2021,9 +2003,5 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         #     return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
-            # loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
-            loss=None,
-            logits=None,
-            hidden_states=hidden_states,
-            attentions=None,
+            loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
         )

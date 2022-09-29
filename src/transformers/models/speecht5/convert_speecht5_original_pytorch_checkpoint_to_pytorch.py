@@ -37,11 +37,12 @@ from transformers import (
 logging.set_verbosity_info()
 logger = logging.get_logger("transformers.models.speecht5")
 
-MAPPING = {
+MAPPING_S2T = {
     "speech_encoder_prenet.layer_norm": "speecht5.encoder.prenet.feature_projection.layer_norm",
     "speech_encoder_prenet.post_extract_proj": "speecht5.encoder.prenet.feature_projection.projection",
     "speech_encoder_prenet.pos_conv.0": "speecht5.encoder.prenet.pos_conv_embed.conv",
     "speech_encoder_prenet.mask_emb": "speecht5.encoder.prenet.masked_spec_embed",
+
     "encoder.layers.*.self_attn.k_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.k_proj",
     "encoder.layers.*.self_attn.v_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.v_proj",
     "encoder.layers.*.self_attn.q_proj": "speecht5.encoder.wrapped_encoder.layers.*.attention.q_proj",
@@ -66,16 +67,25 @@ MAPPING = {
     "decoder.layers.*.fc1": "speecht5.decoder.wrapped_decoder.layers.*.fc1",
     "decoder.layers.*.fc2": "speecht5.decoder.wrapped_decoder.layers.*.fc2",
     "decoder.layers.*.final_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.final_layer_norm",
-    #"decoder.pos_emb.pe_k": "speecht5.decoder.wrapped_decoder.embed_positions.pe_k",
 
     "text_decoder_postnet.output_projection": "text_decoder_postnet.lm_head",
-
-    # "encoder.proj": "speecht5.encoder.ctc_proj",  #TODO: CTC model only?
-    # "quantizer.weight_proj": "quantizer.weight_proj",
-    # "quantizer.vars": "quantizer.codevectors",
-    # "project_q": "project_q",
-    # "final_proj": "project_hid",
-    # "w2v_encoder.proj": "lm_head",
+}
+MAPPING_CTC = {
+    "speech_encoder_prenet.layer_norm": "encoder.prenet.feature_projection.layer_norm",
+    "speech_encoder_prenet.post_extract_proj": "encoder.prenet.feature_projection.projection",
+    "speech_encoder_prenet.pos_conv.0": "encoder.prenet.pos_conv_embed.conv",
+    "speech_encoder_prenet.mask_emb": "encoder.prenet.masked_spec_embed",
+    "encoder.layers.*.self_attn.k_proj": "encoder.wrapped_encoder.layers.*.attention.k_proj",
+    "encoder.layers.*.self_attn.v_proj": "encoder.wrapped_encoder.layers.*.attention.v_proj",
+    "encoder.layers.*.self_attn.q_proj": "encoder.wrapped_encoder.layers.*.attention.q_proj",
+    "encoder.layers.*.self_attn.out_proj": "encoder.wrapped_encoder.layers.*.attention.out_proj",
+    "encoder.layers.*.self_attn_layer_norm": "encoder.wrapped_encoder.layers.*.layer_norm",
+    "encoder.layers.*.fc1": "encoder.wrapped_encoder.layers.*.feed_forward.intermediate_dense",
+    "encoder.layers.*.fc2": "encoder.wrapped_encoder.layers.*.feed_forward.output_dense",
+    "encoder.layers.*.final_layer_norm": "encoder.wrapped_encoder.layers.*.final_layer_norm",
+    "encoder.layer_norm": "encoder.wrapped_encoder.layer_norm",
+    "encoder.pos_emb.pe_k": "encoder.wrapped_encoder.embed_positions.pe_k",
+    "encoder.proj": "lm_head",
 }
 TOP_LEVEL_KEYS = [
     # "lm_head",
@@ -137,8 +147,15 @@ def should_ignore(name):
     return False
 
 
-def recursively_load_weights(fairseq_dict, hf_model):
+def recursively_load_weights(fairseq_dict, hf_model, task):
     unused_weights = []
+
+    if task == "s2t":
+        feature_encoder = hf_model.speecht5.encoder.prenet.feature_encoder
+        MAPPING = MAPPING_S2T
+    else:
+        feature_encoder = hf_model.encoder.prenet.feature_encoder
+        MAPPING = MAPPING_CTC
 
     for name, value in fairseq_dict.items():
         if should_ignore(name):
@@ -150,7 +167,7 @@ def recursively_load_weights(fairseq_dict, hf_model):
             load_conv_layer(
                 name,
                 value,
-                hf_model.speecht5.encoder.prenet.feature_encoder,
+                feature_encoder,
                 unused_weights,
                 hf_model.config.feat_extract_norm == "group",
             )
@@ -288,13 +305,15 @@ def convert_speecht5_checkpoint(
     #         processor.save_pretrained(pytorch_dump_folder_path)
 
         model = SpeechT5ForConditionalGeneration(config)
+    elif task == "ctc":
+        model = SpeechT5ForCTC(config)
     # elif task == "pretrain":
-    #     _model = SpeechT5ForPreTraining(config)
+    #     model = SpeechT5ForPreTraining(config)
     else:
-        raise ValueError(f"Unknown model name: {task}")
+        raise ValueError(f"Unknown task name: {task}")
 
     fairseq_checkpoint = torch.load(checkpoint_path)
-    recursively_load_weights(fairseq_checkpoint["model"], model)
+    recursively_load_weights(fairseq_checkpoint["model"], model, task)
 
     model.save_pretrained(pytorch_dump_folder_path)
 
