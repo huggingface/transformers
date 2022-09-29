@@ -45,6 +45,7 @@ from huggingface_hub.utils import (
     LocalEntryNotFoundError,
     RepositoryNotFoundError,
     RevisionNotFoundError,
+    hf_raise_for_status,
 )
 from requests.exceptions import HTTPError
 from transformers.utils.logging import tqdm
@@ -607,7 +608,7 @@ def has_file(
 
     r = requests.head(url, headers=headers, allow_redirects=False, proxies=proxies, timeout=10)
     try:
-        huggingface_hub.utils._errors._raise_for_status(r)
+        hf_raise_for_status(r)
         return True
     except RepositoryNotFoundError as e:
         logger.error(e)
@@ -993,7 +994,7 @@ def get_hub_metadata(url, token=None):
     r = huggingface_hub.file_download._request_with_retry(
         method="HEAD", url=url, headers=headers, allow_redirects=False
     )
-    huggingface_hub.file_download._raise_for_status(r)
+    hf_raise_for_status(r)
     commit_hash = r.headers.get(HUGGINGFACE_HEADER_X_REPO_COMMIT)
     etag = r.headers.get(HUGGINGFACE_HEADER_X_LINKED_ETAG) or r.headers.get("ETag")
     if etag is not None:
