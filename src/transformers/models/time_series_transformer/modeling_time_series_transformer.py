@@ -1593,7 +1593,6 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         static_real_features: torch.Tensor,
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
@@ -1601,8 +1600,8 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         output_hidden_states: Optional[bool] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
+        use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
         r"""
