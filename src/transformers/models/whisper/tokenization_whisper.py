@@ -21,8 +21,8 @@ import regex as re
 
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
-
 from .english_normalizer import EnglishTextNormalizer
+
 
 SPIECE_UNDERLINE = "▁"
 
