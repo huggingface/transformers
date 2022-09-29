@@ -102,7 +102,7 @@ class LiltTextEmbeddings(nn.Module):
         embeddings = self.dropout(embeddings)
         return embeddings, position_ids
 
-    def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_length=0):
+    def create_position_ids_from_input_ids(self, input_ids, padding_idx, past_key_values_length=0):
         """
         Args:
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
@@ -158,7 +158,7 @@ class LiltLayoutEmbeddings(nn.Module):
             right_position_embeddings = self.x_position_embeddings(bbox[:, :, 2])
             lower_position_embeddings = self.y_position_embeddings(bbox[:, :, 3])
         except IndexError as e:
-            raise IndexError("The :obj:`bbox`coordinate values should be within 0-1000 range.") from e
+            raise IndexError("The `bbox` coordinate values should be within 0-1000 range.") from e
 
         h_position_embeddings = self.h_position_embeddings(bbox[:, :, 3] - bbox[:, :, 1])
         w_position_embeddings = self.w_position_embeddings(bbox[:, :, 2] - bbox[:, :, 0])
@@ -427,9 +427,9 @@ class LiltAttention(nn.Module):
             past_key_value,
             output_attentions,
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
+        attention_output = self.output(self_outputs[0][0], hidden_states)
         layout_attention_output = self.layout_output(self_outputs[0][1], layout_inputs)
-        outputs = (attention_output, layout_attention_output) + self_outputs[1:]  # add attentions if we output them
+        outputs = ((attention_output, layout_attention_output),) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
 
@@ -509,7 +509,7 @@ class LiltLayer(nn.Module):
             output_attentions=output_attentions,
             past_key_value=self_attn_past_key_value,
         )
-        attention_output = self_attention_outputs[0]
+        attention_output = self_attention_outputs[0][0]
         layout_attention_output = self_attention_outputs[0][1]
 
         # if decoder, the last output is tuple of self-attn cache
@@ -640,7 +640,9 @@ class LiltEncoder(nn.Module):
                     output_attentions,
                 )
 
-            hidden_states = layer_outputs[0]
+            hidden_states = layer_outputs[0][0]
+            layout_inputs = layer_outputs[0][1]
+
             if use_cache:
                 next_decoder_cache += (layer_outputs[-1],)
             if output_attentions:
@@ -861,7 +863,7 @@ class LiltModel(LiltPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
-        bbox=None,
+        bbox: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
@@ -964,6 +966,9 @@ class LiltModel(LiltPreTrainedModel):
 
         layout_embedding_output = self.layout_embeddings(bbox=bbox, position_ids=position_ids)
 
+        print("Shape of embedding output:", embedding_output.shape)
+        print("Shape of layout embedding output:", layout_embedding_output.shape)
+
         encoder_outputs = self.encoder(
             embedding_output,
             layout_embedding_output,
@@ -1000,10 +1005,10 @@ class LiltModel(LiltPreTrainedModel):
     """,
     LILT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification with ROBERTA->LILT,Roberta->Lilt,roberta->lilt,roberta-base->organization/lilt-roberta-en-base
 class LiltForSequenceClassification(LiltPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification.__init__ with Roberta->Lilt
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1027,6 +1032,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        bbox: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1047,6 +1053,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
 
         outputs = self.lilt(
             input_ids,
+            bbox=bbox,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1101,11 +1108,11 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
     """,
     LILT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification with ROBERTA->LILT,Roberta->Lilt,roberta->lilt
 class LiltForTokenClassification(LiltPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification.__init__ with Roberta->Lilt
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1132,6 +1139,7 @@ class LiltForTokenClassification(LiltPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        bbox: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1150,6 +1158,7 @@ class LiltForTokenClassification(LiltPreTrainedModel):
 
         outputs = self.lilt(
             input_ids,
+            bbox=bbox,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
@@ -1212,11 +1221,11 @@ class LiltClassificationHead(nn.Module):
     """,
     LILT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering with ROBERTA->LILT,Roberta->Lilt,roberta->lilt,roberta-base->organization/lilt-roberta-en-base
 class LiltForQuestionAnswering(LiltPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
+    # Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering.__init__ with Roberta->Lilt
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -1239,6 +1248,7 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        bbox: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         token_type_ids: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -1264,6 +1274,7 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
 
         outputs = self.lilt(
             input_ids,
+            bbox=bbox,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
