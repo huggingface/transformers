@@ -923,6 +923,8 @@ class SpeechT5DecoderLayer(nn.Module):
             dropout=config.attention_dropout,
             is_decoder=True,
         )
+
+        # TODO: why does this not use SpeechT5FeedForward? how do other decoder models do this?
         self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
@@ -1050,6 +1052,7 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
+    #TODO: implement this
     def _init_weights(self, module):
         """Initialize the weights"""
         # # gumbel softmax requires special init
@@ -1091,19 +1094,17 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
 
 class SpeechT5Encoder(SpeechT5PreTrainedModel):
     """
-    TODO
+    Transformer encoder consisting of *config.encoder_layers* layers. Each layer is a [`SpeechT5EncoderLayer`].
     """
 
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
-        self.speech_encoder_prenet = SpeechT5SpeechEncoderPrenet(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([SpeechT5EncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.pos_emb = SpeechT5RelativePositionalEncoding(
+        self.embed_positions = SpeechT5RelativePositionalEncoding(
             config.hidden_size // config.num_attention_heads, config.encoder_max_relative_position
         )
-        self.ctc_proj = nn.Linear(config.hidden_size, config.vocab_size)
 
         self.gradient_checkpointing = False
 
@@ -1118,26 +1119,21 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
+
+        #TODO: make this look more like the Speech2TextEncoder implementation!
+
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
+        # expand attention_mask
         if attention_mask is not None:
-            # TODO: original model doesn't do this -- should we?
-            # make sure padded tokens output 0
-            # expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            # hidden_states[~expand_attention_mask] = 0
-
-            # extend attention_mask
-            attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
-            attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
-            attention_mask = attention_mask.expand(
-                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
-            )
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            attention_mask = _expand_mask(attention_mask, hidden_states.dtype)
 
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
-        position_bias = self.pos_emb(hidden_states)
+        position_bias = self.embed_positions(hidden_states)
 
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
@@ -1235,28 +1231,19 @@ class SpeechT5SpeechEncoder(SpeechT5PreTrainedModel):
 
 class SpeechT5Decoder(SpeechT5PreTrainedModel):
     """
-    TODO
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`SpeechT5DecoderLayer`]
     """
 
-    def __init__(self, config: SpeechT5Config, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: SpeechT5Config):
         super().__init__(config)
         self.dropout = config.hidden_dropout
         self.layerdrop = config.decoder_layerdrop
-        self.max_target_positions = config.max_target_positions
-
-        # if embed_tokens is not None:
-        #     self.embed_tokens = embed_tokens
-        # else:
-        #     self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        # self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-
-        # self.embed_positions = BartLearnedPositionalEmbedding(
-        #     config.max_position_embeddings,
-        #     config.hidden_size,
-        # )
-
         self.layers = nn.ModuleList([SpeechT5DecoderLayer(config) for _ in range(config.decoder_layers)])
-        self.layernorm_embedding = nn.LayerNorm(config.hidden_size)
+
+        #TODO: The original model has this but it's not used.
+        #self.embed_positions = SpeechT5RelativePositionalEncoding(
+        #    config.hidden_size // config.num_attention_heads, config.decoder_max_relative_position
+        #)
 
         self.gradient_checkpointing = False
 
@@ -1373,7 +1360,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
         input_shape = hidden_states.size()[:-1]
 
-        # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         attention_mask = self._prepare_decoder_attention_mask(
@@ -1384,14 +1370,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, hidden_states.dtype, tgt_len=input_shape[-1])
-
-        # embed positions
-        # positions = self.embed_positions(input, past_key_values_length)
-
-        #hidden_states = hidden_states #+ positions
-        hidden_states = self.layernorm_embedding(hidden_states)
-
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -1419,7 +1397,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
-
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1444,7 +1421,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                     None,
                 )
             else:
-
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,

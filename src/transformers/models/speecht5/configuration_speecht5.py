@@ -194,6 +194,8 @@ class SpeechT5Config(PretrainedConfig):
             TODO: still need this?
         encoder_max_relative_position (`int`, *optional*, defaults to 160):
             Maximum distance for relative position embedding in the encoder.
+        decoder_max_relative_position (`int`, *optional*, defaults to 64):
+            Maximum distance for relative position embedding in the dencoder.
         encoder_layerdrop (`float`, *optional*, defaults to 0.1):
             The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
@@ -289,6 +291,7 @@ class SpeechT5Config(PretrainedConfig):
         max_source_positions=4000,
         max_target_positions=1024,
         encoder_max_relative_position=160,
+        decoder_max_relative_position=160,
         use_cache=True,
         is_encoder_decoder=True,
         **kwargs
@@ -322,6 +325,7 @@ class SpeechT5Config(PretrainedConfig):
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
         self.encoder_max_relative_position = encoder_max_relative_position
+        self.decoder_max_relative_position = decoder_max_relative_position
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(hidden_size) if True

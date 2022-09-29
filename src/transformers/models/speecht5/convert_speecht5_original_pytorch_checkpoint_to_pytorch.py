@@ -51,7 +51,23 @@ MAPPING = {
     "encoder.layers.*.fc2": "speecht5.encoder.wrapped_encoder.layers.*.feed_forward.output_dense",
     "encoder.layers.*.final_layer_norm": "speecht5.encoder.wrapped_encoder.layers.*.final_layer_norm",
     "encoder.layer_norm": "speecht5.encoder.wrapped_encoder.layer_norm",
-    "encoder.pos_emb.pe_k": "speecht5.encoder.wrapped_encoder.pos_emb.pe_k",
+    "encoder.pos_emb.pe_k": "speecht5.encoder.wrapped_encoder.embed_positions.pe_k",
+
+    "decoder.layers.*.self_attn.k_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.k_proj",
+    "decoder.layers.*.self_attn.v_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.v_proj",
+    "decoder.layers.*.self_attn.q_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.q_proj",
+    "decoder.layers.*.self_attn.out_proj": "speecht5.decoder.wrapped_decoder.layers.*.self_attn.out_proj",
+    "decoder.layers.*.self_attn_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.self_attn_layer_norm",
+    "decoder.layers.*.encoder_attn.k_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.k_proj",
+    "decoder.layers.*.encoder_attn.v_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.v_proj",
+    "decoder.layers.*.encoder_attn.q_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.q_proj",
+    "decoder.layers.*.encoder_attn.out_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.out_proj",
+    "decoder.layers.*.encoder_attn_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn_layer_norm",
+    "decoder.layers.*.fc1": "speecht5.decoder.wrapped_decoder.layers.*.fc1",
+    "decoder.layers.*.fc2": "speecht5.decoder.wrapped_decoder.layers.*.fc2",
+    "decoder.layers.*.final_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.final_layer_norm",
+    #"decoder.pos_emb.pe_k": "speecht5.decoder.wrapped_decoder.embed_positions.pe_k",
+
     # "encoder.proj": "speecht5.encoder.ctc_proj",  #TODO: CTC model only?
     # "quantizer.weight_proj": "quantizer.weight_proj",
     # "quantizer.vars": "quantizer.codevectors",
@@ -73,6 +89,9 @@ IGNORE_KEYS = [
     "encoder.layers.*.norm_k.bias",
     "speech_encoder_prenet.embed_positions._float_tensor",
     "decoder.version",
+    "decoder.layers.*.norm_k.weight",
+    "decoder.layers.*.norm_k.bias",
+    "decoder.pos_emb.pe_k",
 ]
 
 
