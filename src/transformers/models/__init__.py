@@ -123,6 +123,7 @@ from . import (
     resnet,
     retribert,
     roberta,
+    lilt,
     roformer,
     segformer,
     sew,
