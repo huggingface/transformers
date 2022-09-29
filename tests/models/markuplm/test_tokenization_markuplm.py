@@ -1556,8 +1556,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
                 # Single example
                 nodes, xpaths = self.get_nodes_and_xpaths()
-                print("Nodes:", nodes)
-                print("Xpaths:", xpaths)
                 tokens = tokenizer.encode_plus(
                     nodes,
                     xpaths=xpaths,
@@ -1567,11 +1565,6 @@ class MarkupLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     return_tensors=returned_tensor,
                     return_overflowing_tokens=True,
                 )
-
-                for k, v in tokens.items():
-                    print(k, v.shape)
-
-                print(tokenizer.decode(tokens.input_ids.squeeze().tolist()))
 
                 for key in filter(lambda x: "overflow_to_sample_mapping" not in x, tokens.keys()):
                     if "xpath" not in key:
