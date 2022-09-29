@@ -1601,17 +1601,15 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(**inputs)
 
-        >>> # use the `post_process_panoptic` method of `DetrFeatureExtractor` to convert to COCO format
-        >>> processed_sizes = torch.as_tensor(inputs["pixel_values"].shape[-2:]).unsqueeze(0)
-        >>> result = feature_extractor.post_process_panoptic(outputs, processed_sizes)[0]
+        >>> # use the `post_process_panoptic_segmentation` method of `DetrFeatureExtractor` to retrieve post-processed panoptic segmentation maps
+        >>> result = feature_extractor.post_process_panoptic(outputs, processed_sizes)
 
-        >>> # the segmentation is stored in a special-format png
-        >>> panoptic_seg = Image.open(io.BytesIO(result["png_string"]))
-        >>> panoptic_seg = numpy.array(panoptic_seg, dtype=numpy.uint8)
-        >>> # retrieve the ids corresponding to each mask
-        >>> panoptic_seg_id = rgb_to_id(panoptic_seg)
-        >>> panoptic_seg_id.shape
-        (800, 1066)
+        >>> # Segmentation results are returned as a list of dictionaries
+        >>> panoptic_seg = result[0][
+        ...     "segmentation"
+        ... ]  # A tensor of shape (height, width) where each value denotes a segment id
+        >>> # Get mapping of segment ids to semantic class ids
+        >>> panoptic_segments_info = result[0]["segment_ids"]
         ```"""
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict

@@ -1007,7 +1007,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         return preds
 
     def post_process_object_detection(
-        self, outputs, object_detection_threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
+        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None
     ):
         """
         Converts the output of [`DetrForObjectDetection`] into the format expected by the COCO api. Only supports
@@ -1016,9 +1016,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         Args:
             outputs ([`DetrObjectDetectionOutput`]):
                 Raw outputs of the model.
-            object_detection_threshold (`float`, *optional*):
+            threshold (`float`, *optional*):
                 Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*, defaults to `None`):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 (height, width) of each image in the batch. If left to None, predictions will not be resized.
 
@@ -1053,20 +1053,20 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         results = []
         for s, l, b in zip(scores, labels, boxes):
-            score = s[s > object_detection_threshold]
-            label = l[s > object_detection_threshold]
-            box = b[s > object_detection_threshold]
+            score = s[s > threshold]
+            label = l[s > threshold]
+            box = b[s > threshold]
             results.append({"scores": score, "labels": label, "boxes": box})
 
         return results
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple[int, int]] = None):
         """
         Args:
         Converts the output of [`DetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
             outputs ([`DetrForSegmentation`]):
                 Raw outputs of the model.
-            target_sizes (`List[Tuple[int, int]]`, *optional*):
+            target_sizes (`List[Tuple[int, int]]`, *optional*, defaults to `None`):
                 A list of tuples (`Tuple[int, int]`) containing the target size (height, width) of each image in the
                 batch. If left to None, predictions will not be resized.
         Returns:
@@ -1109,34 +1109,33 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     def post_process_instance_segmentation(
         self,
         outputs,
-        object_mask_threshold: float = 0.5,
+        threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         target_sizes: List[Tuple] = None,
-        return_coco_format: Optional[bool] = False,
+        return_coco_annotation: Optional[bool] = False,
     ):
         """
         Args:
         Converts the output of [`DetrForSegmentation`] into instance segmentation predictions. Only supports PyTorch.
             outputs ([`DetrForSegmentation`]):
                 Raw outputs of the model.
-            object_mask_threshold (`float`, *optional*):
+            threshold (`float`, *optional*):
                 The probability score threshold to keep predicted instance masks, defaults to 0.5.
             overlap_mask_area_threshold (`float`, *optional*):
                 The overlap mask area threshold to merge or discard small disconnected parts within each binary
                 instance mask, defaults to 0.8.
-            target_sizes (`List[Tuple]`, *optional*):
+            target_sizes (`List[Tuple]`, *optional*, defaults to `None`):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
-            return_coco_format (`bool`, *optional*):
-                Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
-                format.
+            return_coco_annotation (`bool`, *optional*, defaults to `False`):
+                If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE) format.
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
               `List[List]` run-length encoding (RLE) of the segmentation map if return_coco_format is set to `True`.
-            - **segments** -- A dictionary with the following keys
+            - **segment_ids** -- A dictionary that maps segment ids to semantic class ids.
                 - **id** -- An integer representing the `segment_id`.
-                - **label_id** -- An integer representing the segment's label / class id.
+                - **label_id** -- An integer representing the segment's label / semantic class id.
         """
         class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
@@ -1154,7 +1153,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         for i in range(batch_size):
             mask_probs_item, pred_scores_item, pred_labels_item = self.remove_low_and_no_objects(
-                mask_probs[i], pred_scores[i], pred_labels[i], object_mask_threshold, num_labels
+                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
             )
 
             height, width = target_sizes[i][0], target_sizes[i][1]
@@ -1215,7 +1214,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 segmentation -= 1
 
             # Return segmentation map in run-length encoding (RLE) format
-            if return_coco_format:
+            if return_coco_annotation:
                 segment_ids = torch.unique(segmentation)
 
                 run_length_encodings = []
@@ -1226,13 +1225,13 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
                 segmentation = run_length_encodings
 
-            results.append({"segmentation": segmentation, "segments": segments})
+            results.append({"segmentation": segmentation, "segment_ids": segments})
         return results
 
     def post_process_panoptic_segmentation(
         self,
         outputs,
-        object_mask_threshold: float = 0.5,
+        threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         label_ids_to_fuse: Optional[Set[int]] = None,
         target_sizes: List[Tuple] = None,
@@ -1243,12 +1242,12 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
         PyTorch.
             outputs ([`DetrForSegmentation`]):
                 The outputs from [`DetrForSegmentation`].
-            object_mask_threshold (`float`, *optional*):
-                The probability score threshold to keep predicted instance masks, defaults to 0.5.
-            overlap_mask_area_threshold (`float`, *optional*):
+            threshold (`float`, *optional*, defaults to 0.5):
+                The probability score threshold to keep predicted instance masks.
+            overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 The overlap mask area threshold to merge or discard small disconnected parts within each binary
-                instance mask, defaults to 0.8.
-            label_ids_to_fuse (`Set[int]`, *optional*):
+                instance mask.
+            label_ids_to_fuse (`Set[int]`, *optional*, defaults to `None`):
                 The labels in this state will have all their instances be fused together. For instance we could say
                 there can only be one sky in an image, but several persons, so the label ID for sky would be in that
                 set, but not the one for person.
@@ -1260,9 +1259,9 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`. If
               `target_sizes` is specified, segmentation is resized to the corresponding `target_sizes` entry.
-            - **segments** -- a dictionary with the following keys
-                - **id** -- an integer representing the `segment_id`.
-                - **label_id** -- an integer representing the segment's label / class id.
+            - **segment_ids** -- A dictionary that maps segment ids to semantic class ids.
+                - **id** -- An integer representing the `segment_id`.
+                - **label_id** -- An integer representing the segment's label / semantic class id.
                 - **was_fused** -- a boolean, `True` if `label_id` was in `label_ids_to_fuse`, `False` otherwise.
                   Multiple instances of the same class / label were fused and assigned a single `segment_id`.
         """
@@ -1287,7 +1286,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
         for i in range(batch_size):
             mask_probs_item, pred_scores_item, pred_labels_item = self.remove_low_and_no_objects(
-                mask_probs[i], pred_scores[i], pred_labels[i], object_mask_threshold, num_labels
+                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
             )
 
             height, width = target_sizes[i][0], target_sizes[i][1]
@@ -1352,5 +1351,5 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
             else:
                 segmentation -= 1
 
-            results.append({"segmentation": segmentation, "segments": segments})
+            results.append({"segmentation": segmentation, "segment_ids": segments})
         return results
