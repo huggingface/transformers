@@ -87,7 +87,6 @@ from .import_utils import (
     _LazyModule,
     ccl_version,
     is_accelerate_available,
-    is_more_itertools_available,
     is_apex_available,
     is_bitsandbytes_available,
     is_bs4_available,
