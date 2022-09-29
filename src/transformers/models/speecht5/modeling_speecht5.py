@@ -671,14 +671,9 @@ class SpeechT5TextDecoderPostnet(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
-        # TODO: this is not the final postnet, just a placeholder for now
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-    ):
+    def forward(self, hidden_states: torch.Tensor):
         return self.lm_head(hidden_states)
 
 

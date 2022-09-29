@@ -68,6 +68,8 @@ MAPPING = {
     "decoder.layers.*.final_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.final_layer_norm",
     #"decoder.pos_emb.pe_k": "speecht5.decoder.wrapped_decoder.embed_positions.pe_k",
 
+    "text_decoder_postnet.output_projection": "text_decoder_postnet.lm_head",
+
     # "encoder.proj": "speecht5.encoder.ctc_proj",  #TODO: CTC model only?
     # "quantizer.weight_proj": "quantizer.weight_proj",
     # "quantizer.vars": "quantizer.codevectors",
