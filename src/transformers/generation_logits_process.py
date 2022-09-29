@@ -236,6 +236,19 @@ class TopKLogitsWarper(LogitsWarper):
 
 
 class TypicalLogitsWarper(LogitsWarper):
+    r"""
+    [`LogitsWarper`] that performs typical decoding. See [Typical Decoding for Natural Language
+    Generation](https://arxiv.org/abs/2202.00666) for more information.
+
+    Args:
+        mass (`float`):
+            Value of typical_p between 0 and 1 inclusive, defaults to 0.9.
+        filter_value (`float`, *optional*, defaults to `-float("Inf")`):
+            All filtered values will be set to this float value.
+        min_tokens_to_keep (`int`, *optional*, defaults to 1):
+            Minimum number of tokens that cannot be filtered.
+    """
+
     def __init__(self, mass: float = 0.9, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
         mass = float(mass)
         if not (mass > 0 and mass < 1):

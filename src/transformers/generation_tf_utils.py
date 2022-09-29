@@ -475,7 +475,7 @@ class TFGenerationMixin:
                 [What are attention masks?](../glossary#attention-mask)
             decoder_start_token_id (`int`, *optional*):
                 If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
-            use_cache: (`bool`, *optional*, defaults to `True`):
+            use_cache (`bool`, *optional*, defaults to `True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
             output_attentions (`bool`, *optional*, defaults to `False`):
@@ -1604,6 +1604,14 @@ class TFGenerationMixin:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
                 input_ids, pad_token_id, eos_token_id
             )
+
+        # decoder-only models should use left-padding for generation
+        if not self.config.is_encoder_decoder:
+            if pad_token_id is not None and tf.math.reduce_any(input_ids[:, -1] == pad_token_id):
+                logger.warning(
+                    "A decoder-only architecture is being used, but right-padding was detected! For correct "
+                    "generation results, please set `padding_side='left'` when initializing the tokenizer."
+                )
 
         # 4. Prepare model inputs which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:

@@ -2102,7 +2102,7 @@ class MaskFormerSinePositionEmbedding(nn.Module):
         self.num_pos_feats = num_pos_feats
         self.temperature = temperature
         self.normalize = normalize
-        self.scale = 2 * torch.pi if scale is None else scale
+        self.scale = 2 * math.pi if scale is None else scale
 
     def forward(self, x: Tensor, mask: Optional[Tensor] = None) -> Tensor:
         if mask is None:
