@@ -30,36 +30,46 @@ VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "t
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "organization/lilt-roberta-en-base": "https://huggingface.co/organization/lilt-roberta-en-base/resolve/main/vocab.json",
+        "organization/lilt-roberta-en-base": (
+            "https://huggingface.co/organization/lilt-roberta-en-base/resolve/main/vocab.json"
+        ),
         "lilt-large": "https://huggingface.co/lilt-large/resolve/main/vocab.json",
         "lilt-large-mnli": "https://huggingface.co/lilt-large-mnli/resolve/main/vocab.json",
-        "distilorganization/lilt-roberta-en-base": "https://huggingface.co/distilorganization/lilt-roberta-en-base/resolve/main/vocab.json",
-        "organization/lilt-roberta-en-base-openai-detector": "https://huggingface.co/organization/lilt-roberta-en-base-openai-detector/resolve/main/vocab.json",
-        "lilt-large-openai-detector": (
-            "https://huggingface.co/lilt-large-openai-detector/resolve/main/vocab.json"
+        "distilorganization/lilt-roberta-en-base": (
+            "https://huggingface.co/distilorganization/lilt-roberta-en-base/resolve/main/vocab.json"
         ),
+        "organization/lilt-roberta-en-base-openai-detector": (
+            "https://huggingface.co/organization/lilt-roberta-en-base-openai-detector/resolve/main/vocab.json"
+        ),
+        "lilt-large-openai-detector": "https://huggingface.co/lilt-large-openai-detector/resolve/main/vocab.json",
     },
     "merges_file": {
-        "organization/lilt-roberta-en-base": "https://huggingface.co/organization/lilt-roberta-en-base/resolve/main/merges.txt",
+        "organization/lilt-roberta-en-base": (
+            "https://huggingface.co/organization/lilt-roberta-en-base/resolve/main/merges.txt"
+        ),
         "lilt-large": "https://huggingface.co/lilt-large/resolve/main/merges.txt",
         "lilt-large-mnli": "https://huggingface.co/lilt-large-mnli/resolve/main/merges.txt",
-        "distilorganization/lilt-roberta-en-base": "https://huggingface.co/distilorganization/lilt-roberta-en-base/resolve/main/merges.txt",
-        "organization/lilt-roberta-en-base-openai-detector": "https://huggingface.co/organization/lilt-roberta-en-base-openai-detector/resolve/main/merges.txt",
-        "lilt-large-openai-detector": (
-            "https://huggingface.co/lilt-large-openai-detector/resolve/main/merges.txt"
+        "distilorganization/lilt-roberta-en-base": (
+            "https://huggingface.co/distilorganization/lilt-roberta-en-base/resolve/main/merges.txt"
         ),
+        "organization/lilt-roberta-en-base-openai-detector": (
+            "https://huggingface.co/organization/lilt-roberta-en-base-openai-detector/resolve/main/merges.txt"
+        ),
+        "lilt-large-openai-detector": "https://huggingface.co/lilt-large-openai-detector/resolve/main/merges.txt",
     },
     "tokenizer_file": {
-        "organization/lilt-roberta-en-base": "https://huggingface.co/organization/lilt-roberta-en-base/resolve/main/tokenizer.json",
+        "organization/lilt-roberta-en-base": (
+            "https://huggingface.co/organization/lilt-roberta-en-base/resolve/main/tokenizer.json"
+        ),
         "lilt-large": "https://huggingface.co/lilt-large/resolve/main/tokenizer.json",
         "lilt-large-mnli": "https://huggingface.co/lilt-large-mnli/resolve/main/tokenizer.json",
-        "distilorganization/lilt-roberta-en-base": "https://huggingface.co/distilorganization/lilt-roberta-en-base/resolve/main/tokenizer.json",
+        "distilorganization/lilt-roberta-en-base": (
+            "https://huggingface.co/distilorganization/lilt-roberta-en-base/resolve/main/tokenizer.json"
+        ),
         "organization/lilt-roberta-en-base-openai-detector": (
             "https://huggingface.co/organization/lilt-roberta-en-base-openai-detector/resolve/main/tokenizer.json"
         ),
-        "lilt-large-openai-detector": (
-            "https://huggingface.co/lilt-large-openai-detector/resolve/main/tokenizer.json"
-        ),
+        "lilt-large-openai-detector": "https://huggingface.co/lilt-large-openai-detector/resolve/main/tokenizer.json",
     },
 }
 
@@ -75,8 +85,8 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 
 class LiltTokenizerFast(PreTrainedTokenizerFast):
     """
-    Construct a "fast" LiLT tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2
-    tokenizer, using byte-level Byte-Pair-Encoding.
+    Construct a "fast" LiLT tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2 tokenizer,
+    using byte-level Byte-Pair-Encoding.
 
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:

@@ -34,24 +34,32 @@ VOCAB_FILES_NAMES = {
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "organization/lilt-roberta-en-base": "https://huggingface.co/organization/lilt-roberta-en-base/resolve/main/vocab.json",
+        "organization/lilt-roberta-en-base": (
+            "https://huggingface.co/organization/lilt-roberta-en-base/resolve/main/vocab.json"
+        ),
         "lilt-large": "https://huggingface.co/lilt-large/resolve/main/vocab.json",
         "lilt-large-mnli": "https://huggingface.co/lilt-large-mnli/resolve/main/vocab.json",
-        "distilorganization/lilt-roberta-en-base": "https://huggingface.co/distilorganization/lilt-roberta-en-base/resolve/main/vocab.json",
-        "organization/lilt-roberta-en-base-openai-detector": "https://huggingface.co/organization/lilt-roberta-en-base-openai-detector/resolve/main/vocab.json",
-        "lilt-large-openai-detector": (
-            "https://huggingface.co/lilt-large-openai-detector/resolve/main/vocab.json"
+        "distilorganization/lilt-roberta-en-base": (
+            "https://huggingface.co/distilorganization/lilt-roberta-en-base/resolve/main/vocab.json"
         ),
+        "organization/lilt-roberta-en-base-openai-detector": (
+            "https://huggingface.co/organization/lilt-roberta-en-base-openai-detector/resolve/main/vocab.json"
+        ),
+        "lilt-large-openai-detector": "https://huggingface.co/lilt-large-openai-detector/resolve/main/vocab.json",
     },
     "merges_file": {
-        "organization/lilt-roberta-en-base": "https://huggingface.co/organization/lilt-roberta-en-base/resolve/main/merges.txt",
+        "organization/lilt-roberta-en-base": (
+            "https://huggingface.co/organization/lilt-roberta-en-base/resolve/main/merges.txt"
+        ),
         "lilt-large": "https://huggingface.co/lilt-large/resolve/main/merges.txt",
         "lilt-large-mnli": "https://huggingface.co/lilt-large-mnli/resolve/main/merges.txt",
-        "distilorganization/lilt-roberta-en-base": "https://huggingface.co/distilorganization/lilt-roberta-en-base/resolve/main/merges.txt",
-        "organization/lilt-roberta-en-base-openai-detector": "https://huggingface.co/organization/lilt-roberta-en-base-openai-detector/resolve/main/merges.txt",
-        "lilt-large-openai-detector": (
-            "https://huggingface.co/lilt-large-openai-detector/resolve/main/merges.txt"
+        "distilorganization/lilt-roberta-en-base": (
+            "https://huggingface.co/distilorganization/lilt-roberta-en-base/resolve/main/merges.txt"
         ),
+        "organization/lilt-roberta-en-base-openai-detector": (
+            "https://huggingface.co/organization/lilt-roberta-en-base-openai-detector/resolve/main/merges.txt"
+        ),
+        "lilt-large-openai-detector": "https://huggingface.co/lilt-large-openai-detector/resolve/main/merges.txt",
     },
 }
 
