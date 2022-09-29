@@ -145,6 +145,8 @@
   title: Conceptual guides
 - sections:
   - sections:
+    - local: model_doc/auto
+      title: Auto Classes
     - local: main_classes/callback
       title: Callbacks
     - local: main_classes/configuration
@@ -179,8 +181,6 @@
       title: Feature Extractor
     title: Main Classes
   - sections:
-    - local: model_doc/auto
-      title: Auto Classes
     - isExpanded: false
       sections:
       - local: model_doc/albert

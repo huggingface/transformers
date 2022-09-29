@@ -50,6 +50,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("funnel", ("TFFunnelModel", "TFFunnelBaseModel")),
         ("gpt2", "TFGPT2Model"),
         ("gptj", "TFGPTJModel"),
+        ("groupvit", "TFGroupViTModel"),
         ("hubert", "TFHubertModel"),
         ("layoutlm", "TFLayoutLMModel"),
         ("layoutlmv3", "TFLayoutLMv3Model"),
