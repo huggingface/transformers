@@ -19,13 +19,9 @@ Feature extractor class for Whisper
 from typing import List, Optional, Union
 
 import numpy as np
-
-from transformers import is_torch_available
-from transformers.testing_utils import require_torch
+from numpy.fft import fft
 
 
-if is_torch_available():
-    import torch
 
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
@@ -34,7 +30,7 @@ from ...utils import TensorType, logging
 
 logger = logging.get_logger(__name__)
 
-@require_torch
+
 class WhisperFeatureExtractor(SequenceFeatureExtractor):
     r"""
     Constructs a Whisper feature extractor.
@@ -132,26 +128,80 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
         return weights
 
-    def _extract_fbank_features(
-        self,
-        waveform: np.ndarray,
-    ) -> np.ndarray:
-        """
-        Compute the log-Mel spectrogram of the provided audio
-        """
-        waveform = torch.from_numpy(waveform)
-        window = torch.hann_window(self.n_fft).to(waveform.device)
-        stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, return_complex=True)
-        magnitudes = stft[:, :-1].abs() ** 2
+    def fram_wave(self, waveform, center = True):
+        frames = []
+        for i in range(0,waveform.shape[0], self.hop_length) : 
+            half_window = (self.n_fft - 1 )//2 +1
+            if center == True : 
+                start = i-half_window if i > half_window else 0
+                end = i+half_window  if i < waveform.shape[0] - half_window else waveform.shape[0]
 
-        filters = torch.from_numpy(self.mel_filters)
+                frame = waveform[start:end]
+
+                if start == 0 : 
+                    padd_width = (-i+half_window, 0)
+                    frame = np.pad(frame, pad_width=padd_width, mode = "reflect") 
+
+                elif end == waveform.shape[0] : 
+                    padd_width = (0, (i - waveform.shape[0] + half_window))
+                    frame = np.pad(frame, pad_width=padd_width, mode = "reflect") 
+                
+            else : 
+                frame = waveform[i : i + self.n_fft ]
+                frame_width = frame.shape[0]
+                if frame_width < waveform.shape[0] :
+                    frame = np.lib.pad(frame, pad_width=(0,self.n_fft - frame_width), mode = "constant", constant_values=0) 
+
+            frames.append(frame)
+        return np.stack(frames,0)
+
+    def stft(self, frames, window):
+        """
+        Calculates the complex Short-Time Fourier Transform (STFT) of the given
+        framed signal. Should give the same results as torch.stft
+        """
+        frame_size = frames.shape[1]
+        fft_size = self.n_fft
+
+        if fft_size is None:
+            fft_size = frame_size
+
+        if fft_size < frame_size:
+            raise ValueError('FFT size must greater or equal the frame size')
+        # number of FFT bins to store
+        num_fft_bins = (fft_size >> 1) + 1
+
+        data = np.empty((len(frames), num_fft_bins), dtype = np.complex64)
+        fft_signal = np.zeros(fft_size)
+
+        for f, frame in enumerate(frames):
+            if window is not None:
+                np.multiply(frame, window, out=fft_signal[:frame_size])
+            else:
+                fft_signal[:frame_size] = frame
+            data[f] = fft(fft_signal, axis=0)[:num_fft_bins]
+        return data.T
+
+    def _np_extract_fbank_features(self,waveform : np.array) -> np.ndarray : 
+        """
+        Compute the log-Mel spectrogram of the provided audio, gives similar 
+        results to a torch implementation at 1e-5 tolerance. 
+        """
+        window = np.hanning(self.n_fft + 1)[:-1]
+
+        frames = self.fram_wave(waveform)
+        stft = self.stft(frames, window=window)
+        magnitudes = (np.abs(stft[:, :-1]) ** 2)
+
+        filters = self.mel_filters
         mel_spec = filters @ magnitudes
 
-        log_spec = torch.clamp(mel_spec, min=1e-10).log10()
-        log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
+        log_spec = np.log10(np.clip(mel_spec,a_min=1e-10, a_max = None))
+        log_spec = np.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
 
         return log_spec
+
 
     def __call__(
         self,
@@ -237,9 +287,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
 
-        input_features = [self._extract_fbank_features(waveform) for waveform in input_features[0]]
+        input_features = [self._np_extract_fbank_features(waveform) for waveform in input_features[0]]
 
-        if isinstance(input_features[0], torch.Tensor) or isinstance(input_features[0], List):
+        if isinstance(input_features[0], List):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
         else:
             padded_inputs["input_features"] = input_features
