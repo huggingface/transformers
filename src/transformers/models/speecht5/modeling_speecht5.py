@@ -1193,6 +1193,46 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
         )
 
 
+class SpeechT5SpeechEncoder(SpeechT5PreTrainedModel):
+    """
+    Wrapper around SpeechT5Encoder that applies SpeechT5SpeechEncoderPrenet to convert
+    raw audio to hidden features.
+    """
+
+    def __init__(self, config: SpeechT5Config):
+        super().__init__(config)
+        self.prenet = SpeechT5SpeechEncoderPrenet(config)
+        self.wrapped_encoder = SpeechT5Encoder(config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
+
+        hidden_states, attention_mask = self.prenet(input_values, attention_mask)
+
+        outputs = self.wrapped_encoder(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        return outputs
+
+
+# TODO: add class SpeechT5TextEncoder that works on input_ids
+
+
 class SpeechT5Decoder(SpeechT5PreTrainedModel):
     """
     TODO
@@ -1449,6 +1489,59 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         )
 
 
+class SpeechT5TextDecoder(SpeechT5PreTrainedModel):
+    """
+    Wrapper around SpeechT5Decoder that applies SpeechT5TextDecoderPrenet to convert
+    input tokens to hidden features.
+    """
+
+    def __init__(self, config: SpeechT5Config):
+        super().__init__(config)
+        self.prenet = SpeechT5TextDecoderPrenet(config)
+        self.wrapped_decoder = SpeechT5Decoder(config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        input_values: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+
+        # TODO: (this line is from the original code)
+        # incremental_state is similar to our past_key_values
+        #prev_output_tokens, tgt_mask, incremental_state = self.text_decoder_prenet(tokens, incremental_state)
+
+        decoder_hidden_states = self.prenet(input_values)
+
+        outputs = self.wrapped_decoder(
+            hidden_states=decoder_hidden_states,
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        return outputs
+
+
 SPEECHT5_START_DOCSTRING = r"""
     TODO
 """
@@ -1502,16 +1595,13 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     def __init__(
         self,
         config: SpeechT5Config,
-        encoder_prenet: Optional[nn.Module] = None,
-        decoder_prenet: Optional[nn.Module] = None,
+        encoder: Optional[nn.Module] = None,
+        decoder: Optional[nn.Module] = None,
     ):
         super().__init__(config)
         self.config = config
-        self.encoder_prenet = encoder_prenet
-        self.decoder_prenet = decoder_prenet
-
-        self.encoder = SpeechT5Encoder(config)
-        self.decoder = SpeechT5Decoder(config)
+        self.encoder = SpeechT5Encoder(config) if encoder is None else encoder
+        self.decoder = SpeechT5Decoder(config) if decoder is None else decoder
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1543,8 +1633,8 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         r"""
         TODO: write this
 
-        input_values can be input_ids or raw audio
-        decoder_input_values can be input_ids or raw audio
+        input_values can be input_ids or raw audio, depending on the encoder
+        decoder_input_values can be input_ids or raw audio, depending on the decoder
 
         Return:
         """
@@ -1557,13 +1647,8 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
 
         # Encode if needed (training, first prediction pass)
         if encoder_outputs is None:
-            if self.encoder_prenet is not None:
-                hidden_states, attention_mask = self.encoder_prenet(input_values, attention_mask)
-            else:
-                hidden_states = input_values
-
             encoder_outputs = self.encoder(
-                hidden_states=hidden_states,
+                input_values=input_values,
                 attention_mask=attention_mask,
                 # head_mask=head_mask,  #TODO: do we have this?
                 output_attentions=output_attentions,
@@ -1577,28 +1662,19 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # TODO: we already do this in the encoder, so seems wasteful to do it again here
-        #       can we return this downsampled attention mask from the Encoder instead?
-        #       may need to change BaseModelOutput to a different class then
+        # TODO: put the downsampled attention mask into the output from the encoder
+        # (change BaseModelOutput to a different class), so it gets added to the
+        # returned encoder_outputs and we don't have to downsample here
         # downsample encoder attention mask
-        # if attention_mask is not None:
-        #     encoder_attention_mask = self.speech_encoder.prenet._get_feature_vector_attention_mask(
-        #         encoder_outputs[0].shape[1], attention_mask
-        #     )
-        # else:
-        #     encoder_attention_mask = None
-
-        # TODO: if the encoder isn't called, we still need to resize the attention mask
-        # so either put it into encoder_outputs or recompute it like Speech2Text does
-        encoder_attention_mask = attention_mask
-
-        if self.decoder_prenet is not None:
-            decoder_hidden_states = self.decoder_prenet(decoder_input_values)
+        if attention_mask is not None:
+            encoder_attention_mask = self.encoder.prenet._get_feature_vector_attention_mask(
+                encoder_outputs[0].shape[1], attention_mask
+            )
         else:
-            decoder_hidden_states = decoder_input_values
+            encoder_attention_mask = None
 
         decoder_outputs = self.decoder(
-            hidden_states=decoder_hidden_states,
+            input_values=decoder_input_values,
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=encoder_attention_mask,
@@ -1642,10 +1718,9 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        speech_encoder_prenet = SpeechT5SpeechEncoderPrenet(config)
-        text_decoder_prenet = SpeechT5TextDecoderPrenet(config)
-
-        self.speecht5 = SpeechT5Model(config, speech_encoder_prenet, text_decoder_prenet)
+        speech_encoder = SpeechT5SpeechEncoder(config)
+        text_decoder = SpeechT5TextDecoder(config)
+        self.speecht5 = SpeechT5Model(config, speech_encoder, text_decoder)
 
         #TODO? self.dropout = nn.Dropout(config.final_dropout)
 
@@ -1718,6 +1793,9 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
     ) -> Union[Tuple, Seq2SeqLMOutput]:
         r"""
         TODO
+
+        input_values = raw audio (after feature extraction); maybe rename this to
+        be less ambiguous with input_values used in SpeechT5Model / encoder / decoder?
 
         labels (`torch.LongTensor` of shape `(batch_size, target_length)`, *optional*):
             Labels for connectionist temporal classification. Note that `target_length` has to be smaller or equal to
@@ -1820,7 +1898,7 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
         return {
             "encoder_outputs": encoder_outputs,
             "past_key_values": past,
-            "decoder_input_values": decoder_input_ids,
+            "decoder_input_ids": decoder_input_ids,
             "attention_mask": attention_mask,
             # "head_mask": head_mask,
             # "decoder_head_mask": decoder_head_mask,
