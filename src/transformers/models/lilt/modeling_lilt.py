@@ -923,6 +923,9 @@ class LiltModel(LiltPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
+        if bbox is None:
+            bbox = torch.zeros(input_shape + (4,), dtype=torch.long, device=device)
+        
         if attention_mask is None:
             attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
 

@@ -47,7 +47,7 @@ class LiltModelTester:
         vocab_size=99,
         hidden_size=768,
         num_hidden_layers=5,
-        num_attention_heads=4,
+        num_attention_heads=6,
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -229,6 +229,7 @@ class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         else ()
     )
     fx_compatible = False
+    test_pruning = False
 
     def setUp(self):
         self.model_tester = LiltModelTester(self)
