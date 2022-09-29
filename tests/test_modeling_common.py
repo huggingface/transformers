@@ -2987,7 +2987,7 @@ class ModelUtilsTest(TestCasePlus):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir, safe_serialization=True)
-            # No pytorch_mode.bin file, only a model.safetensors
+            # No pytorch_model.bin file, only a model.safetensors
             self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
             self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
 
