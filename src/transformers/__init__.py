@@ -1769,9 +1769,6 @@ else:
     _import_structure["models.lilt"].extend(
         [
             "LILT_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "LiltForCausalLM",
-            "LiltForMaskedLM",
-            "LiltForMultipleChoice",
             "LiltForQuestionAnswering",
             "LiltForSequenceClassification",
             "LiltForTokenClassification",
@@ -4166,9 +4163,6 @@ if TYPE_CHECKING:
         )
         from .models.lilt import (
             LILT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            LiltForCausalLM,
-            LiltForMaskedLM,
-            LiltForMultipleChoice,
             LiltForQuestionAnswering,
             LiltForSequenceClassification,
             LiltForTokenClassification,

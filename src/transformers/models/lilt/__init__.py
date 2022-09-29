@@ -33,9 +33,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_lilt"] = [
         "LILT_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "LiltForCausalLM",
-        "LiltForMaskedLM",
-        "LiltForMultipleChoice",
         "LiltForQuestionAnswering",
         "LiltForSequenceClassification",
         "LiltForTokenClassification",
@@ -54,9 +51,6 @@ if TYPE_CHECKING:
     else:
         from .modeling_lilt import (
             LILT_PRETRAINED_MODEL_ARCHIVE_LIST,
-            LiltForCausalLM,
-            LiltForMaskedLM,
-            LiltForMultipleChoice,
             LiltForQuestionAnswering,
             LiltForSequenceClassification,
             LiltForTokenClassification,
