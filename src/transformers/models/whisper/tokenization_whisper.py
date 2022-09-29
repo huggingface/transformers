@@ -424,11 +424,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return normalizer(text)
 
     def _decode(
-        self,
-        token_ids: Union[int, List[int]],
-        skip_special_tokens: bool = False,
-        normalize: bool = False,
-        **kwargs
+        self, token_ids: Union[int, List[int]], skip_special_tokens: bool = False, normalize: bool = False, **kwargs
     ) -> str:
         self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
 
@@ -459,7 +455,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
             return clean_text
         else:
             return text
-
 
     # Copied from transformers.models.gpt2.tokenization_gpt2.GPT2Tokenizer.convert_tokens_to_string with GPT2 -> Whisper
     def convert_tokens_to_string(self, tokens):
