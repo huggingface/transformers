@@ -91,6 +91,8 @@ class MarkupLMProcessor(ProcessorMixin):
             nodes = features["nodes"]
             xpaths = features["xpaths"]
         else:
+            if html_strings is not None:
+                raise ValueError("You have passed HTML strings but `parse_html` is set to `False`.")
             if nodes is None or xpaths is None:
                 raise ValueError("Make sure to pass nodes and xpaths in case `parse_html` is set to `False`")
 
