@@ -1624,7 +1624,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.info(f"Model weights saved in {os.path.join(save_directory, WEIGHTS_NAME)}")
         else:
             save_index_file = SAFE_WEIGHTS_INDEX_NAME if safe_serialization else WEIGHTS_INDEX_NAME
-            save_index_file = os.path.join(save_directory, SAFE_WEIGHTS_INDEX_NAME)
+            save_index_file = os.path.join(save_directory, save_index_file)
             # Save the index as well
             with open(save_index_file, "w", encoding="utf-8") as f:
                 content = json.dumps(index, indent=2, sort_keys=True) + "\n"
