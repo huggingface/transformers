@@ -18,9 +18,16 @@ import re
 from fractions import Fraction
 from typing import Iterator, List, Match, Optional, Union
 
-from more_itertools import windowed
+from transformers.utils.import_utils import is_more_itertools_available
+
+
+if is_more_itertools_available():
+    from more_itertools import windowed
 
 import unicodedata
+
+import regex
+
 
 # non-ASCII letters that are not separated by "NFKD" normalization
 ADDITIONAL_DIACRITICS = {
@@ -45,8 +52,8 @@ ADDITIONAL_DIACRITICS = {
 
 def remove_symbols_and_diacritics(s: str, keep=""):
     """
-    Replace any other markers, symbols, and punctuations with a space,
-    and drop any diacritics (category 'Mn' and some manual mappings)
+    Replace any other markers, symbols, and punctuations with a space, and drop any diacritics (category 'Mn' and some
+    manual mappings)
     """
     return "".join(
         c
