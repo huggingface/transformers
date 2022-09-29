@@ -148,8 +148,8 @@ class DetrObjectDetectionOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~DetrFeatureExtractor.post_process`] to retrieve the unnormalized bounding
-            boxes.
+            possible padding). You can use [`~DetrFeatureExtractor.post_process_object_detection`] to retrieve the
+            unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxilary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
@@ -211,12 +211,14 @@ class DetrSegmentationOutput(ModelOutput):
         pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
             Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
             values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding). You can use [`~DetrFeatureExtractor.post_process`] to retrieve the unnormalized bounding
-            boxes.
+            possible padding). You can use [`~DetrFeatureExtractor.post_process_object_detection`] to retrieve the
+            unnormalized bounding boxes.
         pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/4, width/4)`):
-            Segmentation masks logits for all queries. See also [`~DetrFeatureExtractor.post_process_segmentation`] or
-            [`~DetrFeatureExtractor.post_process_panoptic`] to evaluate instance and panoptic segmentation masks
-            respectively.
+            Segmentation masks logits for all queries. See also
+            [`~DetrFeatureExtractor.post_process_semantic_segmentation`] or
+            [`~DetrFeatureExtractor.post_process_instance_segmentation`]
+            [`~DetrFeatureExtractor.post_process_panoptic_segmentation`] to evaluate semantic, instance and panoptic
+            segmentation masks respectively.
         auxiliary_outputs (`list[Dict]`, *optional*):
             Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
             and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
@@ -1424,7 +1426,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
 
         >>> # convert outputs (bounding boxes and class logits) to COCO API
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = feature_extractor.post_process(outputs, target_sizes=target_sizes)[0]
+        >>> results = feature_extractor.post_process_object_detection(outputs, target_sizes=target_sizes)[0]
 
         >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
@@ -1601,13 +1603,12 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> # forward pass
         >>> outputs = model(**inputs)
 
-        >>> # use the `post_process_panoptic_segmentation` method of `DetrFeatureExtractor` to retrieve post-processed panoptic segmentation maps
-        >>> result = feature_extractor.post_process_panoptic(outputs, processed_sizes)
-
+        >>> # Use the `post_process_panoptic_segmentation` method of `DetrFeatureExtractor` to retrieve post-processed panoptic segmentation maps
         >>> # Segmentation results are returned as a list of dictionaries
-        >>> panoptic_seg = result[0][
-        ...     "segmentation"
-        ... ]  # A tensor of shape (height, width) where each value denotes a segment id
+        >>> result = feature_extractor.post_process_panoptic_segmentation(outputs, processed_sizes)
+
+        >>> # A tensor of shape (height, width) where each value denotes a segment id
+        >>> panoptic_seg = result[0]["segmentation"]
         >>> # Get mapping of segment ids to semantic class ids
         >>> panoptic_segments_info = result[0]["segment_ids"]
         ```"""

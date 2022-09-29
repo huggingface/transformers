@@ -16,6 +16,7 @@
 
 import io
 import pathlib
+import warnings
 from collections import defaultdict
 from typing import Dict, List, Optional, Union
 
@@ -674,7 +675,7 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
-        logger.warning(
+        warnings.warn(
             "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_object_detection`",
             FutureWarning,
@@ -719,7 +720,7 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an image
             in the batch as predicted by the model.
         """
-        logger.warning(
+        warnings.warn(
             "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_semantic_segmentation`.",
             FutureWarning,
@@ -772,7 +773,7 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and masks for an
             image in the batch as predicted by the model.
         """
-        logger.warning(
+        warnings.warn(
             "`post_process_instance` is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_instance_segmentation`.",
             FutureWarning,
@@ -820,7 +821,7 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             `List[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values for
             an image in the batch as predicted by the model.
         """
-        logger.warning(
+        warnings.warn(
             "`post_process_panoptic is deprecated and will be removed in v5 of Transformers, please use"
             " `post_process_panoptic_segmentation`.",
             FutureWarning,
