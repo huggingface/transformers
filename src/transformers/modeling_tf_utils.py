@@ -84,6 +84,8 @@ TFModelInputType = Union[
     KerasTensor,
 ]
 
+tf.experimental.numpy.experimental_enable_numpy_behavior(prefer_float32=True)
+
 
 def dummy_loss(y_true, y_pred):
     return tf.reduce_mean(y_pred)
