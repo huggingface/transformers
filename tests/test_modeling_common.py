@@ -2999,6 +2999,15 @@ class ModelUtilsTest(TestCasePlus):
                 self.assertTrue(torch.allclose(p1, p2))
 
     @require_safetensors
+    def test_safetensors_load_from_hub(self):
+        safetensors_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-safetensors")
+        pytorch_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Check models are equal
+        for p1, p2 in zip(safetensors_model.parameters(), pytorch_model.parameters()):
+            self.assertTrue(torch.allclose(p1, p2))
+
+    @require_safetensors
     def test_safetensors_save_and_load_sharded(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
         with tempfile.TemporaryDirectory() as tmp_dir:
