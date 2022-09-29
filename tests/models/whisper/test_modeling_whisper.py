@@ -16,10 +16,10 @@
 
 import copy
 import inspect
-from locale import normalize
 import os
 import tempfile
 import unittest
+from locale import normalize
 
 from transformers import WhisperConfig
 from transformers.testing_utils import is_torch_available, require_torch, require_torchaudio, slow, torch_device
