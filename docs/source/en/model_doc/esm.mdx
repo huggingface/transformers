@@ -13,11 +13,25 @@ specific language governing permissions and limitations under the License.
 # ESM
 
 ## Overview
-The ESM model was proposed in [Biological structure and function emerge from scaling unsupervised learning to 250
-million protein sequences](https://www.pnas.org/content/118/15/e2016239118). ESM is the ESM-1b Transformer protein
-language model from Facebook AI Research.
+This page provides code and pre-trained weights for Transformer protein language models from Meta AI's Fundamental 
+AI Research Team, providing the state-of-the-art ESM-2, and the previously released ESM-1b and ESM-1v. Transformer 
+protein language models were introduced in the paper [Biological structure and function emerge from scaling 
+unsupervised learning to 250 million protein sequences](https://www.pnas.org/content/118/15/e2016239118) by 
+Alexander Rives, Joshua Meier, Tom Sercu, Siddharth Goyal, Zeming Lin, Jason Liu, Demi Guo, Myle Ott, 
+C. Lawrence Zitnick, Jerry Ma, and Rob Fergus.
+The first version of this paper was [preprinted in 2019](https://www.biorxiv.org/content/10.1101/622803v1?versioned=true).
 
-The abstract from the paper is the following:
+ESM-2 outperforms all tested single-sequence protein language models across a range of structure prediction tasks,
+and enables atomic resolution structure prediction.
+It was released with the paper [Language models of protein sequences at the scale of evolution enable accurate
+structure prediction](https://doi.org/10.1101/2022.07.20.500902) by Zeming Lin, Halil Akin, Roshan Rao, Brian Hie,
+Zhongkai Zhu, Wenting Lu, Allan dos Santos Costa, Maryam Fazel-Zarandi, Tom Sercu, Sal Candido and Alexander Rives.
+
+
+The abstract from 
+"Biological structure and function emerge from scaling unsupervised learning to 250 
+million protein sequences" is
+
 
 *In the field of artificial intelligence, a combination of scale in data and model capacity enabled by unsupervised
 learning has led to major advances in representation learning and statistical generation. In the life sciences, the
@@ -32,12 +46,33 @@ can be identified by linear projections. Representation learning produces featur
 applications, enabling state-of-the-art supervised prediction of mutational effect and secondary structure and
 improving state-of-the-art features for long-range contact prediction.*
 
+
+The abstract from
+"Language models of protein sequences at the scale of evolution enable accurate structure prediction" is
+
+*Large language models have recently been shown to develop emergent capabilities with scale, going beyond
+simple pattern matching to perform higher level reasoning and generate lifelike images and text. While
+language models trained on protein sequences have been studied at a smaller scale, little is known about
+what they learn about biology as they are scaled up. In this work we train models up to 15 billion parameters,
+the largest language models of proteins to be evaluated to date. We find that as models are scaled they learn
+information enabling the prediction of the three-dimensional structure of a protein at the resolution of
+individual atoms. We present ESMFold for high accuracy end-to-end atomic level structure prediction directly
+from the individual sequence of a protein. ESMFold has similar accuracy to AlphaFold2 and RoseTTAFold for
+sequences with low perplexity that are well understood by the language model. ESMFold inference is an
+order of magnitude faster than AlphaFold2, enabling exploration of the structural space of metagenomic
+proteins in practical timescales.*
+
+
+
+
 Tips:
 
-- ESM was trained with a masked language modeling (MLM) objective.
+- ESM models are trained with a masked language modeling (MLM) objective.
 
-This model was contributed by [jasonliu](https://huggingface.co/jasonliu) and [Matt](https://huggingface.co/Rocketknight1).
-The original code can be found [here](https://github.com/facebookresearch/esm).
+The original code can be found [here](https://github.com/facebookresearch/esm) and was
+was developed by the Fundamental AI Research team at Meta AI.
+This model was contributed to huggingface by [jasonliu](https://huggingface.co/jasonliu) 
+and [Matt](https://huggingface.co/Rocketknight1).
 
 ## EsmConfig
 
