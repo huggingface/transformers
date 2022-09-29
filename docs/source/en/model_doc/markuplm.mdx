@@ -39,7 +39,7 @@ tasks. The pre-trained model and code will be publicly available.*
 Tips:
 - In addition to `input_ids`, [`~MarkupLMModel.forward`] expects 2 additional inputs, namely `xpath_tags_seq` and `xpath_subs_seq`.
 These are the XPATH tags and subscripts respectively for each token in the input sequence.
-- One can use ['MarkupLMProcessor`] to prepare all data for the model. Refer to the [usage guide](#usage-markuplmprocessor) for more info.
+- One can use [`MarkupLMProcessor`] to prepare all data for the model. Refer to the [usage guide](#usage-markuplmprocessor) for more info.
 - Demo notebooks can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/MarkupLM).
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/markuplm_architecture.jpg"
@@ -69,7 +69,7 @@ In short, one can provide HTML strings (and possibly additional data) to [`Marku
 and it will create the inputs expected by the model. Internally, the processor first uses
 [`MarkupLMFeatureExtractor`] to get a list of nodes and corresponding xpaths. The nodes and
 xpaths are then provided to [`MarkupLMTokenizer`] or [`MarkupLMTokenizerFast`], which converts them
-to token-level `input_ids`, `attention_mask`, `token_type_ids`, `xpath_subs_seq`, `xpath_tags_seq.
+to token-level `input_ids`, `attention_mask`, `token_type_ids`, `xpath_subs_seq`, `xpath_tags_seq`.
 Optionally, one can provide node labels to the processor, which are turned into token-level `labels`.
 
 [`MarkupLMFeatureExtractor`] uses [Beautiful Soup](https://www.crummy.com/software/BeautifulSoup/bs4/doc/), a Python library for

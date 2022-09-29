@@ -125,14 +125,6 @@ except importlib_metadata.PackageNotFoundError:
     _datasets_available = False
 
 
-_bs4_available = importlib.util.find_spec("bs4") is not None
-try:
-    _bs4_version = importlib_metadata.version("beautifulsoup4")
-    logger.debug(f"Successfully imported Beautiful Soup 4 version {_bs4_version}")
-except importlib_metadata.PackageNotFoundError:
-    _bs4_available = False
-
-
 _detectron2_available = importlib.util.find_spec("detectron2") is not None
 try:
     _detectron2_version = importlib_metadata.version("detectron2")
@@ -395,7 +387,7 @@ def is_torch_fx_available():
 
 
 def is_bs4_available():
-    return _bs4_available
+    return importlib.util.find_spec("bs4") is not None
 
 
 def is_torch_onnx_dict_inputs_support_available():
