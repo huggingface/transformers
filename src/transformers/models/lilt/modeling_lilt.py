@@ -57,7 +57,7 @@ LILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-class LiLTTextEmbeddings(nn.Module):
+class LiltTextEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
@@ -127,9 +127,9 @@ class LiLTTextEmbeddings(nn.Module):
         return position_ids.unsqueeze(0).expand(input_shape)
 
 
-class LiLTLayoutEmbeddings(nn.Module):
+class LiltLayoutEmbeddings(nn.Module):
     def __init__(self, config):
-        super(LiLTRobertaLikeLayoutEmbeddings, self).__init__()
+        super().__init__()
         self.x_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size // 6)
         self.y_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size // 6)
         self.h_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size // 6)
@@ -655,6 +655,7 @@ class LiltPreTrainedModel(PreTrainedModel):
     base_model_prefix = "lilt"
     supports_gradient_checkpointing = True
 
+    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
@@ -754,7 +755,6 @@ LILT_INPUTS_DOCSTRING = r"""
     "The bare LiLT Model transformer outputting raw hidden-states without any specific head on top.",
     LILT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaModel with ROBERTA->LILT,Roberta->Lilt
 class LiltModel(LiltPreTrainedModel):
     """
 
@@ -770,14 +770,14 @@ class LiltModel(LiltPreTrainedModel):
     .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
 
     """
-
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = LiltEmbeddings(config)
+        self.embeddings = LiltTextEmbeddings(config)
+        self.layout_embeddings = LiltLayoutEmbeddings(config)
         self.encoder = LiltEncoder(config)
 
         self.pooler = LiltPooler(config) if add_pooling_layer else None
@@ -1015,13 +1015,13 @@ class LiltForCausalLM(LiltPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import RobertaTokenizer, LiltForCausalLM, LiltConfig
+        >>> from transformers import LiltTokenizer, LiltForCausalLM, LiltConfig
         >>> import torch
 
-        >>> tokenizer = RobertaTokenizer.from_pretrained("organization/lilt-roberta-en-base")
-        >>> config = LiltConfig.from_pretrained("organization/lilt-roberta-en-base")
+        >>> tokenizer = LiltTokenizer.from_pretrained("lilt-base")
+        >>> config = LiltConfig.from_pretrained("lilt-base")
         >>> config.is_decoder = True
-        >>> model = LiltForCausalLM.from_pretrained("organization/lilt-roberta-en-base", config=config)
+        >>> model = LiltForCausalLM.from_pretrained("lilt-base", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1243,7 +1243,7 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
     @add_start_docstrings_to_model_forward(LILT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="cardiffnlp/twitter-organization/lilt-roberta-en-base-emotion",
+        checkpoint="cardiffnlp/twitter-lilt-base-emotion",
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output="'optimism'",
@@ -1549,7 +1549,7 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
     @add_start_docstrings_to_model_forward(LILT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint="deepset/organization/lilt-roberta-en-base-squad2",
+        checkpoint="deepset/lilt-base-squad2",
         output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output="' puppet'",
