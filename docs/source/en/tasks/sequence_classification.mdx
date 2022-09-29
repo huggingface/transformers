@@ -125,6 +125,7 @@ Then create a function to compute the metric. Pass your predictions and labels t
 ```py
 >>> import numpy as np
 
+
 >>> def compute_metrics(eval_pred):
 ...     predictions, labels = eval_pred
 ...     predictions = np.argmax(predictions, axis=1)
@@ -159,7 +160,7 @@ At this point, only three steps remain:
 
 ```py
 >>> training_args = TrainingArguments(
-...     output_dir="my_awesome_model"",
+...     output_dir="my_awesome_model",
 ...     learning_rate=2e-5,
 ...     per_device_train_batch_size=16,
 ...     per_device_eval_batch_size=16,
@@ -257,9 +258,7 @@ Set up your `compute_metrics` function with [`~transformers.KerasMetricCallback`
 ```py
 >>> from transformers.keras_callbacks import KerasMetricCallback
 
->>> metric_callback = KerasMetricCallback(
-...     metric_fn=compute_metrics, eval_dataset=tf_validation_set
-... )
+>>> metric_callback = KerasMetricCallback(metric_fn=compute_metrics, eval_dataset=tf_validation_set)
 ```
 
 Set up the [`transformers.PushToHubCallback`]:
@@ -280,8 +279,6 @@ Then bundle your callbacks together and pass them to [`fit`] in the next step:
 ```
 
 Finally, you're ready to start training your model! Call [`fit`] with your training and validation datasets, the number of epochs, and your callbacks:
-
-```py
 
 Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to finetune the model:
 
@@ -312,8 +309,8 @@ Grab some text you'd like to run inference on:
 The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Map the expected id to their labels with `id2label` and `label2id`:
 
 ```py
->>> id2label = {0:'NEGATIVE', 1:'POSITIVE'}
->>> label2id = {'NEGATIVE':0, 'POSITIVE':1}
+>>> id2label = {0: "NEGATIVE", 1: "POSITIVE"}
+>>> label2id = {"NEGATIVE": 0, "POSITIVE": 1}
 ```
 
 <frameworkcontent>
@@ -322,7 +319,9 @@ The simplest way to try out your finetuned model for inference is to use it in a
 >>> from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
 
 >>> tokenizer = AutoTokenizer.from_pretrained("stevhliu/my_awesome_model")
->>> model = AutoModelForSequenceClassification.from_pretrained("stevhliu/my_awesome_model", id2label=id2label, label2id=label2id)
+>>> model = AutoModelForSequenceClassification.from_pretrained(
+...     "stevhliu/my_awesome_model", id2label=id2label, label2id=label2id
+... )
 ```
 
 Instantiate the `pipeline` for sentiment analysis with your model and tokenizer, and pass your text to it:
@@ -338,7 +337,9 @@ Instantiate the `pipeline` for sentiment analysis with your model and tokenizer,
 >>> from transformers import pipeline, AutoTokenizer, TFAutoModelForSequenceClassification
 
 >>> tokenizer = AutoTokenizer.from_pretrained("stevhliu/my_awesome_model")
->>> model = TFAutoModelForSequenceClassification.from_pretrained("stevhliu/my_awesome_model", id2label=id2label, label2id=label2id)
+>>> model = TFAutoModelForSequenceClassification.from_pretrained(
+...     "stevhliu/my_awesome_model", id2label=id2label, label2id=label2id
+... )
 ```
 
 Instantiate the `pipeline` for sentiment analysis with your model and tokenizer, and pass your text to it:
