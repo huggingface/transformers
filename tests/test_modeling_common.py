@@ -53,6 +53,7 @@ from transformers.testing_utils import (
     is_pt_tf_cross_test,
     is_staging_test,
     require_accelerate,
+    require_safetensors,
     require_torch,
     require_torch_gpu,
     require_torch_multi_gpu,
@@ -61,6 +62,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
+    SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     is_accelerate_available,
@@ -2979,6 +2981,24 @@ class ModelUtilsTest(TestCasePlus):
         _ = BertModel.from_pretrained(
             "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/pytorch_model.bin", config=config
         )
+
+    @require_safetensors
+    def test_safetensors_save_and_load(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+            # No pytorch_mode.bin file, only a model.safetensors
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
+
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            state = model.state_dict()
+            new_state = new_model.state_dict()
+            for key in state.keys():
+                self.assertIn(key, new_state)
+                self.assertTrue(torch.allclose(state[key], new_state[key]))
 
 
 @require_torch
