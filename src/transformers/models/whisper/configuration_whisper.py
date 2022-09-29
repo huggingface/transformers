@@ -156,7 +156,7 @@ class WhisperConfig(PretrainedConfig):
         encoder_ffn_dim=1536,
         encoder_layerdrop=0.0,
         decoder_layerdrop=0.0,
-        decoder_start_token_id=50258,
+        decoder_start_token_id=50257,
         use_cache=True,
         is_encoder_decoder=True,
         activation_function="gelu",
@@ -170,7 +170,7 @@ class WhisperConfig(PretrainedConfig):
         max_target_positions=448,
         pad_token_id=0,
         bos_token_id=50257,
-        eos_token_id=50257,
+        eos_token_id=50256,
         tie_word_embeddings=True,
         non_speech_tokens=None,
         **kwargs
