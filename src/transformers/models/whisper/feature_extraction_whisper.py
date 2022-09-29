@@ -128,7 +128,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
     def fram_wave(self, waveform, center=True):
         frames = []
-        for i in range(0, waveform.shape[0]+1, self.hop_length):
+        for i in range(0, waveform.shape[0] + 1, self.hop_length):
             half_window = (self.n_fft - 1) // 2 + 1
             if center:
                 start = i - half_window if i > half_window else 0
