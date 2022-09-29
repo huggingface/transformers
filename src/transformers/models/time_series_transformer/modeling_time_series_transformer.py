@@ -1761,10 +1761,15 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
         future_observed_mask: Optional[torch.Tensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        decoder_head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
         encoder_outputs: Optional[List[torch.FloatTensor]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
         output_hidden_states: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        use_cache: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
         r"""
