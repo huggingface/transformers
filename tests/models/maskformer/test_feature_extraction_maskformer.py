@@ -407,8 +407,8 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         self.assertTrue(len(segmentation) == self.feature_extract_tester.batch_size)
         for el in segmentation:
             self.assertTrue("segmentation" in el)
-            self.assertTrue("segment_ids" in el)
-            self.assertEqual(type(el["segment_ids"]), list)
+            self.assertTrue("segments_info" in el)
+            self.assertEqual(type(el["segments_info"]), list)
             self.assertEqual(
                 el["segmentation"].shape, (self.feature_extract_tester.height, self.feature_extract_tester.width)
             )
