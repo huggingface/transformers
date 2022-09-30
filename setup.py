@@ -169,6 +169,7 @@ _deps = [
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
+    "beautifulsoup4",
 ]
 
 
@@ -302,6 +303,7 @@ extras["testing"] = (
         "sacremoses",
         "rjieba",
         "safetensors",
+        "beautifulsoup4",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
