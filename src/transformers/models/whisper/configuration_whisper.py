@@ -129,6 +129,7 @@ class WhisperConfig(PretrainedConfig):
             A list containing tokens that will be supressed at the beginning of the sampling process. Initialized as
             the token for " " (`blank_token_id`) and the `eos_token_id`
 
+
     Example:
 
     ```python
