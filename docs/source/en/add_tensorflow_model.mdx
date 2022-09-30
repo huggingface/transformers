@@ -27,16 +27,17 @@ Before you dive deeper, it is recommended that you check the following resources
 - [General overview of 🤗 Transformers](add_new_model#general-overview-of-transformers)
 - [Hugging Face's TensorFlow Philosophy](https://huggingface.co/blog/tensorflow-philosophy)
 
-As for the remainder of this guide, you will learn what's needed to add a new TensorFlow model architecture, the
+For the remainder of this guide, you will learn what's needed to add a new TensorFlow model architecture, the
 procedure to convert PyTorch into TensorFlow model weights, and how to efficiently debug mismatches across ML
 frameworks. Let's get started!
 
 <Tip>
 
-Are you unsure whether the model you wish to use already has a corresponding TensorFlow architecture, so you can jump
-straight to the weight conversion section? Check the `model_type` field of the `config.json` of your model of choice
+Are you unsure whether the model you wish to use already has a corresponding TensorFlow architecture?
+
+Check the `model_type` field of the `config.json` of your model of choice
 ([example](https://huggingface.co/bert-base-uncased/blob/main/config.json#L14)). If the corresponding model folder in
-🤗 Transformers has a file whose name starts with `modeling_tf`, it means that it has a corresponding TensorFlow
+🤗 Transformers has a file whose name starts with "modeling_tf", it means that it has a corresponding TensorFlow
 architecture ([example](https://github.com/huggingface/transformers/tree/main/src/transformers/models/bert)).
 
 </Tip>
@@ -221,13 +222,13 @@ changes:
 
 When you're happy with your implementation, run the following checklist to confirm that your model architecture is
 ready:
-- 1. All layers that behave differently at train time (e.g. Dropout) are called with a `training` argument, which is
+1. All layers that behave differently at train time (e.g. Dropout) are called with a `training` argument, which is
 propagated all the way from the top-level classes
-- 2. You have used `#copied from ...` whenever possible
-- 3. `TFBrandNewBertMainLayer` and all classes that use it have their `call` function decorated with `@unpack_inputs`
-- 4. `TFBrandNewBertMainLayer` is decorated with `@keras_serializable`
-- 5. A TensorFlow model can be loaded from PyTorch weights using `TFBrandNewBert.from_pretrained(model_repo, from_pt=True)`
-- 6. You can call the TensorFlow model using the expected input format
+2. You have used `#copied from ...` whenever possible
+3. `TFBrandNewBertMainLayer` and all classes that use it have their `call` function decorated with `@unpack_inputs`
+4. `TFBrandNewBertMainLayer` is decorated with `@keras_serializable`
+5. A TensorFlow model can be loaded from PyTorch weights using `TFBrandNewBert.from_pretrained(model_repo, from_pt=True)`
+6. You can call the TensorFlow model using the expected input format
 
 
 ### 5. Add model tests
@@ -241,7 +242,8 @@ the existing PyTorch weights.
 After you're done, it's time for the moment of truth: run the tests! 😬
 
 ```bash
-NVIDIA_TF32_OVERRIDE=0 RUN_SLOW=1 RUN_PT_TF_CROSS_TESTS=1 py.test -vv tests/brand_new_bert/test_modeling_tf_brand_new_bert.py
+NVIDIA_TF32_OVERRIDE=0 RUN_SLOW=1 RUN_PT_TF_CROSS_TESTS=1 \
+py.test -vv tests/models/brand_new_bert/test_modeling_tf_brand_new_bert.py
 ```
 
 The most likely outcome is that you'll see a bunch of errors. Don't worry, this is expected! Debugging ML models is
@@ -273,7 +275,8 @@ Finally, when the TensorFlow weights get merged, you have at least 3 reviewer ap
 green, double-check the tests localy one last time
 
 ```bash
-NVIDIA_TF32_OVERRIDE=0 RUN_SLOW=1 RUN_PT_TF_CROSS_TESTS=1 py.test -vv tests/brand_new_bert/test_modeling_tf_brand_new_bert.py
+NVIDIA_TF32_OVERRIDE=0 RUN_SLOW=1 RUN_PT_TF_CROSS_TESTS=1 \
+py.test -vv tests/models/brand_new_bert/test_modeling_tf_brand_new_bert.py
 ```
 
 and we will merge your PR! Congratulations on the milestone 🎉
@@ -284,9 +287,9 @@ One of the hardest parts about open-source is discovery. How can the other users
 fabulous TensorFlow contribution? With proper communication, of course! 📣
 
 There are two main ways to share your model with the community:
-- 1. Build demos. These include Gradio demos, notebooks, and other fun ways to show off your model. We highly
+- Build demos. These include Gradio demos, notebooks, and other fun ways to show off your model. We highly
    encourage you to add a notebook to our [community-driven demos](https://huggingface.co/docs/transformers/community).
-- 2. Share stories on social media like Twitter and LinkedIn. You should be proud of your work and share
+- Share stories on social media like Twitter and LinkedIn. You should be proud of your work and share
    your achievement with the community - your model can now be used by thousands of engineers and researchers around
    the world 🌍! We will be happy to retweet your posts and help you share your work with the community.
 
@@ -297,11 +300,11 @@ Assuming that the TensorFlow model architecture is available in 🤗 Transformer
 TensorFlow weights is a breeze!
 
 Here's how to do it:
-- 1. Make sure you are logged into your Hugging Face account in your terminal. You can log in using the command
+1. Make sure you are logged into your Hugging Face account in your terminal. You can log in using the command
    `huggingface-cli login` (you find your access tokens [here](https://huggingface.co/settings/tokens))
-- 2. Run `transformers-cli pt-to-tf --model-name foo/bar`, where `foo/bar` is the name of the model repository
+2. Run `transformers-cli pt-to-tf --model-name foo/bar`, where `foo/bar` is the name of the model repository
    containing the PyTorch weights you want to convert
-- 3. Tag `@joaogante` and `@Rocketknight1` in the 🤗 Hub PR the command above has just created
+3. Tag `@joaogante` and `@Rocketknight1` in the 🤗 Hub PR the command above has just created
 
 That's it! 🎉
 
@@ -321,13 +324,13 @@ arguably worse than a model that fails to run at all! To that end, we aim at hav
 
 As in other numerical problems, the devil is in the details. And as in any detail-oriented craft, the secret
 ingredient here is patience. Here is our suggested workflow for when you come across this type of issues:
-- 1. Locate the source of mismatches. The model you're converting probably has near identical inner variables up to a
+1. Locate the source of mismatches. The model you're converting probably has near identical inner variables up to a
    certain point. Place `breakpoint()` statements in the two frameworks' architectures, and compare the values of the
    numerical variables in a top-down fashion until you find the source of the problems.
-- 2. Now that you've pinpointed the source of the issue, get in touch with the 🤗 Transformers team. It is possible
+2. Now that you've pinpointed the source of the issue, get in touch with the 🤗 Transformers team. It is possible
    that we've seen a similar problem before and can promptly provide a solution. As a fallback, scan popular pages
    like StackOverflow and GitHub issues.
-- 3. If there is no solution in sight, it means you'll have to go deeper. The good news is that you've located the
+3. If there is no solution in sight, it means you'll have to go deeper. The good news is that you've located the
    issue, so you can focus on the problematic instruction, abstracting away the rest of the model! The bad news is
    that you'll have to venture into the source implementation of said instruction. In some cases, you might find an
    issue with a reference implementation - don't abstain from opening an issue in the upstream repository.
