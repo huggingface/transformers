@@ -78,7 +78,9 @@ Let's start off with the basics: the first thing you need to know is the archite
 don't have your eyes set on a specific architecture, asking the 🤗 Transformers team for suggestions is a great way to
 maximize your impact - we will guide you towards the most prominent architectures that are missing on the TensorFlow
 side. If the specific model you want to use with TensorFlow already has a TensorFlow architecture implementation in
-🤗 Transformers but is lacking weights, feel free to jump straight into the weight conversion section of this page.
+🤗 Transformers but is lacking weights, feel free to jump straight into the
+[weight conversion section](#adding-tensorflow-weights-to-hub)
+of this page.
 
 For simplicity, the remainder of this guide assumes you've decided to contribute with the TensorFlow version of
 *BrandNewBert* (the same example as in the [guide](add_new_model) to add a new model from scratch).
@@ -315,7 +317,7 @@ That's it! 🎉
 ## Debugging mismatches across ML frameworks 🐛
 
 At some point, when adding a new architecture or when creating TensorFlow weights for an existing architecture, you
-might come across errors complaining about mismatches between PyTorch and TensorFlow. You might even decide open the
+might come across errors compaining about mismatches between PyTorch and TensorFlow. You might even decide to open the
 model architecture code for the two frameworks, and find that they look identical. What's going on? 🤔
 
 First of all, let's talk about why understanding these mismatches matters. Many community members will use 🤗
