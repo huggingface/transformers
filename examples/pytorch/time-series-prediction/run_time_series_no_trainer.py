@@ -56,6 +56,25 @@ def parse_args():
         help="The configuration name of the dataset to use (via the datasets library).",
     )
     parser.add_argument(
+        "--freq",
+        type=str,
+        default="1M",
+        help="The freq of the dataset.",
+    )
+    parser.add_argument(
+        "--prediction_length",
+        type=int,
+        default=24,
+        help="The prediction length of the dataset.",
+    )
+    parser.add_argument(
+        "--context_length",
+        type=int,
+        default=24 * 3,
+        help="The configuration context_length of the dataset.",
+    )
+
+    parser.add_argument(
         "--model_name_or_path",
         type=str,
         help="Path to pretrained model or model identifier from huggingface.co/models.",
@@ -82,19 +101,19 @@ def parse_args():
     parser.add_argument(
         "--per_device_train_batch_size",
         type=int,
-        default=8,
+        default=64,
         help="Batch size (per device) for the training dataloader.",
     )
     parser.add_argument(
         "--per_device_eval_batch_size",
         type=int,
-        default=8,
+        default=64,
         help="Batch size (per device) for the evaluation dataloader.",
     )
     parser.add_argument(
         "--learning_rate",
         type=float,
-        default=5e-5,
+        default=5e-4,
         help="Initial learning rate (after the potential warmup period) to use.",
     )
     parser.add_argument("--weight_decay", type=float, default=0.0, help="Weight decay to use.")
@@ -202,7 +221,7 @@ def main():
     raw_datasets = load_dataset(args.dataset_name, args.dataset_config_name)
 
     # config
-    config = AutoConfig.from_pretrained(args.model_name_or_path, cache_dir=args.cache_dir)
+    config = AutoConfig.from_pretrained(args.model_name_or_path)
 
     # model
     model = TimeSeriesTransformerForPrediction(config)
@@ -212,3 +231,7 @@ def main():
     print(raw_datasets)
     print(model)
     print(repo)
+
+
+if __name__ == "__main__":
+    main()
