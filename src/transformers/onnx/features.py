@@ -43,7 +43,6 @@ if is_tf_available():
         TFAutoModelForSeq2SeqLM,
         TFAutoModelForSequenceClassification,
         TFAutoModelForTokenClassification,
-        TFAutoModelForVision2Seq,
     )
 if not is_torch_available() and not is_tf_available():
     logger.warning(
