@@ -112,7 +112,7 @@ Now create a batch of examples using [`DataCollatorWithPadding`]. It'll *dynamic
 
 ## Evaluate
 
-Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a metric using the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/a_quick_tour) quick tour to learn more about how to load and compute a metric):
+Including a metric during training is often helpful for evaluating your model's performance. You can quickly load a evaluation method using the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/a_quick_tour) quick tour to learn more about how to load and compute a metric):
 
 ```py
 >>> import evaluate
@@ -120,7 +120,7 @@ Including a metric during training is often helpful for evaluating your model's 
 >>> accuracy = evaluate.load("accuracy")
 ```
 
-Then create a function to compute the metric. Pass your predictions and labels to [`~evaluate.EvaluateModule.compute`] to calculate the accuracy:
+Then create a function that passes your predictions and labels to [`~evaluate.EvaluateModule.compute`] to calculate the accuracy:
 
 ```py
 >>> import numpy as np
@@ -138,12 +138,19 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 
 <frameworkcontent>
 <pt>
-You're ready to start training your model now! Load DistilBERT with [`AutoModelForSequenceClassification`] along with the number of expected labels:
+You're ready to start training your model now! Map the expected ids to their labels with `id2label` and `label2id`:
+
+```py
+>>> id2label = {0: "NEGATIVE", 1: "POSITIVE"}
+>>> label2id = {"NEGATIVE": 0, "POSITIVE": 1}
+```
+
+Then you can load DistilBERT with [`AutoModelForSequenceClassification`] along with the number of expected labels, and the label mappings:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification, TrainingArguments, Trainer
 
->>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
+>>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id)
 ```
 
 <Tip>
@@ -187,42 +194,23 @@ At this point, only three steps remain:
 
 <Tip>
 
-[`Trainer`] will apply dynamic padding by default when you pass `tokenizer` to it. In this case, you don't need to specify a data collator explicitly.
+[`Trainer`] applies dynamic padding by default when you pass `tokenizer` to it. In this case, you don't need to specify a data collator explicitly.
 
 </Tip>
 
-Once training is completed, share your model to the Hub with the [`~transformers.Trainer.push_to_hub`] function so everyone can use your model!
+Once training is completed, share your model to the Hub with the [`~transformers.Trainer.push_to_hub`] method so everyone can use your model:
 
 ```py
 >>> trainer.push_to_hub()
 ```
 </pt>
 <tf>
-To finetune a model in TensorFlow, start by converting your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
-
-```py
->>> tf_train_set = model.prepare_tf_dataset(
-...     tokenized_imdb["train"],
-...     shuffle=True,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-
->>> tf_validation_set = tmodel.prepare_tf_dataset(
-...     tokenized_imdb["test"],
-...     shuffle=False,
-...     batch_size=16,
-...     collate_fn=data_collator,
-... )
-```
-
 <Tip>
 
 If you aren't familiar with finetuning a model with Keras, take a look at the basic tutorial [here](../training#train-a-tensorflow-model-with-keras)!
 
 </Tip>
-
-Set up an optimizer function, learning rate schedule, and some training hyperparameters:
+To finetune a model in TensorFlow, start by setting up an optimizer function, learning rate schedule, and some training hyperparameters:
 
 ```py
 >>> from transformers import create_optimizer
@@ -235,12 +223,37 @@ Set up an optimizer function, learning rate schedule, and some training hyperpar
 >>> optimizer, schedule = create_optimizer(init_lr=2e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
 ```
 
-Load DistilBERT with [`TFAutoModelForSequenceClassification`] along with the number of expected labels:
+Map the expected ids to their labels with `id2label` and `label2id`:
+
+```py
+>>> id2label = {0: "NEGATIVE", 1: "POSITIVE"}
+>>> label2id = {"NEGATIVE": 0, "POSITIVE": 1}
+```
+
+Then you can load DistilBERT with [`TFAutoModelForSequenceClassification`] along with the number of expected labels, and the label mappings:
 
 ```py
 >>> from transformers import TFAutoModelForSequenceClassification
 
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
+>>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id)
+```
+
+Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
+
+```py
+>>> tf_train_set = model.prepare_tf_dataset(
+...     tokenized_imdb["train"],
+...     shuffle=True,
+...     batch_size=16,
+...     collate_fn=data_collator,
+... )
+
+>>> tf_validation_set = model.prepare_tf_dataset(
+...     tokenized_imdb["test"],
+...     shuffle=False,
+...     batch_size=16,
+...     collate_fn=data_collator,
+... )
 ```
 
 Configure the model for training with [`compile`](https://keras.io/api/models/model_training_apis/#compile-method):
@@ -278,13 +291,13 @@ Then bundle your callbacks together and pass them to [`fit`] in the next step:
 >>> callbacks = [metric_callback, push_to_hub_callback]
 ```
 
-Finally, you're ready to start training your model! Call [`fit`] with your training and validation datasets, the number of epochs, and your callbacks:
-
-Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) to finetune the model:
+Finally, you're ready to start training your model! Call [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) with your training and validation datasets, the number of epochs, and your callbacks to finetune the model:
 
 ```py
 >>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3, callbacks=callbacks)
 ```
+
+Once training is completed, your model is automatically uploaded to the Hub so everyone can use it!
 </tf>
 </frameworkcontent>
 
@@ -306,51 +319,15 @@ Grab some text you'd like to run inference on:
 >>> text = "This was a masterpiece. Not completely faithful to the books, but enthralling from beginning to end. Might be my favorite of the three."
 ```
 
-The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Map the expected id to their labels with `id2label` and `label2id`:
+The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for sentiment analysis with your model, and pass your text to it:
 
 ```py
->>> id2label = {0: "NEGATIVE", 1: "POSITIVE"}
->>> label2id = {"NEGATIVE": 0, "POSITIVE": 1}
-```
+>>> from transformers import pipeline
 
-<frameworkcontent>
-<pt>
-```py
->>> from transformers import pipeline, AutoTokenizer, AutoModelForSequenceClassification
-
->>> tokenizer = AutoTokenizer.from_pretrained("stevhliu/my_awesome_model")
->>> model = AutoModelForSequenceClassification.from_pretrained(
-...     "stevhliu/my_awesome_model", id2label=id2label, label2id=label2id
-... )
-```
-
-Instantiate the `pipeline` for sentiment analysis with your model and tokenizer, and pass your text to it:
-
-```py
->>> classifier = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
+>>> classifier = pipeline("sentiment-analysis", model="stevhliu/my_awesome_model")
 >>> classifier(text)
 [{'label': 'POSITIVE', 'score': 0.9994940757751465}]
 ```
-</pt>
-<tf>
-```py
->>> from transformers import pipeline, AutoTokenizer, TFAutoModelForSequenceClassification
-
->>> tokenizer = AutoTokenizer.from_pretrained("stevhliu/my_awesome_model")
->>> model = TFAutoModelForSequenceClassification.from_pretrained(
-...     "stevhliu/my_awesome_model", id2label=id2label, label2id=label2id
-... )
-```
-
-Instantiate the `pipeline` for sentiment analysis with your model and tokenizer, and pass your text to it:
-
-```py
->>> classifier = pipeline("sentiment-analysis", model=model, tokenizer=tokenizer)
->>> classifier(text)
-[{'label': 'POSITIVE', 'score': 0.9994940757751465}]
-```
-</tf>
-<frameworkcontent>
 
 You can also manually replicate the results of the [`pipeline`] if you'd like:
 
@@ -375,7 +352,7 @@ Pass your inputs to the model and return the `logits`:
 ...     logits = model(**inputs).logits
 ```
 
-Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a label:
+Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a more readable label:
 
 ```py
 >>> predicted_class_id = logits.argmax().item()
@@ -402,7 +379,7 @@ Pass your inputs to the model and return the `logits`:
 >>> logits = model(**inputs).logits
 ```
 
-Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a label:
+Get the class with the highest probability, and use the model's `id2label` mapping to convert it to a more readable label:
 
 ```py
 >>> predicted_class_id = int(tf.math.argmax(logits, axis=-1)[0])
