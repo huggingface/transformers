@@ -107,24 +107,6 @@ class MaxTimeCriteria(StoppingCriteria):
         return time.time() - self.initial_timestamp > self.max_time
 
 
-class EndOfStringCriteria(StoppingCriteria):
-    """
-    This class can be used to stop generation whenever the eos_token_id is generated.
-
-    Args:
-        eos_token_id (`int`):
-            The token id for the end of string (eos) token.
-    """
-
-    def __init__(self, eos_token_id: int):
-        self.eos_token_id = eos_token_id
-
-    @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
-    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
-        return sum([self.eos_token_id in i for i in input_ids]) == input_ids.shape[0]
-        return input_ids[:, -1] == self.eos_token_id
-
-
 class StoppingCriteriaList(list):
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> bool:
