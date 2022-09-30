@@ -571,7 +571,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         return segmentation
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple[int, int]] = None):
+    def post_process_semantic_segmentation(
+        self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
+    ) -> "torch.Tensor":
         """
         Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
         PyTorch.
@@ -624,9 +626,9 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         outputs,
         threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        target_sizes: List[Tuple] = None,
-        return_coco_format: Optional[bool] = False,
-    ):
+        target_sizes: Optional[List[Tuple[int, int]]] = None,
+        return_coco_annotation: Optional[bool] = False,
+    ) -> List[Dict]:
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into instance segmentation predictions. Only
         supports PyTorch.
@@ -642,13 +644,13 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             target_sizes (`List[Tuple]`, *optional*):
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
-            return_coco_format (`bool`, *optional*):
+            return_coco_annotation (`bool`, *optional*):
                 Defaults to `False`. If set to `True`, segmentation maps are returned in COCO run-length encoding (RLE)
                 format.
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
-              `List[List]` run-length encoding (RLE) of the segmentation map if return_coco_format is set to `True`.
+              `List[List]` run-length encoding (RLE) of the segmentation map if return_coco_annotation is set to `True`.
             - **segment_ids** -- A dictionary that maps segment ids to semantic class ids.
                 - **id** -- An integer representing the `segment_id`.
                 - **label_id** -- An integer representing the segment's label / class id.
@@ -730,7 +732,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 segmentation -= 1
 
             # Return segmentation map in run-length encoding (RLE) format
-            if return_coco_format:
+            if return_coco_annotation:
                 segment_ids = torch.unique(segmentation)
 
                 run_length_encodings = []
@@ -750,7 +752,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         label_ids_to_fuse: Optional[Set[int]] = None,
-        target_sizes: List[Tuple] = None,
+        target_sizes: Optional[List[Tuple[int, int]]] = None,
     ) -> List[Dict]:
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation
