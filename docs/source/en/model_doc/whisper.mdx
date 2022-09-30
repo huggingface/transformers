@@ -24,7 +24,7 @@ The abstract from the paper is the following:
 Tips:
 
 - The model usually performs well without requiring any finetuning. 
-- The architecture follows a classic encoder-decoder architecture, which means that it relies on the [`generate`](https://huggingface.co/docs/transformers/v4.22.2/en/main_classes/text_generation#transformers.generation_utils.GenerationMixin.generate) function for inference.
+- The architecture follows a classic encoder-decoder architecture, which means that it relies on the [`~generation_utils.GenerationMixin.generate`] function for inference.
 - One can use [`WhisperProcessor`] to prepare audio for the model, and decode the predicted ID's back into text.
 
 This model was contributed by [Arthur Zucker](https://huggingface.co/ArthurZ).

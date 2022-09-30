@@ -49,7 +49,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         chunk_length (`int`, defaults to 30):
             The maximum number of chuncks of `sampling_rate` samples used to trim and pad longer or shorter audio
             sequences.
-        n_fft (`int`, defaults to 30):
+        n_fft (`int`, defaults to 400):
             Size of the Fourier transform.
         padding_value (`float`, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
