@@ -128,7 +128,7 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
     encoder_only = False
 
     # set attributes based on model_name
-    repo_id = "datasets/huggingface/label-files"
+    repo_id = "huggingface/label-files"
     if "segformer" in model_name:
         size = model_name[len("segformer.") : len("segformer.") + 2]
         if "ade" in model_name:
@@ -151,7 +151,7 @@ def convert_segformer_checkpoint(model_name, checkpoint_path, pytorch_dump_folde
         raise ValueError(f"Model {model_name} not supported")
 
     # set config attributes
-    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}

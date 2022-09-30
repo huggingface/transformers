@@ -16,6 +16,7 @@
 
 import io
 import pathlib
+import warnings
 from collections import defaultdict
 from typing import Dict, List, Optional, Union
 
@@ -555,6 +556,12 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
             if annotations is not None:
                 annotations = [annotations]
 
+        # Create a copy of the list to avoid editing it in place
+        images = [image for image in images]
+
+        if annotations is not None:
+            annotations = [annotation for annotation in annotations]
+
         # prepare (COCO annotations as a list of Dict -> ConditionalDETR target as a single Dict per image)
         if annotations is not None:
             for idx, (image, target) in enumerate(zip(images, annotations)):
@@ -587,6 +594,8 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
                 images = [
                     self._normalize(image=image, mean=self.image_mean, std=self.image_std)[0] for image in images
                 ]
+        else:
+            images = [np.array(image) for image in images]
 
         if pad_and_return_pixel_mask:
             # pad images up to largest image in batch and create pixel_mask
@@ -745,6 +754,11 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an image
             in the batch as predicted by the model.
         """
+        warnings.warn(
+            "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_semantic_segmentation`.",
+            FutureWarning,
+        )
         out_logits, raw_masks = outputs.logits, outputs.pred_masks
         preds = []
 
@@ -793,6 +807,11 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and masks for an
             image in the batch as predicted by the model.
         """
+        warnings.warn(
+            "`post_process_instance` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_instance_segmentation`.",
+            FutureWarning,
+        )
 
         if len(orig_target_sizes) != len(max_target_sizes):
             raise ValueError("Make sure to pass in as many orig_target_sizes as max_target_sizes")
@@ -837,6 +856,11 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
             `List[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values for
             an image in the batch as predicted by the model.
         """
+        warnings.warn(
+            "`post_process_panoptic is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_panoptic_segmentation`.",
+            FutureWarning,
+        )
         if target_sizes is None:
             target_sizes = processed_sizes
         if len(processed_sizes) != len(target_sizes):

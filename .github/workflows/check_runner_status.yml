@@ -19,6 +19,8 @@ jobs:
   check_runner_status:
     name: Check Runner Status
     runs-on: ubuntu-latest
+    outputs:
+      offline_runners: ${{ steps.set-offline_runners.outputs.offline_runners }}
     steps:
       - name: Checkout transformers
         uses: actions/checkout@v2
@@ -26,7 +28,14 @@ jobs:
           fetch-depth: 2
 
       - name: Check Runner Status
-        run: python utils/check_self_hosted_runner.py --target_runners single-gpu-ci-runner-docker,multi-gpu-ci-runner-docker,single-gpu-scheduled-ci-runner-docker,multi-scheduled-scheduled-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+        run: python utils/check_self_hosted_runner.py --target_runners single-gpu-ci-runner-docker,multi-gpu-ci-runner-docker,single-gpu-scheduled-ci-runner-docker,multi-scheduled-scheduled-ci-runner-docker,single-gpu-doctest-ci-runner-docker --token ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
+
+      - id: set-offline_runners
+        name: Set output for offline runners
+        if: ${{ always() }}
+        run: |
+          offline_runners=$(python3 -c 'fp = open("offline_runners.txt"); failed = fp.read(); fp.close(); print(failed)')
+          echo "::set-output name=offline_runners::$offline_runners"
 
   send_results:
     name: Send results to webhook
@@ -50,6 +59,7 @@ jobs:
           CI_SLACK_REPORT_CHANNEL_ID: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
           CI_EVENT: runner status check
           RUNNER_STATUS: ${{ needs.check_runner_status.result }}
+          OFFLINE_RUNNERS: ${{ needs.check_runner_status.outputs.offline_runners }}
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
