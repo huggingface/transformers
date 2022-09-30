@@ -64,7 +64,7 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "nvidia/fan"
 _CONFIG_FOR_DOC = "FANConfig"
-_TOKENIZER_FOR_DOC = "FANTokenizer"
+_FEAT_EXTRACTOR_FOR_DOC = "FANFeatureExtractor"
 
 FAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "nvidia/fan",
@@ -606,7 +606,7 @@ class ChannelProcessing(nn.Module):
         _, _, N, _ = k.shape
         k = torch.nn.functional.adaptive_avg_pool2d(k.softmax(-2), (N, 1))
 
-        attn = torch.nn.functional.sigmoid(q @ k)
+        attn = torch.sigmoid(q @ k)
         return attn * self.temperature
 
     def forward(self, x, H, W, atten=None):
@@ -1060,7 +1060,7 @@ class ConvNeXt(nn.Module):
         self.stages = nn.Sequential(*stages)
 
         self.num_features = prev_chs
-
+        # TODO: Remove Head
         if head_norm_first:
             # norm -> global pool -> fc ordering, like most other nets (not compat with FB weights)
             self.norm_pre = norm_layer(self.num_features)  # final norm layer, before pooling
@@ -1734,7 +1734,7 @@ class FANModel(FANPreTrainedModel):
 
     @add_start_docstrings_to_model_forward(FAN_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPastAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,

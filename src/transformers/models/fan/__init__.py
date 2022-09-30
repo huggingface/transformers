@@ -23,7 +23,7 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_tokenizers_
 
 _import_structure = {
     "configuration_fan": ["FAN_PRETRAINED_CONFIG_ARCHIVE_MAP", "FANConfig"],
-    "tokenization_fan": ["FANTokenizer"],
+    "feature_extraction_fan": ["FANFeatureExtractor"],
 }
 
 try:
@@ -32,7 +32,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["tokenization_fan_fast"] = ["FANTokenizerFast"]
+    _import_structure["feature_extraction_fan"] = ["FANFeatureExtractor"]
 
 try:
     if not is_torch_available():
@@ -43,6 +43,7 @@ else:
     _import_structure["modeling_fan"] = [
         "FAN_PRETRAINED_MODEL_ARCHIVE_LIST",
         "FANForImageClassification",
+        "FANForSemanticSegmentation",
         "FANLayer",
         "FANModel",
         "FANPreTrainedModel",
@@ -52,7 +53,7 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_fan import FAN_PRETRAINED_CONFIG_ARCHIVE_MAP, FANConfig
-    from .tokenization_fan import FANTokenizer
+    from .feature_extraction_fan import FANFeatureExtractor
 
     try:
         if not is_tokenizers_available():
@@ -60,7 +61,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .tokenization_fan_fast import FANTokenizerFast
+        from .feature_extraction_fan import FANFeatureExtractor
 
     try:
         if not is_torch_available():
@@ -71,10 +72,9 @@ if TYPE_CHECKING:
         from .modeling_fan import (
             FAN_PRETRAINED_MODEL_ARCHIVE_LIST,
             FANForImageClassification,
-            FANLayer,
+            FANForSemanticSegmentation,
             FANModel,
             FANPreTrainedModel,
-            load_tf_weights_in_fan,
         )
 
 
