@@ -95,7 +95,9 @@ class QuestionAnsweringSeq2SeqTrainer(Seq2SeqTrainer):
 
             output.metrics.update(metrics)
 
-        self.log(metrics)
+            self.log(metrics)
+        else:
+            metrics = {}
 
         if self.args.tpu_metrics_debug or self.args.debug:
             # tpu-comment: Logging debug metrics for PyTorch/XLA (compile, execute times, ops, etc.)
