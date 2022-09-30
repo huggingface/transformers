@@ -1313,7 +1313,7 @@ class TFBlenderbotForConditionalGeneration(TFBlenderbotPreTrainedModel, TFCausal
         self.bias_layer = BiasLayer(
             name="final_logits_bias", shape=[1, vocab_size], initializer="zeros", trainable=False
         )
-        self.final_logits_bias = value["final_logits_bias"]
+        self.bias_layer.bias.assign(value["final_logits_bias"])
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path: Optional[Union[str, os.PathLike]], *model_args, **kwargs):
