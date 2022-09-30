@@ -44,7 +44,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
 
     Args:
         prediction_length (`int`):
-            The prediction length for the decoder. In other words, the prediction horizion of the model.
+            The prediction length for the decoder. In other words, the prediction horizon of the model.
         context_length (`int`, *optional*, defaults to `prediction_length`):
             The context length for the encoder. If `None`, the context length will be the same as the
             `prediction_length`.
