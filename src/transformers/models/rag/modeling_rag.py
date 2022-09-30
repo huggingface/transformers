@@ -1633,8 +1633,8 @@ class RagTokenForGeneration(RagPreTrainedModel):
             exponential_decay_length_penalty=exponential_decay_length_penalty,
             logits_processor=logits_processor,
             renormalize_logits=renormalize_logits,
-            supress_tokens = None, # Not used for RAG, were added after the whisper pull request
-            begin_supress_tokens = None  # Not used for RAG, were added after the whisper pull request
+            supress_tokens=None,  # Not used for RAG, were added after the whisper pull request
+            begin_supress_tokens=None,  # Not used for RAG, were added after the whisper pull request
         )
 
         if num_beams == 1:
