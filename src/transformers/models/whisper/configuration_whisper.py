@@ -87,7 +87,7 @@ class WhisperConfig(PretrainedConfig):
         decoder_layerdrop (`float`, *optional*, defaults to 0.0):
             The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
             for more details.
-        decoder_start_token_id (`int`, *optional*, defaults to 50258):
+        decoder_start_token_id (`int`, *optional*, defaults to 50257):
             Corresponds to the "<|startoftranscript|>" token, which is automatically used when no `decoder_input_ids`
             are provided to the `generate`function
         use_cache (`bool`, *optional*, defaults to True):
