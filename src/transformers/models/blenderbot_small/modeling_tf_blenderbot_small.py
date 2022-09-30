@@ -644,7 +644,9 @@ class TFBlenderbotSmallEncoder(tf.keras.layers.Layer):
         config: BlenderbotSmallConfig
     """
 
-    def __init__(self, config: BlenderbotSmallConfig, embed_tokens: Optional[tf.keras.layers.Embedding] = None, **kwargs):
+    def __init__(
+        self, config: BlenderbotSmallConfig, embed_tokens: Optional[tf.keras.layers.Embedding] = None, **kwargs
+    ):
         super().__init__(**kwargs)
         self.config = config
         self.dropout = tf.keras.layers.Dropout(config.dropout)
@@ -819,7 +821,9 @@ class TFBlenderbotSmallDecoder(tf.keras.layers.Layer):
         embed_tokens: output embedding
     """
 
-    def __init__(self, config: BlenderbotSmallConfig, embed_tokens: Optional[tf.keras.layers.Embedding] = None, **kwargs):
+    def __init__(
+        self, config: BlenderbotSmallConfig, embed_tokens: Optional[tf.keras.layers.Embedding] = None, **kwargs
+    ):
         super().__init__(**kwargs)
         self.config = config
         self.padding_idx = config.pad_token_id
