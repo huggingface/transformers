@@ -99,7 +99,7 @@ class CircleCIJob:
         )
         test_command = f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
         if self.tests_to_run is None:
-            test_command += f" $(cat test_preparation/test_list.txt)"
+            test_command += " $(cat test_preparation/test_list.txt)"
         else:
             test_command += " " + " ".join(self.tests_to_run)
         if self.marker is not None:
@@ -116,7 +116,7 @@ class CircleCIJob:
         return self.name if "examples" in self.name else f"tests_{self.name}"
 
 
-## JOBS ##
+# JOBS
 torch_and_tf_job = CircleCIJob(
     "torch_and_tf",
     additional_env={"RUN_PT_TF_CROSS_TESTS": True},

@@ -38,9 +38,9 @@ jobs:
                       test_list.txt
                       examples_test_list.txt
             - store_artifacts:
-                  path: ~/transformers/test_list.txt
+                  path: test_preparation/test_list.txt
             - store_artifacts:
-                  path: ~/transformers/examples_test_list.txt
+                  path: test_preparation/examples_test_list.txt
             - run: python utils/create_circleci_config.py --fetcher_folder test_preparation
             - run: |
                   if [ ! -s test_preparation/generated_config.yml ]; then
