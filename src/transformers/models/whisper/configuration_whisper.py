@@ -177,7 +177,7 @@ class WhisperConfig(PretrainedConfig):
         eos_token_id=50256,
         tie_word_embeddings=True,
         suppress_tokens=None,
-        begin_suppress_tokens=[220,50256],
+        begin_suppress_tokens=[220, 50256],
         **kwargs
     ):
         """_summary_
