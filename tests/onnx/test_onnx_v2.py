@@ -241,22 +241,13 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     # ("longt5", "google/long-t5-tglobal-base"),
 }
 
-
-def _get_features_to_test(name, skip_features=None):
-    skip_features = skip_features or ()
-    feature_config_mapping = FeaturesManager.get_supported_features_for_model_type(name)
-    features = {feature: config for feature, config in feature_config_mapping.items() if feature not in skip_features}
-    return tuple(features)
-
-
-# TODO: bert, camembert, and roberta multiple-choice fail inference with ONNX when exported with TensorFlow with error `Attempting to broadcast an axis by a dimension other than 1`
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_MODELS` once TensorFlow has parity with the PyTorch model implementations.
 TENSORFLOW_EXPORT_DEFAULT_MODELS = {
-    ("albert", "hf-internal-testing/tiny-albert", _get_features_to_test("albert")),
-    ("bert", "bert-base-cased", _get_features_to_test("bert", skip_features=("multiple-choice",))),
-    ("camembert", "camembert-base", _get_features_to_test("camembert", skip_features=("multiple-choice",))),
-    ("distilbert", "distilbert-base-cased", _get_features_to_test("distilbert")),
-    ("roberta", "roberta-base", _get_features_to_test("roberta", skip_features=("multiple-choice",))),
+    ("albert", "hf-internal-testing/tiny-albert"),
+    ("bert", "bert-base-cased"),
+    ("camembert", "camembert-base"),
+    ("distilbert", "distilbert-base-cased"),
+    ("roberta", "roberta-base"),
 }
 
 # TODO(lewtun): Include the same model types in `PYTORCH_EXPORT_WITH_PAST_MODELS` once TensorFlow has parity with the PyTorch model implementations.
@@ -304,6 +295,11 @@ class OnnxExportTestCaseV2(TestCase):
         # Dynamic axes aren't supported for YOLO-like models. This means they cannot be exported to ONNX on CUDA devices.
         # See: https://github.com/ultralytics/yolov5/pull/8378
         if model.__class__.__name__.startswith("Yolos") and device != "cpu":
+            return
+
+        # ONNX inference fails on bert, camembert, and roberta multiple-choice when exported with TensorFlow.
+        # Skip for now
+        if name in ("bert", "camembert", "roberta") and feature == "multiple-choice" and framework == "tf":
             return
 
         onnx_config = onnx_config_class_constructor(model.config)
