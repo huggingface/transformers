@@ -187,6 +187,8 @@ Get the NER labels first, and then create a function that passes your true predi
 >>> import numpy as np
 
 >>> labels = [label_list[i] for i in example[f"ner_tags"]]
+
+
 >>> def compute_metrics(p):
 ...     predictions, labels = p
 ...     predictions = np.argmax(predictions, axis=2)
@@ -218,8 +220,36 @@ Your `compute_metrics` function is ready to go now, and you'll return to it when
 You're ready to start training your model now! Map the expected ids to their labels with `id2label` and `label2id`:
 
 ```py
-id2label = {0:"O", 1:"B-corporation", 2:"I-corporation", 3:"B-creative-work", 4:"I-creative-work", 5:"B-group", 6:"I-group", 7:"B-location", 8:"I-location", 9:"B-person", 10:"I-person", 11:"B-product", 12:"I-product"}
-label2id = {"O":0, "B-corporation":1, "I-corporation":2, "B-creative-work":3, "I-creative-work":4, "B-group":5, "I-group":6, "B-location":7, "I-location":8, "B-person":9, "I-person":10, "B-product":11, "I-product":12}
+id2label = {
+    0: "O",
+    1: "B-corporation",
+    2: "I-corporation",
+    3: "B-creative-work",
+    4: "I-creative-work",
+    5: "B-group",
+    6: "I-group",
+    7: "B-location",
+    8: "I-location",
+    9: "B-person",
+    10: "I-person",
+    11: "B-product",
+    12: "I-product",
+}
+label2id = {
+    "O": 0,
+    "B-corporation": 1,
+    "I-corporation": 2,
+    "B-creative-work": 3,
+    "I-creative-work": 4,
+    "B-group": 5,
+    "I-group": 6,
+    "B-location": 7,
+    "I-location": 8,
+    "B-person": 9,
+    "I-person": 10,
+    "B-product": 11,
+    "I-product": 12,
+}
 ```
 
 Then you can load DistilBERT with [`AutoModelForTokenClassification`] along with the number of expected labels, and the label mappings:
@@ -227,7 +257,9 @@ Then you can load DistilBERT with [`AutoModelForTokenClassification`] along with
 ```py
 >>> from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
 
->>> model = AutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id)
+>>> model = AutoModelForTokenClassification.from_pretrained(
+...     "distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
+... )
 ```
 
 <Tip>
@@ -300,8 +332,36 @@ To finetune a model in TensorFlow, start by setting up an optimizer function, le
 Map the expected ids to their labels with `id2label` and `label2id`:
 
 ```py
->>> id2label = {0:"O", 1:"B-corporation", 2:"I-corporation", 3:"B-creative-work", 4:"I-creative-work", 5:"B-group", 6:"I-group", 7:"B-location", 8:"I-location", 9:"B-person", 10:"I-person", 11:"B-product", 12:"I-product"}
->>> label2id = {"O":0, "B-corporation":1, "I-corporation":2, "B-creative-work":3, "I-creative-work":4, "B-group":5, "I-group":6, "B-location":7, "I-location":8, "B-person":9, "I-person":10, "B-product":11, "I-product":12}
+>>> id2label = {
+...     0: "O",
+...     1: "B-corporation",
+...     2: "I-corporation",
+...     3: "B-creative-work",
+...     4: "I-creative-work",
+...     5: "B-group",
+...     6: "I-group",
+...     7: "B-location",
+...     8: "I-location",
+...     9: "B-person",
+...     10: "I-person",
+...     11: "B-product",
+...     12: "I-product",
+... }
+>>> label2id = {
+...     "O": 0,
+...     "B-corporation": 1,
+...     "I-corporation": 2,
+...     "B-creative-work": 3,
+...     "I-creative-work": 4,
+...     "B-group": 5,
+...     "I-group": 6,
+...     "B-location": 7,
+...     "I-location": 8,
+...     "B-person": 9,
+...     "I-person": 10,
+...     "B-product": 11,
+...     "I-product": 12,
+... }
 ```
 
 Then you can load DistilBERT with [`TFAutoModelForTokenClassification`] along with the number of expected labels, and the label mappings:
@@ -309,7 +369,9 @@ Then you can load DistilBERT with [`TFAutoModelForTokenClassification`] along wi
 ```py
 >>> from transformers import TFAutoModelForTokenClassification
 
->>> model = TFAutoModelForTokenClassification.from_pretrained("distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id)
+>>> model = TFAutoModelForTokenClassification.from_pretrained(
+...     "distilbert-base-uncased", num_labels=13, id2label=id2label, label2id=label2id
+... )
 ```
 
 Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:

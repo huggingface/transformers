@@ -150,7 +150,9 @@ Then you can load DistilBERT with [`AutoModelForSequenceClassification`] along w
 ```py
 >>> from transformers import AutoModelForSequenceClassification, TrainingArguments, Trainer
 
->>> model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id)
+>>> model = AutoModelForSequenceClassification.from_pretrained(
+...     "distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
+... )
 ```
 
 <Tip>
@@ -235,7 +237,9 @@ Then you can load DistilBERT with [`TFAutoModelForSequenceClassification`] along
 ```py
 >>> from transformers import TFAutoModelForSequenceClassification
 
->>> model = TFAutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id)
+>>> model = TFAutoModelForSequenceClassification.from_pretrained(
+...     "distilbert-base-uncased", num_labels=2, id2label=id2label, label2id=label2id
+... )
 ```
 
 Convert your datasets to the `tf.data.Dataset` format with [`~transformers.TFPreTrainedModel.prepare_tf_dataset`]:
