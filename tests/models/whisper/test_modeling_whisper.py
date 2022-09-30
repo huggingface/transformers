@@ -931,7 +931,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we're glad"
+        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow

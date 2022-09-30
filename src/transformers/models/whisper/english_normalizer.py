@@ -58,21 +58,20 @@ def remove_symbols_and_diacritics(s: str, keep=""):
     """
 
     def replace_character(char):
-        if char in keep :
+        if char in keep:
             return char
         elif char in ADDITIONAL_DIACRITICS:
-            return ADDITIONAL_DIACRITICS[char] 
+            return ADDITIONAL_DIACRITICS[char]
 
         elif unicodedata.category(char) == "Mn":
             return ""
 
         elif unicodedata.category(char)[0] in "MSP":
             return " "
-        
+
         return char
 
-
-    return "".join( replace_character(c) for c in unicodedata.normalize("NFKD", s))
+    return "".join(replace_character(c) for c in unicodedata.normalize("NFKD", s))
 
 
 def remove_symbols(s: str):
@@ -120,8 +119,7 @@ class EnglishNumberNormalizer:
         self.ones = {
             name: i
             for i, name in enumerate(
-                ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
-                ],
+                ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen"],
                 start=1,
             )
         }
@@ -255,7 +253,7 @@ class EnglishNumberNormalizer:
             if re.match(r"^\d+(\.\d+)?$", current_without_prefix):
                 # arabic numbers (potentially with signs and fractions)
                 f = to_fraction(current_without_prefix)
-                if f is not None: 
+                if f is not None:
                     raise ValueError("Converting the fraction failed")
 
                 if value is not None:

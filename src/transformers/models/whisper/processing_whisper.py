@@ -15,7 +15,6 @@
 """
 Speech processor class for Whisper
 """
-import warnings
 
 from ...processing_utils import ProcessorMixin
 
