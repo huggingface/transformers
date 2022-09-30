@@ -1,5 +1,6 @@
 # coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2018 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -43,6 +44,18 @@ from gluonts.transform import (
     VstackFeatures,
 )
 from gluonts.transform.sampler import InstanceSampler
+
+
+PREDICTION_INPUT_NAMES = [
+    "static_categorical_features",
+    "static_real_features",
+    "past_time_features",
+    "past_values",
+    "past_observed_mask",
+    "future_time_features",
+]
+
+TRAIN_VAL_INPUT_NAMES = PREDICTION_INPUT_NAMES + ["future_values", "future_observed_mask"]
 
 
 @lru_cache(10_000)
@@ -104,9 +117,9 @@ def create_transformation(freq: str, config: PretrainedConfig) -> Transformation
                 time_features=time_features_from_frequency_str(freq),
                 pred_length=config.prediction_length,
             ),
-            # step 6: add another temporal feature (just a single number)
+            # step 6: add another temporal feature (just a single number per time step)
             # tells the model where in the life the value of the time series is
-            # sort of running counter
+            # kind of running counter which is log transformed
             AddAgeFeature(
                 target_field=FieldName.TARGET,
                 output_field=FieldName.FEAT_AGE,
@@ -168,22 +181,11 @@ def create_train_dataloader(
     shuffle_buffer_length: Optional[int] = None,
     **kwargs,
 ) -> Iterable:
-    PREDICTION_INPUT_NAMES = [
-        "static_categorical_features",
-        "static_real_features",
-        "past_time_features",
-        "past_values",
-        "past_observed_mask",
-        "future_time_features",
-    ]
-
-    TRAINING_INPUT_NAMES = PREDICTION_INPUT_NAMES + ["future_values", "future_observed_mask"]
-
     transformation = create_transformation(freq, config)
     transformed_data = transformation.apply(data, is_train=True)
 
     # we initialize a Training instance splitter
-    instance_splitter = create_instance_splitter(config, "train") + SelectFields(TRAINING_INPUT_NAMES)
+    instance_splitter = create_instance_splitter(config, "train") + SelectFields(TRAIN_VAL_INPUT_NAMES)
 
     # the instance splitter will sample a window of
     # context length + lags + prediction length (from the transformed time series of a dataset)
@@ -199,48 +201,22 @@ def create_train_dataloader(
     # to return batch_size of the appropriate tensors ready for training!
     return IterableSlice(
         iter(DataLoader(IterableDataset(training_instances), batch_size=batch_size, **kwargs)),
-        num_batches_per_epoch,
+        length=num_batches_per_epoch,
     )
 
 
 def create_validation_dataloader(freq, config, data, batch_size, **kwargs):
-    PREDICTION_INPUT_NAMES = [
-        "static_categorical_features",
-        "static_real_features",
-        "past_time_features",
-        "past_values",
-        "past_observed_mask",
-        "future_time_features",
-    ]
-    TRAINING_INPUT_NAMES = PREDICTION_INPUT_NAMES + [
-        "future_values",
-        "future_observed_mask",
-    ]
-
     transformation = create_transformation(freq, config)
     transformed_data = transformation.apply(data, is_train=True)
 
     # we initialize a Validation instance splitter
-    instance_splitter = create_instance_splitter(config, "validation") + SelectFields(TRAINING_INPUT_NAMES)
+    instance_splitter = create_instance_splitter(config, "validation") + SelectFields(TRAIN_VAL_INPUT_NAMES)
     validation_instances = instance_splitter.apply(transformed_data, is_train=True)
 
-    return DataLoader(
-        IterableDataset(validation_instances),
-        batch_size=batch_size,
-        **kwargs,
-    )
+    return DataLoader(IterableDataset(validation_instances), batch_size=batch_size, **kwargs)
 
 
 def create_test_dataloader(config: PretrainedConfig, freq, data, batch_size: int, **kwargs):
-    PREDICTION_INPUT_NAMES = [
-        "static_categorical_features",
-        "static_real_features",
-        "past_time_features",
-        "past_values",
-        "past_observed_mask",
-        "future_time_features",
-    ]
-
     transformation = create_transformation(freq, config)
     transformed_data = transformation.apply(data, is_train=False)
 
