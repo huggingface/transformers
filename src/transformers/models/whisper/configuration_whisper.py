@@ -122,9 +122,12 @@ class WhisperConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to True):
             Whether to tie input and output embeddings.
-        non_speech_tokens (`List[int]`, *optional*, defaults to None):
+        supress_tokens (`List[int]`, *optional*, defaults to NON_SPEECH_TOKENS):
             A list containing the non-speech tokens that will be used by the logit processor in the `generate`
             function. NON_SPEECH_TOKENS and NON_SPEECH_TOKENS_MULTI can be use here.
+        begin_supress_tokens (`List[int]`, *optional*, defaults to [220,50256]]):
+            A list containing tokens that will be supressed at the beginning of the sampling process. Initialized as
+            the token for " " (`blank_token_id`) and the `eos_token_id`
 
     Example:
 
@@ -172,7 +175,8 @@ class WhisperConfig(PretrainedConfig):
         bos_token_id=50257,
         eos_token_id=50256,
         tie_word_embeddings=True,
-        non_speech_tokens=None,
+        supress_tokens=NON_SPEECH_TOKENS,
+        begin_supress_tokens=[220, 50256],
         **kwargs
     ):
         """_summary_
@@ -200,7 +204,6 @@ class WhisperConfig(PretrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
         self.max_source_positions = max_source_positions
         self.max_target_positions = max_target_positions
-        self.non_speech_tokens = non_speech_tokens
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
@@ -208,5 +211,7 @@ class WhisperConfig(PretrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             decoder_start_token_id=decoder_start_token_id,
             tie_word_embeddings=tie_word_embeddings,
+            supress_tokens=supress_tokens,
+            begin_supress_tokens=begin_supress_tokens,
             **kwargs,
         )
