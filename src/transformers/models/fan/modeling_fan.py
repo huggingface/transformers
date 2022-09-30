@@ -174,7 +174,7 @@ class SEMlp(nn.Module):
         self.fc1 = nn.Linear(in_features, hidden_features)
         # self.dwconv = DWConv(hidden_features)
         self.dwconv = DWConv(hidden_features)
-        self.gamma = nn.Parameter(torch.ones(hidden_features), requires_grad=True)
+        self.weight = nn.Parameter(torch.ones(hidden_features), requires_grad=True)
         self.act = act_layer()
         self.fc2 = nn.Linear(hidden_features, out_features)
         self.drop = nn.Dropout(drop)
@@ -205,7 +205,7 @@ class SEMlp(nn.Module):
         if self.linear:
             x = self.relu(x)
         # import pdb; pdb.set_trace()
-        x = self.drop(self.gamma * self.dwconv(x, H, W)) + x
+        x = self.drop(self.weight * self.dwconv(x, H, W)) + x
         x = self.fc2(x)
         x = self.drop(x)
         x = self.se(x.permute(0, 2, 1).reshape(B, C, H, W)).reshape(B, C, N).permute(0, 2, 1)
@@ -227,7 +227,7 @@ class Mlp(nn.Module):
         hidden_features = hidden_features or in_features
         self.fc1 = nn.Linear(in_features, hidden_features)
         self.dwconv = DWConv(hidden_features)
-        self.gamma = nn.Parameter(torch.ones(hidden_features), requires_grad=True)
+        self.weight = nn.Parameter(torch.ones(hidden_features), requires_grad=True)
         self.act = act_layer()
         self.fc2 = nn.Linear(hidden_features, out_features)
         self.drop = nn.Dropout(drop)
@@ -255,7 +255,7 @@ class Mlp(nn.Module):
         x = self.fc1(x)
         if self.linear:
             x = self.relu(x)
-        x = self.drop(self.gamma * self.dwconv(x, H, W)) + x
+        x = self.drop(self.weight * self.dwconv(x, H, W)) + x
         x = self.fc2(x)
         x = self.drop(x)
         return x
@@ -383,10 +383,10 @@ class ClassAttentionBlock(nn.Module):
         )
 
         if eta is not None:  # LayerScale Initialization (no layerscale when None)
-            self.gamma1 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
-            self.gamma2 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
+            self.weight1 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
+            self.weight2 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
         else:
-            self.gamma1, self.gamma2 = 1.0, 1.0
+            self.weight1, self.weight2 = 1.0, 1.0
         self.tokens_norm = tokens_norm
 
     def forward(self, x, return_attention=False):
@@ -396,14 +396,14 @@ class ClassAttentionBlock(nn.Module):
         else:
             x1 = self.attn(x_norm1)
         x_attn = torch.cat([x1, x_norm1[:, 1:]], dim=1)
-        x = x + self.drop_path(self.gamma1 * x_attn)
+        x = x + self.drop_path(self.weight1 * x_attn)
         if self.tokens_norm:
             x = self.norm2(x)
         else:
             x = torch.cat([self.norm2(x[:, 0:1]), x[:, 1:]], dim=1)
         x_res = x
         cls_token = x[:, 0:1]
-        cls_token = self.gamma2 * self.mlp(cls_token)
+        cls_token = self.weight2 * self.mlp(cls_token)
         x = torch.cat([cls_token, x[:, 1:]], dim=1)
         x = x_res + self.drop_path(x)
         if return_attention:
@@ -683,14 +683,14 @@ class FANBlock_SE(nn.Module):
             drop=drop,
         )
 
-        self.gamma1 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
-        self.gamma2 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
+        self.weight1 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
+        self.weight2 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
 
     def forward(self, x, H: int, W: int, attn=None):
         x_new, _ = self.attn(self.norm1(x), H, W)
-        x = x + self.drop_path(self.gamma1 * x_new)
+        x = x + self.drop_path(self.weight1 * x_new)
         x_new, H, W = self.mlp(self.norm2(x), H, W)
-        x = x + self.drop_path(self.gamma2 * x_new)
+        x = x + self.drop_path(self.weight2 * x_new)
         return x, H, W
 
 
@@ -740,8 +740,8 @@ class FANBlock(nn.Module):
             c_head_num=c_head_num,
         )
 
-        self.gamma1 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
-        self.gamma2 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
+        self.weight1 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
+        self.weight2 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
 
         self.downsample = downsample
         self.H = None
@@ -751,10 +751,10 @@ class FANBlock(nn.Module):
         H, W = self.H, self.W
 
         x_new, attn_s = self.attn(self.norm1(x), H, W)
-        x = x + self.drop_path(self.gamma1 * x_new)
+        x = x + self.drop_path(self.weight1 * x_new)
 
         x_new, attn_c = self.mlp(self.norm2(x), H, W, atten=attn)
-        x = x + self.drop_path(self.gamma2 * x_new)
+        x = x + self.drop_path(self.weight2 * x_new)
         if return_attention:
             return x, attn_s
 
@@ -912,7 +912,7 @@ class ConvNeXtBlock(nn.Module):
         self.conv_dw = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
         self.norm = norm_layer(dim)
         self.mlp = mlp_layer(dim, int(mlp_ratio * dim), act_layer=nn.GELU)
-        self.gamma = nn.Parameter(ls_init_value * torch.ones(dim)) if ls_init_value > 0 else None
+        self.weight = nn.Parameter(ls_init_value * torch.ones(dim)) if ls_init_value > 0 else None
         self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, x):
@@ -926,8 +926,8 @@ class ConvNeXtBlock(nn.Module):
             x = self.norm(x)
             x = self.mlp(x)
             x = x.permute(0, 3, 1, 2)
-        if self.gamma is not None:
-            x = x.mul(self.gamma.reshape(1, -1, 1, 1))
+        if self.weight is not None:
+            x = x.mul(self.weight.reshape(1, -1, 1, 1))
         x = self.drop_path(x) + shortcut
         return x
 
