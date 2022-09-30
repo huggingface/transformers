@@ -113,7 +113,6 @@ class FeaturesManager:
             "multiple-choice": TFAutoModelForMultipleChoice,
             "question-answering": TFAutoModelForQuestionAnswering,
             "semantic-segmentation": TFAutoModelForSemanticSegmentation,
-            "vision2seq-lm": TFAutoModelForVision2Seq,
         }
 
     # Set of model topologies we support associated to the features supported by each topology and the factory
