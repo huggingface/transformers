@@ -139,6 +139,7 @@ from . import (
     t5,
     tapas,
     tapex,
+    time_series_transformer,
     trajectory_transformer,
     transfo_xl,
     trocr,

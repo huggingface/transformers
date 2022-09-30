@@ -498,6 +498,11 @@
       - local: model_doc/trajectory_transformer
         title: Trajectory Transformer
       title: Reinforcement learning models
+    - isExpanded: false
+      sections:
+      - local: model_doc/time_series_transformer
+        title: Time Series Transformer
+      title: Time series models
     title: Models
   - sections:
     - local: internal/modeling_utils
