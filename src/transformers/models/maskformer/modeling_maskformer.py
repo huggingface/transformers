@@ -259,7 +259,8 @@ class MaskFormerForInstanceSegmentationOutput(ModelOutput):
     """
     Class for outputs of [`MaskFormerForInstanceSegmentation`].
 
-    This output can be directly passed to [`~MaskFormerFeatureExtractor.post_process_segmentation`] or
+    This output can be directly passed to [`~MaskFormerFeatureExtractor.post_process_semantic_segmentation`] or or
+    [`~MaskFormerFeatureExtractor.post_process_instance_segmentation`] or
     [`~MaskFormerFeatureExtractor.post_process_panoptic_segmentation`] depending on the task. Please, see
     [`~MaskFormerFeatureExtractor] for details regarding usage.
 
@@ -2547,8 +2548,8 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         >>> masks_queries_logits = outputs.masks_queries_logits
 
         >>> # you can pass them to feature_extractor for postprocessing
-        >>> output = feature_extractor.post_process_segmentation(outputs)
         >>> output = feature_extractor.post_process_semantic_segmentation(outputs)
+        >>> output = feature_extractor.post_process_instance_segmentation(outputs)
         >>> output = feature_extractor.post_process_panoptic_segmentation(outputs)
         ```
         """

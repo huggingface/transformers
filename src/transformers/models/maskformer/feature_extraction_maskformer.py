@@ -650,7 +650,8 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
-              `List[List]` run-length encoding (RLE) of the segmentation map if return_coco_annotation is set to `True`.
+              `List[List]` run-length encoding (RLE) of the segmentation map if return_coco_annotation is set to
+              `True`.
             - **segment_ids** -- A dictionary that maps segment ids to semantic class ids.
                 - **id** -- An integer representing the `segment_id`.
                 - **label_id** -- An integer representing the segment's label / class id.
