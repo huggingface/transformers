@@ -717,7 +717,7 @@ class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
 
 
 class SuppressTokensLogitsProcessor(LogitsProcessor):
-    r""" """
+    r"""This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so that they are not sampled."""
 
     def __init__(self, suppress_tokens):
         self.suppress_tokens = list(suppress_tokens)
