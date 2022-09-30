@@ -1309,8 +1309,8 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
                 resized.
         Returns:
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
-            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`. If
-              `target_sizes` is specified, segmentation is resized to the corresponding `target_sizes` entry.
+            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id` or `None` if no mask if found above `threshold`. If
+              `target_sizes` is specified, segmentation is resized to the corresponding `target_sizes` entry. 
             - **segments_info** -- A dictionary that contains additional information on each segment.
                 - **id** -- an integer representing the `segment_id`.
                 - **label_id** -- An integer representing the label / semantic class id corresponding to `segment_id`.
