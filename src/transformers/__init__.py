@@ -210,6 +210,7 @@ _import_structure = {
         "ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "ErnieConfig",
     ],
+    "models.esm": ["ESM_PRETRAINED_CONFIG_ARCHIVE_MAP", "EsmConfig", "EsmTokenizer"],
     "models.flaubert": ["FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "FlaubertConfig", "FlaubertTokenizer"],
     "models.flava": [
         "FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1218,6 +1219,16 @@ else:
             "ErnieForTokenClassification",
             "ErnieModel",
             "ErniePreTrainedModel",
+        ]
+    )
+    _import_structure["models.esm"].extend(
+        [
+            "ESM_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "EsmForMaskedLM",
+            "EsmForSequenceClassification",
+            "EsmForTokenClassification",
+            "EsmModel",
+            "EsmPreTrainedModel",
         ]
     )
     _import_structure["models.flaubert"].extend(
@@ -3158,6 +3169,7 @@ if TYPE_CHECKING:
     from .models.electra import ELECTRA_PRETRAINED_CONFIG_ARCHIVE_MAP, ElectraConfig, ElectraTokenizer
     from .models.encoder_decoder import EncoderDecoderConfig
     from .models.ernie import ERNIE_PRETRAINED_CONFIG_ARCHIVE_MAP, ErnieConfig
+    from .models.esm import ESM_PRETRAINED_CONFIG_ARCHIVE_MAP, EsmConfig, EsmTokenizer
     from .models.flaubert import FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP, FlaubertConfig, FlaubertTokenizer
     from .models.flava import (
         FLAVA_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -4009,6 +4021,14 @@ if TYPE_CHECKING:
             ErnieForTokenClassification,
             ErnieModel,
             ErniePreTrainedModel,
+        )
+        from .models.esm import (
+            ESM_PRETRAINED_MODEL_ARCHIVE_LIST,
+            EsmForMaskedLM,
+            EsmForSequenceClassification,
+            EsmForTokenClassification,
+            EsmModel,
+            EsmPreTrainedModel,
         )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
