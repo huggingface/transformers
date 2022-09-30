@@ -367,7 +367,6 @@ def validate_model_outputs(
 
     # generate inputs with a different batch_size and seq_len that was used for conversion to properly test
     # dynamic input shapes.
-    # TODO is adding 1 always safe?
     if is_torch_available() and issubclass(type(reference_model), PreTrainedModel):
         reference_model_inputs = config.generate_dummy_inputs(
             preprocessor,
