@@ -702,18 +702,16 @@ class LogitNormalization(LogitsProcessor, LogitsWarper):
     def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
         scores = scores.log_softmax(dim=-1)
         return scores
-
-
 class SuppressTokensLogitsProcessor(LogitsProcessor):
     r""" """
 
-    def __init__(self, suppress_tokens, begining_tokens: Optional[List[int]] = None):
+    def __init__(self, suppress_tokens, begin_supress_tokens: Optional[List[int]] = None):
         self.suppress_tokens = list(suppress_tokens)
-        self.begining_tokens - list(begining_tokens)
+        self.begin_supress_tokens - list(begin_supress_tokens)
 
     def __call__(self, input_ids, scores):
         scores[:, self.suppress_tokens] = -np.inf
-        if input_ids.shape[1] == 1 and self.begining_tokens is not None:
-            scores[:, self.begining_tokens] = -np.inf
+        if input_ids.shape[1] == 1 and self.begin_supress_tokens is not None :
+            scores[:, self.begin_supress_tokens] = -np.inf
 
         return scores
