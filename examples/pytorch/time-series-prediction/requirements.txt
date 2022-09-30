@@ -1,3 +1,0 @@
-accelerate
-datasets
-gluonts[torch]
