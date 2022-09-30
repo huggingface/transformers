@@ -936,7 +936,7 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             Past values of the time series, that serve as context in order to predict the future. These values may
             contain lags, i.e. additional values from the past which are added in order to serve as "extra context".
             The `past_values` is what the Transformer encoder gets as input (with optional additional features, such as
-            `static_categorical_features`, `static_real_features`, `past_time_featuresuresures`).
+            `static_categorical_features`, `static_real_features`, `past_time_features`).
 
             The sequence length here is equal to `context_length` + `max(config.lags_sequence)`.
 
