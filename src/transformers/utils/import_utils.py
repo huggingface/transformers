@@ -533,6 +533,10 @@ def is_accelerate_available():
     return importlib.util.find_spec("accelerate") is not None
 
 
+def is_safetensors_available():
+    return importlib.util.find_spec("safetensors") is not None
+
+
 def is_tokenizers_available():
     return importlib.util.find_spec("tokenizers") is not None
 
