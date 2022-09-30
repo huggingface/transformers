@@ -34,13 +34,13 @@ from gluonts.transform import (
     ExpectedNumInstanceSampler,
     InstanceSplitter,
     RemoveFields,
+    RenameFields,
     SelectFields,
     SetField,
     TestSplitSampler,
     Transformation,
     ValidationSplitSampler,
     VstackFeatures,
-    RenameFields,
 )
 from gluonts.transform.sampler import InstanceSampler
 
