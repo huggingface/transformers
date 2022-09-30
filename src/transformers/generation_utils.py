@@ -40,6 +40,7 @@ from .generation_logits_process import (
     NoRepeatNGramLogitsProcessor,
     PrefixConstrainedLogitsProcessor,
     RepetitionPenaltyLogitsProcessor,
+    SuppressTokensAtBeginLogitsProcessor,
     SuppressTokensLogitsProcessor,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
@@ -771,7 +772,11 @@ class GenerationMixin:
                 ExponentialDecayLengthPenalty(exponential_decay_length_penalty, eos_token_id, input_ids_seq_length)
             )
         if supress_tokens is not None:
-            processors.append(SuppressTokensLogitsProcessor(supress_tokens, begin_supress_tokens))
+            processors.append(SuppressTokensLogitsProcessor(supress_tokens))
+        if begin_supress_tokens is not None:
+            begin_index = input_ids_seq_length
+            begin_index = begin_index if (input_ids_seq_length > 1 or forced_bos_token_id is None) else begin_index + 1
+            processors.append(SuppressTokensAtBeginLogitsProcessor(begin_supress_tokens, begin_index))
 
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         # `LogitNormalization` should always be the last logit processor, when present
