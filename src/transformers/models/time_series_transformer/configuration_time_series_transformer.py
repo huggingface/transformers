@@ -186,8 +186,7 @@ class TimeSeriesTransformerConfig(PretrainedConfig):
         if embedding_dimension and num_static_categorical_features > 0:
             if len(embedding_dimension) != num_static_categorical_features:
                 raise ValueError(
-                    "The embedding dimension should be a list of the same length as"
-                    " `num_static_categorical_features`"
+                    "The embedding dimension should be a list of the same length as `num_static_categorical_features`"
                 )
             self.embedding_dimension = embedding_dimension
         else:
