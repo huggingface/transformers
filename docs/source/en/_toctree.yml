@@ -241,6 +241,8 @@
         title: Encoder Decoder Models
       - local: model_doc/ernie
         title: ERNIE
+      - local: model_doc/esm
+        title: ESM
       - local: model_doc/flaubert
         title: FlauBERT
       - local: model_doc/fnet
