@@ -44,7 +44,7 @@ from gluonts.transform import (
     VstackFeatures,
 )
 from gluonts.transform.sampler import InstanceSampler
-from transformer import PretrainedConfig
+from transformers import PretrainedConfig
 
 
 PREDICTION_INPUT_NAMES = [
