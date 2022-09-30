@@ -386,6 +386,10 @@ def is_torch_fx_available():
     return _torch_fx_available
 
 
+def is_bs4_available():
+    return importlib.util.find_spec("bs4") is not None
+
+
 def is_torch_onnx_dict_inputs_support_available():
     return _torch_onnx_dict_inputs_support_available
 
@@ -748,6 +752,12 @@ If you really do want to use TensorFlow, please follow the instructions on the
 installation page https://www.tensorflow.org/install that match your environment.
 """
 
+# docstyle-ignore
+BS4_IMPORT_ERROR = """
+{0} requires the Beautiful Soup library but it was not found in your environment. You can install it with pip:
+`pip install beautifulsoup4`
+"""
+
 
 # docstyle-ignore
 SKLEARN_IMPORT_ERROR = """
@@ -889,6 +899,7 @@ CCL_IMPORT_ERROR = """
 
 BACKENDS_MAPPING = OrderedDict(
     [
+        ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
