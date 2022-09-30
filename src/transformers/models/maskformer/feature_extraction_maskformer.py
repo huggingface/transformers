@@ -679,7 +679,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 height, width = target_sizes[i][0], target_sizes[i][1]
             else:
                 height, width = mask_probs.shape[2], mask_probs.shape[3]
-                
+
             segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs_item.device)
             segments: List[Dict] = []
 

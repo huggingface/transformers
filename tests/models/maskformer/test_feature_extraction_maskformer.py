@@ -346,12 +346,11 @@ class MaskFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest
         common(is_instance_map=True, segmentation_type="pil")
 
     def test_binary_mask_to_rle(self):
-        fature_extractor = self.feature_extraction_class(num_labels=self.feature_extract_tester.num_classes)
         fake_binary_mask = np.zeros((20, 50))
         fake_binary_mask[0, 20:] = 1
         fake_binary_mask[1, :15] = 1
         fake_binary_mask[5, :10] = 1
-        
+
         rle = binary_mask_to_rle(fake_binary_mask)
         self.assertEqual(len(rle), 4)
         self.assertEqual(rle[0], 21)
