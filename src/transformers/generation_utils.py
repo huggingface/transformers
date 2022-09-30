@@ -694,8 +694,8 @@ class GenerationMixin:
         exponential_decay_length_penalty: Tuple,
         logits_processor: Optional[LogitsProcessorList],
         renormalize_logits: Optional[bool],
-        supress_tokens: Optional[List[int]],
-        begin_supress_tokens: Optional[List[int]],
+        suppress_tokens: Optional[List[int]] = None,
+        begin_suppress_tokens: Optional[List[int]] = None,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
@@ -730,9 +730,9 @@ class GenerationMixin:
             if exponential_decay_length_penalty is not None
             else self.config.exponential_decay_length_penalty
         )
-        supress_tokens = supress_tokens if supress_tokens is not None else self.config.supress_tokens
-        begin_supress_tokens = (
-            begin_supress_tokens if begin_supress_tokens is not None else self.config.begin_supress_tokens
+        suppress_tokens = suppress_tokens if suppress_tokens is not None else self.config.suppress_tokens
+        begin_suppress_tokens = (
+            begin_suppress_tokens if begin_suppress_tokens is not None else self.config.begin_suppress_tokens
         )
         # instantiate processors list
 
@@ -771,12 +771,12 @@ class GenerationMixin:
             processors.append(
                 ExponentialDecayLengthPenalty(exponential_decay_length_penalty, eos_token_id, input_ids_seq_length)
             )
-        if supress_tokens is not None:
-            processors.append(SuppressTokensLogitsProcessor(supress_tokens))
-        if begin_supress_tokens is not None:
+        if suppress_tokens is not None:
+            processors.append(SuppressTokensLogitsProcessor(suppress_tokens))
+        if begin_suppress_tokens is not None:
             begin_index = input_ids_seq_length
             begin_index = begin_index if (input_ids_seq_length > 1 or forced_bos_token_id is None) else begin_index + 1
-            processors.append(SuppressTokensAtBeginLogitsProcessor(begin_supress_tokens, begin_index))
+            processors.append(SuppressTokensAtBeginLogitsProcessor(begin_suppress_tokens, begin_index))
 
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         # `LogitNormalization` should always be the last logit processor, when present
@@ -948,8 +948,8 @@ class GenerationMixin:
         remove_invalid_values: Optional[bool] = None,
         synced_gpus: Optional[bool] = False,
         exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
-        supress_tokens: Optional[List[int]] = None,
-        begin_supress_tokens: Optional[List[int]] = None,
+        suppress_tokens: Optional[List[int]] = None,
+        begin_suppress_tokens: Optional[List[int]] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -1108,7 +1108,7 @@ class GenerationMixin:
                 This Tuple adds an exponentially increasing length penalty, after a certain amount of tokens have been
                 generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates
                 where penalty starts and `decay_factor` represents the factor of exponential decay
-            supress_tokens  (`List[int]`, *optional*, defaults to `model.config.supress_tokens`):
+            suppress_tokens  (`List[int]`, *optional*, defaults to `model.config.suppress_tokens`):
                 A list of tokens that will be supressed at generation. The `SupressTokens` logit processor will set
                 their log probs to `-inf` so that they are not sampled.
 
@@ -1358,8 +1358,8 @@ class GenerationMixin:
             exponential_decay_length_penalty=exponential_decay_length_penalty,
             logits_processor=logits_processor,
             renormalize_logits=renormalize_logits,
-            supress_tokens=supress_tokens,
-            begin_supress_tokens=begin_supress_tokens,
+            suppress_tokens=suppress_tokens,
+            begin_suppress_tokens=begin_suppress_tokens,
         )
 
         # 8. prepare stopping criteria

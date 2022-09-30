@@ -19,7 +19,7 @@ import re
 from fractions import Fraction
 from typing import Iterator, List, Match, Optional, Union
 
-from transformers.utils.import_utils import is_more_itertools_available
+from ...utils import is_more_itertools_available
 
 
 if is_more_itertools_available():
@@ -56,18 +56,23 @@ def remove_symbols_and_diacritics(s: str, keep=""):
     Replace any other markers, symbols, and punctuations with a space, and drop any diacritics (category 'Mn' and some
     manual mappings)
     """
-    return "".join(
-        c
-        if c in keep
-        else ADDITIONAL_DIACRITICS[c]
-        if c in ADDITIONAL_DIACRITICS
-        else ""
-        if unicodedata.category(c) == "Mn"
-        else " "
-        if unicodedata.category(c)[0] in "MSP"
-        else c
-        for c in unicodedata.normalize("NFKD", s)
-    )
+
+    def replace_character(char):
+        if char in keep :
+            return char
+        elif char in ADDITIONAL_DIACRITICS:
+            return ADDITIONAL_DIACRITICS[char] 
+
+        elif unicodedata.category(char) == "Mn":
+            return ""
+
+        elif unicodedata.category(char)[0] in "MSP":
+            return " "
+        
+        return char
+
+
+    return "".join( replace_character(c) for c in unicodedata.normalize("NFKD", s))
 
 
 def remove_symbols(s: str):
@@ -111,33 +116,16 @@ class EnglishNumberNormalizer:
         super().__init__()
 
         self.zeros = {"o", "oh", "zero"}
+        # fmt: off
         self.ones = {
             name: i
             for i, name in enumerate(
-                [
-                    "one",
-                    "two",
-                    "three",
-                    "four",
-                    "five",
-                    "six",
-                    "seven",
-                    "eight",
-                    "nine",
-                    "ten",
-                    "eleven",
-                    "twelve",
-                    "thirteen",
-                    "fourteen",
-                    "fifteen",
-                    "sixteen",
-                    "seventeen",
-                    "eighteen",
-                    "nineteen",
+                ["one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen",
                 ],
                 start=1,
             )
         }
+        # fmt: on
         self.ones_plural = {
             "sixes" if name == "six" else name + "s": (value, "s") for name, value in self.ones.items()
         }
@@ -267,7 +255,9 @@ class EnglishNumberNormalizer:
             if re.match(r"^\d+(\.\d+)?$", current_without_prefix):
                 # arabic numbers (potentially with signs and fractions)
                 f = to_fraction(current_without_prefix)
-                assert f is not None
+                if f is not None: 
+                    raise ValueError("Converting the fraction failed")
+
                 if value is not None:
                     if isinstance(value, str) and value.endswith("."):
                         # concatenate decimals / ip address components
@@ -295,7 +285,6 @@ class EnglishNumberNormalizer:
                     value = ones
                 elif isinstance(value, str) or prev in self.ones:
                     if prev in self.tens and ones < 10:  # replace the last zero with the digit
-                        assert value[-1] == "0"
                         value = value[:-1] + str(ones)
                     else:
                         value = str(value) + str(ones)
@@ -316,7 +305,6 @@ class EnglishNumberNormalizer:
                     yield output(str(ones) + suffix)
                 elif isinstance(value, str) or prev in self.ones:
                     if prev in self.tens and ones < 10:
-                        assert value[-1] == "0"
                         yield output(value[:-1] + str(ones) + suffix)
                     else:
                         yield output(str(value) + str(ones) + suffix)

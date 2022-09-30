@@ -20,7 +20,6 @@ import random
 from typing import Optional, Tuple
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
@@ -134,9 +133,11 @@ class WhisperAttention(nn.Module):
         self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
         self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
 
+    # Copied from transformers.models.bart.modeling_bart.forward with BART->whisper
     def _shape(self, tensor: torch.Tensor, seq_len: int, bsz: int):
         return tensor.view(bsz, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
+    # Copied from transformers.models.bart.modeling_bart.forward with BART->whisper
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -635,8 +636,8 @@ class WhisperEncoder(WhisperPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        inputs_embeds = F.gelu(self.conv1(input_features))
-        inputs_embeds = F.gelu(self.conv2(inputs_embeds))
+        inputs_embeds = nn.functional.gelu(self.conv1(input_features))
+        inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
 
         inputs_embeds = inputs_embeds.permute(0, 2, 1)
         embed_pos = self.embed_positions.weight

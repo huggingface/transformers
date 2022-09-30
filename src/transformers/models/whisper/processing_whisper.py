@@ -53,11 +53,7 @@ class WhisperProcessor(ProcessorMixin):
         if self._in_target_context_manager:
             return self.current_processor(*args, **kwargs)
 
-        if "raw_speech" in kwargs:
-            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
-            audio = kwargs.pop("raw_speech")
-        else:
-            audio = kwargs.pop("audio", None)
+        audio = kwargs.pop("audio", None)
         text = kwargs.pop("text", None)
         if len(args) > 0:
             audio = args[0]
