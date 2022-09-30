@@ -161,7 +161,6 @@ class OnnxConfigWithPastTestCaseV2(TestCase):
         """
         for name, config in OnnxConfigWithPastTestCaseV2.SUPPORTED_WITH_PAST_CONFIGS:
             with self.subTest(name):
-
                 # without past
                 onnx_config_default = OnnxConfigWithPast.from_model_config(config())
                 self.assertIsNotNone(onnx_config_default.values_override, "values_override should not be None")
@@ -208,6 +207,7 @@ PYTORCH_EXPORT_MODELS = {
     ("levit", "facebook/levit-128S"),
     ("owlvit", "google/owlvit-base-patch32"),
     ("vit", "google/vit-base-patch16-224"),
+    ("vision-encoder-decoder", "nlpconnect/vit-gpt2-image-captioning"),
     ("deit", "facebook/deit-small-patch16-224"),
     ("beit", "microsoft/beit-base-patch16-224"),
     ("data2vec-text", "facebook/data2vec-text-base"),
