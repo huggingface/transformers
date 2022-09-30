@@ -1922,14 +1922,16 @@ class FANDecodeHead(FANPreTrainedModel):
         super().__init__(config)
         # linear layers which will unify the channel dimension of each of the encoder blocks to the same config.decoder_hidden_size
         mlps = []
-        for i in range(config.num_encoder_blocks):
-            mlp = SegformerMLP(config, input_dim=config.hidden_sizes[i])
+        # for i in range(config.num_encoder_blocks):
+        #     mlp = SegformerMLP(config, input_dim=config.hidden_sizes[i])
+        for in_channels in config.in_channels:
+            mlp = SegformerMLP(config, input_dim=in_channels)
             mlps.append(mlp)
         self.linear_c = nn.ModuleList(mlps)
 
         # the following 3 layers implement the ConvModule of the original implementation
         self.linear_fuse = nn.Conv2d(
-            in_channels=config.decoder_hidden_size * config.num_encoder_blocks,
+            in_channels=config.decoder_hidden_size * len(config.in_channels),
             out_channels=config.decoder_hidden_size,
             kernel_size=1,
             bias=False,
@@ -1937,8 +1939,8 @@ class FANDecodeHead(FANPreTrainedModel):
         self.batch_norm = nn.BatchNorm2d(config.decoder_hidden_size)
         self.activation = nn.ReLU()
 
-        self.dropout = nn.Dropout(config.classifier_dropout_prob)
-        self.classifier = nn.Conv2d(config.decoder_hidden_size, config.num_labels, kernel_size=1)
+        self.dropout = nn.Dropout(config.dropout_ratio)
+        self.classifier = nn.Conv2d(config.decoder_hidden_size, config.num_classes, kernel_size=1)
 
         self.config = config
 
