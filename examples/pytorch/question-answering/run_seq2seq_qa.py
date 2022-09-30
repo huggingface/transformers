@@ -484,25 +484,11 @@ def main():
             max_length=max_seq_length,
             padding=padding,
             truncation=True,
-            return_offsets_mapping=True,
             return_overflowing_tokens=True,
+            return_offsets_mapping=True,
         )
-
         # Tokenize targets with the `text_target` keyword argument
         labels = tokenizer(text_target=targets, max_length=max_answer_length, padding=padding, truncation=True)
-
-        # Since one example might give us several features if it has a long context, we need a map from a feature to
-        # its corresponding example. This key gives us just that.
-        sample_mapping = model_inputs.pop("overflow_to_sample_mapping")
-
-        # For evaluation, we will need to convert our predictions to substrings of the context, so we keep the
-        # corresponding example_id and we will store the offset mappings.
-        model_inputs["example_id"] = []
-
-        for i in range(len(model_inputs["input_ids"])):
-            # One example can give several spans, this is the index of the example containing this span of text.
-            sample_index = sample_mapping[i]
-            model_inputs["example_id"].append(examples["id"][sample_index])
 
         # If we are padding here, replace all tokenizer.pad_token_id in the labels by -100 when we want to ignore
         # padding in the loss.
@@ -511,8 +497,23 @@ def main():
                 [(l if l != tokenizer.pad_token_id else -100) for l in label] for label in labels["input_ids"]
             ]
 
-        model_inputs["labels"] = labels["input_ids"]
+        # Since one example might give us several features if it has a long context, we need a map from a feature to
+        # its corresponding example. This key gives us just that.
+        sample_mapping = model_inputs.pop("overflow_to_sample_mapping")
 
+        # For evaluation, we will need to convert our predictions to substrings of the context, so we keep the
+        # corresponding example_id and we will store the offset mappings.
+        model_inputs["example_id"] = []
+        # Augment the overflowing tokens to the labels
+        labels_out = []
+
+        for i in range(len(model_inputs["input_ids"])):
+            # One example can give several spans, this is the index of the example containing this span of text.
+            sample_index = sample_mapping[i]
+            model_inputs["example_id"].append(examples["id"][sample_index])
+            labels_out.append(labels["input_ids"][sample_index])
+
+        model_inputs["labels"] = labels_out
         return model_inputs
 
     if training_args.do_train:
