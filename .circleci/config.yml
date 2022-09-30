@@ -47,21 +47,11 @@ jobs:
                       echo "No tests to run, exiting early!"
                       circleci-agent step halt
                   fi
+            - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
             - store_artifacts:
-                path: ~/transformers/examples_tests_fetched_summary.txt
-            - run: |
-                if [ -f test_list.txt ]; then
-                    mv test_list.txt test_preparation/examples_test_list.txt
-                else
-                    touch test_preparation/examples_test_list.txt
-                fi
-
-            - persist_to_workspace:
-                root: test_preparation/
-                paths:
-                    test_list.txt
-                    filtered_test_list.txt
-                    examples_test_list.txt
+                  path: test_preparation/generated_config.txt
+            - continuation/continue:
+                  configuration_path: test_preparation/generated_config.yml
 
     check_code_quality:
         working_directory: ~/transformers
