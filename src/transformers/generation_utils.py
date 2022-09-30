@@ -1108,7 +1108,7 @@ class GenerationMixin:
                 generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates
                 where penalty starts and `decay_factor` represents the factor of exponential decay
             supress_tokens  (`List[int]`, *optional*, defaults to `model.config.supress_tokens`):
-                A list of tokens that will be supressed at generation. Teh `SupressTokens` logit processor will set
+                A list of tokens that will be supressed at generation. The `SupressTokens` logit processor will set
                 their log probs to `-inf` so that they are not sampled.
 
             model_kwargs:
