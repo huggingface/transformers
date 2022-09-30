@@ -60,6 +60,7 @@ from .utils import (
     is_pytesseract_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
+    is_safetensors_available,
     is_scatter_available,
     is_scipy_available,
     is_sentencepiece_available,
@@ -262,6 +263,13 @@ def require_accelerate(test_case):
     Decorator marking a test that requires accelerate. These tests are skipped when accelerate isn't installed.
     """
     return unittest.skipUnless(is_accelerate_available(), "test requires accelerate")(test_case)
+
+
+def require_safetensors(test_case):
+    """
+    Decorator marking a test that requires safetensors. These tests are skipped when safetensors isn't installed.
+    """
+    return unittest.skipUnless(is_safetensors_available(), "test requires safetensors")(test_case)
 
 
 def require_rjieba(test_case):
