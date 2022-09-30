@@ -1029,7 +1029,7 @@ TIME_SERIES_TRANSFORMER_INPUTS_DOCSTRING = r"""
             - 0 indicates the head is **masked**.
 
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
             hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
