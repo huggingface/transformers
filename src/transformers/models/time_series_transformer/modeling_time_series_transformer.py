@@ -1499,9 +1499,9 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
-        past_observed_mask: torch.Tensor,
         static_categorical_features: torch.Tensor,
         static_real_features: torch.Tensor,
+        past_observed_mask: Optional[torch.Tensor] = None,
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
     ):
@@ -1519,6 +1519,9 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         )
 
         # target
+        if past_observed_mask is None:
+            past_observed_mask = torch.ones_like(past_values)
+
         context = past_values[:, -self.config.context_length :]
         observed_context = past_observed_mask[:, -self.config.context_length :]
         _, scale = self.scaler(context, observed_context)
@@ -1588,11 +1591,11 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
-        past_observed_mask: torch.Tensor,
         static_categorical_features: torch.Tensor,
         static_real_features: torch.Tensor,
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
+        past_observed_mask: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         decoder_head_mask: Optional[torch.Tensor] = None,
@@ -1629,7 +1632,7 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         >>> inputs["static_real_features"] = torch.randn([batch_size, 1])
         >>> inputs["past_time_features"] = torch.randn([batch_size, past_length, num_time_features])
         >>> inputs["past_values"] = torch.randn([batch_size, past_length])
-        >>> inputs["past_observed_mask"] = torch.randn([batch_size, past_length])
+        >>> inputs["past_observed_mask"] = torch.ones([batch_size, past_length])
 
         >>> # decoder inputs
         >>> inputs["future_time_features"] = torch.randn([batch_size, prediction_length, num_time_features])
@@ -1753,11 +1756,11 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
-        past_observed_mask: torch.Tensor,
         static_categorical_features: torch.Tensor,
         static_real_features: torch.Tensor,
         future_values: Optional[torch.Tensor] = None,
         future_time_features: Optional[torch.Tensor] = None,
+        past_observed_mask: Optional[torch.Tensor] = None,
         future_observed_mask: Optional[torch.Tensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.Tensor] = None,
@@ -1804,7 +1807,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         >>> inputs["static_real_features"] = torch.randn([batch_size, 1])
         >>> inputs["past_time_features"] = torch.randn([batch_size, past_length, num_time_features])
         >>> inputs["past_values"] = torch.randn([batch_size, past_length])
-        >>> inputs["past_observed_mask"] = torch.randn([batch_size, past_length])
+        >>> inputs["past_observed_mask"] = torch.ones([batch_size, past_length])
 
         >>> # decoder inputs
         >>> inputs["future_time_features"] = torch.randn([batch_size, prediction_length, num_time_features])
@@ -1881,8 +1884,8 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         static_real_features: torch.Tensor,
         past_time_features: torch.Tensor,
         past_values: torch.Tensor,
-        past_observed_mask: torch.Tensor,
         future_time_features: Optional[torch.Tensor],
+        past_observed_mask: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> torch.Tensor:
