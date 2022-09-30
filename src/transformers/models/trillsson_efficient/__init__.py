@@ -46,6 +46,7 @@ else:
         "Trillsson_efficientForConditionalGeneration",
         "Trillsson_efficientModel",
         "Trillsson_efficientPreTrainedModel",
+        "Trillsson_efficientForSequenceClassification",
     ]
 
 
@@ -71,6 +72,7 @@ if TYPE_CHECKING:
     else:
         from .modeling_trillsson_efficient import (
             TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Trillsson_efficientForSequenceClassification,
             Trillsson_efficientModel,
             Trillsson_efficientPreTrainedModel,
         )

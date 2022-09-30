@@ -14,13 +14,14 @@
 # limitations under the License.
 """ PyTorch Trillson_efficient model."""
 
-from typing import Optional, Union
+from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention
+from ...modeling_outputs import BaseModelOutputWithPoolingAndNoAttention, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_trillsson_efficient import Trillsson_efficientConfig
@@ -405,10 +406,19 @@ class Trillsson_efficientPreTrainedModel(PreTrainedModel):
 
 
 TRILLSSON_EFFICIENT_START_DOCSTRING = r"""
-    Parameters:
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+
+    Trillsson_efficient was proposed in [TRILLsson: Small, Universal Speech Representations for Paralinguistic Tasks]
+    (https://arxiv.org/pdf/2203.00236) by Joel Shor, Subhashini Venugopalan.
+    
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving etc.).
+    
+    This model is a PyTorch [torch.nn.Module](https:
+        //pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
+    
+    Parameters:
         config ([`Trillsson_efficientConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -416,9 +426,12 @@ TRILLSSON_EFFICIENT_START_DOCSTRING = r"""
 
 TRILLSSON_EFFICIENT_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`MobileNetV2FeatureExtractor`]. See
-            [`MobileNetV2FeatureExtractor.__call__`] for details.
+        input_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
+            Float values of input raw speech waveform. Values can be obtained by loading a *.flac* or *.wav* audio file
+            into an array of type *List[float]* or a *numpy.ndarray*, *e.g.* via the soundfile library (*pip install
+            soundfile*). To prepare the array into *input_values*, the [`Trillsson_efficientFeatureExtractor`] should
+            be used for padding and conversion into a tensor of type *torch.FloatTensor*. See
+            [`Trillsson_efficientFeatureExtractor.__call__`] for details.
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
@@ -434,8 +447,8 @@ TRILLSSON_EFFICIENT_INPUTS_DOCSTRING = r"""
 class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
     def __init__(self, config: Trillsson_efficientConfig, add_pooling_layer: bool = True):
         super().__init__(config)
-        self.config = config
 
+        self.config = config
         # block efficientnetv3 info expand_ratio, output_filters, num_repeat, strides, use_se, conv_type
         block_configs = [
             [1, 24, 2, 1, 0, 1],
@@ -460,7 +473,8 @@ class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
         )
 
         # building inverted residual blocks
-        layers = []
+        # layers = []
+        self.block = nn.ModuleList()
         current_num_blocks = 0
         total_blocks = float(sum(blocks_args[0] for blocks_args in block_configs))
         for expand_ratio, output_filters, num_repeat, stride, use_se, conv_type in block_configs:
@@ -472,7 +486,7 @@ class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
                 if i > 0:
                     stride = 1
                 survival_probability = self.config.drop_connect_rate * current_num_blocks / total_blocks
-                layers.append(
+                self.block.append(
                     conv_block(
                         config=self.config,
                         in_channels=input_channel,
@@ -487,7 +501,7 @@ class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
                 )
                 input_channel = output_channel
                 current_num_blocks += 1
-        self.block = nn.Sequential(*layers)
+        # self.block = nn.Sequential(*layers)
 
         # building last several layers
         if config.depth_multiplier > 1.0:
@@ -504,7 +518,7 @@ class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
             norm_eps=self.config.norm_eps,
             norm_momentum=self.config.norm_momentum,
         )
-        self.pooler = nn.AdaptiveAvgPool2d((1, 1))
+        self.pooler = nn.AdaptiveAvgPool2d((1, 1)) if add_pooling_layer else None
         self.dense = nn.Linear(output_channel, config.output_size)
 
         # Initialize weights
@@ -568,4 +582,105 @@ class Trillsson_efficientModel(Trillsson_efficientPreTrainedModel):
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
             hidden_states=all_hidden_states,
+        )
+
+
+@add_start_docstrings(
+    """
+    Trillsson_efficient Model with a sequence classification head on top (a linear layer over the last hidden state
+    output).
+    """,
+    TRILLSSON_EFFICIENT_START_DOCSTRING,
+)
+class Trillsson_efficientForSequenceClassification(Trillsson_efficientPreTrainedModel):
+    def __init__(self, config: Trillsson_efficientConfig):
+        super().__init__(config)
+
+        self.num_labels = config.num_labels
+        self.trillsson = Trillsson_efficientModel(config)
+
+        last_hidden_size = self.trillsson.dense.out_features
+
+        # Classifier head
+        self.dropout = nn.Dropout(config.classifier_dropout_prob, inplace=True)
+        self.classifier = nn.Linear(last_hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def freeze_base_model(self):
+        """
+        Calling this function will disable the gradient computation for the base model so that its parameters will not
+        be updated during training. Only the classification head will be updated.
+        """
+        for param in self.trillsson.parameters():
+            param.requires_grad = False
+
+    # @add_start_docstrings_to_model_forward(TRILLSSON_EFFICIENT_INPUTS_DOCSTRING)
+    # @add_code_sample_docstrings(
+    #     processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+    #     checkpoint=_SEQ_CLASS_CHECKPOINT,
+    #     output_type=SequenceClassifierOutput,
+    #     config_class=_CONFIG_FOR_DOC,
+    #     modality="audio",
+    #     expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+    #     expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
+    # )
+    def forward(
+        self,
+        input_values: Optional[torch.Tensor],
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        labels: Optional[torch.Tensor] = None,
+    ) -> Union[Tuple, SequenceClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.trillsson(
+            input_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_state = outputs.last_hidden_state if return_dict else outputs[1]
+
+        logits = self.classifier(self.dropout(last_hidden_state))
+
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.last_hidden_state,
         )

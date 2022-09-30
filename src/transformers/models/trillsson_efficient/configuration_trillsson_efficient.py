@@ -74,6 +74,8 @@ class Trillsson_efficientConfig(PretrainedConfig):
             The minimum frequency in Hz.
         fft_length (:obj:`int`, `optional`, defaults to None):
             The FFT length. If None, it will be computed from the window length.
+        classifier_dropout_prob (:obj:`float`, `optional`, defaults to 0.8):
+            The dropout probability for the classifier.
 
     Example:
     ```python
@@ -106,6 +108,7 @@ class Trillsson_efficientConfig(PretrainedConfig):
         f_max=7500.0,
         f_min=125.0,
         fft_length=None,
+        classifier_dropout_prob=0.8,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -129,3 +132,4 @@ class Trillsson_efficientConfig(PretrainedConfig):
         self.f_max = f_max
         self.f_min = f_min
         self.fft_length = fft_length
+        self.classifier_dropout_prob = classifier_dropout_prob

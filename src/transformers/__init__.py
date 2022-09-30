@@ -342,6 +342,7 @@ _import_structure = {
         "TRILLSSON_EFFICIENT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "Trillsson_efficientConfig",
         "Trillsson_efficientFeatureExtractor",
+        "Trillsson_efficientForSequenceClassification",
     ],
     "models.trocr": [
         "TROCR_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -1828,6 +1829,7 @@ else:
             "TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST",
             "Trillsson_efficientModel",
             "Trillsson_efficientPreTrainedModel",
+            "Trillsson_efficientForSequenceClassification",
         ]
     )
     _import_structure["models.speech_to_text_2"].extend(["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"])
@@ -4545,6 +4547,7 @@ if TYPE_CHECKING:
         )
         from .models.trillsson_efficient import (
             TRILLSSON_EFFICIENT_PRETRAINED_MODEL_ARCHIVE_LIST,
+            Trillsson_efficientForSequenceClassification,
             Trillsson_efficientModel,
             Trillsson_efficientPreTrainedModel,
         )
