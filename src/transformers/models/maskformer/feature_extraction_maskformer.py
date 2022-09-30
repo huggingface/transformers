@@ -35,6 +35,59 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+def binary_mask_to_rle(mask):
+    """
+    Converts given binary mask of shape (height, width) to the run-length encoding (RLE) format.
+
+    Args:
+        mask (`torch.Tensor` or `numpy.array`):
+            A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
+            segment_id or class_id.
+
+    Returns:
+        `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
+        format.
+    """
+    if is_torch_tensor(mask):
+        mask = mask.numpy()
+
+    pixels = mask.flatten()
+    pixels = np.concatenate([[0], pixels, [0]])
+    runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
+    runs[1::2] -= runs[::2]
+    return [x for x in runs]
+
+
+def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
+    """
+    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
+    `labels`.
+
+    Args:
+        masks (`torch.Tensor`):
+            A tensor of shape `(num_queries, height, width)`.
+        scores (`torch.Tensor`):
+            A tensor of shape `(num_queries)`.
+        labels (`torch.Tensor`):
+            A tensor of shape `(num_queries)`.
+        object_mask_threshold (`float`):
+            A number between 0 and 1 used to binarize the masks.
+
+    Raises:
+        `ValueError`: Raised when the first dimension doesn't match in all input tensors.
+
+    Returns:
+        `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
+        < `object_mask_threshold`.
+    """
+    if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
+        raise ValueError("mask, scores and labels must have the same shape!")
+
+    to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
+
+    return masks[to_keep], scores[to_keep], labels[to_keep]
+
+
 class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a MaskFormer feature extractor. The feature extractor can be used to prepare image(s) and optional
@@ -157,60 +210,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             target = self.resize(target, size=size, resample=Image.NEAREST)
 
         return image, target
-
-
-    def binary_mask_to_rle(mask):
-        """
-        Converts given binary mask of shape (height, width) to the run-length encoding (RLE) format.
-
-        Args:
-            mask (`torch.Tensor` or `numpy.array`):
-                A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
-                segment_id or class_id.
-
-        Returns:
-            `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
-            format.
-        """
-        if is_torch_tensor(mask):
-            mask = mask.numpy()
-
-        pixels = mask.flatten()
-        pixels = np.concatenate([[0], pixels, [0]])
-        runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
-        runs[1::2] -= runs[::2]
-        return [x for x in runs]
-
-
-    def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
-        """
-        Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores`
-        and `labels`.
-
-        Args:
-            masks (`torch.Tensor`):
-                A tensor of shape `(num_queries, height, width)`.
-            scores (`torch.Tensor`):
-                A tensor of shape `(num_queries)`.
-            labels (`torch.Tensor`):
-                A tensor of shape `(num_queries)`.
-            object_mask_threshold (`float`):
-                A number between 0 and 1 used to binarize the masks.
-
-        Raises:
-            `ValueError`: Raised when the first dimension doesn't match in all input tensors.
-
-        Returns:
-            `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the
-            region < `object_mask_threshold`.
-        """
-        if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
-            raise ValueError("mask, scores and labels must have the same shape!")
-
-        to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
-
-        return masks[to_keep], scores[to_keep], labels[to_keep]
-
 
     def __call__(
         self,
@@ -572,7 +571,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         return segmentation
 
-
     def post_process_semantic_segmentation(self, outputs, target_sizes: List[Tuple[int, int]] = None):
         """
         Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
@@ -585,8 +583,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                 List of length (batch_size), where each list item (`Tuple[int, int]]`) corresponds to the requested
                 final size (height, width) of each prediction. If left to None, predictions will not be resized.
         Returns:
-            `torch.Tensor`: Semantic segmentation maps tensor of shape (batch_size, height, width). Each `torch.Tensor`
-            value corresponds to a semantic class id.
+            `List[torch.Tensor]`:
+                A list of length `batch_size`, where each item is a semantic segmentation map of shape (height, width)
+                corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
+                `torch.Tensor` correspond to a semantic class id.
         """
         class_queries_logits = outputs.class_queries_logits  # [batch_size, num_queries, num_classes+1]
         masks_queries_logits = outputs.masks_queries_logits  # [batch_size, num_queries, height, width]
@@ -597,18 +597,32 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
         segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
+        batch_size = class_queries_logits.shape[0]
 
-        if target_size is not None:
-            segmentation = interpolate(segmentation, size=target_size, mode="bilinear", align_corners=False)
+        # Resize logits and compute semantic segmentation maps
+        if target_sizes is not None:
+            if batch_size != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
 
-        # Get semantic segmentation map of shape (batch_size, height, width)
-        semantic_segmentation = segmentation.argmax(dim=1)
+            semantic_segmentation = []
+            for idx in range(batch_size):
+                resized_logits = torch.nn.functional.interpolate(
+                    segmentation[idx].unsqueeze(dim=0), size=target_sizes[idx], mode="bilinear", align_corners=False
+                )
+                semantic_map = resized_logits[0].argmax(dim=0)
+                semantic_segmentation.append(semantic_map)
+        else:
+            semantic_segmentation = segmentation.argmax(dim=1)
+            semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
+
         return semantic_segmentation
 
     def post_process_instance_segmentation(
         self,
         outputs,
-        object_mask_threshold: float = 0.8,
+        threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         target_sizes: List[Tuple] = None,
         return_coco_format: Optional[bool] = False,
@@ -620,7 +634,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         Args:
             outputs ([`MaskFormerForInstanceSegmentation`]):
                 Raw outputs of the model.
-            object_mask_threshold (`float`, *optional*, defaults to 0.8):
+            threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 The overlap mask area threshold to merge or discard small disconnected parts within each binary
@@ -635,7 +649,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- A tensor of shape `(height, width)` where each pixel represents a `segment_id` or
               `List[List]` run-length encoding (RLE) of the segmentation map if return_coco_format is set to `True`.
-            - **segments** -- A dictionary with the following keys
+            - **segment_ids** -- A dictionary that maps segment ids to semantic class ids.
                 - **id** -- An integer representing the `segment_id`.
                 - **label_id** -- An integer representing the segment's label / class id.
         """
@@ -655,10 +669,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         for i in range(batch_size):
             mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
-                mask_probs[i], pred_scores[i], pred_labels[i], object_mask_threshold, num_labels
+                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
             )
 
-            height, width = target_sizes[i][0], target_sizes[i][1] 
+            height, width = target_sizes[i][0], target_sizes[i][1]
             segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs_item.device)
             segments: List[Dict] = []
 
@@ -727,13 +741,13 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
                 segmentation = run_length_encodings
 
-            results.append({"segmentation": segmentation, "segments": segments})
+            results.append({"segmentation": segmentation, "segment_ids": segments})
         return results
 
     def post_process_panoptic_segmentation(
         self,
         outputs,
-        object_mask_threshold: float = 0.8,
+        threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
         label_ids_to_fuse: Optional[Set[int]] = None,
         target_sizes: List[Tuple] = None,
@@ -745,7 +759,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
         Args:
             outputs ([`MaskFormerForInstanceSegmentationOutput`]):
                 The outputs from [`MaskFormerForInstanceSegmentation`].
-            object_mask_threshold (`float`, *optional*, defaults to 0.8):
+            threshold (`float`, *optional*, defaults to 0.5):
                 The probability score threshold to keep predicted instance masks.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.8):
                 The overlap mask area threshold to merge or discard small disconnected parts within each binary
@@ -763,7 +777,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
             `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
             - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`. If
               `target_sizes` is specified, segmentation is resized to the corresponding `target_sizes` entry.
-            - **segment_ids** -- a dictionary with the following keys
+            - **segment_ids** -- A dictionary that maps segment ids to semantic class ids.
                 - **id** -- an integer representing the `segment_id`.
                 - **label_id** -- an integer representing the segment's label / semantic class id.
                 - **was_fused** -- a boolean, `True` if `label_id` was in `label_ids_to_fuse`, `False` otherwise.
@@ -790,10 +804,10 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
         for i in range(batch_size):
             mask_probs_item, pred_scores_item, pred_labels_item = remove_low_and_no_objects(
-                mask_probs[i], pred_scores[i], pred_labels[i], object_mask_threshold, num_labels
+                mask_probs[i], pred_scores[i], pred_labels[i], threshold, num_labels
             )
 
-            height, width = target_sizes[i][0], target_sizes[i][1] 
+            height, width = target_sizes[i][0], target_sizes[i][1]
             segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs_item.device)
             segments: List[Dict] = []
 
@@ -854,6 +868,6 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
                             stuff_memory_list[pred_class] = current_segment_id
             else:
                 segmentation -= 1
-                
-            results.append({"segmentation": segmentation, "segments": segments})
+
+            results.append({"segmentation": segmentation, "segment_ids": segments})
         return results
