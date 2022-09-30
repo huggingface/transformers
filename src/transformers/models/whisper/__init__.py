@@ -73,6 +73,19 @@ if TYPE_CHECKING:
             WhisperPreTrainedModel,
         )
 
+    try:
+        if not is_tf_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .modeling_tf_whisper import (
+            TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFWhisperForConditionalGeneration,
+            TFWhisperModel,
+            TFWhisperPreTrainedModel,
+        )
+
 else:
     import sys
 

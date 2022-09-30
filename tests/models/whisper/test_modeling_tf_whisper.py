@@ -12,34 +12,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" Testing suite for the PyTorch Whisper model. """
+""" Testing suite for the TensorFlow Whisper model. """
 
-import copy
 import inspect
-import os
 import tempfile
 import unittest
 
 import numpy as np
 
 from transformers import WhisperConfig
-from transformers.testing_utils import (
-    is_tf_available,
-    require_librosa,
-    require_pyctcdecode,
-    require_tf,
-    require_torch,
-    require_torchaudio,
-    slow,
-    torch_device,
-)
-from transformers.utils import cached_property, is_librosa_available, is_pyctcdecode_available
+from transformers.testing_utils import is_tf_available, require_tf, slow
+from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
 
-from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_tf_common import TFModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
-from ...utils.test_modeling_tf_core import TFCoreModelTesterMixin
+from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_tensor
 
 
 if is_datasets_available():
@@ -51,19 +38,15 @@ if is_tf_available():
     import tensorflow as tf
 
     from transformers import (
-        WhisperFeatureExtractor,
         TFWhisperForConditionalGeneration,
         TFWhisperModel,
+        WhisperFeatureExtractor,
         WhisperProcessor,
         WhisperTokenizer,
         set_seed,
     )
     from transformers.generation_logits_process import LogitsProcessorList, SuppressBlank, SuppressTokens
     from transformers.models.whisper.modeling_tf_whisper import TFWhisperDecoder, TFWhisperEncoder
-
-
-if is_librosa_available():
-    import librosa
 
 
 def prepare_whisper_inputs_dict(
@@ -677,7 +660,6 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_logits_librispeech(self):
-        torch_device = "cpu"
         set_seed(0)
         model = TFWhisperModel.from_pretrained("openai/whisper-tiny", from_pt=True)
         input_speech = self._load_datasamples(1)
@@ -722,7 +704,6 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_small_en_logits_librispeech(self):
         set_seed(0)
-        torch_device = "cpu"
         model = TFWhisperModel.from_pretrained("openai/whisper-small.en", from_pt=True)
 
         input_speech = self._load_datasamples(1)
@@ -757,7 +738,6 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     def test_large_logits_librispeech(self):
         set_seed(0)
 
-        torch_device = "cpu"
         model = TFWhisperModel.from_pretrained("openai/whisper-large", from_pt=True)
 
         input_speech = self._load_datasamples(1)
@@ -793,7 +773,6 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_tiny_en_generation(self):
 
-        torch_device = "cpu"
         set_seed(0)
         model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
         model.config.decoder_start_token_id = 50257
@@ -816,7 +795,6 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_tiny_generation(self):
 
-        torch_device = "cpu"
         set_seed(0)
         model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny", from_pt=True)
 
@@ -839,7 +817,6 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_large_generation(self):
-        torch_device = "cpu"
         set_seed(0)
         model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large", from_pt=True)
 

@@ -105,6 +105,8 @@ IGNORE_NON_TESTED = PRIVATE_MODELS.copy() + [
     "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
     "TFRobertaForMultipleChoice",  # TODO: fix
     "TrOCRDecoderWrapper",  # Building part of bigger (tested) model.
+    "TFWhisperEncoder",  # Building part of bigger (tested) model.
+    "TFWhisperDecoder",  # Building part of bigger (tested) model.
     "SeparableConv1D",  # Building part of bigger (tested) model.
     "FlaxBartForCausalLM",  # Building part of bigger (tested) model.
     "FlaxBertForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through FlaxRobertaForCausalLM.

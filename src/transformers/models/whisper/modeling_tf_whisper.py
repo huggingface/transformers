@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch Whisper model."""
+""" TensorFlow Whisper model."""
 
 
 import math
@@ -602,7 +602,6 @@ class TFWhisperEncoder(TFWhisperPreTrainedModel):
     """
 
     def __init__(self, config: WhisperConfig, **kwargs):
-        self.layer_name = kwargs.pop("layer_name", "encoder")
         super().__init__(config, **kwargs)
         self.layerdrop = config.encoder_layerdrop
 
@@ -619,7 +618,7 @@ class TFWhisperEncoder(TFWhisperPreTrainedModel):
             self.max_source_positions, self.embed_dim, name="embed_positions"
         )
 
-        self.encoder_layers = [TFWhisperEncoderLayer(config, name=f"layers.{i}", layer_name=f"encoder_layer_{i}") for i in range(config.encoder_layers)]
+        self.encoder_layers = [TFWhisperEncoderLayer(config, name=f"layers.{i}") for i in range(config.encoder_layers)]
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
         self.dropout = tf.keras.layers.Dropout(config.dropout)
@@ -663,8 +662,6 @@ class TFWhisperEncoder(TFWhisperPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        
 
         # TF 2.0 layers can't use channels first format when running on CPU.
         input_features = tf.transpose(input_features, perm=(0, 2, 1))
@@ -741,9 +738,7 @@ class TFWhisperDecoder(TFWhisperPreTrainedModel):
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        self.embed_tokens = tf.keras.layers.Embedding(
-            config.vocab_size, config.d_model, name="embed_tokens"
-        )
+        self.embed_tokens = tf.keras.layers.Embedding(config.vocab_size, config.d_model, name="embed_tokens")
         self.embed_positions = TFWhisperPositionalEmbedding(
             self.max_target_positions, config.d_model, name="embed_positions"
         )
