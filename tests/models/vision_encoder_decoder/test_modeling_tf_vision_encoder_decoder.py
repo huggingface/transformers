@@ -673,9 +673,7 @@ class TFVisionEncoderDecoderMixin:
 @require_tf
 class TFViT2GPT2EncoderDecoderModelTest(TFVisionEncoderDecoderMixin, unittest.TestCase):
     def get_pretrained_model(self):
-        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "google/vit-base-patch16-224-in21k", "gpt2"
-        )
+        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained("google/vit-base-patch16-224-in21k", "gpt2")
 
     def get_encoder_decoder_model(self, config, decoder_config):
         encoder_model = TFViTModel(config, name="encoder")
@@ -720,9 +718,7 @@ class TFViT2GPT2EncoderDecoderModelTest(TFVisionEncoderDecoderMixin, unittest.Te
 @require_tf
 class TFVisionEncoderDecoderModelTest(unittest.TestCase):
     def get_from_encoderdecoder_pretrained_model(self):
-        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained(
-            "google/vit-base-patch16-224-in21k", "gpt2"
-        )
+        return TFVisionEncoderDecoderModel.from_encoder_decoder_pretrained("google/vit-base-patch16-224-in21k", "gpt2")
 
     def get_decoder_config(self):
         config = AutoConfig.from_pretrained("gpt2")
