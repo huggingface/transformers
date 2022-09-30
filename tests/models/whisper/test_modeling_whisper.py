@@ -104,8 +104,8 @@ class WhisperModelTester:
         num_mel_bins=80,
         decoder_start_token_id=85,
         num_conv_layers=1,
-        supress_tokens=None,
-        begin_supress_tokens=None,
+        suppress_tokens=None,
+        begin_suppress_tokens=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -129,8 +129,8 @@ class WhisperModelTester:
         self.bos_token_id = bos_token_id
         self.decoder_start_token_id = decoder_start_token_id
         self.num_conv_layers = num_conv_layers
-        self.supress_tokens = supress_tokens
-        self.begin_supress_tokens = begin_supress_tokens
+        self.suppress_tokens = suppress_tokens
+        self.begin_suppress_tokens = begin_suppress_tokens
 
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
@@ -166,8 +166,8 @@ class WhisperModelTester:
             decoder_ffn_dim=self.hidden_size,
             encoder_ffn_dim=self.hidden_size,
             decoder_start_token_id=self.decoder_start_token_id,
-            supress_tokens=self.supress_tokens,
-            begin_supress_tokens=self.begin_supress_tokens,
+            suppress_tokens=self.suppress_tokens,
+            begin_suppress_tokens=self.begin_suppress_tokens,
         )
 
     def prepare_config_and_inputs_for_common(self):
@@ -890,8 +890,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         set_seed(0)
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
-        model.config.begin_supress_tokens = None
-        model.config.supress_tokens = None
+        model.config.begin_suppress_tokens = None
+        model.config.suppress_tokens = None
         input_speech = self._load_datasamples(1)
         feaure_extractor = WhisperFeatureExtractor()
 
@@ -940,7 +940,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         set_seed(0)
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
-        model.config.supress_tokens = NON_SPEECH_TOKENS_MULTI
+        model.config.suppress_tokens = NON_SPEECH_TOKENS_MULTI
 
         ds = load_dataset("common_voice", "ja", split="test", streaming=True)
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
@@ -953,7 +953,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-large")
 
-        model.config.begin_supress_tokens = [tokenizer.encode(" ")[0], tokenizer.eos_token_id]
+        model.config.begin_suppress_tokens = [tokenizer.encode(" ")[0], tokenizer.eos_token_id]
         decoder_input_ids = torch.tensor([[50258, 50359, 50266, 50363]]).long().to(torch_device)
         generated_ids = model.generate(
             input_features,
