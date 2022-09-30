@@ -13,13 +13,13 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 
 Having multiple frameworks available to use with 🤗 Transformers gives you flexibility to play their strengths when
 designing your application, but it implies that compatibility must be added on a per-model basis. The good news is that
-adding TensorFlow compatibility to an existing model is simpler than to [add a new model from scratch](add_new_model)!
+adding TensorFlow compatibility to an existing model is simpler than [adding a new model from scratch](add_new_model)!
 Whether you wish to have a deeper understanding of large TensorFlow models, make a major open-source contribution, or
 enable TensorFlow for your model of choice, this guide is for you.
 
 This guide empowers you, a member of our community, to contribute with TensorFlow model weights and/or
 architectures to be used in 🤗 Transformers, with minimal supervision from the Hugging Face team. Writing a new model
-is no small feat, but opefully this guide will make less of a rollercoaster 🎢 and more of a walk in the park 🚶.
+is no small feat, but hopefully this guide will make it less of a rollercoaster 🎢 and more of a walk in the park 🚶.
 Harnessing our collective experiences is absolutely critical to make this process increasingly easier, and thus we
 highly encourage that you suggest improvements to this guide!
 
@@ -58,7 +58,7 @@ PyTorch equivalent of the model you are implementing and other TensorFlow models
 because the code is clear, easy to debug and build upon. If you make the life of the maintainers easy with your
 TensorFlow implementation, by replicating the same patterns as in other TensorFlow models and minimizing the mismatch
 to the PyTorch implementation, you ensure your contribution will be long lived.
-- Ask for help when you're stuck! The 🤗 Transformers is here to help, and we've probably found solutions to the same
+- Ask for help when you're stuck! The 🤗 Transformers team is here to help, and we've probably found solutions to the same
 problems you're facing.
 
 Here's an overview of the steps needed to add a TensorFlow model architecture:
@@ -166,7 +166,7 @@ After you've grasped the basics of the models you are about to implement, it's i
 implementation. This is a great chance to confirm that a working implementation matches your expectations for the
 model, as well as to foresee technical challenges on the TensorFlow side.
 
-It's perfectly natural that you feel overwhelmed with the amount of information that you've just absorved. It is
+It's perfectly natural that you feel overwhelmed with the amount of information that you've just absorbed. It is
 definitely not a requirement that you understand all facets of the model at this stage. Nevertheless, we highly
 encourage you to clear any pressing questions in our [forum](https://discuss.huggingface.co/).
 
@@ -275,7 +275,7 @@ After all reviewers are happy with the state of your PR, the final action point 
 below for instructions on how to do it.
 
 Finally, when the TensorFlow weights get merged, you have at least 3 reviewer approvals, and all CI checks are
-green, double-check the tests localy one last time
+green, double-check the tests locally one last time
 
 ```bash
 NVIDIA_TF32_OVERRIDE=0 RUN_SLOW=1 RUN_PT_TF_CROSS_TESTS=1 \
@@ -315,7 +315,7 @@ That's it! 🎉
 ## Debugging mismatches across ML frameworks 🐛
 
 At some point, when adding a new architecture or when creating TensorFlow weights for an existing architecture, you
-might come across errors compaining about mismatches between PyTorch and TensorFlow. You might even decide open the
+might come across errors complaining about mismatches between PyTorch and TensorFlow. You might even decide open the
 model architecture code for the two frameworks, and find that they look identical. What's going on? 🤔
 
 First of all, let's talk about why understanding these mismatches matters. Many community members will use 🤗
