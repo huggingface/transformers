@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import unittest
+import torch
+import tensorflow as tf
 
 import numpy as np
 
@@ -132,6 +134,22 @@ class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
                 truncation=True,
                 tokenize_kwargs=tokenize_kwargs,
             )
+
+    @require_torch
+    def test_return_tensors_pt(self):
+        feature_extractor = pipeline(
+            task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="pt"
+        )
+        outputs = feature_extractor("This is a test" * 100, return_tensors=True)
+        self.assertTrue(torch.is_tensor(outputs))
+
+    @require_tf
+    def test_return_tensors_tf(self):
+        feature_extractor = pipeline(
+            task="feature-extraction", model="hf-internal-testing/tiny-random-distilbert", framework="tf"
+        )
+        outputs = feature_extractor("This is a test" * 100, return_tensors=True)
+        self.assertTrue(tf.is_tensor(outputs))
 
     def get_shape(self, input_, shape=None):
         if shape is None:
