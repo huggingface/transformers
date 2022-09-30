@@ -89,6 +89,7 @@ from .import_utils import (
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
+    is_bs4_available,
     is_coloredlogs_available,
     is_datasets_available,
     is_detectron2_available,

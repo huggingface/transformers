@@ -88,6 +88,7 @@ from . import (
     lxmert,
     m2m_100,
     marian,
+    markuplm,
     maskformer,
     mbart,
     mbart50,

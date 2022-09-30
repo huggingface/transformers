@@ -279,6 +279,8 @@
         title: M2M100
       - local: model_doc/marian
         title: MarianMT
+      - local: model_doc/markuplm
+        title: MarkupLM
       - local: model_doc/mbart
         title: MBart and MBart-50
       - local: model_doc/megatron-bert
