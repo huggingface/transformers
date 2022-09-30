@@ -25,16 +25,28 @@ jobs:
                 else
                     touch test_preparation/test_list.txt
                 fi
-            - run: python utils/tests_fetcher.py --filter_pipeline_tests
-            - run: |
-                if [ -f test_list.txt ]; then
-                    mv test_list.txt test_preparation/filtered_test_list.txt
-                else
-                    touch test_preparation/filtered_test_list.txt
-                fi
-            - store_artifacts:
-                  path: ~/transformers/test_preparation/filtered_test_list.txt
             - run: python utils/tests_fetcher.py --filters tests examples | tee examples_tests_fetched_summary.txt
+            - run: |
+                  if [ -f test_list.txt ]; then
+                      mv test_list.txt test_preparation/examples_test_list.txt
+                  else
+                      touch test_preparation/examples_test_list.txt
+                  fi
+            - persist_to_workspace:
+                  root: test_preparation/
+                  paths:
+                      test_list.txt
+                      examples_test_list.txt
+            - store_artifacts:
+                  path: ~/transformers/test_list.txt
+            - store_artifacts:
+                  path: ~/transformers/examples_test_list.txt
+            - run: python utils/create_circleci_config.py --fetcher_folder test_preparation
+            - run: |
+                  if [ ! -s test_preparation/generated_config.yml ]; then
+                      echo "No tests to run, exiting early!"
+                      circleci-agent step halt
+                  fi
             - store_artifacts:
                 path: ~/transformers/examples_tests_fetched_summary.txt
             - run: |
