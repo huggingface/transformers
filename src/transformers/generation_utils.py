@@ -39,6 +39,7 @@ from .generation_logits_process import (
     NoRepeatNGramLogitsProcessor,
     PrefixConstrainedLogitsProcessor,
     RepetitionPenaltyLogitsProcessor,
+    SuppressTokensLogitsProcessor,
     TemperatureLogitsWarper,
     TopKLogitsWarper,
     TopPLogitsWarper,
@@ -691,6 +692,8 @@ class GenerationMixin:
         exponential_decay_length_penalty: Tuple,
         logits_processor: Optional[LogitsProcessorList],
         renormalize_logits: Optional[bool],
+        supress_tokens: Optional[List[int]],
+        begin_supress_tokens: Optional[List[int]],
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
@@ -724,6 +727,10 @@ class GenerationMixin:
             exponential_decay_length_penalty
             if exponential_decay_length_penalty is not None
             else self.config.exponential_decay_length_penalty
+        )
+        supress_tokens = supress_tokens if supress_tokens is not None else self.config.supress_tokens
+        begin_supress_tokens = (
+            begin_supress_tokens if begin_supress_tokens is not None else self.config.begin_supress_tokens
         )
         # instantiate processors list
 
@@ -762,6 +769,9 @@ class GenerationMixin:
             processors.append(
                 ExponentialDecayLengthPenalty(exponential_decay_length_penalty, eos_token_id, input_ids_seq_length)
             )
+        if supress_tokens is not None:
+            processors.append(SuppressTokensLogitsProcessor(supress_tokens, begin_supress_tokens))
+
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         # `LogitNormalization` should always be the last logit processor, when present
         if renormalize_logits is True:
@@ -932,6 +942,8 @@ class GenerationMixin:
         remove_invalid_values: Optional[bool] = None,
         synced_gpus: Optional[bool] = False,
         exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
+        supress_tokens: Optional[List[int]] = None,
+        begin_supress_tokens: Optional[List[int]] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -1090,6 +1102,9 @@ class GenerationMixin:
                 This Tuple adds an exponentially increasing length penalty, after a certain amount of tokens have been
                 generated. The tuple shall consist of: `(start_index, decay_factor)` where `start_index` indicates
                 where penalty starts and `decay_factor` represents the factor of exponential decay
+            supress_tokens  (`List[int]`, *optional*, defaults to `model.config.supress_tokens`):
+                A list of tokens that will be supressed at generation. Teh `SupressTokens` logit processor will set
+                their log probs to `-inf` so that they are not sampled.
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model
@@ -1337,6 +1352,8 @@ class GenerationMixin:
             exponential_decay_length_penalty=exponential_decay_length_penalty,
             logits_processor=logits_processor,
             renormalize_logits=renormalize_logits,
+            supress_tokens=supress_tokens,
+            begin_supress_tokens=begin_supress_tokens,
         )
 
         # 8. prepare stopping criteria

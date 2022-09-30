@@ -299,6 +299,8 @@ class PretrainedConfig(PushToHubMixin):
         self.forced_eos_token_id = kwargs.pop("forced_eos_token_id", None)
         self.remove_invalid_values = kwargs.pop("remove_invalid_values", False)
         self.exponential_decay_length_penalty = kwargs.pop("exponential_decay_length_penalty", None)
+        self.supress_tokens = kwargs.pop("supress_tokens", None)
+        self.begin_supress_tokens = kwargs.pop("begin_supress_tokens", None)
 
         # Fine-tuning task arguments
         self.architectures = kwargs.pop("architectures", None)
