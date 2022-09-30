@@ -45,6 +45,8 @@ from gluonts.transform import (
 )
 from gluonts.transform.sampler import InstanceSampler
 
+from .configuration_utils import PretrainedConfig
+
 
 PREDICTION_INPUT_NAMES = [
     "static_categorical_features",
