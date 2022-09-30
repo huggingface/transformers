@@ -704,29 +704,16 @@ class LogitNormalization(LogitsProcessor, LogitsWarper):
         return scores
 
 
-class SuppressBlank(LogitsProcessor):
+class SuppressTokensLogitsProcessor(LogitsProcessor):
     r""" """
 
-    def __init__(self, blank_token_id, eos_token_id, sample_begin: int = 1):
-        self.blank_token_id = blank_token_id
-        self.eos_token_id = eos_token_id
-        self.sample_begin = sample_begin
-
-    def __call__(self, input_ids, scores):
-        tokens = input_ids
-        logits = scores
-        if tokens.shape[1] == self.sample_begin:
-            logits[:, self.blank_token_id + [self.eos_token_id]] = -np.inf
-        return logits
-
-
-class SuppressTokens(LogitsProcessor):
-    r""" """
-
-    def __init__(self, suppress_tokens):
+    def __init__(self, suppress_tokens, begining_tokens: Optional[List[int]] = None):
         self.suppress_tokens = list(suppress_tokens)
+        self.begining_tokens - list(begining_tokens)
 
     def __call__(self, input_ids, scores):
-        logits = scores
-        logits[:, self.suppress_tokens] = -np.inf
-        return logits
+        scores[:, self.suppress_tokens] = -np.inf
+        if input_ids.shape[1] == 1 and self.begining_tokens is not None:
+            scores[:, self.begining_tokens] = -np.inf
+
+        return scores
