@@ -908,7 +908,7 @@ class TFGPT2EncoderDecoderModelTest(TFEncoderDecoderMixin, unittest.TestCase):
         from transformers import EncoderDecoderModel
 
         tokenizer_in = AutoTokenizer.from_pretrained("bert-base-cased")
-        tokenizer_out = AutoTokenizer.from_pretrained("../gpt2")
+        tokenizer_out = AutoTokenizer.from_pretrained("gpt2")
 
         """Not working, because pt checkpoint has `encoder.encoder.layer...` while tf model has `encoder.bert.encoder.layer...`.
         (For GPT2 decoder, there is no issue)

@@ -46,6 +46,7 @@ from .utils import (
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
+    is_bs4_available,
     is_detectron2_available,
     is_faiss_available,
     is_flax_available,
@@ -59,6 +60,7 @@ from .utils import (
     is_pytesseract_available,
     is_pytorch_quantization_available,
     is_rjieba_available,
+    is_safetensors_available,
     is_scatter_available,
     is_scipy_available,
     is_sentencepiece_available,
@@ -239,6 +241,13 @@ def custom_tokenizers(test_case):
     return unittest.skipUnless(_run_custom_tokenizers, "test of custom tokenizers")(test_case)
 
 
+def require_bs4(test_case):
+    """
+    Decorator marking a test that requires BeautifulSoup4. These tests are skipped when BeautifulSoup4 isn't installed.
+    """
+    return unittest.skipUnless(is_bs4_available(), "test requires BeautifulSoup4")(test_case)
+
+
 def require_git_lfs(test_case):
     """
     Decorator marking a test that requires git-lfs.
@@ -254,6 +263,13 @@ def require_accelerate(test_case):
     Decorator marking a test that requires accelerate. These tests are skipped when accelerate isn't installed.
     """
     return unittest.skipUnless(is_accelerate_available(), "test requires accelerate")(test_case)
+
+
+def require_safetensors(test_case):
+    """
+    Decorator marking a test that requires safetensors. These tests are skipped when safetensors isn't installed.
+    """
+    return unittest.skipUnless(is_safetensors_available(), "test requires safetensors")(test_case)
 
 
 def require_rjieba(test_case):

@@ -37,6 +37,7 @@ if is_torch_available():
         Speech2TextForConditionalGeneration,
         SpeechEncoderDecoderModel,
         VisionEncoderDecoderModel,
+        pipeline,
         top_k_top_p_filtering,
     )
     from transformers.generation_beam_constraints import DisjunctiveConstraint, PhrasalConstraint
@@ -1978,6 +1979,25 @@ class GenerationIntegrationTests(unittest.TestCase):
             list(bart_model.generate(input_ids, stopping_criteria=stopping_criteria, max_length=18).shape),
             [1, 18],
         )
+
+    def test_stop_sequence_stopping_criteria(self):
+
+        prompt = """Hello I believe in"""
+        generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-bart")
+        output = generator(prompt)
+        self.assertEqual(
+            output,
+            [
+                {
+                    "generated_text": (
+                        "Hello I believe in in in number number number number number number number number number"
+                    )
+                }
+            ],
+        )
+
+        output = generator(prompt, stop_sequence=" number")
+        self.assertEqual(output, [{"generated_text": "Hello I believe in in in number"}])
 
     def test_custom_logits_processor(self):
         bart_tokenizer = BartTokenizer.from_pretrained("sshleifer/bart-tiny-random")
