@@ -19,7 +19,6 @@ Fine-tuning a 🤗 Transformers model on summarization.
 # You can also adapt this script on your own summarization task. Pointers for this are left as comments.
 
 import argparse
-from base64 import decode
 import json
 import logging
 import math
