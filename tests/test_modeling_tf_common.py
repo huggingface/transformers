@@ -2216,6 +2216,22 @@ class UtilsFunctionsTest(unittest.TestCase):
                 for p1, p2 in zip(model.weights, new_model.weights):
                     self.assertTrue(np.allclose(p1.numpy(), p2.numpy()))
 
+    def test_save_pretrained_signatures(self):
+        model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Short custom TF signature function
+        @tf.function
+        def serving_fn(input):
+            return {"preds": model(input)}
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # Using default signature (default behavior)
+            model.save_pretrained(tmp_dir, saved_model=True, signatures=None)
+            # Providing custom signature function
+            model.save_pretrained(tmp_dir, saved_model=True, signatures=serving_fn)
+            # Providing custom signature function (dict input)
+            model.save_pretrained(tmp_dir, saved_model=True, signatures={"serving_default": serving_fn})
+
 
 @require_tf
 @is_staging_test
