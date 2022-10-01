@@ -1079,7 +1079,7 @@ class WhisperModel(WhisperPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The Whisper Model with a language modeling head. Can be used for summarization.",
+    "The Whisper Model with a language modeling head. Can be used for automatic speech recognition.",
     WHISPER_START_DOCSTRING,
 )
 class WhisperForConditionalGeneration(WhisperPreTrainedModel):
