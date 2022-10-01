@@ -1135,7 +1135,7 @@ class Trainer:
                 raise ValueError("Trainer tried to instantiate bnb Adam8bit but bnb is not installed!")
         elif args.optim == OptimizerNames.ANYPRECISION_ADAMW:
             try:
-                from torchdistx.optimizers.anyprecision_optimizer import AnyPrecisionAdamW
+                from torchdistx.optimizers import AnyPrecisionAdamW
 
                 optimizer_cls = AnyPrecisionAdamW
                 optimizer_kwargs.update(adam_kwargs)
