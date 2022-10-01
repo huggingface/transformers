@@ -2119,8 +2119,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 Whether or not to push your model to the Hugging Face model hub after saving it. You can specify the
                 repository you want to push to with `repo_id` (will default to the name of `save_directory` in your
                 namespace).
-            signatures (`dict` or `tf.function`, *optional*, defaults to `None`):
-                Model's signature used for serving.
+            signatures (`dict` or `tf.function`, *optional*):
+                Model's signature used for serving. This will be passed to the `signatures` argument of model.save().
             max_shard_size (`int` or `str`, *optional*, defaults to `"10GB"`):
                 The maximum size for a checkpoint before being sharded. Checkpoints shard will then be each of size
                 lower than this size. If expressed as a string, needs to be digits followed by a unit (like `"5MB"`).
@@ -2151,7 +2151,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             files_timestamps = self._get_files_timestamps(save_directory)
 
         if saved_model:
-            if not signatures:
+            if signatures is not None:
                 signatures = self.serving
             saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
             self.save(saved_model_dir, include_optimizer=False, signatures=signatures)
