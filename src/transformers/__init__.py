@@ -1529,6 +1529,8 @@ else:
             "Mask2FormerForInstanceSegmentation",
             "Mask2FormerModel",
             "Mask2FormerPreTrainedModel",
+        ]
+    )
     _import_structure["models.markuplm"].extend(
         [
             "MARKUPLM_PRETRAINED_MODEL_ARCHIVE_LIST",
