@@ -18,16 +18,9 @@ import logging
 import os
 import sys
 import threading
-from logging import CRITICAL  # NOQA
-from logging import DEBUG  # NOQA
-from logging import ERROR  # NOQA
-from logging import FATAL  # NOQA
-from logging import INFO  # NOQA
-from logging import NOTSET  # NOQA
-from logging import WARN  # NOQA
-from logging import WARNING  # NOQA
 from typing import Optional
 
+import frozendict
 from tqdm import auto as tqdm_lib
 
 import huggingface_hub.utils as hf_hub_utils
@@ -36,13 +29,13 @@ import huggingface_hub.utils as hf_hub_utils
 _lock = threading.Lock()
 _default_handler: Optional[logging.Handler] = None
 
-log_levels = {
+log_levels = frozendict.frozendict({
     "debug": logging.DEBUG,
     "info": logging.INFO,
     "warning": logging.WARNING,
     "error": logging.ERROR,
     "critical": logging.CRITICAL,
-}
+})
 
 _default_log_level = logging.WARNING
 
@@ -170,22 +163,22 @@ def set_verbosity(verbosity: int) -> None:
 
 def set_verbosity_info():
     """Set the verbosity to the `INFO` level."""
-    return set_verbosity(INFO)
+    return set_verbosity(logging.INFO)
 
 
 def set_verbosity_warning():
     """Set the verbosity to the `WARNING` level."""
-    return set_verbosity(WARNING)
+    return set_verbosity(logging.WARNING)
 
 
 def set_verbosity_debug():
     """Set the verbosity to the `DEBUG` level."""
-    return set_verbosity(DEBUG)
+    return set_verbosity(logging.DEBUG)
 
 
 def set_verbosity_error():
     """Set the verbosity to the `ERROR` level."""
-    return set_verbosity(ERROR)
+    return set_verbosity(logging.ERROR)
 
 
 def disable_default_handler() -> None:
