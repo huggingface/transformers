@@ -162,6 +162,7 @@ from . import (
     vision_text_dual_encoder,
     visual_bert,
     vit,
+    audio_spectogram_transformer,
     vit_mae,
     vit_msn,
     wav2vec2,

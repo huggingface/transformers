@@ -358,7 +358,7 @@ class ViTFeatureExtractor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class ViTImageProcessor(metaclass=DummyObject):
+class AudioSpectogramTransformerFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

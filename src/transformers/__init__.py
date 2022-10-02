@@ -403,6 +403,7 @@ _import_structure = {
     "models.vision_text_dual_encoder": ["VisionTextDualEncoderConfig", "VisionTextDualEncoderProcessor"],
     "models.visual_bert": ["VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP", "VisualBertConfig"],
     "models.vit": ["VIT_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTConfig"],
+    "models.audio_spectogram_transformer": ["AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "AudioSpectogramTransformerConfig"],
     "models.vit_mae": ["VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMAEConfig"],
     "models.vit_msn": ["VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP", "ViTMSNConfig"],
     "models.wav2vec2": [
@@ -735,13 +736,15 @@ else:
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
     _import_structure["models.owlvit"].append("OwlViTFeatureExtractor")
-    _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
-    _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
-    _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
-    _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
-    _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
-    _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
-    _import_structure["models.yolos"].extend(["YolosFeatureExtractor"])
+    _import_structure["models.perceiver"].append("PerceiverFeatureExtractor")
+    _import_structure["models.poolformer"].append("PoolFormerFeatureExtractor")
+    _import_structure["models.segformer"].append("SegformerFeatureExtractor")
+    _import_structure["models.videomae"].append("VideoMAEFeatureExtractor")
+    _import_structure["models.vilt"].append("ViltFeatureExtractor")
+    _import_structure["models.vilt"].append("ViltProcessor")
+    _import_structure["models.vit"].append("ViTFeatureExtractor")
+    _import_structure["models.audio_spectogram_transformer"].append("AudioSpectogramTransformerFeatureExtractor")
+    _import_structure["models.yolos"].append("YolosFeatureExtractor")
 
 # Timm-backed objects
 try:
@@ -2159,6 +2162,15 @@ else:
             "ViTPreTrainedModel",
         ]
     )
+    _import_structure["models.audio_spectogram_transformer"].extend(
+        [
+            "AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "AudioSpectogramTransformerForImageClassification",
+            "AudioSpectogramTransformerForMaskedImageModeling",
+            "AudioSpectogramTransformerModel",
+            "AudioSpectogramTransformerPreTrainedModel",
+        ]
+    )
     _import_structure["models.vit_mae"].extend(
         [
             "VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -3553,6 +3565,7 @@ if TYPE_CHECKING:
     from .models.vision_text_dual_encoder import VisionTextDualEncoderConfig, VisionTextDualEncoderProcessor
     from .models.visual_bert import VISUAL_BERT_PRETRAINED_CONFIG_ARCHIVE_MAP, VisualBertConfig
     from .models.vit import VIT_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTConfig
+    from .models.audio_spectogram_transformer import AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, AudioSpectogramTransformerConfig
     from .models.vit_mae import VIT_MAE_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMAEConfig
     from .models.vit_msn import VIT_MSN_PRETRAINED_CONFIG_ARCHIVE_MAP, ViTMSNConfig
     from .models.wav2vec2 import (
@@ -3846,12 +3859,13 @@ if TYPE_CHECKING:
         from .models.mobilenet_v2 import MobileNetV2FeatureExtractor, MobileNetV2ImageProcessor
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
         from .models.owlvit import OwlViTFeatureExtractor
-        from .models.perceiver import PerceiverFeatureExtractor, PerceiverImageProcessor
-        from .models.poolformer import PoolFormerFeatureExtractor, PoolFormerImageProcessor
-        from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
-        from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
-        from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
-        from .models.vit import ViTFeatureExtractor, ViTImageProcessor
+        from .models.perceiver import PerceiverFeatureExtractor
+        from .models.poolformer import PoolFormerFeatureExtractor
+        from .models.segformer import SegformerFeatureExtractor
+        from .models.videomae import VideoMAEFeatureExtractor
+        from .models.vilt import ViltFeatureExtractor, ViltProcessor
+        from .models.vit import ViTFeatureExtractor
+        from .models.audio_spectogram_transformer import AudioSpectogramTransformerFeatureExtractor
         from .models.yolos import YolosFeatureExtractor
 
     # Modeling
@@ -5004,6 +5018,13 @@ if TYPE_CHECKING:
             ViTForMaskedImageModeling,
             ViTModel,
             ViTPreTrainedModel,
+        )
+        from .models.audio_spectogram_transformer import (
+            AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            AudioSpectogramTransformerForImageClassification,
+            AudioSpectogramTransformerForMaskedImageModeling,
+            AudioSpectogramTransformerModel,
+            AudioSpectogramTransformerPreTrainedModel,
         )
         from .models.vit_mae import (
             VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST,
