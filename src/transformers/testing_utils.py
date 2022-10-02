@@ -41,6 +41,7 @@ from .integrations import (
     is_ray_available,
     is_sigopt_available,
     is_wandb_available,
+    is_clearml_available
 )
 from .utils import (
     is_accelerate_available,
@@ -584,6 +585,14 @@ def require_wandb(test_case):
     """
     return unittest.skipUnless(is_wandb_available(), "test requires wandb")(test_case)
 
+def require_clearml(test_case):
+    """
+    Decorator marking a test requires clearml.
+
+    These tests are skipped when clearml isn't installed.
+
+    """
+    return unittest.skipUnless(is_clearml_available(), "test requires clearml")(test_case)
 
 def require_soundfile(test_case):
     """
