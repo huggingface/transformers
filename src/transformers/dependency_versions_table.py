@@ -18,6 +18,7 @@ deps = {
     "filelock": "filelock",
     "flake8": "flake8>=3.8.3",
     "flax": "flax>=0.4.1",
+    "frozendict": "frozendict",
     "ftfy": "ftfy",
     "fugashi": "fugashi>=1.0",
     "GitPython": "GitPython<3.1.19",
