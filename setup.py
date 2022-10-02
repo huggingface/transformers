@@ -116,7 +116,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.9.0,<1.0",
+    "huggingface-hub>=0.10.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -148,6 +148,7 @@ _deps = [
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
+    "safetensors>=0.2.1",
     "sagemaker>=2.31.0",
     "scikit-learn",
     "sentencepiece>=0.1.91,!=0.1.92",
@@ -168,6 +169,7 @@ _deps = [
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
+    "beautifulsoup4",
 ]
 
 
@@ -279,6 +281,7 @@ extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
 extras["codecarbon"] = deps_list("codecarbon")
 
+
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list(
@@ -300,6 +303,8 @@ extras["testing"] = (
         "protobuf",  # Can be removed once we can unpin protobuf
         "sacremoses",
         "rjieba",
+        "safetensors",
+        "beautifulsoup4",
     )
     + extras["retrieval"]
     + extras["modelcreation"]

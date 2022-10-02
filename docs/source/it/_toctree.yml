@@ -36,3 +36,6 @@
   - local: debugging
     title: Debugging
   title: Guide pratiche
+- sections:
+  - local: add_new_pipeline
+    title: Come aggiungere una pipeline a 🤗 Transformers?
