@@ -2236,17 +2236,17 @@ class UtilsFunctionsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Using default signature (default behavior)
             model.save_pretrained(tmp_dir, saved_model=True, signatures=None)
-            model_loaded = tf.keras.models.load_model(tmp_dir)
+            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
             self.assertTrue(len(list(model_loaded.signatures.keys())) > 0)
 
             # Providing custom signature function
             model.save_pretrained(tmp_dir, saved_model=True, signatures=serving_fn)
-            model_loaded = tf.keras.models.load_model(tmp_dir)
+            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
             self.assertTrue(len(list(model_loaded.signatures.keys())) > 0)
 
             # Providing custom signature function (dict input)
             model.save_pretrained(tmp_dir, saved_model=True, signatures={"serving_default": serving_fn})
-            model_loaded = tf.keras.models.load_model(tmp_dir)
+            model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
             self.assertTrue(len(list(model_loaded.signatures.keys())) > 0)
 
 
