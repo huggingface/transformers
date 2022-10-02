@@ -2151,7 +2151,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             files_timestamps = self._get_files_timestamps(save_directory)
 
         if saved_model:
-            if signatures is not None:
+            if signatures is None:
                 signatures = self.serving
             saved_model_dir = os.path.join(save_directory, "saved_model", str(version))
             self.save(saved_model_dir, include_optimizer=False, signatures=signatures)

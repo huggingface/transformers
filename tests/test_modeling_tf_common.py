@@ -2219,18 +2219,35 @@ class UtilsFunctionsTest(unittest.TestCase):
     def test_save_pretrained_signatures(self):
         model = TFBertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
 
-        # Short custom TF signature function
-        @tf.function
+        # Short custom TF signature function.
+        # `input_signature` is specific to BERT.
+        @tf.function(
+            input_signature=[
+                [
+                    tf.TensorSpec([None, None], tf.int32, name="input_ids"),
+                    tf.TensorSpec([None, None], tf.int32, name="token_type_ids"),
+                    tf.TensorSpec([None, None], tf.int32, name="attention_mask"),
+                ]
+            ]
+        )
         def serving_fn(input):
-            return {"preds": model(input)}
+            return model(input)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Using default signature (default behavior)
             model.save_pretrained(tmp_dir, saved_model=True, signatures=None)
+            model_loaded = tf.keras.models.load_model(tmp_dir)
+            self.assertTrue(len(list(model_loaded.signatures.keys())) > 0)
+
             # Providing custom signature function
             model.save_pretrained(tmp_dir, saved_model=True, signatures=serving_fn)
+            model_loaded = tf.keras.models.load_model(tmp_dir)
+            self.assertTrue(len(list(model_loaded.signatures.keys())) > 0)
+
             # Providing custom signature function (dict input)
             model.save_pretrained(tmp_dir, saved_model=True, signatures={"serving_default": serving_fn})
+            model_loaded = tf.keras.models.load_model(tmp_dir)
+            self.assertTrue(len(list(model_loaded.signatures.keys())) > 0)
 
 
 @require_tf
