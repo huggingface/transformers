@@ -104,7 +104,7 @@ kubernetes==12.0.1
 libclang==13.0.0
 librosa==0.9.1
 llvmlite==0.38.0
-Mako==1.2.0
+Mako==1.2.2
 Markdown==3.3.6
 MarkupSafe==1.1.1
 matplotlib==3.5.1
@@ -118,7 +118,7 @@ mypy-extensions==0.4.3
 nltk==3.7
 numba==0.55.1
 numpy==1.22.3
-oauthlib==3.2.0
+oauthlib==3.2.1
 onnx==1.11.0
 onnxconverter-common==1.9.0
 opt-einsum==3.3.0
@@ -144,7 +144,7 @@ portalocker==2.0.0
 poyo==0.5.0
 prettytable==3.2.0
 prompt-toolkit==3.0.28
-protobuf==3.19.4
+protobuf==3.19.5
 psutil==5.9.0
 ptyprocess==0.7.0
 pure-eval==0.2.2

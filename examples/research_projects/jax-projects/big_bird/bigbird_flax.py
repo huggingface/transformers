@@ -104,7 +104,7 @@ class DataCollator:
 
     def __call__(self, batch):
         batch = self.collate_fn(batch)
-        batch = jax.tree_map(shard, batch)
+        batch = jax.tree_util.tree_map(shard, batch)
         return batch
 
     def collate_fn(self, features):
