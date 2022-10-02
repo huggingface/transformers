@@ -191,6 +191,7 @@ PYTORCH_EXPORT_MODELS = {
     ("deberta", "microsoft/deberta-base"),
     ("deberta-v2", "microsoft/deberta-v2-xlarge"),
     ("convnext", "facebook/convnext-tiny-224"),
+    ("decision_transformer", "huggingface/decision_transformer"),
     ("detr", "facebook/detr-resnet-50"),
     ("distilbert", "distilbert-base-cased"),
     ("electra", "google/electra-base-generator"),

@@ -25,7 +25,7 @@ _import_structure = {
     "configuration_decision_transformer": [
         "DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DecisionTransformerConfig",
-        "DecisionTransformerOnnxConfig"
+        "DecisionTransformerOnnxConfig",
     ],
 }
 
@@ -48,7 +48,7 @@ if TYPE_CHECKING:
     from .configuration_decision_transformer import (
         DECISION_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DecisionTransformerConfig,
-        DecisionTransformerOnnxConfig
+        DecisionTransformerOnnxConfig,
     )
 
     try:

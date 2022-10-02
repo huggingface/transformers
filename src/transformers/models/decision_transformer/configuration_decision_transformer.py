@@ -14,11 +14,13 @@
 # limitations under the License.
 """ Decision Transformer model configuration"""
 
-from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-from ...onnx import OnnxConfig
-from typing import Mapping
 from collections import OrderedDict
+from typing import Mapping
+
+from ...configuration_utils import PretrainedConfig
+from ...onnx import OnnxConfig
+from ...utils import logging
+
 
 logger = logging.get_logger(__name__)
 
@@ -81,7 +83,7 @@ class DecisionTransformerConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         scale_attn_weights (`bool`, *optional*, defaults to `True`):
             Scale attention weights by dividing by sqrt(hidden_size)..
-        use_cache (`bool`, *optiofrom typing import Mappingnal*, defaults to `True`):
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         scale_attn_by_inverse_layer_idx (`bool`, *optional*, defaults to `False`):
             Whether to additionally scale attention weights by `1 / layer_idx + 1`.
