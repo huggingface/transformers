@@ -53,6 +53,8 @@ jobs:
 #                  path: test_preparation/generated_config.txt
             - continuation/continue:
                   configuration_path: test_preparation/generated_config.yml
+                  paramerers:
+                      - tests_to_run: tests1
 
     check_code_quality:
         working_directory: ~/transformers
