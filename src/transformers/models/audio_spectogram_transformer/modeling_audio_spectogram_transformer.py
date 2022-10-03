@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 MIT and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,10 +12,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch AudioSpectogramTransformer model."""
+""" PyTorch Audio Spectogram Transformer model."""
 
-
-import collections.abc
 import math
 from typing import Dict, List, Optional, Set, Tuple, Union
 
@@ -25,16 +23,10 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput, MaskedLMOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
-from ...utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_audio_spectogram_transformer import AudioSpectogramTransformerConfig
 
 
@@ -48,16 +40,16 @@ _FEAT_EXTRACTOR_FOR_DOC = "AudioSpectogramTransformerFeatureExtractor"
 _CHECKPOINT_FOR_DOC = "MIT/ast-10-10"
 _EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/audio_spectogram_transformer-base-patch16-224"
-_IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
+# Audio classification docstring
+_SEQ_CLASS_CHECKPOINT = "MIT/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593"
+_SEQ_CLASS_EXPECTED_OUTPUT = ""
+_SEQ_CLASS_EXPECTED_LOSS = 0.0
 
 
 AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "MIT/ast-10-10",
+    "MIT/audio-spectogram-transformer-finetuned-audioset-10-10-0.4593",
     # See all Audio Spectogram Transformer models at https://huggingface.co/models?filter=audio-spectogram-transformer
 ]
-
 
 
 class AudioSpectogramTransformerEmbeddings(nn.Module):
@@ -89,7 +81,7 @@ class AudioSpectogramTransformerEmbeddings(nn.Module):
         f_dim = test_out.shape[2]
         t_dim = test_out.shape[3]
         return f_dim, t_dim
-    
+
     def forward(self, input_values: torch.Tensor) -> torch.Tensor:
         batch_size = input_values.shape[0]
         embeddings = self.patch_embeddings(input_values)
@@ -123,7 +115,11 @@ class AudioSpectogramTransformerPatchEmbeddings(nn.Module):
         # self.num_channels = num_channels
         # self.num_patches = num_patches
 
-        self.projection = nn.Conv2d(1, config.hidden_size, kernel_size=(16, 16), stride=(10, 10))
+        patch_size = config.patch_size
+        fstride = config.fstride
+        tstride = config.tstride
+
+        self.projection = nn.Conv2d(1, config.hidden_size, kernel_size=(patch_size, patch_size), stride=(fstride, tstride))
 
     def forward(self, input_values: torch.Tensor) -> torch.Tensor:
         input_values = input_values.unsqueeze(1)
@@ -454,7 +450,8 @@ AUDIO_SPECTOGRAM_TRANSFORMER_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare AudioSpectogramTransformer Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare AudioSpectogramTransformer Model transformer outputting raw hidden-states without any specific head on"
+    " top.",
     AUDIO_SPECTOGRAM_TRANSFORMER_START_DOCSTRING,
 )
 class AudioSpectogramTransformerModel(AudioSpectogramTransformerPreTrainedModel):
@@ -538,11 +535,11 @@ class AudioSpectogramTransformerModel(AudioSpectogramTransformerPreTrainedModel)
             attentions=encoder_outputs.attentions,
         )
 
-    
+
 @add_start_docstrings(
     """
-    Audio Spectogram Transformer model with an audio classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for AudioSet.
+    Audio Spectogram Transformer model with an audio classification head on top (a linear layer on top of the final
+    hidden state of the [CLS] token) e.g. for AudioSet.
     """,
     AUDIO_SPECTOGRAM_TRANSFORMER_START_DOCSTRING,
 )
@@ -563,10 +560,12 @@ class AudioSpectogramTransformerForSequenceClassification(AudioSpectogramTransfo
     @add_start_docstrings_to_model_forward(AUDIO_SPECTOGRAM_TRANSFORMER_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_IMAGE_CLASS_CHECKPOINT,
+        checkpoint=_SEQ_CLASS_CHECKPOINT,
         output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
+        modality="audio",
+        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
+        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
     )
     def forward(
         self,

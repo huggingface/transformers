@@ -1,5 +1,7 @@
-from transformers import AudioSpectogramTransformerConfig, AudioSpectogramTransformerForSequenceClassification
 import torch
+
+from transformers import AudioSpectogramTransformerConfig, AudioSpectogramTransformerForSequenceClassification
+
 
 config = AudioSpectogramTransformerConfig(num_labels=527)
 model = AudioSpectogramTransformerForSequenceClassification(config)

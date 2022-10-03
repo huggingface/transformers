@@ -17,15 +17,16 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-    is_vision_available,
-)
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
 
 
-_import_structure = {"configuration_audio_spectogram_transformer": ["AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "AudioSpectogramTransformerConfig", "AudioSpectogramTransformerOnnxConfig"]}
+_import_structure = {
+    "configuration_audio_spectogram_transformer": [
+        "AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "AudioSpectogramTransformerConfig",
+        "AudioSpectogramTransformerOnnxConfig",
+    ]
+}
 
 try:
     if not is_vision_available():
@@ -33,7 +34,9 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["feature_extraction_audio_spectogram_transformer"] = ["AudioSpectogramTransformerFeatureExtractor"]
+    _import_structure["feature_extraction_audio_spectogram_transformer"] = [
+        "AudioSpectogramTransformerFeatureExtractor"
+    ]
 
 try:
     if not is_torch_available():
@@ -51,7 +54,11 @@ else:
     ]
 
 if TYPE_CHECKING:
-    from .configuration_audio_spectogram_transformer import AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, AudioSpectogramTransformerConfig, AudioSpectogramTransformerOnnxConfig
+    from .configuration_audio_spectogram_transformer import (
+        AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        AudioSpectogramTransformerConfig,
+        AudioSpectogramTransformerOnnxConfig,
+    )
 
     try:
         if not is_vision_available():
@@ -71,9 +78,9 @@ if TYPE_CHECKING:
             AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             AudioSpectogramTransformerForImageClassification,
             AudioSpectogramTransformerForMaskedImageModeling,
+            AudioSpectogramTransformerForSequenceClassification,
             AudioSpectogramTransformerModel,
             AudioSpectogramTransformerPreTrainedModel,
-            AudioSpectogramTransformerForSequenceClassification,
         )
 
 else:

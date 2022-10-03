@@ -14,10 +14,6 @@
 # limitations under the License.
 """ AudioSpectogramTransformer model configuration"""
 
-from collections import OrderedDict
-from typing import Mapping
-
-from packaging import version
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -30,13 +26,14 @@ AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-
 class AudioSpectogramTransformerConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AudioSpectogramTransformerModel`]. It is used to instantiate an AudioSpectogramTransformer
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the AudioSpectogramTransformer
-    [google/audio_spectogram_transformer-base-patch16-224](https://huggingface.co/google/audio_spectogram_transformer-base-patch16-224) architecture.
+    This is the configuration class to store the configuration of a [`AudioSpectogramTransformerModel`]. It is used to
+    instantiate an AudioSpectogramTransformer model according to the specified arguments, defining the model
+    architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    AudioSpectogramTransformer
+    [google/audio_spectogram_transformer-base-patch16-224](https://huggingface.co/google/audio_spectogram_transformer-base-patch16-224)
+    architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

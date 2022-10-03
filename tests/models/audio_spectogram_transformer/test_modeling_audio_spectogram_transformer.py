@@ -30,8 +30,14 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import AudioSpectogramTransformerForImageClassification, AudioSpectogramTransformerForMaskedImageModeling, AudioSpectogramTransformerModel
-    from transformers.models.audio_spectogram_transformer.modeling_audio_spectogram_transformer import AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST
+    from transformers import (
+        AudioSpectogramTransformerForImageClassification,
+        AudioSpectogramTransformerForMaskedImageModeling,
+        AudioSpectogramTransformerModel,
+    )
+    from transformers.models.audio_spectogram_transformer.modeling_audio_spectogram_transformer import (
+        AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+    )
 
 
 if is_vision_available():
@@ -192,7 +198,9 @@ class AudioSpectogramTransformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AudioSpectogramTransformerModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=AudioSpectogramTransformerConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self, config_class=AudioSpectogramTransformerConfig, has_text_modality=False, hidden_size=37
+        )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -252,11 +260,19 @@ def prepare_img():
 class AudioSpectogramTransformerModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_feature_extractor(self):
-        return AudioSpectogramTransformerFeatureExtractor.from_pretrained("google/audio_spectogram_transformer-base-patch16-224") if is_vision_available() else None
+        return (
+            AudioSpectogramTransformerFeatureExtractor.from_pretrained(
+                "google/audio_spectogram_transformer-base-patch16-224"
+            )
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_image_classification_head(self):
-        model = AudioSpectogramTransformerForImageClassification.from_pretrained("google/audio_spectogram_transformer-base-patch16-224").to(torch_device)
+        model = AudioSpectogramTransformerForImageClassification.from_pretrained(
+            "google/audio_spectogram_transformer-base-patch16-224"
+        ).to(torch_device)
 
         feature_extractor = self.default_feature_extractor
         image = prepare_img()
@@ -280,9 +296,13 @@ class AudioSpectogramTransformerModelIntegrationTest(unittest.TestCase):
         # allowing to interpolate the pre-trained position embeddings in order to use
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
-        model = AudioSpectogramTransformerModel.from_pretrained("facebook/dino-audio_spectogram_transformers8").to(torch_device)
+        model = AudioSpectogramTransformerModel.from_pretrained("facebook/dino-audio_spectogram_transformers8").to(
+            torch_device
+        )
 
-        feature_extractor = AudioSpectogramTransformerFeatureExtractor.from_pretrained("facebook/dino-audio_spectogram_transformers8", size=480)
+        feature_extractor = AudioSpectogramTransformerFeatureExtractor.from_pretrained(
+            "facebook/dino-audio_spectogram_transformers8", size=480
+        )
         image = prepare_img()
         inputs = feature_extractor(images=image, return_tensors="pt")
         pixel_values = inputs.pixel_values.to(torch_device)

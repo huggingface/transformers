@@ -20,14 +20,11 @@ import json
 from pathlib import Path
 
 import torch
-from PIL import Image
+import torchaudio
 
-import requests
 from huggingface_hub import hf_hub_download
 from transformers import AudioSpectogramTransformerConfig, AudioSpectogramTransformerForSequenceClassification
 from transformers.utils import logging
-
-import torchaudio
 
 
 logging.set_verbosity_info()
@@ -38,14 +35,12 @@ def get_audio_spectogram_transformer_config(model_name):
     config = AudioSpectogramTransformerConfig()
 
     config.num_labels = 527
-    
-    #TODO add id2label mappings
-    # repo_id = "huggingface/label-files"
-    # filename = "coco-detection-id2label.json"
-    # id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
-    # id2label = {int(k): v for k, v in id2label.items()}
-    # config.id2label = id2label
-    # config.label2id = {v: k for k, v in id2label.items()}
+    repo_id = "huggingface/label-files"
+    filename = "audioset-id2label.json"
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
 
     return config
 
@@ -97,15 +92,25 @@ def convert_state_dict(orig_state_dict, config):
             layer_num = int(key_split[3])
             dim = config.hidden_size
             if "weight" in key:
-                orig_state_dict[f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.query.weight"] = val[:dim, :]
-                orig_state_dict[f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.key.weight"] = val[
-                    dim : dim * 2, :
-                ]
-                orig_state_dict[f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
+                orig_state_dict[
+                    f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.query.weight"
+                ] = val[:dim, :]
+                orig_state_dict[
+                    f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.key.weight"
+                ] = val[dim : dim * 2, :]
+                orig_state_dict[
+                    f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.value.weight"
+                ] = val[-dim:, :]
             else:
-                orig_state_dict[f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.query.bias"] = val[:dim]
-                orig_state_dict[f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.key.bias"] = val[dim : dim * 2]
-                orig_state_dict[f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.value.bias"] = val[-dim:]
+                orig_state_dict[
+                    f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.query.bias"
+                ] = val[:dim]
+                orig_state_dict[
+                    f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.key.bias"
+                ] = val[dim : dim * 2]
+                orig_state_dict[
+                    f"audio_spectogram_transformer.encoder.layer.{layer_num}.attention.attention.value.bias"
+                ] = val[-dim:]
         else:
             orig_state_dict[rename_key(key)] = val
 
@@ -127,9 +132,15 @@ def make_features(wav_name, mel_bins, target_length=1024):
     waveform, sr = torchaudio.load(wav_name)
 
     fbank = torchaudio.compliance.kaldi.fbank(
-        waveform, htk_compat=True, sample_frequency=sr, use_energy=False,
-        window_type='hanning', num_mel_bins=mel_bins, dither=0.0,
-        frame_shift=10)
+        waveform,
+        htk_compat=True,
+        sample_frequency=sr,
+        use_energy=False,
+        window_type="hanning",
+        num_mel_bins=mel_bins,
+        dither=0.0,
+        frame_shift=10,
+    )
 
     n_frames = fbank.shape[0]
 
@@ -145,7 +156,9 @@ def make_features(wav_name, mel_bins, target_length=1024):
 
 
 @torch.no_grad()
-def convert_audio_spectogram_transformer_checkpoint(model_name, checkpoint_url, pytorch_dump_folder_path, push_to_hub=False):
+def convert_audio_spectogram_transformer_checkpoint(
+    model_name, checkpoint_url, pytorch_dump_folder_path, push_to_hub=False
+):
     """
     Copy/paste/tweak model's weights to our YOLOS structure.
     """
@@ -161,22 +174,22 @@ def convert_audio_spectogram_transformer_checkpoint(model_name, checkpoint_url, 
     # load 🤗 model
     model = AudioSpectogramTransformerForSequenceClassification(config)
     model.eval()
-    
+
     model.load_state_dict(new_state_dict)
 
     # verify outputs on dummy input
-    filepath = hf_hub_download(repo_id="nielsr/audio-spectogram-transformer-checkpoint",
-                           filename="sample_audio.flac",
-                           repo_type="dataset")
-    features = make_features(filepath, mel_bins=128) # shape(1024, 128)
-    input_values = features.expand(1, 1024, 128)  # (batch_size, time, freq)  
-    
+    filepath = hf_hub_download(
+        repo_id="nielsr/audio-spectogram-transformer-checkpoint", filename="sample_audio.flac", repo_type="dataset"
+    )
+    features = make_features(filepath, mel_bins=128)  # shape(1024, 128)
+    input_values = features.expand(1, 1024, 128)  # (batch_size, time, freq)
+
     # forward pass
     outputs = model(input_values)
     logits = outputs.logits
 
     print("Shape of logits:", logits.shape)
-    print("Predicted class:", logits.argmax(-1))
+    print("Predicted class:", model.config.id2label[logits.argmax(-1).item()])
 
     expected_slice = torch.tensor([-0.8760, -7.0042, -8.6602])
     if not torch.allclose(logits[0, :3], expected_slice, atol=1e-4):
@@ -188,17 +201,8 @@ def convert_audio_spectogram_transformer_checkpoint(model_name, checkpoint_url, 
         model.save_pretrained(pytorch_dump_folder_path)
 
     if push_to_hub:
-        model_mapping = {
-            "audio_spectogram_transformer_ti": "audio_spectogram_transformer-tiny",
-            "audio_spectogram_transformer_s_200_pre": "audio_spectogram_transformer-small",
-            "audio_spectogram_transformer_s_300_pre": "audio_spectogram_transformer-small-300",
-            "audio_spectogram_transformer_s_dWr": "audio_spectogram_transformer-small-dwr",
-            "audio_spectogram_transformer_base": "audio_spectogram_transformer-base",
-        }
-
         print("Pushing to the hub...")
-        model_name = model_mapping[model_name]
-        model.push_to_hub(model_name, organization="hustvl")
+        model.push_to_hub(model_name, organization="nielsr")
 
 
 if __name__ == "__main__":
@@ -206,15 +210,15 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="audio_spectogram_transformer_s_200_pre",
+        default="audio-spectogram-transformer-finetuned-audioset-10-10-0.4593",
         type=str,
-        help=(
-            "Name of the YOLOS model you'd like to convert. Should be one of 'audio_spectogram_transformer_ti', 'audio_spectogram_transformer_s_200_pre',"
-            " 'audio_spectogram_transformer_s_300_pre', 'audio_spectogram_transformer_s_dWr', 'audio_spectogram_transformer_base'."
-        ),
+        help="Name of the Audio Spectogram Transformer model you'd like to convert.",
     )
     parser.add_argument(
-        "--checkpoint_url", default="https://www.dropbox.com/s/ca0b1v2nlxzyeb4/audioset_10_10_0.4593.pth?dl=1", type=str, help="URL of the original state dict (.pth file)."
+        "--checkpoint_url",
+        default="https://www.dropbox.com/s/ca0b1v2nlxzyeb4/audioset_10_10_0.4593.pth?dl=1",
+        type=str,
+        help="URL of the original state dict (.pth file).",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
@@ -224,4 +228,6 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_audio_spectogram_transformer_checkpoint(args.model_name, args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_audio_spectogram_transformer_checkpoint(
+        args.model_name, args.checkpoint_url, args.pytorch_dump_folder_path, args.push_to_hub
+    )
