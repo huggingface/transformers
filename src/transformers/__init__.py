@@ -395,6 +395,7 @@ _import_structure = {
         "WhisperConfig",
         "WhisperFeatureExtractor",
         "WhisperProcessor",
+        "WhisperTokenizer",
     ],
     "models.x_clip": [
         "XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -539,7 +540,6 @@ else:
     _import_structure["models.reformer"].append("ReformerTokenizer")
     _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
-    _import_structure["models.whisper"].append("WhisperTokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
@@ -3363,6 +3363,7 @@ if TYPE_CHECKING:
         WhisperConfig,
         WhisperFeatureExtractor,
         WhisperProcessor,
+        WhisperTokenizer,
     )
     from .models.x_clip import (
         XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -3506,7 +3507,6 @@ if TYPE_CHECKING:
         from .models.rembert import RemBertTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.t5 import T5Tokenizer
-        from .models.whisper import WhisperTokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
