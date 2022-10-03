@@ -17,37 +17,19 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_sentencepiece_available,
-    is_speech_available,
-    is_torch_available,
-)
+from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
 _import_structure = {
-    "configuration_whisper": ["WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP", "WhisperConfig"],
+    "configuration_whisper": [
+        "WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "WhisperConfig",
+        "WhisperFeatureExtractor",
+        "WhisperProcessor",
+        "WhisperTokenizer",
+    ],
 }
 
-try:
-    if not is_sentencepiece_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["tokenization_whisper"] = ["WhisperTokenizer"]
-
-try:
-    if not is_speech_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["feature_extraction_whisper"] = ["WhisperFeatureExtractor"]
-
-    if is_sentencepiece_available():
-        _import_structure["processing_whisper"] = ["WhisperProcessor"]
 
 try:
     if not is_torch_available():
@@ -65,25 +47,9 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_whisper import WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP, WhisperConfig
-
-    try:
-        if not is_sentencepiece_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_whisper import WhisperTokenizer
-
-    try:
-        if not is_speech_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .feature_extraction_whisper import WhisperFeatureExtractor
-
-        if is_sentencepiece_available():
-            from .processing_whisper import WhisperProcessor
+    from .feature_extraction_whisper import WhisperFeatureExtractor
+    from .processing_whisper import WhisperProcessor
+    from .tokenization_whisper import WhisperTokenizer
 
     try:
         if not is_torch_available():

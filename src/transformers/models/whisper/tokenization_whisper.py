@@ -24,8 +24,6 @@ from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
 
 
-SPIECE_UNDERLINE = "▁"
-
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "tokenizer_file": "tokenizer.json", "merges_file": "merges.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
