@@ -706,10 +706,9 @@ class LogitNormalization(LogitsProcessor, LogitsWarper):
 
 class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     r"""
-    [`SuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function's starts
-    generating using `begin_index` tokens. This usually happens when `use_cache` us set to `True`, and the
-    `decoder_input_ids` only include the previously generated token along with and `eos_token` if `forced_eos_token` is
-    used.
+    [`SuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function starts
+    generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` at not 
+    sampled at the begining of the generation. 
     """
 
     def __init__(self, begin_suppress_tokens, begin_index):
