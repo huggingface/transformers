@@ -20,7 +20,6 @@ from typing import Mapping
 from packaging import version
 
 from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
 from ...utils import logging
 
 
@@ -71,8 +70,14 @@ class AudioSpectogramTransformerConfig(PretrainedConfig):
             The number of input channels.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
-        encoder_stride (`int`, `optional`, defaults to 16):
-           Factor to increase the spatial resolution by in the decoder head for masked image modeling.
+        fstride (`int`, *optional*, defaults to 10):
+            ...
+        tstride (`int`, *optional*, defaults to 10):
+            ...
+        input_fdim (`int`, *optional*, defaults to 128):
+            ...
+        input_tdim (`int`, *optional*, defaults to 1024):
+            ...
 
     Example:
 
@@ -106,7 +111,10 @@ class AudioSpectogramTransformerConfig(PretrainedConfig):
         patch_size=16,
         num_channels=3,
         qkv_bias=True,
-        encoder_stride=16,
+        fstride=10,
+        tstride=10,
+        input_fdim=128,
+        input_tdim=1024,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -124,21 +132,7 @@ class AudioSpectogramTransformerConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-        self.encoder_stride = encoder_stride
-
-
-class AudioSpectogramTransformerOnnxConfig(OnnxConfig):
-
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
+        self.fstride = fstride
+        self.tstride = tstride
+        self.input_fdim = input_fdim
+        self.input_tdim = input_tdim

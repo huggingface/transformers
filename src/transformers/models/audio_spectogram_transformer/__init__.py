@@ -47,6 +47,7 @@ else:
         "AudioSpectogramTransformerForMaskedImageModeling",
         "AudioSpectogramTransformerModel",
         "AudioSpectogramTransformerPreTrainedModel",
+        "AudioSpectogramTransformerForSequenceClassification",
     ]
 
 if TYPE_CHECKING:
@@ -72,6 +73,7 @@ if TYPE_CHECKING:
             AudioSpectogramTransformerForMaskedImageModeling,
             AudioSpectogramTransformerModel,
             AudioSpectogramTransformerPreTrainedModel,
+            AudioSpectogramTransformerForSequenceClassification,
         )
 
 else:

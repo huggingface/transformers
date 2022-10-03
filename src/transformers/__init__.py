@@ -2169,6 +2169,7 @@ else:
             "AudioSpectogramTransformerForMaskedImageModeling",
             "AudioSpectogramTransformerModel",
             "AudioSpectogramTransformerPreTrainedModel",
+            "AudioSpectogramTransformerForSequenceClassification",
         ]
     )
     _import_structure["models.vit_mae"].extend(
@@ -5025,6 +5026,7 @@ if TYPE_CHECKING:
             AudioSpectogramTransformerForMaskedImageModeling,
             AudioSpectogramTransformerModel,
             AudioSpectogramTransformerPreTrainedModel,
+            AudioSpectogramTransformerForSequenceClassification,
         )
         from .models.vit_mae import (
             VIT_MAE_PRETRAINED_MODEL_ARCHIVE_LIST,

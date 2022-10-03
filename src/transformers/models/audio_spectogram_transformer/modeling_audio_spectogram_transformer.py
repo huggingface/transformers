@@ -25,7 +25,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput, MaskedLMOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, SequenceClassifierOutput, MaskedLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
@@ -60,123 +60,75 @@ AUDIO_SPECTOGRAM_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEmbeddings with ViT->AudioSpectogramTransformer
 class AudioSpectogramTransformerEmbeddings(nn.Module):
     """
-    Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
+    Construct the CLS token, position and patch embeddings.
     """
 
-    def __init__(self, config: AudioSpectogramTransformerConfig, use_mask_token: bool = False) -> None:
+    def __init__(self, config: AudioSpectogramTransformerConfig) -> None:
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size)) if use_mask_token else None
+        self.distillation_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.patch_embeddings = AudioSpectogramTransformerPatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
+
+        frequency_dimension, time_dimension = self.get_shape(config)
+        num_patches = frequency_dimension * time_dimension
+        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 2, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.config = config
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
+    def get_shape(self, config):
+        fstride = config.fstride
+        tstride = config.tstride
+        input_fdim = config.input_fdim
+        input_tdim = config.input_tdim
+        test_input = torch.randn(1, 1, input_fdim, input_tdim)
+        test_proj = nn.Conv2d(1, config.hidden_size, kernel_size=(16, 16), stride=(fstride, tstride))
+        test_out = test_proj(test_input)
+        f_dim = test_out.shape[2]
+        t_dim = test_out.shape[3]
+        return f_dim, t_dim
+    
+    def forward(self, input_values: torch.Tensor) -> torch.Tensor:
+        batch_size = input_values.shape[0]
+        embeddings = self.patch_embeddings(input_values)
 
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
-        """
-
-        num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
-        if num_patches == num_positions and height == width:
-            return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
-        patch_pos_embed = self.position_embeddings[:, 1:]
-        dim = embeddings.shape[-1]
-        h0 = height // self.config.patch_size
-        w0 = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        h0, w0 = h0 + 0.1, w0 + 0.1
-        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            scale_factor=(h0 / math.sqrt(num_positions), w0 / math.sqrt(num_positions)),
-            mode="bicubic",
-            align_corners=False,
-        )
-        assert int(h0) == patch_pos_embed.shape[-2] and int(w0) == patch_pos_embed.shape[-1]
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
-
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: bool = False,
-    ) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
-        embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
-
-        if bool_masked_pos is not None:
-            seq_length = embeddings.shape[1]
-            mask_tokens = self.mask_token.expand(batch_size, seq_length, -1)
-            # replace the masked visual tokens by mask_tokens
-            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
-            embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
-
-        # add the [CLS] token to the embedded patch tokens
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-
-        # add positional encoding to each token
-        if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-        else:
-            embeddings = embeddings + self.position_embeddings
-
+        distillation_tokens = self.distillation_token.expand(batch_size, -1, -1)
+        embeddings = torch.cat((cls_tokens, distillation_tokens, embeddings), dim=1)
+        embeddings = embeddings + self.position_embeddings
         embeddings = self.dropout(embeddings)
 
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTPatchEmbeddings with ViT->AudioSpectogramTransformer
 class AudioSpectogramTransformerPatchEmbeddings(nn.Module):
     """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    This class turns `input_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
     Transformer.
     """
 
     def __init__(self, config):
         super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
+        # image_size, patch_size = config.image_size, config.patch_size
+        # num_channels, hidden_size = config.num_channels, config.hidden_size
 
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
+        # image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        # patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        # num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        # self.image_size = image_size
+        # self.patch_size = patch_size
+        # self.num_channels = num_channels
+        # self.num_patches = num_patches
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv2d(1, config.hidden_size, kernel_size=(16, 16), stride=(10, 10))
 
-    def forward(self, pixel_values: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-            )
-        if not interpolate_pos_encoding:
-            if height != self.image_size[0] or width != self.image_size[1]:
-                raise ValueError(
-                    f"Input image size ({height}*{width}) doesn't match model"
-                    f" ({self.image_size[0]}*{self.image_size[1]})."
-                )
-        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+    def forward(self, input_values: torch.Tensor) -> torch.Tensor:
+        input_values = input_values.unsqueeze(1)
+        input_values = input_values.transpose(2, 3)
+        embeddings = self.projection(input_values).flatten(2).transpose(1, 2)
         return embeddings
 
 
@@ -447,7 +399,7 @@ class AudioSpectogramTransformerPreTrainedModel(PreTrainedModel):
 
     config_class = AudioSpectogramTransformerConfig
     base_model_prefix = "audio_spectogram_transformer"
-    main_input_name = "pixel_values"
+    main_input_name = "input_values"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
@@ -480,7 +432,7 @@ AUDIO_SPECTOGRAM_TRANSFORMER_START_DOCSTRING = r"""
 
 AUDIO_SPECTOGRAM_TRANSFORMER_INPUTS_DOCSTRING = r"""
     Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        input_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AudioSpectogramTransformerFeatureExtractor`]. See
             [`AudioSpectogramTransformerFeatureExtractor.__call__`] for details.
 
@@ -496,8 +448,6 @@ AUDIO_SPECTOGRAM_TRANSFORMER_INPUTS_DOCSTRING = r"""
         output_hidden_states (`bool`, *optional*):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more detail.
-        interpolate_pos_encoding (`bool`, *optional*):
-            Whether to interpolate the pre-trained position encodings.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
@@ -507,19 +457,15 @@ AUDIO_SPECTOGRAM_TRANSFORMER_INPUTS_DOCSTRING = r"""
     "The bare AudioSpectogramTransformer Model transformer outputting raw hidden-states without any specific head on top.",
     AUDIO_SPECTOGRAM_TRANSFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTModel with VIT->AUDIO_SPECTOGRAM_TRANSFORMER,ViT->AudioSpectogramTransformer
 class AudioSpectogramTransformerModel(AudioSpectogramTransformerPreTrainedModel):
-    def __init__(
-        self, config: AudioSpectogramTransformerConfig, add_pooling_layer: bool = True, use_mask_token: bool = False
-    ):
+    def __init__(self, config: AudioSpectogramTransformerConfig):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = AudioSpectogramTransformerEmbeddings(config, use_mask_token=use_mask_token)
+        self.embeddings = AudioSpectogramTransformerEmbeddings(config)
         self.encoder = AudioSpectogramTransformerEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.pooler = AudioSpectogramTransformerPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -541,17 +487,15 @@ class AudioSpectogramTransformerModel(AudioSpectogramTransformerPreTrainedModel)
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutputWithPooling,
         config_class=_CONFIG_FOR_DOC,
-        modality="vision",
+        modality="audio",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        input_values: Optional[torch.Tensor] = None,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -560,8 +504,8 @@ class AudioSpectogramTransformerModel(AudioSpectogramTransformerPreTrainedModel)
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if pixel_values is None:
-            raise ValueError("You have to specify pixel_values")
+        if input_values is None:
+            raise ValueError("You have to specify input_values")
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head
@@ -570,9 +514,7 @@ class AudioSpectogramTransformerModel(AudioSpectogramTransformerPreTrainedModel)
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
-        )
+        embedding_output = self.embeddings(input_values)
 
         encoder_outputs = self.encoder(
             embedding_output,
@@ -583,11 +525,11 @@ class AudioSpectogramTransformerModel(AudioSpectogramTransformerPreTrainedModel)
         )
         sequence_output = encoder_outputs[0]
         sequence_output = self.layernorm(sequence_output)
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+
+        pooled_output = (sequence_output[:, 0] + sequence_output[:, 1]) / 2
 
         if not return_dict:
-            head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
-            return head_outputs + encoder_outputs[1:]
+            return (sequence_output, pooled_output) + encoder_outputs[1:]
 
         return BaseModelOutputWithPooling(
             last_hidden_state=sequence_output,
@@ -596,176 +538,23 @@ class AudioSpectogramTransformerModel(AudioSpectogramTransformerPreTrainedModel)
             attentions=encoder_outputs.attentions,
         )
 
-
-# Copied from transformers.models.vit.modeling_vit.ViTPooler with ViT->AudioSpectogramTransformer
-class AudioSpectogramTransformerPooler(nn.Module):
-    def __init__(self, config: AudioSpectogramTransformerConfig):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
-
-    def forward(self, hidden_states):
-        # We "pool" the model by simply taking the hidden state corresponding
-        # to the first token.
-        first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
-        return pooled_output
-
-
-@add_start_docstrings(
-    """AudioSpectogramTransformer Model with a decoder on top for masked image modeling, as proposed in [SimMIM](https://arxiv.org/abs/2111.09886).
-
-    <Tip>
-
-    Note that we provide a script to pre-train this model on custom data in our [examples
-    directory](https://github.com/huggingface/transformers/tree/main/examples/pytorch/image-pretraining).
-
-    </Tip>
-    """,
-    AUDIO_SPECTOGRAM_TRANSFORMER_START_DOCSTRING,
-)
-# Copied from transformers.models.vit.modeling_vit.ViTForMaskedImageModeling with VIT->AUDIO_SPECTOGRAM_TRANSFORMER,ViT->AudioSpectogramTransformer,vit->audio_spectogram_transformer,google/vit-base-patch16-224-in21k->MIT/ast-10-10
-class AudioSpectogramTransformerForMaskedImageModeling(AudioSpectogramTransformerPreTrainedModel):
-    def __init__(self, config: AudioSpectogramTransformerConfig) -> None:
-        super().__init__(config)
-
-        self.audio_spectogram_transformer = AudioSpectogramTransformerModel(
-            config, add_pooling_layer=False, use_mask_token=True
-        )
-
-        self.decoder = nn.Sequential(
-            nn.Conv2d(
-                in_channels=config.hidden_size,
-                out_channels=config.encoder_stride**2 * config.num_channels,
-                kernel_size=1,
-            ),
-            nn.PixelShuffle(config.encoder_stride),
-        )
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @add_start_docstrings_to_model_forward(AUDIO_SPECTOGRAM_TRANSFORMER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
-    def forward(
-        self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, MaskedLMOutput]:
-        r"""
-        bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
-            Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
-        Returns:
-
-        Examples:
-        ```python
-        >>> from transformers import (
-        ...     AudioSpectogramTransformerFeatureExtractor,
-        ...     AudioSpectogramTransformerForMaskedImageModeling,
-        ... )
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> feature_extractor = AudioSpectogramTransformerFeatureExtractor.from_pretrained(
-        ...     "google/audio_spectogram_transformer-base-patch16-224-in21k"
-        ... )
-        >>> model = AudioSpectogramTransformerForMaskedImageModeling.from_pretrained(
-        ...     "google/audio_spectogram_transformer-base-patch16-224-in21k"
-        ... )
-
-        >>> num_patches = (model.config.image_size // model.config.patch_size) ** 2
-        >>> pixel_values = feature_extractor(images=image, return_tensors="pt").pixel_values
-        >>> # create random boolean mask of shape (batch_size, num_patches)
-        >>> bool_masked_pos = torch.randint(low=0, high=2, size=(1, num_patches)).bool()
-
-        >>> outputs = model(pixel_values, bool_masked_pos=bool_masked_pos)
-        >>> loss, reconstructed_pixel_values = outputs.loss, outputs.logits
-        >>> list(reconstructed_pixel_values.shape)
-        [1, 3, 224, 224]
-        ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.audio_spectogram_transformer(
-            pixel_values,
-            bool_masked_pos=bool_masked_pos,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
-        )
-
-        sequence_output = outputs[0]
-
-        # Reshape to (batch_size, num_channels, height, width)
-        sequence_output = sequence_output[:, 1:]
-        batch_size, sequence_length, num_channels = sequence_output.shape
-        height = width = math.floor(sequence_length**0.5)
-        sequence_output = sequence_output.permute(0, 2, 1).reshape(batch_size, num_channels, height, width)
-
-        # Reconstruct pixel values
-        reconstructed_pixel_values = self.decoder(sequence_output)
-
-        masked_im_loss = None
-        if bool_masked_pos is not None:
-            size = self.config.image_size // self.config.patch_size
-            bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
-            mask = (
-                bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
-                .repeat_interleave(self.config.patch_size, 2)
-                .unsqueeze(1)
-                .contiguous()
-            )
-            reconstruction_loss = nn.functional.l1_loss(pixel_values, reconstructed_pixel_values, reduction="none")
-            masked_im_loss = (reconstruction_loss * mask).sum() / (mask.sum() + 1e-5) / self.config.num_channels
-
-        if not return_dict:
-            output = (reconstructed_pixel_values,) + outputs[1:]
-            return ((masked_im_loss,) + output) if masked_im_loss is not None else output
-
-        return MaskedLMOutput(
-            loss=masked_im_loss,
-            logits=reconstructed_pixel_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
-
-
+    
 @add_start_docstrings(
     """
-    AudioSpectogramTransformer Model transformer with an image classification head on top (a linear layer on top of the final hidden state of
-    the [CLS] token) e.g. for ImageNet.
-
-    <Tip>
-
-        Note that it's possible to fine-tune AudioSpectogramTransformer on higher resolution images than the ones it has been trained on, by
-        setting `interpolate_pos_encoding` to `True` in the forward of the model. This will interpolate the pre-trained
-        position embeddings to the higher resolution.
-
-    </Tip>
+    Audio Spectogram Transformer model with an audio classification head on top (a linear layer on top of the final hidden state of
+    the [CLS] token) e.g. for AudioSet.
     """,
     AUDIO_SPECTOGRAM_TRANSFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.vit.modeling_vit.ViTForImageClassification with VIT->AUDIO_SPECTOGRAM_TRANSFORMER,ViT->AudioSpectogramTransformer,vit->audio_spectogram_transformer
-class AudioSpectogramTransformerForImageClassification(AudioSpectogramTransformerPreTrainedModel):
+class AudioSpectogramTransformerForSequenceClassification(AudioSpectogramTransformerPreTrainedModel):
     def __init__(self, config: AudioSpectogramTransformerConfig) -> None:
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        self.audio_spectogram_transformer = AudioSpectogramTransformerModel(config, add_pooling_layer=False)
+        self.audio_spectogram_transformer = AudioSpectogramTransformerModel(config)
 
         # Classifier head
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels) if config.num_labels > 0 else nn.Identity()
 
         # Initialize weights and apply final processing
@@ -775,7 +564,7 @@ class AudioSpectogramTransformerForImageClassification(AudioSpectogramTransforme
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutput,
+        output_type=SequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
@@ -786,12 +575,11 @@ class AudioSpectogramTransformerForImageClassification(AudioSpectogramTransforme
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutput]:
+    ) -> Union[tuple, SequenceClassifierOutput]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
+            Labels for computing the audio classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
@@ -802,13 +590,13 @@ class AudioSpectogramTransformerForImageClassification(AudioSpectogramTransforme
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=return_dict,
         )
 
-        sequence_output = outputs[0]
+        pooled_output = outputs[1]
 
-        logits = self.classifier(sequence_output[:, 0, :])
+        pooled_output = self.layernorm(pooled_output)
+        logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:
@@ -837,7 +625,7 @@ class AudioSpectogramTransformerForImageClassification(AudioSpectogramTransforme
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutput(
+        return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
