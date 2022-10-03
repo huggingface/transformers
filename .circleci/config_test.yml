@@ -3,7 +3,11 @@ version: 2.1
 parameters:
     tests_to_run:
         type: string
-        default: "tests"
+        default: 'tests
+
+          with new
+
+          lines'
 
 jobs:
     # Fetch the tests to run
