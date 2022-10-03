@@ -22,7 +22,7 @@ import numpy as np
 import tensorflow as tf
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, shape_list, unpack_inputs
+from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFModelInputType, TFPreTrainedModel, shape_list, unpack_inputs
 from ...utils import ModelOutput, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_rag import RagConfig
 from .retrieval_rag import RagRetriever
@@ -538,7 +538,7 @@ class TFRagModel(TFRagPreTrainedModel):
     @replace_return_docstrings(output_type=TFRetrievAugLMOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: Optional[TFModelInputType] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         encoder_outputs: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -828,7 +828,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
     @replace_return_docstrings(output_type=TFRetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: Optional[TFModelInputType] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -980,7 +980,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
 
     def generate(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: Optional[TFModelInputType] = None,
         attention_mask: Optional[tf.Tensor] = None,
         context_input_ids=None,
         context_attention_mask=None,
@@ -1425,7 +1425,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
     @replace_return_docstrings(output_type=TFRetrievAugLMMarginOutput, config_class=_CONFIG_FOR_DOC)
     def call(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: Optional[TFModelInputType] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_input_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         decoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -1657,7 +1657,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
 
     def generate(
         self,
-        input_ids: Optional[tf.Tensor] = None,
+        input_ids: Optional[TFModelInputType] = None,
         attention_mask: Optional[tf.Tensor] = None,
         context_input_ids=None,
         context_attention_mask=None,
