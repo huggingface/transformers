@@ -632,6 +632,8 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
+        >>> torch.manual_seed(2)
+
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
@@ -644,6 +646,7 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         >>> # model predicts one of the 1000 ImageNet classes
         >>> predicted_label = logits.argmax(-1).item()
         >>> print(model.config.id2label[predicted_label])
+        Kerry blue terrier
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

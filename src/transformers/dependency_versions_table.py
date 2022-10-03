@@ -54,6 +54,7 @@ deps = {
     "rouge-score": "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "sacrebleu": "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses": "sacremoses",
+    "safetensors": "safetensors>=0.2.1",
     "sagemaker": "sagemaker>=2.31.0",
     "scikit-learn": "scikit-learn",
     "sentencepiece": "sentencepiece>=0.1.91,!=0.1.92",
@@ -74,4 +75,5 @@ deps = {
     "unidic": "unidic>=1.0.2",
     "unidic_lite": "unidic_lite>=1.0.7",
     "uvicorn": "uvicorn",
+    "beautifulsoup4": "beautifulsoup4",
 }

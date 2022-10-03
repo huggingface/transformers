@@ -3,6 +3,7 @@ docs/source/es/quicktour.mdx
 docs/source/en/pipeline_tutorial.mdx
 docs/source/en/autoclass_tutorial.mdx
 docs/source/en/task_summary.mdx
+docs/source/en/model_doc/markuplm.mdx
 docs/source/en/model_doc/speech_to_text.mdx
 docs/source/en/model_doc/t5.mdx
 docs/source/en/model_doc/t5v1.1.mdx
@@ -51,6 +52,7 @@ src/transformers/models/longformer/modeling_longformer.py
 src/transformers/models/longformer/modeling_tf_longformer.py
 src/transformers/models/longt5/modeling_longt5.py
 src/transformers/models/marian/modeling_marian.py
+src/transformers/models/markuplm/modeling_markuplm.py
 src/transformers/models/mbart/modeling_mbart.py
 src/transformers/models/mobilebert/modeling_mobilebert.py
 src/transformers/models/mobilebert/modeling_tf_mobilebert.py
