@@ -40,126 +40,6 @@ MAX_MODEL_INPUT_SIZES = {
 }
 
 
-LANGUAGES = {
-    "en": "english",
-    "zh": "chinese",
-    "de": "german",
-    "es": "spanish",
-    "ru": "russian",
-    "ko": "korean",
-    "fr": "french",
-    "ja": "japanese",
-    "pt": "portuguese",
-    "tr": "turkish",
-    "pl": "polish",
-    "ca": "catalan",
-    "nl": "dutch",
-    "ar": "arabic",
-    "sv": "swedish",
-    "it": "italian",
-    "id": "indonesian",
-    "hi": "hindi",
-    "fi": "finnish",
-    "vi": "vietnamese",
-    "iw": "hebrew",
-    "uk": "ukrainian",
-    "el": "greek",
-    "ms": "malay",
-    "cs": "czech",
-    "ro": "romanian",
-    "da": "danish",
-    "hu": "hungarian",
-    "ta": "tamil",
-    "no": "norwegian",
-    "th": "thai",
-    "ur": "urdu",
-    "hr": "croatian",
-    "bg": "bulgarian",
-    "lt": "lithuanian",
-    "la": "latin",
-    "mi": "maori",
-    "ml": "malayalam",
-    "cy": "welsh",
-    "sk": "slovak",
-    "te": "telugu",
-    "fa": "persian",
-    "lv": "latvian",
-    "bn": "bengali",
-    "sr": "serbian",
-    "az": "azerbaijani",
-    "sl": "slovenian",
-    "kn": "kannada",
-    "et": "estonian",
-    "mk": "macedonian",
-    "br": "breton",
-    "eu": "basque",
-    "is": "icelandic",
-    "hy": "armenian",
-    "ne": "nepali",
-    "mn": "mongolian",
-    "bs": "bosnian",
-    "kk": "kazakh",
-    "sq": "albanian",
-    "sw": "swahili",
-    "gl": "galician",
-    "mr": "marathi",
-    "pa": "punjabi",
-    "si": "sinhala",
-    "km": "khmer",
-    "sn": "shona",
-    "yo": "yoruba",
-    "so": "somali",
-    "af": "afrikaans",
-    "oc": "occitan",
-    "ka": "georgian",
-    "be": "belarusian",
-    "tg": "tajik",
-    "sd": "sindhi",
-    "gu": "gujarati",
-    "am": "amharic",
-    "yi": "yiddish",
-    "lo": "lao",
-    "uz": "uzbek",
-    "fo": "faroese",
-    "ht": "haitian creole",
-    "ps": "pashto",
-    "tk": "turkmen",
-    "nn": "nynorsk",
-    "mt": "maltese",
-    "sa": "sanskrit",
-    "lb": "luxembourgish",
-    "my": "myanmar",
-    "bo": "tibetan",
-    "tl": "tagalog",
-    "mg": "malagasy",
-    "as": "assamese",
-    "tt": "tatar",
-    "haw": "hawaiian",
-    "ln": "lingala",
-    "ha": "hausa",
-    "ba": "bashkir",
-    "jw": "javanese",
-    "su": "sundanese",
-}
-
-
-# language code lookup by name, with a few language aliases
-TO_LANGUAGE_CODE = {
-    **{language: code for code, language in LANGUAGES.items()},
-    "burmese": "my",
-    "valencian": "ca",
-    "flemish": "nl",
-    "haitian": "ht",
-    "letzeburgesch": "lb",
-    "pushto": "ps",
-    "panjabi": "pa",
-    "moldavian": "ro",
-    "moldovan": "ro",
-    "sinhalese": "si",
-    "castilian": "es",
-}
-
-
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
@@ -291,21 +171,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return vocab
 
     @property
-    def all_language_tokens(self) -> Tuple[int]:
-        result = []
-        for token, token_id in zip(
-            self.additional_special_tokens,
-            self.additional_special_tokens_ids,
-        ):
-            if token.strip("<|>") in LANGUAGES:
-                result.append(token_id)
-        return tuple(result)
-
-    @property
-    def all_language_codes(self) -> Tuple[str]:
-        return tuple(self.decode([l]).strip("<|>") for l in self.all_language_tokens)
-
-    @property
     def vocab_size(self) -> int:
         return len(self.encoder)
 
@@ -420,6 +285,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
         return self.decoder.get(index, self.decoder.get(self.unk_token_id))
 
     def _normalize(self, text):
+        """
+        Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
+        english text.
+        """
         normalizer = EnglishTextNormalizer()
         return normalizer(text)
 

@@ -36,8 +36,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`WhisperFeatureExtractor`] which contains most of the main methods. Users
     should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw speech using TorchAudio and applies utterance-level cepstral
-    mean and variance normalization to the extracted features.
+    This class extracts mel-filter bank features from raw speech using a custom numpy implementation of the `Short Time
+    Fourier Transform` which should match pytorch's `torch.stft` equivalent.
 
     Args:
         feature_size (`int`, defaults to 80):
@@ -51,7 +51,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             sequences.
         n_fft (`int`, defaults to 400):
             Size of the Fourier transform.
-        padding_value (`float`, defaults to 0.0):
+        padding_value (`float`, *optional*, defaults to 0.0):
             Padding value used to pad the audio. Should correspond to silences.
     """
 
@@ -127,6 +127,13 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         return weights
 
     def fram_wave(self, waveform, center=True):
+        """
+        Transform a raw waveform into a list of smaller waveforms. The window length defines how much of the signal is
+        contain in each frame (smalle waveform), while the hope length defines the step between the beginning of each
+        new frame.
+
+        Centering is done by reflecting the waveform which is first centered around `frame_idx * hop_length`.
+        """
         frames = []
         for i in range(0, waveform.shape[0] + 1, self.hop_length):
             half_window = (self.n_fft - 1) // 2 + 1
@@ -158,7 +165,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
     def stft(self, frames, window):
         """
         Calculates the complex Short-Time Fourier Transform (STFT) of the given framed signal. Should give the same
-        results as torch.stft
+        results as `torch.stft`.
         """
         frame_size = frames.shape[1]
         fft_size = self.n_fft
@@ -184,8 +191,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
     def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
         """
-        Compute the log-Mel spectrogram of the provided audio, gives similar results to a torch implementation at 1e-5
-        tolerance.
+        Compute the log-Mel spectrogram of the provided audio, gives similar results whisper's original torch
+        implementation with 1e-5 tolerance.
         """
         window = np.hanning(self.n_fft + 1)[:-1]
 
@@ -220,9 +227,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
                 The sequence or batch of sequences to be padded. Each sequence can be a numpy array, a list of float
                 values, a list of numpy arrays or a list of list of float values.
-            truncation (`bool`):
+            truncation (`bool`, *optional*, default to `True`):
                 Activates truncation to cut input sequences longer than *max_length* to *max_length*.
-            pad_to_multiple_of (`int`, *optional*):
+            pad_to_multiple_of (`int`, *optional*, defaults to None):
                 If set will pad the sequence to a multiple of the provided value.
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability

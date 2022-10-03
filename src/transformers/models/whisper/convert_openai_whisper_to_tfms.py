@@ -21,7 +21,6 @@ import urllib
 import warnings
 
 import torch
-from torch import nn
 from tqdm import tqdm
 
 from transformers import WhisperConfig, WhisperForConditionalGeneration
@@ -70,13 +69,6 @@ def rename_keys(s_dict):
 
         s_dict[new_key] = s_dict.pop(key)
     return s_dict
-
-
-def make_linear_from_emb(emb):
-    vocab_size, emb_size = emb.weight.shape
-    lin_layer = nn.Linear(vocab_size, emb_size, bias=False)
-    lin_layer.weight.data = emb.weight.data
-    return lin_layer
 
 
 def convert_openai_whisper_to_tfms(checkpoint_name, pytorch_dump_folder_path, checkpoint_path="weights"):
@@ -140,6 +132,7 @@ _MODELS = {
 
 
 def _download(url: str, root: str) -> bytes:
+    # Copied from whisper's original codebase
     os.makedirs(root, exist_ok=True)
     filename = os.path.basename(url)
 
@@ -210,7 +203,7 @@ def convert_every_model(save_dir="whisper"):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    # # Required parameters
+    # Required parameters
     parser.add_argument("--original_name", type=str, help="Path to the fairseq model (.pt) file.")
     parser.add_argument(
         "--pytorch_dump_folder_path", default="whisper-converted", type=str, help="Path to the output PyTorch model."
