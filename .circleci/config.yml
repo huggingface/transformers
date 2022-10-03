@@ -41,15 +41,16 @@ jobs:
                   path: test_preparation/test_list.txt
             - store_artifacts:
                   path: test_preparation/examples_test_list.txt
-            - run: python utils/create_circleci_config.py --fetcher_folder test_preparation
-            - run: |
-                  if [ ! -s test_preparation/generated_config.yml ]; then
-                      echo "No tests to run, exiting early!"
-                      circleci-agent step halt
-                  fi
-            - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
-            - store_artifacts:
-                  path: test_preparation/generated_config.txt
+            - run: mv .circleci/config_test.yml test_preparation/generated_config.ym
+#            - run: python utils/create_circleci_config.py --fetcher_folder test_preparation
+#            - run: |
+#                  if [ ! -s test_preparation/generated_config.yml ]; then
+#                      echo "No tests to run, exiting early!"
+#                      circleci-agent step halt
+#                  fi
+#            - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
+#            - store_artifacts:
+#                  path: test_preparation/generated_config.txt
             - continuation/continue:
                   configuration_path: test_preparation/generated_config.yml
 
