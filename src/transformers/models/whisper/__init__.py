@@ -21,13 +21,10 @@ from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_avail
 
 
 _import_structure = {
-    "configuration_whisper": [
-        "WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP",
-        "WhisperConfig",
-        "WhisperFeatureExtractor",
-        "WhisperProcessor",
-        "WhisperTokenizer",
-    ],
+    "configuration_whisper": ["WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP", "WhisperConfig"],
+    "feature_extraction_whisper": ["WhisperFeatureExtractor"],
+    "processing_whisper": ["WhisperProcessor"],
+    "tokenization_whisper": ["WhisperTokenizer"],
 }
 
 
