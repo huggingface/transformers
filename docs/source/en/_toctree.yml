@@ -33,9 +33,9 @@
     - local: converting_tensorflow_models
       title: Converting from TensorFlow checkpoints
     - local: serialization
-      title: ONNX
+      title: Export to ONNX
     - local: torchscript
-      title: TorchScript
+      title: Export to TorchScript
     - local: troubleshooting
       title: Troubleshoot
     title: General usage
