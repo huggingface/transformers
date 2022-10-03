@@ -25,6 +25,7 @@ import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import nn
+from torch.nn import LayerNorm as FusedLayerNorm
 from tqdm import tqdm
 
 from ...activations import ACT2FN
@@ -49,9 +50,6 @@ def get_range(list):
         file=sys.stdout,
         bar_format="{n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]",
     )
-
-
-from torch.nn import LayerNorm as FusedLayerNorm
 
 
 def get_relevant_lyric_tokens(full_tokens, max_n_lyric_tokens, total_length, offset, duration):
@@ -1790,8 +1788,8 @@ class JukeboxConditionalAutoregressive(nn.Module):
                 x_prime = self.fc_proj_out(x_prime)  # Predictions
                 preds.append(x_prime)
 
-            gc.collect()
-            torch.cuda.empty_cache()
+            # gc.collect()
+            # torch.cuda.empty_cache()
             hidden_states = sampled_audio[-1]
 
             for sample_t in get_range(range(len(sampled_audio), sample_tokens)):
@@ -2644,8 +2642,8 @@ def get_alignment(music_tokens, labels, prior, fp16, config):
     indices_hops = {}
     # prior.to(tokens.device)
     prior.to("cuda")
-    gc.collect()
-    torch.cuda.empty_cache()
+    # gc.collect()
+    # torch.cuda.empty_cache()
     for start in get_range(get_starts(total_length, n_ctx, hop_length)):
         end = start + n_ctx
         # set metadata offset, sample_length and lyrics tokens
@@ -2672,8 +2670,8 @@ def get_alignment(music_tokens, labels, prior, fp16, config):
         indices_hops[start] = indices_hop
         alignment_hops[start] = alignment_hop
     prior.cpu()
-    gc.collect()
-    torch.cuda.empty_cache()
+    # gc.collect()
+    # torch.cuda.empty_cache()
 
     # Combine attn for each hop into attn for full range
     # Use indices to place them into correct place for corresponding source tokens
@@ -2832,8 +2830,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
         # set metadata offset, sample_length and lyrics tokens
         metadata = prior.get_metadata(labels, start, self.total_length, offset)
 
-        gc.collect()
-        torch.cuda.empty_cache()
+        # gc.collect()
+        # torch.cuda.empty_cache()
         max_batch_size = sampling_kwargs["max_batch_size"]
         del sampling_kwargs["max_batch_size"]
 
@@ -2991,8 +2989,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
 
             # from the actual generated length
             self.priors[level].to(music_tokens[level].device).eval()
-            gc.collect()
-            torch.cuda.empty_cache()
+            # gc.collect()
+            # torch.cuda.empty_cache()
             # Set correct total_length, hop_length, labels and sampling_kwargs for level
             # self.priors[level].total_length = total_length // self.priors[level].raw_to_tokens
             total_token_to_sample = total_length // self.priors[level].raw_to_tokens
@@ -3003,8 +3001,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
             )
 
             self.priors[level].to("cpu")
-            gc.collect()
-            torch.cuda.empty_cache()
+            # gc.collect()
+            # torch.cuda.empty_cache()
             self.vqvae.to(music_tokens[level].device)
             # Decode sample
             with torch.no_grad():
@@ -3019,8 +3017,8 @@ class JukeboxModel(JukeboxPreTrainedModel):
                     os.makedirs(logdir)
                 save_wav(logdir, level, metas=metas, aud=raw_audio.float(), sampling_rate=self.config.sampling_rate)
                 if compute_alignments and self.priors[-1] is not None and self.priors[-1].nb_relevant_lyric_tokens > 0:
-                    gc.collect()
-                    torch.cuda.empty_cache()
+                    # gc.collect()
+                    # torch.cuda.empty_cache()
                     with torch.no_grad():
                         alignments = get_alignment(music_tokens, labels[-1], self.priors[-1], fp16, self.config)
                     torch.save({"alignments": alignments}, f"{logdir}/lyric_alignments.pt")
