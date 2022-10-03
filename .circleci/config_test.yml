@@ -1,5 +1,10 @@
 version: 2.1
 
+parameters:
+    tests_to_run:
+        type: string
+        default: "tests"
+
 jobs:
     # Fetch the tests to run
     run_tests:
@@ -17,6 +22,7 @@ jobs:
                     echo "Found tests!"
                     cat test_preparation/test_list.txt
                 fi
+            - run: echo <<pipeline.tests_to_run>>
 
 workflows:
     version: 2
