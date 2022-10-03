@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2022 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2022 The OpenAI Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -487,21 +487,21 @@ WHISPER_START_DOCSTRING = r"""
 
 WHISPER_INPUTS_DOCSTRING = r"""
     Args:
-        input_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
-            Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be obtained
-            by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.*
-            via the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
-            [`WhisperFeatureExtractor`] should be used for extracting the fbank features, padding and conversion into a
+        input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
+            Float values mel features extracted from the raw speech waveform. Raw speech waveform can be obtained by
+            loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a `numpy.ndarray`, *e.g.* via
+            the soundfile library (`pip install soundfile`). To prepare the array into `input_features`, the
+            [`WhisperFeatureExtractor`] should be used for extracting the mel features, padding and conversion into a
             tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
 
-            Indices can be obtained using [`SpeechToTextTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            Indices can be obtained using [`WhisperTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            SpeechToText uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If
+            Whisper uses the `decoder_start_token_id` as the starting token for `decoder_input_ids` generation. If
             `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
             `past_key_values`).
         decoder_attention_mask (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -609,11 +609,11 @@ class WhisperEncoder(WhisperPreTrainedModel):
     ):
         r"""
         Args:
-            input_features (`torch.LongTensor` of shape `(batch_size, sequence_length, feature_size)`):
-                Float values of fbank features extracted from the raw speech waveform. Raw speech waveform can be
+            input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):
+                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
                 obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
                 `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting the fbank features,
+                `input_features`, the [`WhisperFeatureExtractor`] should be used for extracting the mel features,
                 padding and conversion into a tensor of type `torch.FloatTensor`. See
                 [`~WhisperFeatureExtractor.__call__`]
             head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
@@ -1012,9 +1012,7 @@ class WhisperModel(WhisperPreTrainedModel):
          >>> model = WhisperModel.from_pretrained("openai/whisper-base")
          >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-         >>> inputs = feature_extractor(
-         ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
-         ... )
+         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
          >>> input_features = inputs.input_features
          >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
          >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
@@ -1044,9 +1042,6 @@ class WhisperModel(WhisperPreTrainedModel):
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
-
-        # downsample encoder attention mask
-        # decoder_attention_mask = None
 
         # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
@@ -1156,16 +1151,14 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
-        >>> inputs = processor(
-        ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="pt"
-        ... )
+        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
         >>> input_features = inputs.input_features
 
         >>> generated_ids = model.generate(inputs=input_features)
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
-        ' The quilter is the apostle of the middle classes and we are glad to welcome his'
+        ' Mr. Quilter is the apostle of the middle classes, and we are glad to'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
