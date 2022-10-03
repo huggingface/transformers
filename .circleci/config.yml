@@ -41,7 +41,7 @@ jobs:
                   path: test_preparation/test_list.txt
             - store_artifacts:
                   path: test_preparation/examples_test_list.txt
-            - run: mv .circleci/config_test.yml test_preparation/generated_config.ym
+            - run: mv .circleci/config_test.yml test_preparation/generated_config.yml
 #            - run: python utils/create_circleci_config.py --fetcher_folder test_preparation
 #            - run: |
 #                  if [ ! -s test_preparation/generated_config.yml ]; then
