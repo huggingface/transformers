@@ -1226,7 +1226,7 @@ class LongT5Block(nn.Module):
             )
             hidden_states = cross_attention_outputs[0]
 
-            # clamp inf values to enable fp16 training
+            # clamp inf values to enable fp16 inference - check https://github.com/huggingface/transformers/pull/19229/
             if hidden_states.dtype == torch.float16 and torch.isinf(hidden_states).any():
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
