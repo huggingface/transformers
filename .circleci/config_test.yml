@@ -22,7 +22,7 @@ jobs:
                     echo "Found tests!"
                     cat test_preparation/test_list.txt
                 fi
-            - run: echo << parameters.tests_to_run >>
+            - run: echo << pipeline.parameters.tests_to_run >>
 
 workflows:
     version: 2
