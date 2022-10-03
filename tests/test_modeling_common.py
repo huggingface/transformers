@@ -53,6 +53,7 @@ from transformers.testing_utils import (
     is_pt_tf_cross_test,
     is_staging_test,
     require_accelerate,
+    require_safetensors,
     require_torch,
     require_torch_gpu,
     require_torch_multi_gpu,
@@ -61,6 +62,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
+    SAFE_WEIGHTS_INDEX_NAME,
+    SAFE_WEIGHTS_NAME,
     WEIGHTS_INDEX_NAME,
     WEIGHTS_NAME,
     is_accelerate_available,
@@ -2307,6 +2310,7 @@ class ModelTesterMixin:
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
+            torch.manual_seed(0)
             base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
@@ -2324,6 +2328,7 @@ class ModelTesterMixin:
                 )
 
                 self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                torch.manual_seed(0)
                 new_output = new_model(**inputs_dict)
 
                 self.assertTrue(torch.allclose(base_output[0], new_output[0]))
@@ -2340,6 +2345,8 @@ class ModelTesterMixin:
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
+
+            torch.manual_seed(0)
             base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
@@ -2355,6 +2362,8 @@ class ModelTesterMixin:
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, "cpu"})
 
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+
+                    torch.manual_seed(0)
                     new_output = new_model(**inputs_dict)
 
                     self.assertTrue(torch.allclose(base_output[0], new_output[0]))
@@ -2371,6 +2380,8 @@ class ModelTesterMixin:
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
             model = model_class(config).eval()
             model = model.to(torch_device)
+
+            torch.manual_seed(0)
             base_output = model(**inputs_dict)
 
             model_size = compute_module_sizes(model)[""]
@@ -2386,6 +2397,8 @@ class ModelTesterMixin:
                     self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
 
                     self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+
+                    torch.manual_seed(0)
                     new_output = new_model(**inputs_dict)
 
                     self.assertTrue(torch.allclose(base_output[0], new_output[0]))
@@ -2969,6 +2982,57 @@ class ModelUtilsTest(TestCasePlus):
         _ = BertModel.from_pretrained(
             "https://huggingface.co/hf-internal-testing/tiny-random-bert/resolve/main/pytorch_model.bin", config=config
         )
+
+    @require_safetensors
+    def test_safetensors_save_and_load(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True)
+            # No pytorch_model.bin file, only a model.safetensors
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
+
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.allclose(p1, p2))
+
+    @require_safetensors
+    def test_safetensors_load_from_hub(self):
+        safetensors_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-safetensors")
+        pytorch_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+
+        # Check models are equal
+        for p1, p2 in zip(safetensors_model.parameters(), pytorch_model.parameters()):
+            self.assertTrue(torch.allclose(p1, p2))
+
+    @require_safetensors
+    def test_safetensors_save_and_load_sharded(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir, safe_serialization=True, max_shard_size="100kB")
+            # No pytorch_model.bin index file, only a model.safetensors index
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_INDEX_NAME)))
+            self.assertTrue(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_INDEX_NAME)))
+            # No regular weights file
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, WEIGHTS_NAME)))
+            self.assertFalse(os.path.isfile(os.path.join(tmp_dir, SAFE_WEIGHTS_NAME)))
+
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+            # Check models are equal
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.allclose(p1, p2))
+
+    @require_safetensors
+    def test_safetensors_load_from_hub_sharded(self):
+        safetensors_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded-safetensors")
+        pytorch_model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert-sharded")
+
+        # Check models are equal
+        for p1, p2 in zip(safetensors_model.parameters(), pytorch_model.parameters()):
+            self.assertTrue(torch.allclose(p1, p2))
 
 
 @require_torch

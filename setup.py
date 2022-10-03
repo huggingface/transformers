@@ -102,7 +102,7 @@ _deps = [
     "codecarbon==1.2.0",
     "cookiecutter==1.7.3",
     "dataclasses",
-    "datasets",
+    "datasets!=2.5.0",
     "deepspeed>=0.6.5",
     "dill<0.3.5",
     "evaluate>=0.2.0",
@@ -116,7 +116,7 @@ _deps = [
     "fugashi>=1.0",
     "GitPython<3.1.19",
     "hf-doc-builder>=0.3.0",
-    "huggingface-hub>=0.9.0,<1.0",
+    "huggingface-hub>=0.10.0,<1.0",
     "importlib_metadata",
     "ipadic>=1.0.0,<2.0",
     "isort>=5.5.4",
@@ -148,6 +148,7 @@ _deps = [
     "rouge-score!=0.0.7,!=0.0.8,!=0.1,!=0.1.1",
     "sacrebleu>=1.4.12,<2.0.0",
     "sacremoses",
+    "safetensors>=0.2.1",
     "sagemaker>=2.31.0",
     "scikit-learn",
     "sentencepiece>=0.1.91,!=0.1.92",
@@ -160,7 +161,7 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "timm",
-    "tokenizers>=0.11.1,!=0.11.3,<0.13",
+    "tokenizers>=0.11.1,!=0.11.3,<0.14",
     "torch>=1.7,!=1.12.0",
     "torchaudio",
     "pyctcdecode>=0.3.0",
@@ -168,6 +169,7 @@ _deps = [
     "unidic>=1.0.2",
     "unidic_lite>=1.0.7",
     "uvicorn",
+    "beautifulsoup4",
 ]
 
 
@@ -177,7 +179,7 @@ _deps = [
 # packaging: "packaging"
 #
 # some of the values are versioned whereas others aren't.
-deps = {b: a for a, b in (re.findall(r"^(([^!=<>~]+)(?:[!=<>~].*)?$)", x)[0] for x in _deps)}
+deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] for x in _deps)}
 
 # since we save this data in src/transformers/dependency_versions_table.py it can be easily accessed from
 # anywhere. If you need to quickly access the data from this table in a shell, you can do so easily with:
@@ -279,6 +281,7 @@ extras["vision"] = deps_list("Pillow")
 extras["timm"] = deps_list("timm")
 extras["codecarbon"] = deps_list("codecarbon")
 
+
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["testing"] = (
     deps_list(
@@ -300,6 +303,8 @@ extras["testing"] = (
         "protobuf",  # Can be removed once we can unpin protobuf
         "sacremoses",
         "rjieba",
+        "safetensors",
+        "beautifulsoup4",
     )
     + extras["retrieval"]
     + extras["modelcreation"]
