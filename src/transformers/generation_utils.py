@@ -1112,8 +1112,8 @@ class GenerationMixin:
                 A list of tokens that will be supressed at generation. The `SupressTokens` logit processor will set
                 their log probs to `-inf` so that they are not sampled.
             begin_suppress_tokens  (`List[int]`, *optional*, defaults to `model.config.begin_suppress_tokens`):
-                A list of tokens that will be supressed at the begining of the generation. The `SupressBeginTokens` logit processor will set
-                their log probs to `-inf` so that they are not sampled.
+                A list of tokens that will be supressed at the begining of the generation. The `SupressBeginTokens`
+                logit processor will set their log probs to `-inf` so that they are not sampled.
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model
