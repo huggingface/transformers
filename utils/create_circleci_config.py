@@ -91,8 +91,8 @@ class CircleCIJob:
                 }
             }
         )
-        steps.append("cat test_preparation/test_list.txt")
-        steps.append("cat test_preparation/examples_test_list.txt")
+        steps.append({"run": "cat test_preparation/test_list.txt"})
+        steps.append({"run": "cat test_preparation/examples_test_list.txt"})
 
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
         pytest_flags = [f"--{key}={value}" if value is not None else f"-{key}" for key, value in all_options.items()]
