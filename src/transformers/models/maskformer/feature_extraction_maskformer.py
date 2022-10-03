@@ -14,7 +14,7 @@
 # limitations under the License.
 """Feature extractor class for MaskFormer."""
 
-from typing import TYPE_CHECKING, Dict, List, Optional, Set, Tuple, Union
+from typing import Dict, List, Optional, Set, Tuple, Union
 
 import numpy as np
 from PIL import Image
@@ -28,9 +28,6 @@ if is_torch_available():
     import torch
     from torch import Tensor, nn
     from torch.nn.functional import interpolate
-
-    if TYPE_CHECKING:
-        from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput
 
 logger = logging.get_logger(__name__)
 
