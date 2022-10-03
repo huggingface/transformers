@@ -51,8 +51,8 @@ jobs:
 #            - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
 #            - store_artifacts:
 #                  path: test_preparation/generated_config.txt
-#            - continuation/continue:
-#                  configuration_path: test_preparation/generated_config.yml
+            - continuation/continue:
+                  configuration_path: test_preparation/generated_config.yml
 
     check_code_quality:
         working_directory: ~/transformers
