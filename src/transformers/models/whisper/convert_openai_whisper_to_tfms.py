@@ -61,9 +61,9 @@ def rename_keys(s_dict):
     keys = list(s_dict.keys())
     for key in keys:
         new_key = key
-        for k, v in WHISPER_MAPPING.items():
-            if k in key:
-                new_key = new_key.replace(k, v)
+        for old_key, new_key in WHISPER_MAPPING.items():
+            if old_key in key:
+                new_key = new_key.replace(old_key, new_key)
 
         print(f"{key} -> {new_key}")
 
