@@ -53,7 +53,7 @@ jobs:
 #                  path: test_preparation/generated_config.txt
             - continuation/continue:
                   configuration_path: test_preparation/generated_config.yml
-                  paramerers:
+                  parameters:
                       - tests_to_run: tests1
 
     check_code_quality:
