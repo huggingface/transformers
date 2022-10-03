@@ -143,8 +143,9 @@ def binary_mask_to_rle(mask):
 
 def convert_segmentation_to_rle(segmentation):
     """
-    Args:
     Converts given segmentation map of shape (height, width) to the run-length encoding (RLE) format.
+
+    Args:
         segmentation (`torch.Tensor` or `numpy.array`):
             A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
     Returns:
@@ -163,9 +164,10 @@ def convert_segmentation_to_rle(segmentation):
 
 def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
     """
+    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
+    `labels`.
+
     Args:
-    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores`
-    and `labels`.
         masks (`torch.Tensor`):
             A tensor of shape `(num_queries, height, width)`.
         scores (`torch.Tensor`):
