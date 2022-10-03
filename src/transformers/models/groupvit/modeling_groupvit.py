@@ -1300,7 +1300,7 @@ class GroupViTVisionModel(GroupViTPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, GroupViTVisionModel
 
-        >>> processor = AutoPProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
+        >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
         >>> model = GroupViTVisionModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1542,7 +1542,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
         # cosine similarity as logits
         logit_scale = self.logit_scale.exp()
         logits_per_text = torch.matmul(text_embeds, image_embeds.t()) * logit_scale
-        logits_per_image = logits_per_text.T
+        logits_per_image = logits_per_text.t()
 
         seg_logits = None
         if output_segmentation:
