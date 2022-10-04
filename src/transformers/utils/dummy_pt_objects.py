@@ -1006,6 +1006,13 @@ class BloomForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class BloomForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class BloomForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
