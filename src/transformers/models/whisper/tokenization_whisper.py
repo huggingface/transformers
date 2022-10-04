@@ -24,13 +24,21 @@ from ...utils import logging
 from .english_normalizer import EnglishTextNormalizer
 
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "tokenizer_file": "tokenizer.json", "merges_file": "merges.txt"}
+VOCAB_FILES_NAMES = {
+    "vocab_file": "vocab.json",
+    "tokenizer_file": "tokenizer.json",
+    "merges_file": "merges.txt",
+    "normalizer_file": "normalizer.json",
+}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/vocab.json",
     },
     "merges_file": {"openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/merges_file.txt"},
+    "normalizer_file": {
+        "openai/whisper-base": "https://huggingface.co/openai/whisper-base/resolve/main/normalizer.json"
+    },
 }
 
 MAX_MODEL_INPUT_SIZES = {
@@ -117,6 +125,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self,
         vocab_file,
         merges_file,
+        normalizer_file=None,
         task=None,
         language="en",
         errors="replace",
@@ -159,6 +168,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
         self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
         self.cache = {}
         self.add_prefix_space = add_prefix_space
+
+        if normalizer_file is not None:
+            with open(normalizer_file, encoding="utf-8") as vocab_handle:
+                self.english_spelling_normalizer = json.load(vocab_handle)
 
         # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
@@ -287,7 +300,7 @@ class WhisperTokenizer(PreTrainedTokenizer):
         Normalize a given string using the `EnglishTextNormalizer` class, which preforms commons transformation on
         english text.
         """
-        normalizer = EnglishTextNormalizer()
+        normalizer = EnglishTextNormalizer(self.english_spelling_normalizer)
         return normalizer(text)
 
     def _decode(
