@@ -1050,6 +1050,25 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         self.config = config
         self.name_or_path = config.name_or_path
 
+    def build(self, input_shape: Dict[str, tf.TensorShape]):
+        # Bypass the default tf.keras.Model.build() logic, which doesn't work for our models anyway.
+        # The super() for Model is Layer, whose build() just quietly writes the input shapes and sets
+        # self.built to True, which is conveniently exactly what we want.
+        super(tf.keras.Model, self).build(input_shape)
+
+    def build_from_serving_sig_and_dummies(self):
+        """
+        A replacement for just calling model(model.dummy_inputs). This method first uses self.build() to set
+        more flexible input shapes that are usable for serving, then calls model(model.dummy_inputs) to actually
+        build the model.
+        """
+        if not hasattr(self, "serving") or not hasattr(self.serving, "input_signature"):
+            return
+        serving_sig = self.serving.input_signature[0]
+        serving_shapes = {k: v.shape for k, v in serving_sig.items()}
+        self.build(serving_shapes)  # Just sets the shapes in the model internals
+        self(self.dummy_inputs)  # Actually builds the model with fixed dummies now the flexible serving shapes are set
+
     def get_config(self):
         return self.config.to_dict()
 
@@ -1668,7 +1687,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             main_layer.set_input_embeddings(value)
         except AttributeError:
             logger.info("Building the model")
-            self(self.dummy_inputs)
+            self.build_from_serving_sig_and_dummies()
             main_layer.set_input_embeddings(value)
 
     def get_output_embeddings(self) -> Union[None, tf.keras.layers.Layer]:
@@ -1685,7 +1704,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 return lm_head.get_output_embeddings()
             except AttributeError:
                 logger.info("Building the model")
-                self(self.dummy_inputs)
+                self.build_from_serving_sig_and_dummies()
 
                 return lm_head().get_output_embeddings()
 
@@ -1705,7 +1724,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                 lm_head.set_output_embeddings(value)
             except AttributeError:
                 logger.info("Building the model")
-                self(self.dummy_inputs)
+                self.build_from_serving_sig_and_dummies()
                 lm_head.set_output_embeddings(value)
 
     def get_output_layer_with_bias(self) -> Union[None, tf.keras.layers.Layer]:
@@ -1743,7 +1762,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             try:
                 return lm_head.get_bias()
             except AttributeError:
-                self(self.dummy_inputs)
+                self.build_from_serving_sig_and_dummies()
 
                 return lm_head.get_bias()
         return None
@@ -1761,7 +1780,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             try:
                 lm_head.set_bias(value)
             except AttributeError:
-                self(self.dummy_inputs)
+                self.build_from_serving_sig_and_dummies()
                 lm_head.set_bias(value)
 
     def get_lm_head(self) -> tf.keras.layers.Layer:
@@ -1848,7 +1867,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # The reason why the attributes don't exist might be
         # because the model is not built, so retry getting
         # the argument after building the model
-        model(model.dummy_inputs)
+        model.build_from_serving_sig_and_dummies()
 
         embeds = getattr(embedding_layer, "weight", None)
         if embeds is not None:
@@ -2559,9 +2578,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # we might need to extend the variable scope for composite models
         if load_weight_prefix is not None:
             with tf.compat.v1.variable_scope(load_weight_prefix):
-                model(model.dummy_inputs)  # build the network with dummy inputs
+                model.build_from_serving_sig_and_dummies()
         else:
-            model(model.dummy_inputs)  # build the network with dummy inputs
+            model.build_from_serving_sig_and_dummies()
 
         # 'by_name' allow us to do transfer learning by skipping/adding layers
         # see https://github.com/tensorflow/tensorflow/blob/00fad90125b18b80fe054de1055770cfb8fe4ba3/tensorflow/python/keras/engine/network.py#L1339-L1357
@@ -2599,7 +2618,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
                     "If you tried to load a TF 2.0 model from a PyTorch checkpoint, please set from_pt=True. "
                 )
 
-        model(model.dummy_inputs)  # Make sure restore ops are run
+        model.build_from_serving_sig_and_dummies()
 
         if cls._keys_to_ignore_on_load_missing is not None:
             for pat in cls._keys_to_ignore_on_load_missing:

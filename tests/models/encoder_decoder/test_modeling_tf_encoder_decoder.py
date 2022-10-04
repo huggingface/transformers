@@ -580,8 +580,8 @@ class TFEncoderDecoderMixin:
         encoder = _tf_model.encoder.__class__(encoder_decoder_config.encoder)
         decoder = _tf_model.decoder.__class__(encoder_decoder_config.decoder)
         # Make sure models are built
-        encoder(encoder.dummy_inputs)
-        decoder(decoder.dummy_inputs)
+        encoder.build_from_serving_sig_and_dummies()
+        decoder.build_from_serving_sig_and_dummies()
         tf_model = TFEncoderDecoderModel(encoder=encoder, decoder=decoder)
         tf_model.config = encoder_decoder_config
 
@@ -1114,9 +1114,9 @@ class TFEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         # create two random BERT models for bert2bert & initialize weights (+cross_attention weights)
         encoder = TFBertModel(config.encoder)
-        encoder(encoder.dummy_inputs)
+        encoder.build_from_serving_sig_and_dummies()
         decoder = TFBertLMHeadModel(config.decoder)
-        decoder(decoder.dummy_inputs)
+        decoder.build_from_serving_sig_and_dummies()
 
         encoder_decoder_orig = TFEncoderDecoderModel(encoder=encoder, decoder=decoder)
 

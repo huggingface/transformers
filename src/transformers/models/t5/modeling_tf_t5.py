@@ -901,7 +901,7 @@ class TFT5PreTrainedModel(TFPreTrainedModel):
         try:
             self.shared.weight = value
         except AttributeError:
-            self(self.dummy_inputs)
+            self.build_from_serving_sig_and_dummies()
             self.shared.weight = value
 
         self.shared.vocab_size = shape_list(value)[0]

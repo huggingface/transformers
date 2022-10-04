@@ -226,7 +226,7 @@ class TFBlenderbotModelTest(TFModelTesterMixin, unittest.TestCase):
             else:
                 # Here we build the word embeddings weights if not exists.
                 # And then we retry to get the attribute once built.
-                model(model.dummy_inputs)
+                model.build_from_serving_sig_and_dummies()
                 if hasattr(embedding_layer, "weight"):
                     return embedding_layer.weight
                 else:

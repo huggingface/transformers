@@ -513,8 +513,8 @@ class TFVisionEncoderDecoderMixin:
         encoder = _tf_model.encoder.__class__(encoder_decoder_config.encoder)
         decoder = _tf_model.decoder.__class__(encoder_decoder_config.decoder)
         # Make sure models are built
-        encoder(encoder.dummy_inputs)
-        decoder(decoder.dummy_inputs)
+        encoder.build_from_serving_sig_and_dummies()
+        decoder.build_from_serving_sig_and_dummies()
         tf_model = TFVisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
         tf_model.config = encoder_decoder_config
 
@@ -775,9 +775,9 @@ class TFVisionEncoderDecoderModelSaveLoadTests(unittest.TestCase):
 
         # create two random ViT/GPT2 models for vit-gpt2 & initialize weights (+cross_attention weights)
         encoder = TFViTModel(config.encoder)
-        encoder(encoder.dummy_inputs)
+        encoder.build_from_serving_sig_and_dummies()
         decoder = TFGPT2LMHeadModel(config.decoder)
-        decoder(decoder.dummy_inputs)
+        decoder.build_from_serving_sig_and_dummies()
 
         encoder_decoder_orig = TFVisionEncoderDecoderModel(encoder=encoder, decoder=decoder)
 
