@@ -193,7 +193,6 @@ flax_job = CircleCIJob(
 pipelines_torch_job = CircleCIJob(
     "pipelines_torch",
     additional_env={"RUN_PIPELINE_TESTS": True},
-    cache_name="torch",
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
@@ -209,7 +208,6 @@ pipelines_torch_job = CircleCIJob(
 pipelines_tf_job = CircleCIJob(
     "pipelines_tf",
     additional_env={"RUN_PIPELINE_TESTS": True},
-    cache_name="tf",
     install_steps=[
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,testing,sentencepiece]",
@@ -300,6 +298,23 @@ onnx_job = CircleCIJob(
 )
 
 
+layoutlm_job = CircleCIJob(
+    "layoutlmv2_and_v3",
+    install_steps=[
+        "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev",
+        "pip install --upgrade pip",
+        "pip install .[torch,testing,vision]",
+        "pip install torchvision",
+        "pip install 'git+https://github.com/facebookresearch/detectron2.git'",
+        "sudo apt install tesseract-ocr",
+        "pip install pytesseract",
+    ],
+    tests_to_run="tests/models/*layoutlmv*",
+    pytest_num_workers=1,
+    pytest_options={"durations": 100},
+)
+
+
 REGULAR_TESTS = [
     torch_and_tf_job,
     torch_and_flax_job,
@@ -311,6 +326,7 @@ REGULAR_TESTS = [
     custom_tokenizers_job,
     hub_job,
     onnx_job,
+    layoutlm_job,
 ]
 EXAMPLES_TESTS = [
     examples_torch_job,
