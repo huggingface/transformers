@@ -98,6 +98,8 @@ logger = logging.get_logger(__name__)
 
 
 _init_weights = True
+_init_weights = False
+_init_weights = True
 
 
 if is_sagemaker_mp_enabled():
