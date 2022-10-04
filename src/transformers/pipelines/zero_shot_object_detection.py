@@ -72,19 +72,19 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
             contains the text queries for the corresponding image.
 
         Return:
-            A list of dictionaries containing result, one dictionary per proposed label. The dictionaries contain the
+            A list of dictionaries containing prediction results, one dictionary per each input image. The dictionaries contain the
             following keys:
 
-            - **label** (`str`) -- The label identified by the model. It is one of the suggested `candidate_label`.
-            - **score** (`float`) -- The score attributed by the model for that label (between 0 and 1).
-            - **box** (`List[Dict[str,int]]`) -- The bounding box of detected object in image's original size.
+            - **labels** (`List[str]`) -- The list of text queries corresponding to the found objects.
+            - **scores** (`List[float]`) -- The list of scores corresponding to each object (between 0 and 1).
+            - **boxes** (`List[Dict[str,int]]`) -- A nested list of bounding boxes of all detected objects in image's original size. Each list contains a dictionary with `x_min`, `x_max`, `y_min`, `y_max` keys.
         """
         if isinstance(text_queries, str) or (isinstance(text_queries, List) and not isinstance(text_queries[0], List)):
             if isinstance(images, (str, Image.Image)):
-                inputs = {"image": images, "text_queries": text_queries}
+                inputs = {"images": images, "text_queries": text_queries}
             elif isinstance(images, List):
                 assert len(images) == 1, "Input text_queries and images must have correspondance"
-                inputs = {"image": images[0], "text_queries": text_queries}
+                inputs = {"images": images[0], "text_queries": text_queries}
             else:
                 raise TypeError(f"Innapropriate type of images: {type(images)}")
 
@@ -92,12 +92,11 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
             if isinstance(images, (Image.Image, str)):
                 images = [images]
             assert len(images) == len(text_queries), "Input text_queries and images must have correspondance"
-            inputs = [{"image": image, "text_queries": text_query} for image, text_query in zip(images, text_queries)]
+            inputs = {"images": images, "text_queries": text_queries}
         else:
             """
             Supports the following format
-            - {"image": image, "text_queries": text_queries}
-            - [{"image": image, "text_queries": text_queries}]
+            - {"images": images, "text_queries": text_queries}
             """
             inputs = images
         results = super().__call__(inputs, **kwargs)
@@ -110,33 +109,44 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
         return {}, {}, postprocess_params
 
     def preprocess(self, inputs):
-        image = load_image(inputs["image"])
+        if not isinstance(inputs["images"], List):
+            inputs["images"] = [inputs["images"]]
+        images = [load_image(img) for img in inputs["images"]]
         text_queries = inputs["text_queries"]
-        target_size = torch.IntTensor([[image.height, image.width]])
-        inputs = self._processor(text=inputs["text_queries"], images=image, return_tensors="pt")
-        return {"target_size": target_size, "text_queries": text_queries, **inputs}
+        if isinstance(text_queries, str) or isinstance(text_queries[0], str):
+            text_queries = [text_queries]
+
+        target_sizes = [torch.IntTensor([[img.height, img.width]]) for img in images]
+        target_sizes = torch.cat(target_sizes)
+        inputs = self._processor(text=inputs["text_queries"], images=images, return_tensors="pt")
+        return {"target_sizes": target_sizes, "text_queries": text_queries, **inputs}
 
     def _forward(self, model_inputs):
-        target_size = model_inputs.pop("target_size")
+        target_sizes = model_inputs.pop("target_sizes")
         text_queries = model_inputs.pop("text_queries")
         outputs = self.model(**model_inputs)
 
-        model_outputs = outputs.__class__({"target_size": target_size, "text_queries": text_queries, **outputs})
+        model_outputs = outputs.__class__({"target_sizes": target_sizes, "text_queries": text_queries, **outputs})
         return model_outputs
 
     def postprocess(self, model_outputs, threshold=0.1):
-        text = model_outputs["text_queries"]
+        texts = model_outputs["text_queries"]
 
-        results = self.feature_extractor.post_process(outputs=model_outputs, target_sizes=model_outputs["target_size"])
-        keep = results[0]["scores"] >= threshold
-        boxes = results[0]["boxes"][keep]
-        scores = results[0]["scores"][keep].tolist()
-        labels = results[0]["labels"][keep].tolist()
+        outputs = self.feature_extractor.post_process(
+            outputs=model_outputs, target_sizes=model_outputs["target_sizes"]
+        )
 
-        return [
-            {"score": score, "label": text[label], "box": self._get_bounding_box(box)}
-            for score, label, box in zip(scores, labels, boxes)
-        ]
+        results = []
+        for i in range(len(outputs)):
+            keep = outputs[i]["scores"] >= threshold
+            labels = outputs[i]["labels"][keep].tolist()
+            scores = outputs[i]["scores"][keep].tolist()
+            boxes = [self._get_bounding_box(box) for box in outputs[i]["boxes"][keep]]
+
+            result = {"scores": scores, "labels": [texts[i][label] for label in labels], "boxes": boxes}
+            results.append(result)
+
+        return results
 
     def _get_bounding_box(self, box: "torch.Tensor") -> Dict[str, int]:
         """
@@ -167,6 +177,7 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
         the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
         CLIPFeatureExtractor's [`~CLIPFeatureExtractor.__call__`] if `images` is not `None`. Please refer to the
         doctsring of the above two methods for more information.
+
         Args:
             text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
