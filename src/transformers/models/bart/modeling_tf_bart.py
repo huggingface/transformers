@@ -463,6 +463,7 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
 class TFBartPretrainedModel(TFPreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
+    _initializer_range_name = "init_std"
 
     @property
     def dummy_inputs(self):

@@ -711,6 +711,46 @@ class TFModelTesterMixin:
             if tf_inputs_dict_with_labels:
                 self.check_pt_tf_models(tf_model, pt_model, tf_inputs_dict_with_labels)
 
+    # @tooslow  # TODO (Joao): tagged so as to not run on CI. Remove when most test cases get fixed.
+    @is_pt_tf_cross_test
+    def test_pt_tf_weight_initialization(self):
+        import transformers
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            pt_model_class_name = model_class.__name__[2:]  # Skip the "TF" at the beginning
+            pt_model_class = getattr(transformers, pt_model_class_name)
+
+            # The two models will be initialized with random weights. They will be different, but should be drawn from
+            # the same distribution.
+            tf_model = model_class(config)
+            tf_model(tf_model.dummy_inputs)
+            tf_weights_dict = {weight.name: weight.value() for weight in tf_model.weights}
+
+            # Load the random PT weights into a TF model for simpler comparison logic
+            pt_model = pt_model_class(config)
+            tf_inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            tf_from_pt_model = transformers.load_pytorch_model_in_tf2_model(
+                tf_model, pt_model, tf_inputs=tf_inputs_dict
+            )
+            pt_weights_dict = {weight.name: weight.value() for weight in tf_from_pt_model.weights}
+
+            # Iterate over the two TF models and compare statistical properties of the weights
+            mismatched_initializations = []
+            for weight_name in tf_weights_dict:
+                tf_weight_norm = tf.norm(tf_weights_dict[weight_name])
+                pt_weight_norm = tf.norm(pt_weights_dict[weight_name])
+                norm_difference = tf.abs(tf_weight_norm - pt_weight_norm)
+                # large tolerance relative to the PT weights (which should be correctly set) to focus on large
+                # mismatches
+                norm_tolerance = pt_weight_norm * 2.0
+                if norm_difference > norm_tolerance:
+                    mismatched_initializations.append(weight_name)
+
+            breakpoint()
+            self.assertListEqual(mismatched_initializations, [])
+
     def test_compile_tf_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         max_input = getattr(self.model_tester, "max_position_embeddings", 512)
