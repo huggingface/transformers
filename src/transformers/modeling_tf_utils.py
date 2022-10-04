@@ -1116,29 +1116,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         raise NotImplementedError
 
-    def save(
-        self,
-        filepath,
-        overwrite=True,
-        include_optimizer=True,
-        save_format=None,
-        signatures=None,
-        options=None,
-        save_traces=True,
-    ):
-        # Very simple wrapper that ensures we set the correct serving signature when saving
-        if signatures is None and hasattr(self, "serving"):
-            signatures = self.serving
-        super().save(
-            filepath,
-            overwrite=overwrite,
-            include_optimizer=include_optimizer,
-            save_format=save_format,
-            signatures=signatures,
-            options=options,
-            save_traces=save_traces,
-        )
-
     def get_input_embeddings(self) -> tf.keras.layers.Layer:
         """
         Returns the model's input embeddings layer.
