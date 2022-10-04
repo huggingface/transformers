@@ -23,7 +23,6 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from ...utils import add_start_docstrings, logging
 from ...activations import ACT2FN, gelu
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
@@ -45,6 +44,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_camembert import CamembertConfig
+
 
 logger = logging.get_logger(__name__)
 
@@ -290,6 +290,7 @@ class CamembertSelfAttention(nn.Module):
             outputs = outputs + (past_key_value,)
         return outputs
 
+
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput with Bert->Roberta->Camembert
 class CamembertSelfOutput(nn.Module):
     def __init__(self, config):
@@ -472,6 +473,7 @@ class CamembertLayer(nn.Module):
         layer_output = self.output(intermediate_output, attention_output)
         return layer_output
 
+
 # Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert->Roberta->Camembert
 class CamembertEncoder(nn.Module):
     def __init__(self, config):
@@ -625,7 +627,8 @@ class CamembertPreTrainedModel(PreTrainedModel):
             self._keys_to_ignore_on_load_missing = [
                 k for k in self._keys_to_ignore_on_load_missing if k not in del_keys_to_ignore
             ]
-    
+
+
 # Copied from transformers.models.roberta.modeling_roberta with Roberta->Camembert
 CAMEMBERT_INPUTS_DOCSTRING = r"""
     Args:
@@ -740,8 +743,8 @@ class CamembertModel(CamembertPreTrainedModel):
     all you need*_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
     Kaiser and Illia Polosukhin.
 
-    To behave as a decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
-    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
+    To behave as a decoder the model needs to be initialized with the `is_decoder` argument of the configuration set to
+    `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
 
     .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
@@ -749,7 +752,7 @@ class CamembertModel(CamembertPreTrainedModel):
     """
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
-    
+
     # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Roberta->Camembert
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
@@ -1139,7 +1142,9 @@ class CamembertForMultipleChoice(CamembertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @add_start_docstrings_to_model_forward(CAMEMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CAMEMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
