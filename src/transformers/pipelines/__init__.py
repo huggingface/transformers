@@ -125,6 +125,7 @@ if is_torch_available():
         AutoModelForTokenClassification,
         AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
+        AutoModelForZeroShotObjectDetection,
     )
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -339,7 +340,7 @@ SUPPORTED_TASKS = {
     "zero-shot-object-detection": {
         "impl": ZeroShotObjectDetectionPipeline,
         "tf": (),
-        "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
+        "pt": (AutoModelForZeroShotObjectDetection,) if is_torch_available() else (),
         "default": {"model": {"pt": ("google/owlvit-base-patch32", "17740e1")}},
         "type": "multimodal",
     },

@@ -424,6 +424,9 @@ MODEL_MAPPING = None
 MODEL_WITH_LM_HEAD_MAPPING = None
 
 
+MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING = None
+
+
 class AutoModel(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -607,6 +610,13 @@ class AutoModelForVisualQuestionAnswering(metaclass=DummyObject):
 
 
 class AutoModelWithLMHead(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class AutoModelForZeroShotObjectDetection(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
