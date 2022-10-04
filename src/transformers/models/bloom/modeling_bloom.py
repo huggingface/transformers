@@ -1184,7 +1184,7 @@ class BloomForQuestionAnswering(BloomPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.transformer = BloomModel(config)
-        self.qa_outputs = nn.Linear(config.hidden_size, self.num_labels)
+        self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
         self.post_init()
