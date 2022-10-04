@@ -135,4 +135,16 @@ workflows:
             - check_code_quality
             - check_repository_consistency
             - fetch_tests
-    
+
+    nightly:
+        triggers:
+            - schedule:
+                  cron: "0 0 * * *"
+                  filters:
+                      branches:
+                          only:
+                              - main
+        jobs:
+            - check_code_quality
+            - check_repository_consistency
+            - fetch_all_tests
