@@ -47,7 +47,7 @@ def main():
         ):
             # print(f"Would close issue {issue.number} since it has been 7 days of inactivity since bot mention.")
             issue.edit(state="closed")
-        elif (
+        if (
             (dt.utcnow() - issue.updated_at).days > 23
             and (dt.utcnow() - issue.created_at).days >= 30
             and not any(label.name.lower() in LABELS_TO_EXEMPT for label in issue.get_labels())
