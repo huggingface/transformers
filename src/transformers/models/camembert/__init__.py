@@ -63,6 +63,7 @@ else:
         "CamembertForSequenceClassification",
         "CamembertForTokenClassification",
         "CamembertModel",
+        "CamembertPreTrainedModel",
     ]
 
 try:
@@ -117,6 +118,7 @@ if TYPE_CHECKING:
             CamembertForSequenceClassification,
             CamembertForTokenClassification,
             CamembertModel,
+            CamembertPreTrainedModel,
         )
 
     try:
