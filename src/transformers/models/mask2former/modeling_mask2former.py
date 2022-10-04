@@ -227,8 +227,7 @@ class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
 @dataclass
 class Mask2FormerPixelLevelModuleOutput(ModelOutput):
     """
-    Mask2Former's pixel level module output. It returns both the last and (optionally) the hidden states from the
-    `encoder` and `decoder`. By default, the `encoder` is a Mask2FormerSwin Transformer and the `decoder` is a 
+    Mask2Former's pixel level module output. It returns the output of the encoder (optional) and all hidden states (multi-scale features) from the `decoder`. By default, the `encoder` is a Mask2FormerSwin Transformer and the `decoder` is a 
     MultiScaleDeformableAttention Transformer.
 
     The `encoder_last_hidden_state` are referred on the paper as **images features**, while `decoder_last_hidden_state`
