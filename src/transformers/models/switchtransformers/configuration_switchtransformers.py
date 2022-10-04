@@ -32,7 +32,7 @@ SWITCHTRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class SwitchTransformersConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SwitchTransformersModel`] or a
-    [`TFSwitchTransformersModel`]. It is used to instantiate a SwitchTransformers model according to the specified
+    [`FlaxSwitchTransformersModel`]. It is used to instantiate a SwitchTransformers model according to the specified
     arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar
     configuration to that of the SwitchTransformers
     [ybelkada/switchtransformers-base](https://huggingface.co/ybelkada/switchtransformers-base) architecture.
@@ -44,7 +44,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 32128):
             Vocabulary size of the SwitchTransformers model. Defines the number of different tokens that can be
             represented by the `inputs_ids` passed when calling [`SwitchTransformersModel`] or
-            [`TFSwitchTransformersModel`].
+            [`FlaxSwitchTransformersModel`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):

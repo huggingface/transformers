@@ -2701,15 +2701,6 @@ else:
             "TFT5PreTrainedModel",
         ]
     )
-    _import_structure["models.switchtransformers"].extend(
-        [
-            "TF_SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TFSwitchTransformersEncoderModel",
-            "TFSwitchTransformersForConditionalGeneration",
-            "TFSwitchTransformersModel",
-            "TFSwitchTransformersPreTrainedModel",
-        ]
-    )
     _import_structure["models.tapas"].extend(
         [
             "TF_TAPAS_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5268,13 +5259,6 @@ if TYPE_CHECKING:
             TFSwinForMaskedImageModeling,
             TFSwinModel,
             TFSwinPreTrainedModel,
-        )
-        from .models.switchtransformers import (
-            TF_SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFSwitchTransformersEncoderModel,
-            TFSwitchTransformersForConditionalGeneration,
-            TFSwitchTransformersModel,
-            TFSwitchTransformersPreTrainedModel,
         )
         from .models.t5 import (
             TF_T5_PRETRAINED_MODEL_ARCHIVE_LIST,
