@@ -30,6 +30,7 @@ from .generation_logits_process import (
     ExponentialDecayLengthPenalty,
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
+    ForceTokensLogitsProcessor,
     HammingDiversityLogitsProcessor,
     InfNanRemoveLogitsProcessor,
     LogitNormalization,
@@ -695,6 +696,7 @@ class GenerationMixin:
         renormalize_logits: Optional[bool],
         suppress_tokens: Optional[List[int]] = None,
         begin_suppress_tokens: Optional[List[int]] = None,
+        forced_decoder_ids: Optional[List[int]] = None,
     ) -> LogitsProcessorList:
         """
         This class returns a [`LogitsProcessorList`] list object that contains all relevant [`LogitsProcessor`]
@@ -733,6 +735,8 @@ class GenerationMixin:
         begin_suppress_tokens = (
             begin_suppress_tokens if begin_suppress_tokens is not None else self.config.begin_suppress_tokens
         )
+        if forced_decoder_ids is None and hasattr(self.config, "forced_decoder_ids"):
+            forced_decoder_ids = self.config.forced_decoder_ids
         # instantiate processors list
 
         # the following idea is largely copied from this PR: https://github.com/huggingface/transformers/pull/5420/files
@@ -776,7 +780,8 @@ class GenerationMixin:
             begin_index = input_ids_seq_length
             begin_index = begin_index if (input_ids_seq_length > 1 or forced_bos_token_id is None) else begin_index + 1
             processors.append(SuppressTokensAtBeginLogitsProcessor(begin_suppress_tokens, begin_index))
-
+        if forced_decoder_ids is not None:
+            processors.append(ForceTokensLogitsProcessor(forced_decoder_ids))
         processors = self._merge_criteria_processor_list(processors, logits_processor)
         # `LogitNormalization` should always be the last logit processor, when present
         if renormalize_logits is True:
@@ -949,6 +954,7 @@ class GenerationMixin:
         exponential_decay_length_penalty: Optional[Tuple[Union[int, float]]] = None,
         suppress_tokens: Optional[List[int]] = None,
         begin_suppress_tokens: Optional[List[int]] = None,
+        forced_decoder_ids: Optional[List[int]] = None,
         **model_kwargs,
     ) -> Union[GreedySearchOutput, SampleOutput, BeamSearchOutput, BeamSampleOutput, torch.LongTensor]:
         r"""
@@ -1113,6 +1119,8 @@ class GenerationMixin:
             begin_suppress_tokens  (`List[int]`, *optional*, defaults to `model.config.begin_suppress_tokens`):
                 A list of tokens that will be supressed at the begining of the generation. The `SupressBeginTokens`
                 logit processor will set their log probs to `-inf` so that they are not sampled.
+            forced_decoder_ids (`List[int]`, *optional*, defaults to `model.config.forced_decoder_ids`):
+                A list of tokens that will be forced as beginning tokens.
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model
@@ -1362,6 +1370,7 @@ class GenerationMixin:
             renormalize_logits=renormalize_logits,
             suppress_tokens=suppress_tokens,
             begin_suppress_tokens=begin_suppress_tokens,
+            forced_decoder_ids=forced_decoder_ids,
         )
 
         # 8. prepare stopping criteria
