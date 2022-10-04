@@ -37,7 +37,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
-from .configuration_camembert import CamembertConfig
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -45,6 +44,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from .configuration_camembert import CamembertConfig
 
 logger = logging.get_logger(__name__)
 
@@ -593,7 +593,7 @@ class CamembertPreTrainedModel(PreTrainedModel):
     """
 
     config_class = CamembertConfig
-    base_model_prefix = "camembert"
+    base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
@@ -749,7 +749,7 @@ class CamembertModel(CamembertPreTrainedModel):
     """
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
-
+    
     # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Roberta->Camembert
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
