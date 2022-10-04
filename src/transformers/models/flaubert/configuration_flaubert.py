@@ -32,6 +32,7 @@ FLAUBERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "flaubert/flaubert_large_cased": "https://huggingface.co/flaubert/flaubert_large_cased/resolve/main/config.json",
 }
 
+
 class FlaubertConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`FlaubertModel`] or a [`TFFlaubertModel`]. It is
