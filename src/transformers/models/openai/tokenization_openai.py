@@ -18,10 +18,10 @@
 import json
 import os
 import re
-from typing import Optional, Tuple
 import unicodedata
+from typing import Optional, Tuple
 
-from ...tokenization_utils import PreTrainedTokenizer, _is_punctuation, _is_whitespace, _is_control
+from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
 
 
