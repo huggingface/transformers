@@ -91,7 +91,6 @@ class CircleCIJob:
                 }
             }
         )
-        steps.append({"run": "echo << pipeline.parameters.tests_to_run >>"})
 
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
         pytest_flags = [f"--{key}={value}" if value is not None else f"-{key}" for key, value in all_options.items()]
@@ -106,7 +105,7 @@ class CircleCIJob:
         if self.marker is not None:
             test_command += f" -m {self.marker}"
         test_command += " | tee tests_output.txt"
-        steps.append({"run": test_command})
+        steps.append({"run": {"name": "Run tests", "command": test_command}})
         steps.append({"store_artifacts": {"path": "~/transformers/tests_output.txt"}})
         steps.append({"store_artifacts": {"path": "~/transformers/reports"}})
         job["steps"] = steps
