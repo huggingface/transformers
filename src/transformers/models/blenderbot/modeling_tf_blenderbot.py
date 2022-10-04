@@ -18,7 +18,6 @@
 import os
 import random
 import warnings
-from contextlib import nullcontext
 from typing import List, Optional, Tuple, Union
 
 import tensorflow as tf
@@ -41,6 +40,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
+    ContextManagers,
     add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
@@ -731,11 +731,10 @@ class TFBlenderbotEncoder(tf.keras.layers.Layer):
             # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
             # is used with a name ending in `/`, that name replaces the current name scope.
             # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            context = []
             if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context_manager = tf.name_scope(self.embed_tokens.load_weight_prefix + "/")
-            else:
-                context_manager = nullcontext()
-            with context_manager:
+                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
+            with ContextManagers(context):
                 # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
                 # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
                 tf.debugging.assert_less(
@@ -943,15 +942,10 @@ class TFBlenderbotDecoder(tf.keras.layers.Layer):
             positions = self.embed_positions(input_shape, position_ids=position_ids)
 
         if inputs_embeds is None:
-            # if `self.embed_tokens.load_weight_prefix` is set, runs the embedding operation with the correct name
-            # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
-            # is used with a name ending in `/`, that name replaces the current name scope.
-            # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            context = []
             if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context_manager = tf.name_scope(self.embed_tokens.load_weight_prefix + "/")
-            else:
-                context_manager = nullcontext()
-            with context_manager:
+                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
+            with ContextManagers(context):
                 # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
                 # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
                 tf.debugging.assert_less(
