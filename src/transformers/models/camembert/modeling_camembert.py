@@ -922,7 +922,7 @@ class CamembertModel(CamembertPreTrainedModel):
     """CamemBERT Model with a `language modeling` head on top.""",
     CAMEMBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM with Roberta->Camembert, self.roberta->self.camembert, ROBERTA->CAMEMBERT
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForMaskedLM with Roberta->Camembert, ROBERTA->CAMEMBERT
 class CamembertForMaskedLM(CamembertPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
@@ -937,7 +937,7 @@ class CamembertForMaskedLM(CamembertPreTrainedModel):
                 "bi-directional self-attention."
             )
 
-        self.camembert = CamembertModel(config, add_pooling_layer=False)
+        self.roberta = CamembertModel(config, add_pooling_layer=False)
         self.lm_head = CamembertLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
@@ -987,7 +987,7 @@ class CamembertForMaskedLM(CamembertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.camembert(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1027,7 +1027,7 @@ class CamembertForMaskedLM(CamembertPreTrainedModel):
     """,
     CAMEMBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification with Roberta->Camembert, self.roberta->self.camembert, ROBERTA->CAMEMBERT
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForSequenceClassification with Roberta->Camembert, ROBERTA->CAMEMBERT
 class CamembertForSequenceClassification(CamembertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -1036,7 +1036,7 @@ class CamembertForSequenceClassification(CamembertPreTrainedModel):
         self.num_labels = config.num_labels
         self.config = config
 
-        self.camembert = CamembertModel(config, add_pooling_layer=False)
+        self.roberta = CamembertModel(config, add_pooling_layer=False)
         self.classifier = CamembertClassificationHead(config)
 
         # Initialize weights and apply final processing
@@ -1072,7 +1072,7 @@ class CamembertForSequenceClassification(CamembertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.camembert(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1128,14 +1128,14 @@ class CamembertForSequenceClassification(CamembertPreTrainedModel):
     """,
     CAMEMBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice with Roberta->Camembert, self.roberta->self.camembert, ROBERTA->CAMEMBERT
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForMultipleChoice with Roberta->Camembert, ROBERTA->CAMEMBERT
 class CamembertForMultipleChoice(CamembertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.camembert = CamembertModel(config)
+        self.roberta = CamembertModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
@@ -1183,7 +1183,7 @@ class CamembertForMultipleChoice(CamembertPreTrainedModel):
             else None
         )
 
-        outputs = self.camembert(
+        outputs = self.roberta(
             flat_input_ids,
             position_ids=flat_position_ids,
             token_type_ids=flat_token_type_ids,
@@ -1224,7 +1224,7 @@ class CamembertForMultipleChoice(CamembertPreTrainedModel):
     """,
     CAMEMBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification with Roberta->Camembert, self.roberta->self.camembert, ROBERTA->CAMEMBERT
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForTokenClassification with Roberta->Camembert, ROBERTA->CAMEMBERT
 class CamembertForTokenClassification(CamembertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1233,7 +1233,7 @@ class CamembertForTokenClassification(CamembertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.camembert = CamembertModel(config, add_pooling_layer=False)
+        self.roberta = CamembertModel(config, add_pooling_layer=False)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1271,7 +1271,7 @@ class CamembertForTokenClassification(CamembertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.camembert(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1312,7 +1312,7 @@ class CamembertForTokenClassification(CamembertPreTrainedModel):
     """,
     CAMEMBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering with Roberta->Camembert, self.roberta->self.camembert, ROBERTA->CAMEMBERT
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForQuestionAnswering with Roberta->Camembert, ROBERTA->CAMEMBERT
 class CamembertForQuestionAnswering(CamembertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
@@ -1321,7 +1321,7 @@ class CamembertForQuestionAnswering(CamembertPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.camembert = CamembertModel(config, add_pooling_layer=False)
+        self.roberta = CamembertModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
@@ -1362,7 +1362,7 @@ class CamembertForQuestionAnswering(CamembertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.camembert(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1414,7 +1414,7 @@ class CamembertForQuestionAnswering(CamembertPreTrainedModel):
 @add_start_docstrings(
     """CamemBERT Model with a `language modeling` head on top for CLM fine-tuning.""", CAMEMBERT_START_DOCSTRING
 )
-# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with Roberta->Camembert, self.roberta->self.camembert, ROBERTA->CAMEMBERT, roberta-base->camembert-base
+# Copied from transformers.models.roberta.modeling_roberta.RobertaForCausalLM with Roberta->Camembert, ROBERTA->CAMEMBERT, roberta-base->camembert-base
 class CamembertForCausalLM(CamembertPreTrainedModel):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
@@ -1426,7 +1426,7 @@ class CamembertForCausalLM(CamembertPreTrainedModel):
         if not config.is_decoder:
             logger.warning("If you want to use `CamembertLMHeadModel` as a standalone, add `is_decoder=True.`")
 
-        self.camembert = CamembertModel(config, add_pooling_layer=False)
+        self.roberta = CamembertModel(config, add_pooling_layer=False)
         self.lm_head = CamembertLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
@@ -1507,7 +1507,7 @@ class CamembertForCausalLM(CamembertPreTrainedModel):
         if labels is not None:
             use_cache = False
 
-        outputs = self.camembert(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
