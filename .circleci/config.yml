@@ -36,7 +36,7 @@ jobs:
                   path: test_preparation/test_list.txt
             - store_artifacts:
                   path: test_preparation/examples_test_list.txt
-            - run: python utils/create_circleci_config.py --fetcher_folder test_preparation
+            - run: python .circleci/create_circleci_config.py --fetcher_folder test_preparation
             - run: |
                   if [ ! -s test_preparation/generated_config.yml ]; then
                       echo "No tests to run, exiting early!"
@@ -56,13 +56,12 @@ jobs:
         parallelism: 1
         steps:
             - run: pip install --upgrade pip
-            - run: pip install GitPython
             - run: pip install .
             - run: |
                   mkdir test_preparation
                   echo "tests" > test_preparation/test_list.txt
                   echo "tests" > test_preparation/examples_test_list.txt
-            - run: python utils/create_circleci_config.py --fetcher_folder test_preparation
+            - run: python .circleci/create_circleci_config.py --fetcher_folder test_preparation
             - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
             - store_artifacts:
                   path: test_preparation/generated_config.txt
