@@ -45,7 +45,6 @@ if is_tf_available():
         WhisperTokenizer,
         set_seed,
     )
-    from transformers.generation_logits_process import LogitsProcessorList, SuppressBlank, SuppressTokens
     from transformers.models.whisper.modeling_tf_whisper import TFWhisperDecoder, TFWhisperEncoder
 
 
@@ -827,17 +826,10 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
         tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-large")
 
-        logits_processor = LogitsProcessorList(
-            [
-                SuppressBlank(tokenizer.encode(" "), 50256),
-                SuppressTokens(model.config.non_speech_tokens),
-            ]
-        )
         decoder_input_ids = tf.convert_to_tensor([[50258]], dtype=tf.int64)
         generated_ids = model.generate(
             input_features,
             do_sample=False,
-            logits_processor=logits_processor,
             decoder_input_ids=decoder_input_ids,
         )
         transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True, normalize=False)[0]
@@ -861,17 +853,10 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
         tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-large")
 
-        logits_processor = LogitsProcessorList(
-            [
-                SuppressBlank(tokenizer.encode(" "), 50256),
-                SuppressTokens(model.config.non_speech_tokens),
-            ]
-        )
         decoder_input_ids = tf.convert_to_tensor([[50258, 50359, 50266, 50363]], dtype=tf.int64)
         generated_ids = model.generate(
             input_features,
             do_sample=True,
-            logits_processor=logits_processor,
             decoder_input_ids=decoder_input_ids,
         )
         transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True, normalize=False)[0]
@@ -883,7 +868,6 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(
             input_features,
             do_sample=False,
-            logits_processor=logits_processor,
             decoder_input_ids=decoder_input_ids,
         )
         transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True, normalize=False)[0]
@@ -895,7 +879,6 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(
             input_features,
             do_sample=False,
-            logits_processor=logits_processor,
             decoder_input_ids=decoder_input_ids,
         )
         transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True, normalize=False)[0]
