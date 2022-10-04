@@ -72,12 +72,13 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
             contains the text queries for the corresponding image.
 
         Return:
-            A list of dictionaries containing prediction results, one dictionary per each input image. The dictionaries contain the
-            following keys:
+            A list of dictionaries containing prediction results, one dictionary per each input image. The dictionaries
+            contain the following keys:
 
             - **labels** (`List[str]`) -- The list of text queries corresponding to the found objects.
             - **scores** (`List[float]`) -- The list of scores corresponding to each object (between 0 and 1).
-            - **boxes** (`List[Dict[str,int]]`) -- A nested list of bounding boxes of all detected objects in image's original size. Each list contains a dictionary with `x_min`, `x_max`, `y_min`, `y_max` keys.
+            - **boxes** (`List[Dict[str,int]]`) -- A nested list of bounding boxes of all detected objects in image's
+              original size. Each list contains a dictionary with `x_min`, `x_max`, `y_min`, `y_max` keys.
         """
         if isinstance(text_queries, str) or (isinstance(text_queries, List) and not isinstance(text_queries[0], List)):
             if isinstance(images, (str, Image.Image)):
