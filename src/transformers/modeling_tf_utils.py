@@ -1058,9 +1058,9 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
 
     def build_from_serving_sig_and_dummies(self):
         """
-        A replacement for just calling model(model.dummy_inputs). This method first uses self.build() to set
-        more flexible input shapes that are usable for serving, then calls model(model.dummy_inputs) to actually
-        build the model.
+        A replacement for just calling model(model.dummy_inputs). This method first uses self.build() to set more
+        flexible input shapes that are usable for serving, then calls model(model.dummy_inputs) to actually build the
+        model.
         """
         if not hasattr(self, "serving") or not hasattr(self.serving, "input_signature"):
             return
