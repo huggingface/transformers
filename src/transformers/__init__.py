@@ -1923,7 +1923,6 @@ else:
             "SwitchTransformersForConditionalGeneration",
             "SwitchTransformersModel",
             "SwitchTransformersPreTrainedModel",
-            "load_tf_weights_in_switchtransformers",
         ]
     )
     _import_structure["models.trajectory_transformer"].extend(
@@ -4616,7 +4615,6 @@ if TYPE_CHECKING:
             SwitchTransformersForConditionalGeneration,
             SwitchTransformersModel,
             SwitchTransformersPreTrainedModel,
-            load_tf_weights_in_switchtransformers,
         )
         from .models.t5 import (
             T5_PRETRAINED_MODEL_ARCHIVE_LIST,

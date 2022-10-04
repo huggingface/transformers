@@ -65,7 +65,6 @@ else:
         "SwitchTransformersForConditionalGeneration",
         "SwitchTransformersModel",
         "SwitchTransformersPreTrainedModel",
-        "load_tf_weights_in_switchtransformers",
     ]
 
 
@@ -118,7 +117,6 @@ if TYPE_CHECKING:
             SwitchTransformersForConditionalGeneration,
             SwitchTransformersModel,
             SwitchTransformersPreTrainedModel,
-            load_tf_weights_in_switchtransformers,
         )
 
     try:
