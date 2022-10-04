@@ -275,7 +275,7 @@ except Exception:
     pass
 
 ALL_LAYERNORM_LAYERS.append(SwitchTransformersLayerNorm)
-
+# TODO: this has to be changed with the experts
 
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->SwitchTransformers
 class SwitchTransformersDenseActDense(nn.Module):
