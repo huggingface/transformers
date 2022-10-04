@@ -32,11 +32,6 @@ jobs:
                   else
                       touch test_preparation/examples_test_list.txt
                   fi
-            - persist_to_workspace:
-                  root: test_preparation/
-                  paths:
-                      test_list.txt
-                      examples_test_list.txt
             - store_artifacts:
                   path: test_preparation/test_list.txt
             - store_artifacts:
@@ -47,6 +42,27 @@ jobs:
                       echo "No tests to run, exiting early!"
                       circleci-agent step halt
                   fi
+            - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
+            - store_artifacts:
+                  path: test_preparation/generated_config.txt
+            - continuation/continue:
+                  configuration_path: test_preparation/generated_config.yml
+
+    # To run all tests for the nightly build
+    fetch_all_tests:
+        working_directory: ~/transformers
+        docker:
+            - image: cimg/python:3.7.12
+        parallelism: 1
+        steps:
+            - run: pip install --upgrade pip
+            - run: pip install GitPython
+            - run: pip install .
+            - run: |
+                  mkdir test_preparation
+                  echo "tests" > test_preparation/test_list.txt
+                  echo "tests" > test_preparation/examples_test_list.txt
+            - run: python utils/create_circleci_config.py --fetcher_folder test_preparation
             - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
             - store_artifacts:
                   path: test_preparation/generated_config.txt
