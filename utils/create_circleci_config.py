@@ -91,8 +91,7 @@ class CircleCIJob:
                 }
             }
         )
-        steps.append({"run": "cat test_preparation/test_list.txt"})
-        steps.append({"run": "cat test_preparation/examples_test_list.txt"})
+        steps.append({"run": "echo << pipeline.parameters.tests_to_run >>"})
 
         all_options = {**COMMON_PYTEST_OPTIONS, **self.pytest_options}
         pytest_flags = [f"--{key}={value}" if value is not None else f"-{key}" for key, value in all_options.items()]
@@ -101,7 +100,7 @@ class CircleCIJob:
         )
         test_command = f"python -m pytest -n {self.pytest_num_workers} " + " ".join(pytest_flags)
         if self.tests_to_run is None:
-            test_command += " $(cat test_preparation/test_list.txt)"
+            test_command += " << pipeline.parameters.tests_to_run >>"
         else:
             test_command += " " + " ".join(self.tests_to_run)
         if self.marker is not None:
@@ -326,14 +325,21 @@ def create_circleci_config(folder=None):
         folder = os.getcwd()
     jobs = []
     test_file = os.path.join(folder, "test_list.txt")
-    example_file = os.path.join(folder, "examples_test_list.txt")
-    if os.path.exists(test_file) and os.path.getsize(test_file) > 0:
+    if os.path.exists(test_file):
+        with open(test_file) as f:
+            test_list = f.read()
+    else:
+        test_list = []
+    if len(test_list) > 0:
         jobs.extend(REGULAR_TESTS)
+
+    example_file = os.path.join(folder, "examples_test_list.txt")
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
         jobs.extend(EXAMPLES_TESTS)
 
     if len(jobs) > 0:
         config = {"version": "2.1"}
+        config["parameters"] = {"tests_to_run": {"type": "string", "default": test_list}}
         config["jobs"] = {j.job_name: j.to_dict() for j in jobs}
         config["workflows"] = {"version": 2, "run_tests": {"jobs": [j.job_name for j in jobs]}}
         with open(os.path.join(folder, "generated_config.yml"), "w") as f:
