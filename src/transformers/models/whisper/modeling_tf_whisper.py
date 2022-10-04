@@ -958,7 +958,6 @@ class TFWhisperDecoder(TFWhisperPreTrainedModel):
     WHISPER_START_DOCSTRING,
 )
 class TFWhisperMainLayer(tf.keras.layers.Layer):
-    _keys_to_ignore_on_load_missing = [r"proj_out.weight"]
     config_class = WhisperConfig
 
     def __init__(self, config: WhisperConfig, **kwargs):
@@ -1081,7 +1080,6 @@ class TFWhisperMainLayer(tf.keras.layers.Layer):
     WHISPER_START_DOCSTRING,
 )
 class TFWhisperModel(TFWhisperPreTrainedModel):
-    _keys_to_ignore_on_load_missing = [r"proj_out.weight"]
 
     def __init__(self, config: WhisperConfig, **kwargs):
         super().__init__(config, **kwargs)
@@ -1184,6 +1182,13 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
         )
 
 
+class ProjectionLayer(tf.keras.layers.Layer):
+    """
+    Linear layer
+    """
+
+
+
 @add_start_docstrings(
     "The Whisper Model with a language modeling head. Can be used for summarization.",
     WHISPER_START_DOCSTRING,
@@ -1202,7 +1207,6 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
     def __init__(self, config: WhisperConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = TFWhisperMainLayer(config, name="model")
-        self.proj_out = tf.keras.layers.Dense(config.vocab_size, use_bias=False, name="proj_out")
         self.supports_xla_generation = False
 
     def get_encoder(self):
@@ -1212,10 +1216,14 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         return self.model.get_decoder()
 
     def get_output_embeddings(self):
-        return self.proj_out
+        return self.get_input_embeddings()
 
-    def set_output_embeddings(self, new_embeddings):
-        self.proj_out = new_embeddings
+    def set_output_embeddings(self, value):
+        self.set_input_embeddings(value)
+
+    def resize_token_embeddings(self, new_num_tokens: int) -> tf.Variable:
+        new_embeddings = super().resize_token_embeddings(new_num_tokens)
+        return new_embeddings
 
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=TFSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1291,7 +1299,8 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        lm_logits = self.proj_out(outputs[0])
+        # Decoder and encoder embeddings are tied
+        lm_logits = tf.matmul(outputs[0], self.model.get_input_embeddings().weights, transpose_b=True)
 
         loss = None if labels is None else self.hf_compute_loss(labels, lm_logits)
 
