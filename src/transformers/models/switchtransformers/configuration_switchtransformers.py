@@ -60,6 +60,16 @@ class SwitchTransformersConfig(PretrainedConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         num_experts (`int`, *optional*, defaults to 8):
             Number of experts for each SwitchTransformer layer.
+        router_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the router.
+        router_jitter_noise (`float`, *optional*, defaults to 0.1):
+            Amount of noise to add to the router.
+        router_ignore_padding_tokens (`bool`, *optional*, defaults to `False`):
+            Whether to ignore padding tokens when routing.
+        batch_prioritized_routing (`bool`, *optional*, defaults to `False`):
+            Whether to use batch prioritized routing.
+        num_selected_experts (`int`, *optional*, defaults to 2):
+            Number of experts to select for each token.
         relative_attention_num_buckets (`int`, *optional*, defaults to 32):
             The number of buckets to use for each attention layer.
         relative_attention_max_distance (`int`, *optional*, defaults to 128):
@@ -91,6 +101,11 @@ class SwitchTransformersConfig(PretrainedConfig):
         num_decoder_layers=None,
         num_heads=8,
         num_experts=8,
+        router_bias=False,
+        router_jitter_noise=0.01,
+        num_selected_experts=2,
+        router_ignore_padding_tokens=False,
+        batch_prioritized_routing=False,
         relative_attention_num_buckets=32,
         relative_attention_max_distance=128,
         dropout_rate=0.1,
@@ -113,8 +128,16 @@ class SwitchTransformersConfig(PretrainedConfig):
         )  # default = symmetry
         self.num_heads = num_heads
         self.num_experts = num_experts
+        self.router_bias = router_bias
+        self.router_jitter_noise = router_jitter_noise
+
+        self.router_ignore_padding_tokens = router_ignore_padding_tokens
         self.relative_attention_num_buckets = relative_attention_num_buckets
         self.relative_attention_max_distance = relative_attention_max_distance
+        self.batch_prioritized_routing = batch_prioritized_routing
+
+        self.num_selected_experts = num_selected_experts
+
         self.dropout_rate = dropout_rate
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_factor = initializer_factor

@@ -37,7 +37,7 @@ if is_torch_available():
     from transformers.models.switchtransformers.modeling_switchtransformers import (
         SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-    from transformers.models.switchtransformers.router import _load_balancing_loss, _router_z_loss
+    from transformers.models.switchtransformers.router import load_balancing_loss_func, router_z_loss_func
 
 
 class SwitchTransformersModelTester:
@@ -886,7 +886,7 @@ class SwitchTransformerRouterTest(unittest.TestCase):
 
         expert_indices = torch.Tensor([[0], [1], [1], [0], [0]]).to(torch.int32)
 
-        loss = _load_balancing_loss(router_probs, expert_indices)
+        loss = load_balancing_loss_func(router_probs, expert_indices)
         self.assertAlmostEqual(loss.item(), 0.8741045, places=5)
 
     def test_equivalency_router_z_loss(self):
@@ -915,5 +915,5 @@ class SwitchTransformerRouterTest(unittest.TestCase):
             ]
         )
 
-        loss = _router_z_loss(logits)
+        loss = router_z_loss_func(logits)
         self.assertAlmostEqual(loss.item(), 13.786719, places=5)
