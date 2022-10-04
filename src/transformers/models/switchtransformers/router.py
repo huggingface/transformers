@@ -18,9 +18,11 @@ from typing import Any, Tuple
 import torch
 import torch.nn as nn
 
+
 # Output classes
 
 RouterOutput = Any
+
 
 @dataclass
 class RouterIndices:
@@ -40,7 +42,8 @@ class RouterIndices:
     dispatch_indices: torch.Tensor
     combine_weights: torch.Tensor
     auxiliary_loss: float
-    router_z_loss: float = 0.
+    router_z_loss: float = 0.0
+
 
 @dataclass
 class RouterMask:
@@ -60,9 +63,11 @@ class RouterMask:
     dispatch_mask: torch.Tensor
     combine_array: torch.Tensor
     auxiliary_loss: float
-    router_z_loss: float = 0.
+    router_z_loss: float = 0.0
+
 
 # Router loss
+
 
 def _router_z_loss(router_logits: torch.Tensor) -> float:
     r"""
@@ -107,7 +112,7 @@ def _load_balancing_loss(router_probs: torch.Tensor, expert_indices: torch.Tenso
     if expert_indices.dtype != torch.int64:
         expert_indices = expert_indices.to(torch.int64)
     expert_mask = torch.nn.functional.one_hot(expert_indices, num_experts)
-    
+
     # For a given token, determine if it was routed to a given expert.
     # Shape: [num_groups, tokens_per_group, num_experts]
     expert_mask = torch.max(expert_mask, axis=-2).values
@@ -115,11 +120,13 @@ def _load_balancing_loss(router_probs: torch.Tensor, expert_indices: torch.Tenso
     # cast to float32 otherwise mean will fail
     expert_mask = expert_mask.to(torch.float32)
     tokens_per_group_and_expert = torch.mean(expert_mask, axis=-2)
-    
+
     router_prob_per_group_and_expert = torch.mean(router_probs, axis=-2)
     return torch.mean(tokens_per_group_and_expert * router_prob_per_group_and_expert) * (num_experts**2)
 
+
 # Router classes
+
 
 class Router(nn.Module):
     """
@@ -143,8 +150,10 @@ class Router(nn.Module):
         self.router_weights = nn.Linear(config.hidden_size, self.num_experts, bias=config.router_bias)
         self.jitter_noise = config.router_jitter_noise
         self.ignore_padding_tokens = config.router_ignore_padding_tokens
-    
-    def _compute_router_probabilities(self, token_inputs: torch.Tensor, num_experts: int, apply_jitter: bool) -> Tuple[torch.Tensor, torch.Tensor]:
+
+    def _compute_router_probabilities(
+        self, token_inputs: torch.Tensor, num_experts: int, apply_jitter: bool
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         r"""
         Computes router probabilities from input tokens.
 
@@ -167,10 +176,8 @@ class Router(nn.Module):
 
         if apply_jitter and self.jitter_noise > 0:
             token_inputs *= torch.random.uniform(
-                token_inputs.shape,
-                token_inputs.dtype,
-                minval=1.0 - self.jitter_noise,
-                maxval=1.0 + self.jitter_noise)
+                token_inputs.shape, token_inputs.dtype, minval=1.0 - self.jitter_noise, maxval=1.0 + self.jitter_noise
+            )
 
         # Shape: [num_groups, tokens_per_group, num_experts]
         router_logits = self.router_weights(token_inputs, num_experts)
@@ -179,37 +186,32 @@ class Router(nn.Module):
 
         return router_probabilities, router_logits
 
-
     def forward(self, token_inputs: torch.Tensor, expert_capacity: int, apply_jitter: bool = True) -> RouterOutput:
         r"""
         Args:
         Computes dispatch and combine torch.Tensors for routing to experts.
-            token_inputs: <float>[num_groups, tokens_per_group, hidden_dim] inputs to
-            send to experts.
-            num_experts: Number of experts.
-            expert_capacity: Each group will send this many tokens to each expert.
-            apply_jitter: If true, apply jitter noise during routing.
+            token_inputs: <float>[num_groups, tokens_per_group, hidden_dim] inputs to send to experts. num_experts:
+            Number of experts. expert_capacity: Each group will send this many tokens to each expert. apply_jitter: If
+            true, apply jitter noise during routing.
         Returns:
             Router indices or mask torch.Tensors (depending on router type).
         """
         router_probs, router_logits = self._compute_router_probabilities(token_inputs, self.num_experts, apply_jitter)
 
+        # Flax code for reference
+        # if self.ignore_padding_tokens:
+        #     # To identify non-padding tokens, we rely on the fact that padding tokens
+        #     # in the inputs have already been masked in the default T5 architecture.
+        #     # See
+        #     # https://github.com/google/flaxformer/blob/9712a16/flaxformer/architectures/t5/t5_architecture.py#L315
+        #     # and
+        #     # https://github.com/google/flaxformer/blob/9712a16/flaxformer/architectures/t5/t5_architecture.py#L603.
+        #     padding_mask = jnp.torch.Tensor((jnp.sum(jnp.abs(token_inputs), axis=-1) > 0), dtype=token_inputs.dtype)
+        #     router_logits *= jnp.expand_dims(padding_mask, axis=-1)
+        # else:
+        #     padding_mask = None
 
-        if self.ignore_padding_tokens:
-            # To identify non-padding tokens, we rely on the fact that padding tokens
-            # in the inputs have already been masked in the default T5 architecture.
-            # See
-            # https://github.com/google/flaxformer/blob/9712a16/flaxformer/architectures/t5/t5_architecture.py#L315
-            # and
-            # https://github.com/google/flaxformer/blob/9712a16/flaxformer/architectures/t5/t5_architecture.py#L603.
-            padding_mask = jnp.torch.Tensor((jnp.sum(jnp.abs(token_inputs), axis=-1) > 0),
-                                    dtype=token_inputs.dtype)
-            router_logits *= jnp.expand_dims(padding_mask, axis=-1)
-        else:
-            padding_mask = None
+        # instructions = self._compute_routing_instructions(router_probs, padding_mask, expert_capacity)
 
-        instructions = self._compute_routing_instructions(router_probs,
-                                                            padding_mask,
-                                                            expert_capacity)
-
-        return instructions.replace(router_z_loss=_router_z_loss(router_logits))
+        # return instructions.replace(router_z_loss=_router_z_loss(router_logits))
+        pass

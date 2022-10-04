@@ -68,19 +68,6 @@ else:
         "load_tf_weights_in_switchtransformers",
     ]
 
-try:
-    if not is_tf_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_tf_switchtransformers"] = [
-        "TF_SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TFSwitchTransformersEncoderModel",
-        "TFSwitchTransformersForConditionalGeneration",
-        "TFSwitchTransformersModel",
-        "TFSwitchTransformersPreTrainedModel",
-    ]
 
 try:
     if not is_flax_available():
@@ -132,20 +119,6 @@ if TYPE_CHECKING:
             SwitchTransformersModel,
             SwitchTransformersPreTrainedModel,
             load_tf_weights_in_switchtransformers,
-        )
-
-    try:
-        if not is_tf_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_tf_switchtransformers import (
-            TF_SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TFSwitchTransformersEncoderModel,
-            TFSwitchTransformersForConditionalGeneration,
-            TFSwitchTransformersModel,
-            TFSwitchTransformersPreTrainedModel,
         )
 
     try:
