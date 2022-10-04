@@ -3207,7 +3207,7 @@ class Mask2FormerModel(Mask2FormerPreTrainedModel):
             hidden_states = encoder_hidden_states + pixel_decoder_hidden_states + transformer_decoder_hidden_states
 
         output = Mask2FormerModelOutput(
-            encoder_last_hidden_state=multi_scale_features,
+            encoder_last_hidden_state=pixel_level_module_output.encoder_last_hidden_state,
             pixel_decoder_last_hidden_state=pixel_embeddings,
             transformer_decoder_last_hidden_state=transformer_module_output.last_hidden_state,
             encoder_hidden_states=encoder_hidden_states,
