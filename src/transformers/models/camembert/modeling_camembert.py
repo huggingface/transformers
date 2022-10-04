@@ -937,7 +937,7 @@ class CamembertForMaskedLM(CamembertPreTrainedModel):
                 "bi-directional self-attention."
             )
 
-        self.camembert = CamembertModel(config, add_pooling_layer=False)
+        self.roberta = CamembertModel(config, add_pooling_layer=False)
         self.lm_head = CamembertLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
