@@ -19,16 +19,16 @@ import random
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
-import tensorflow as tf
 import numpy as np
+import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import TFBaseModelOutputWithPastAndCrossAttentions
 
 # Public API
 from ...modeling_tf_utils import (
-    TFPreTrainedModel,
     TFModelInputType,
+    TFPreTrainedModel,
     TFSharedEmbeddings,
     TFWrappedEmbeddings,
     get_initializer,
