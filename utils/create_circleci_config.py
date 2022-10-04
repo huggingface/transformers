@@ -330,7 +330,7 @@ def create_circleci_config(folder=None):
     if os.path.exists(test_file) and os.path.getsize(test_file) > 0:
         jobs.extend(REGULAR_TESTS)
     if os.path.exists(example_file) and os.path.getsize(example_file) > 0:
-        jobs.extend(REGULAR_TESTS)
+        jobs.extend(EXAMPLES_TESTS)
 
     if len(jobs) > 0:
         config = {"version": "2.1"}
