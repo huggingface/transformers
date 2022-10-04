@@ -67,7 +67,7 @@ class WhisperProcessor(ProcessorMixin):
                 )
             forced_decoder_tokens += f"<|{language}|>"
 
-        forced_decoder_tokens += "<|notimestamps|>" if no_timestamps else None
+        forced_decoder_tokens += "<|notimestamps|>" if no_timestamps else ""
         ids = self.tokenizer.encode(forced_decoder_tokens)
         forced_decoder_ids = [ (rank +1 ,token) for rank,token in enumerate(ids)]
         return forced_decoder_ids
