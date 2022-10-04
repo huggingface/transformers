@@ -360,6 +360,13 @@ class SqueezeBertTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class SwitchTransformersTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class T5TokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 

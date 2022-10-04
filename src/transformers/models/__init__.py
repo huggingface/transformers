@@ -136,6 +136,7 @@ from . import (
     squeezebert,
     swin,
     swinv2,
+    switchtransformers,
     t5,
     tapas,
     tapex,

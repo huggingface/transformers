@@ -74,6 +74,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("segformer", "TFSegformerModel"),
         ("speech_to_text", "TFSpeech2TextModel"),
         ("swin", "TFSwinModel"),
+        ("switchtransformers", "TFSwitchTransformersModel"),
         ("t5", "TFT5Model"),
         ("tapas", "TFTapasModel"),
         ("transfo-xl", "TFTransfoXLModel"),
@@ -106,6 +107,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("mpnet", "TFMPNetForMaskedLM"),
         ("openai-gpt", "TFOpenAIGPTLMHeadModel"),
         ("roberta", "TFRobertaForMaskedLM"),
+        ("switchtransformers", "TFSwitchTransformersForConditionalGeneration"),
         ("t5", "TFT5ForConditionalGeneration"),
         ("tapas", "TFTapasForMaskedLM"),
         ("transfo-xl", "TFTransfoXLLMHeadModel"),
@@ -142,6 +144,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("roberta", "TFRobertaForMaskedLM"),
         ("roformer", "TFRoFormerForMaskedLM"),
         ("speech_to_text", "TFSpeech2TextForConditionalGeneration"),
+        ("switchtransformers", "TFSwitchTransformersForConditionalGeneration"),
         ("t5", "TFT5ForConditionalGeneration"),
         ("tapas", "TFTapasForMaskedLM"),
         ("transfo-xl", "TFTransfoXLLMHeadModel"),
@@ -246,6 +249,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("mbart", "TFMBartForConditionalGeneration"),
         ("mt5", "TFMT5ForConditionalGeneration"),
         ("pegasus", "TFPegasusForConditionalGeneration"),
+        ("switchtransformers", "TFSwitchTransformersForConditionalGeneration"),
         ("t5", "TFT5ForConditionalGeneration"),
     ]
 )
