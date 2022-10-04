@@ -41,7 +41,7 @@ class WhisperProcessor(ProcessorMixin):
         self.current_processor = self.feature_extractor
         self._in_target_context_manager = False
 
-    def _get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
+    def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         forced_decoder_tokens = ""
 
         if task is not None:
