@@ -1151,7 +1151,9 @@ class FlaxSwitchTransformersPreTrainedModel(FlaxPreTrainedModel):
         )
 
     @add_start_docstrings(SWITCHTRANSFORMERS_DECODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=SwitchTransformersConfig)
+    @replace_return_docstrings(
+        output_type=FlaxBaseModelOutputWithPastAndCrossAttentions, config_class=SwitchTransformersConfig
+    )
     def decode(
         self,
         decoder_input_ids,
@@ -1423,12 +1425,17 @@ FLAX_SWITCHTRANSFORMERS_MODEL_DOCSTRING = """
 """
 
 
-overwrite_call_docstring(FlaxSwitchTransformersModel, SWITCHTRANSFORMERS_INPUTS_DOCSTRING + FLAX_SWITCHTRANSFORMERS_MODEL_DOCSTRING)
-append_replace_return_docstrings(FlaxSwitchTransformersModel, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+overwrite_call_docstring(
+    FlaxSwitchTransformersModel, SWITCHTRANSFORMERS_INPUTS_DOCSTRING + FLAX_SWITCHTRANSFORMERS_MODEL_DOCSTRING
+)
+append_replace_return_docstrings(
+    FlaxSwitchTransformersModel, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC
+)
 
 
 @add_start_docstrings(
-    "The bare SWITCHTRANSFORMERS Model transformer outputting encoder's raw hidden-states without any specific head on top.",
+    "The bare SWITCHTRANSFORMERS Model transformer outputting encoder's raw hidden-states without any specific head on"
+    " top.",
     SWITCHTRANSFORMERS_START_DOCSTRING,
 )
 # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5EncoderModule with T5->SwitchTransformers
@@ -1518,7 +1525,9 @@ class FlaxSwitchTransformersEncoderModel(FlaxSwitchTransformersPreTrainedModel):
         )
 
 
-@add_start_docstrings("""SWITCHTRANSFORMERS Model with a `language modeling` head on top.""", SWITCHTRANSFORMERS_START_DOCSTRING)
+@add_start_docstrings(
+    """SWITCHTRANSFORMERS Model with a `language modeling` head on top.""", SWITCHTRANSFORMERS_START_DOCSTRING
+)
 # Copied from transformers.models.t5.modeling_flax_t5.FlaxT5ForConditionalGenerationModule with T5->SwitchTransformers
 class FlaxSwitchTransformersForConditionalGenerationModule(nn.Module):
     config: SwitchTransformersConfig
@@ -1633,7 +1642,9 @@ class FlaxSwitchTransformersForConditionalGeneration(FlaxSwitchTransformersPreTr
     module_class = FlaxSwitchTransformersForConditionalGenerationModule
 
     @add_start_docstrings(SWITCHTRANSFORMERS_DECODE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=SwitchTransformersConfig)
+    @replace_return_docstrings(
+        output_type=FlaxCausalLMOutputWithCrossAttentions, config_class=SwitchTransformersConfig
+    )
     def decode(
         self,
         decoder_input_ids,
@@ -1819,7 +1830,8 @@ FLAX_SWITCHTRANSFORMERS_CONDITIONAL_GENERATION_DOCSTRING = """
 
 
 overwrite_call_docstring(
-    FlaxSwitchTransformersForConditionalGeneration, SWITCHTRANSFORMERS_INPUTS_DOCSTRING + FLAX_SWITCHTRANSFORMERS_CONDITIONAL_GENERATION_DOCSTRING
+    FlaxSwitchTransformersForConditionalGeneration,
+    SWITCHTRANSFORMERS_INPUTS_DOCSTRING + FLAX_SWITCHTRANSFORMERS_CONDITIONAL_GENERATION_DOCSTRING,
 )
 append_replace_return_docstrings(
     FlaxSwitchTransformersForConditionalGeneration, output_type=FlaxSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC

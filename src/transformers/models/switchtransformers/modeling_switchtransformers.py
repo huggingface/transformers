@@ -64,7 +64,6 @@ SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-
 ####################################################
 # This is a conversion method from TF 1.0 to PyTorch
 # More details: https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28
@@ -275,8 +274,9 @@ except Exception:
     pass
 
 ALL_LAYERNORM_LAYERS.append(SwitchTransformersLayerNorm)
-# TODO: this has to be changed with the experts
 
+
+# TODO: this has to be changed with the experts
 # Copied from transformers.models.t5.modeling_t5.T5DenseActDense with T5->SwitchTransformers
 class SwitchTransformersDenseActDense(nn.Module):
     def __init__(self, config: SwitchTransformersConfig):
@@ -314,9 +314,9 @@ class SwitchTransformersDenseGatedActDense(nn.Module):
 
 
 # TODO: Change it here to adapt it from the paper, the FF layer contains experts
-# an expert is a FF layer with multiple sub-FF layers inside. 
-# This class should also contain a router class 
-# check flaxformer/architecture/moe/router.py : https://github.com/google/flaxformer/blob/main/flaxformer/architectures/moe/routing.py 
+# an expert is a FF layer with multiple sub-FF layers inside.
+# This class should also contain a router class
+# check flaxformer/architecture/moe/router.py : https://github.com/google/flaxformer/blob/main/flaxformer/architectures/moe/routing.py
 class SwitchTransformersLayerFF(nn.Module):
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__()
@@ -1482,7 +1482,9 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         )
 
 
-@add_start_docstrings("""SWITCHTRANSFORMERS Model with a `language modeling` head on top.""", SWITCHTRANSFORMERS_START_DOCSTRING)
+@add_start_docstrings(
+    """SWITCHTRANSFORMERS Model with a `language modeling` head on top.""", SWITCHTRANSFORMERS_START_DOCSTRING
+)
 class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedModel):
     _keys_to_ignore_on_load_missing = [
         r"encoder.embed_tokens.weight",
@@ -1774,7 +1776,8 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
 
 @add_start_docstrings(
-    "The bare SWITCHTRANSFORMERS Model transformer outputting encoder's raw hidden-states without any specific head on top.",
+    "The bare SWITCHTRANSFORMERS Model transformer outputting encoder's raw hidden-states without any specific head on"
+    " top.",
     SWITCHTRANSFORMERS_START_DOCSTRING,
 )
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):

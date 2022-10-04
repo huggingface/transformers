@@ -26,7 +26,13 @@ from ...test_modeling_tf_common import TFModelTesterMixin, ids_tensor, random_at
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import BySwitchTransformersTokenizer, SwitchTransformersTokenizer, TFSwitchTransformersEncoderModel, TFSwitchTransformersForConditionalGeneration, TFSwitchTransformersModel
+    from transformers import (
+        BySwitchTransformersTokenizer,
+        SwitchTransformersTokenizer,
+        TFSwitchTransformersEncoderModel,
+        TFSwitchTransformersForConditionalGeneration,
+        TFSwitchTransformersModel,
+    )
 
 
 class TFSwitchTransformersModelTester:
@@ -115,7 +121,9 @@ class TFSwitchTransformersModelTester:
 
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
-    def create_and_check_switchtransformers_decoder_model_past(self, config, input_ids, decoder_input_ids, attention_mask):
+    def create_and_check_switchtransformers_decoder_model_past(
+        self, config, input_ids, decoder_input_ids, attention_mask
+    ):
         model = TFSwitchTransformersModel(config=config).get_decoder()
 
         input_ids = input_ids[:1, :]
@@ -242,7 +250,9 @@ class TFSwitchTransformersModelTester:
 class TFSwitchTransformersModelTest(TFModelTesterMixin, unittest.TestCase):
 
     is_encoder_decoder = True
-    all_model_classes = (TFSwitchTransformersModel, TFSwitchTransformersForConditionalGeneration) if is_tf_available() else ()
+    all_model_classes = (
+        (TFSwitchTransformersModel, TFSwitchTransformersForConditionalGeneration) if is_tf_available() else ()
+    )
     all_generative_model_classes = (TFSwitchTransformersForConditionalGeneration,) if is_tf_available() else ()
     test_onnx = False
 
@@ -702,7 +712,9 @@ class TFSwitchTransformersModelIntegrationTests(unittest.TestCase):
         >>> score = switchtransformers_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = TFSwitchTransformersForConditionalGeneration.from_pretrained("google/byybelkada/switchtransformers-base")
+        model = TFSwitchTransformersForConditionalGeneration.from_pretrained(
+            "google/byybelkada/switchtransformers-base"
+        )
         tokenizer = BySwitchTransformersTokenizer.from_pretrained("google/byybelkada/switchtransformers-base")
 
         input_ids = tokenizer("Hello there", return_tensors="tf").input_ids

@@ -17,7 +17,11 @@
 
 import argparse
 
-from transformers import SwitchTransformersConfig, SwitchTransformersForConditionalGeneration, load_tf_weights_in_switchtransformers
+from transformers import (
+    SwitchTransformersConfig,
+    SwitchTransformersForConditionalGeneration,
+    load_tf_weights_in_switchtransformers,
+)
 from transformers.utils import logging
 
 
@@ -50,7 +54,8 @@ if __name__ == "__main__":
         type=str,
         required=True,
         help=(
-            "The config json file corresponding to the pre-trained SwitchTransformers model. \nThis specifies the model architecture."
+            "The config json file corresponding to the pre-trained SwitchTransformers model. \nThis specifies the"
+            " model architecture."
         ),
     )
     parser.add_argument(

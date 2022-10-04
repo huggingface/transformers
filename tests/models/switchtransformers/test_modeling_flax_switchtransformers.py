@@ -46,7 +46,12 @@ if is_flax_available():
     from flax.core.frozen_dict import unfreeze
     from flax.training.common_utils import onehot
     from flax.traverse_util import flatten_dict
-    from transformers import FLAX_MODEL_MAPPING, BySwitchTransformersTokenizer, SwitchTransformersConfig, SwitchTransformersTokenizer
+    from transformers import (
+        FLAX_MODEL_MAPPING,
+        BySwitchTransformersTokenizer,
+        SwitchTransformersConfig,
+        SwitchTransformersTokenizer,
+    )
     from transformers.modeling_flax_pytorch_utils import load_flax_weights_in_pytorch_model
     from transformers.models.switchtransformers.modeling_flax_switchtransformers import (
         FlaxSwitchTransformersEncoderModel,
@@ -229,7 +234,9 @@ class FlaxSwitchTransformersModelTester:
 @require_flax
 class FlaxSwitchTransformersModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
 
-    all_model_classes = (FlaxSwitchTransformersModel, FlaxSwitchTransformersForConditionalGeneration) if is_flax_available() else ()
+    all_model_classes = (
+        (FlaxSwitchTransformersModel, FlaxSwitchTransformersForConditionalGeneration) if is_flax_available() else ()
+    )
     all_generative_model_classes = (FlaxSwitchTransformersForConditionalGeneration,) if is_flax_available() else ()
     is_encoder_decoder = True
 
@@ -834,7 +841,9 @@ class FlaxSwitchTransformersModelIntegrationTests(unittest.TestCase):
         >>> score = switchtransformers_model.score(inputs=["Hello there"], targets=["Hi I am"], vocabulary=vocab)
         """
 
-        model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained("google/byybelkada/switchtransformers-base")
+        model = FlaxSwitchTransformersForConditionalGeneration.from_pretrained(
+            "google/byybelkada/switchtransformers-base"
+        )
         tokenizer = BySwitchTransformersTokenizer.from_pretrained("google/byybelkada/switchtransformers-base")
 
         input_ids = tokenizer("Hello there", return_tensors="np").input_ids

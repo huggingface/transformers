@@ -29,7 +29,13 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_switchtransformers": ["SWITCHTRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwitchTransformersConfig", "SwitchTransformersOnnxConfig"]}
+_import_structure = {
+    "configuration_switchtransformers": [
+        "SWITCHTRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "SwitchTransformersConfig",
+        "SwitchTransformersOnnxConfig",
+    ]
+}
 
 try:
     if not is_sentencepiece_available():
@@ -91,7 +97,11 @@ else:
 
 
 if TYPE_CHECKING:
-    from .configuration_switchtransformers import SWITCHTRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP, SwitchTransformersConfig, SwitchTransformersOnnxConfig
+    from .configuration_switchtransformers import (
+        SWITCHTRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        SwitchTransformersConfig,
+        SwitchTransformersOnnxConfig,
+    )
 
     try:
         if not is_sentencepiece_available():

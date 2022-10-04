@@ -23,9 +23,10 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 SWITCHTRANSFORMERS_PRETRAINED_CONFIG_ARCHIVE_MAP = {
-    "ybelkada/switchtransformers-base": "https://huggingface.co/ybelkada/switchtransformers-base/resolve/main/config.json",
+    "ybelkada/switchtransformers-base": (
+        "https://huggingface.co/ybelkada/switchtransformers-base/resolve/main/config.json"
+    ),
 }
-
 
 
 class SwitchTransformersConfig(PretrainedConfig):

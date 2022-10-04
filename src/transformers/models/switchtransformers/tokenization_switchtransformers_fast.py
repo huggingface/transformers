@@ -36,14 +36,18 @@ VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
-        "ybelkada/switchtransformers-base": "https://huggingface.co/ybelkada/switchtransformers-base/resolve/main/spiece.model",
+        "ybelkada/switchtransformers-base": (
+            "https://huggingface.co/ybelkada/switchtransformers-base/resolve/main/spiece.model"
+        ),
         "switchtransformers-base": "https://huggingface.co/switchtransformers-base/resolve/main/spiece.model",
         "switchtransformers-large": "https://huggingface.co/switchtransformers-large/resolve/main/spiece.model",
         "switchtransformers-3b": "https://huggingface.co/switchtransformers-3b/resolve/main/spiece.model",
         "switchtransformers-11b": "https://huggingface.co/switchtransformers-11b/resolve/main/spiece.model",
     },
     "tokenizer_file": {
-        "ybelkada/switchtransformers-base": "https://huggingface.co/ybelkada/switchtransformers-base/resolve/main/tokenizer.json",
+        "ybelkada/switchtransformers-base": (
+            "https://huggingface.co/ybelkada/switchtransformers-base/resolve/main/tokenizer.json"
+        ),
         "switchtransformers-base": "https://huggingface.co/switchtransformers-base/resolve/main/tokenizer.json",
         "switchtransformers-large": "https://huggingface.co/switchtransformers-large/resolve/main/tokenizer.json",
         "switchtransformers-3b": "https://huggingface.co/switchtransformers-3b/resolve/main/tokenizer.json",
@@ -127,8 +131,8 @@ class SwitchTransformersTokenizerFast(PreTrainedTokenizerFast):
             if extra_tokens != extra_ids:
                 raise ValueError(
                     f"Both extra_ids ({extra_ids}) and additional_special_tokens ({additional_special_tokens}) are"
-                    " provided to SwitchTransformersTokenizer. In this case the additional_special_tokens must include the extra_ids"
-                    " tokens"
+                    " provided to SwitchTransformersTokenizer. In this case the additional_special_tokens must"
+                    " include the extra_ids tokens"
                 )
 
         super().__init__(
@@ -147,9 +151,13 @@ class SwitchTransformersTokenizerFast(PreTrainedTokenizerFast):
         self._extra_ids = extra_ids
 
     @staticmethod
-    def _eventually_correct_switchtransformers_max_length(pretrained_model_name_or_path, max_model_length, init_max_model_length):
+    def _eventually_correct_switchtransformers_max_length(
+        pretrained_model_name_or_path, max_model_length, init_max_model_length
+    ):
         if pretrained_model_name_or_path in SwitchTransformersTokenizerFast.max_model_input_sizes:
-            deprecated_max_model_length = SwitchTransformersTokenizerFast.max_model_input_sizes[pretrained_model_name_or_path]
+            deprecated_max_model_length = SwitchTransformersTokenizerFast.max_model_input_sizes[
+                pretrained_model_name_or_path
+            ]
             if init_max_model_length is not None and init_max_model_length != max_model_length:
                 return init_max_model_length
             elif init_max_model_length is None:

@@ -21,7 +21,9 @@ from switchtransformersx import checkpoints
 from transformers import FlaxSwitchTransformersForConditionalGeneration, SwitchTransformersConfig
 
 
-def convert_switchtransformersx_checkpoint_to_flax(switchtransformersx_checkpoint_path, config_name, flax_dump_folder_path):
+def convert_switchtransformersx_checkpoint_to_flax(
+    switchtransformersx_checkpoint_path, config_name, flax_dump_folder_path
+):
     config = SwitchTransformersConfig.from_pretrained(config_name)
     flax_model = FlaxSwitchTransformersForConditionalGeneration(config=config)
     switchtransformersx_model = checkpoints.load_switchtransformersx_checkpoint(switchtransformersx_checkpoint_path)
@@ -33,24 +35,42 @@ def convert_switchtransformersx_checkpoint_to_flax(switchtransformersx_checkpoin
         layer_name = f"layers_{str(layer_index)}"
 
         # Self-Attention
-        switchtransformersx_attention_key = switchtransformersx_model["target"]["encoder"][layer_name]["attention"]["key"]["kernel"]
-        switchtransformersx_attention_out = switchtransformersx_model["target"]["encoder"][layer_name]["attention"]["out"]["kernel"]
-        switchtransformersx_attention_query = switchtransformersx_model["target"]["encoder"][layer_name]["attention"]["query"]["kernel"]
-        switchtransformersx_attention_value = switchtransformersx_model["target"]["encoder"][layer_name]["attention"]["value"]["kernel"]
+        switchtransformersx_attention_key = switchtransformersx_model["target"]["encoder"][layer_name]["attention"][
+            "key"
+        ]["kernel"]
+        switchtransformersx_attention_out = switchtransformersx_model["target"]["encoder"][layer_name]["attention"][
+            "out"
+        ]["kernel"]
+        switchtransformersx_attention_query = switchtransformersx_model["target"]["encoder"][layer_name]["attention"][
+            "query"
+        ]["kernel"]
+        switchtransformersx_attention_value = switchtransformersx_model["target"]["encoder"][layer_name]["attention"][
+            "value"
+        ]["kernel"]
 
         # Layer Normalization
-        switchtransformersx_attention_layer_norm = switchtransformersx_model["target"]["encoder"][layer_name]["pre_attention_layer_norm"]["scale"]
+        switchtransformersx_attention_layer_norm = switchtransformersx_model["target"]["encoder"][layer_name][
+            "pre_attention_layer_norm"
+        ]["scale"]
 
         if split_mlp_wi:
-            switchtransformersx_mlp_wi_0 = switchtransformersx_model["target"]["encoder"][layer_name]["mlp"]["wi_0"]["kernel"]
-            switchtransformersx_mlp_wi_1 = switchtransformersx_model["target"]["encoder"][layer_name]["mlp"]["wi_1"]["kernel"]
+            switchtransformersx_mlp_wi_0 = switchtransformersx_model["target"]["encoder"][layer_name]["mlp"]["wi_0"][
+                "kernel"
+            ]
+            switchtransformersx_mlp_wi_1 = switchtransformersx_model["target"]["encoder"][layer_name]["mlp"]["wi_1"][
+                "kernel"
+            ]
         else:
-            switchtransformersx_mlp_wi = switchtransformersx_model["target"]["encoder"][layer_name]["mlp"]["wi"]["kernel"]
+            switchtransformersx_mlp_wi = switchtransformersx_model["target"]["encoder"][layer_name]["mlp"]["wi"][
+                "kernel"
+            ]
 
         switchtransformersx_mlp_wo = switchtransformersx_model["target"]["encoder"][layer_name]["mlp"]["wo"]["kernel"]
 
         # Layer Normalization
-        switchtransformersx_mlp_layer_norm = switchtransformersx_model["target"]["encoder"][layer_name]["pre_mlp_layer_norm"]["scale"]
+        switchtransformersx_mlp_layer_norm = switchtransformersx_model["target"]["encoder"][layer_name][
+            "pre_mlp_layer_norm"
+        ]["scale"]
 
         # Assigning
         flax_model.params["encoder"]["block"][str(layer_index)]["layer"]["0"]["SelfAttention"]["k"][
@@ -90,7 +110,9 @@ def convert_switchtransformersx_checkpoint_to_flax(switchtransformersx_checkpoin
         ] = switchtransformersx_mlp_layer_norm
 
     # Only for layer 0:
-    switchtransformersx_encoder_rel_embedding = switchtransformersx_model["target"]["encoder"]["relpos_bias"]["rel_embedding"].T
+    switchtransformersx_encoder_rel_embedding = switchtransformersx_model["target"]["encoder"]["relpos_bias"][
+        "rel_embedding"
+    ].T
     flax_model.params["encoder"]["block"]["0"]["layer"]["0"]["SelfAttention"]["relative_attention_bias"][
         "embedding"
     ] = switchtransformersx_encoder_rel_embedding
@@ -104,39 +126,55 @@ def convert_switchtransformersx_checkpoint_to_flax(switchtransformersx_checkpoin
         layer_name = f"layers_{str(layer_index)}"
 
         # Self-Attention
-        switchtransformersx_attention_key = switchtransformersx_model["target"]["decoder"][layer_name]["self_attention"]["key"]["kernel"]
-        switchtransformersx_attention_out = switchtransformersx_model["target"]["decoder"][layer_name]["self_attention"]["out"]["kernel"]
-        switchtransformersx_attention_query = switchtransformersx_model["target"]["decoder"][layer_name]["self_attention"]["query"]["kernel"]
-        switchtransformersx_attention_value = switchtransformersx_model["target"]["decoder"][layer_name]["self_attention"]["value"]["kernel"]
+        switchtransformersx_attention_key = switchtransformersx_model["target"]["decoder"][layer_name][
+            "self_attention"
+        ]["key"]["kernel"]
+        switchtransformersx_attention_out = switchtransformersx_model["target"]["decoder"][layer_name][
+            "self_attention"
+        ]["out"]["kernel"]
+        switchtransformersx_attention_query = switchtransformersx_model["target"]["decoder"][layer_name][
+            "self_attention"
+        ]["query"]["kernel"]
+        switchtransformersx_attention_value = switchtransformersx_model["target"]["decoder"][layer_name][
+            "self_attention"
+        ]["value"]["kernel"]
 
         # Layer Normalization
-        switchtransformersx_pre_attention_layer_norm = switchtransformersx_model["target"]["decoder"][layer_name]["pre_self_attention_layer_norm"][
-            "scale"
-        ]
+        switchtransformersx_pre_attention_layer_norm = switchtransformersx_model["target"]["decoder"][layer_name][
+            "pre_self_attention_layer_norm"
+        ]["scale"]
 
         # Encoder-Decoder-Attention
-        switchtransformersx_enc_dec_attention_key = switchtransformersx_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["key"][
-            "kernel"
-        ]
-        switchtransformersx_enc_dec_attention_out = switchtransformersx_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["out"][
-            "kernel"
-        ]
-        switchtransformersx_enc_dec_attention_query = switchtransformersx_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["query"][
-            "kernel"
-        ]
-        switchtransformersx_enc_dec_attention_value = switchtransformersx_model["target"]["decoder"][layer_name]["encoder_decoder_attention"]["value"][
-            "kernel"
-        ]
+        switchtransformersx_enc_dec_attention_key = switchtransformersx_model["target"]["decoder"][layer_name][
+            "encoder_decoder_attention"
+        ]["key"]["kernel"]
+        switchtransformersx_enc_dec_attention_out = switchtransformersx_model["target"]["decoder"][layer_name][
+            "encoder_decoder_attention"
+        ]["out"]["kernel"]
+        switchtransformersx_enc_dec_attention_query = switchtransformersx_model["target"]["decoder"][layer_name][
+            "encoder_decoder_attention"
+        ]["query"]["kernel"]
+        switchtransformersx_enc_dec_attention_value = switchtransformersx_model["target"]["decoder"][layer_name][
+            "encoder_decoder_attention"
+        ]["value"]["kernel"]
 
         # Layer Normalization
-        switchtransformersx_cross_layer_norm = switchtransformersx_model["target"]["decoder"][layer_name]["pre_cross_attention_layer_norm"]["scale"]
+        switchtransformersx_cross_layer_norm = switchtransformersx_model["target"]["decoder"][layer_name][
+            "pre_cross_attention_layer_norm"
+        ]["scale"]
 
         # MLP
         if split_mlp_wi:
-            switchtransformersx_mlp_wi_0 = switchtransformersx_model["target"]["decoder"][layer_name]["mlp"]["wi_0"]["kernel"]
-            switchtransformersx_mlp_wi_1 = switchtransformersx_model["target"]["decoder"][layer_name]["mlp"]["wi_1"]["kernel"]
+            switchtransformersx_mlp_wi_0 = switchtransformersx_model["target"]["decoder"][layer_name]["mlp"]["wi_0"][
+                "kernel"
+            ]
+            switchtransformersx_mlp_wi_1 = switchtransformersx_model["target"]["decoder"][layer_name]["mlp"]["wi_1"][
+                "kernel"
+            ]
         else:
-            switchtransformersx_mlp_wi = switchtransformersx_model["target"]["decoder"][layer_name]["mlp"]["wi"]["kernel"]
+            switchtransformersx_mlp_wi = switchtransformersx_model["target"]["decoder"][layer_name]["mlp"]["wi"][
+                "kernel"
+            ]
 
         switchtransformersx_mlp_wo = switchtransformersx_model["target"]["decoder"][layer_name]["mlp"]["wo"]["kernel"]
 
@@ -203,7 +241,9 @@ def convert_switchtransformersx_checkpoint_to_flax(switchtransformersx_checkpoin
     flax_model.params["decoder"]["final_layer_norm"]["weight"] = tx5_decoder_norm
 
     # Only for layer 0:
-    switchtransformersx_decoder_rel_embedding = switchtransformersx_model["target"]["decoder"]["relpos_bias"]["rel_embedding"].T
+    switchtransformersx_decoder_rel_embedding = switchtransformersx_model["target"]["decoder"]["relpos_bias"][
+        "rel_embedding"
+    ].T
     flax_model.params["decoder"]["block"]["0"]["layer"]["0"]["SelfAttention"]["relative_attention_bias"][
         "embedding"
     ] = switchtransformersx_decoder_rel_embedding
@@ -214,7 +254,9 @@ def convert_switchtransformersx_checkpoint_to_flax(switchtransformersx_checkpoin
 
     # LM Head (only in v1.1 checkpoints)
     if "logits_dense" in switchtransformersx_model["target"]["decoder"]:
-        flax_model.params["lm_head"]["kernel"] = switchtransformersx_model["target"]["decoder"]["logits_dense"]["kernel"]
+        flax_model.params["lm_head"]["kernel"] = switchtransformersx_model["target"]["decoder"]["logits_dense"][
+            "kernel"
+        ]
 
     flax_model.save_pretrained(flax_dump_folder_path)
     print("SwitchTransformersX Model was sucessfully converted!")
@@ -226,9 +268,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "--switchtransformersx_checkpoint_path", default=None, type=str, required=True, help="Path the TX5 checkpoint."
     )
-    parser.add_argument("--config_name", default=None, type=str, required=True, help="Config name of SwitchTransformers model.")
+    parser.add_argument(
+        "--config_name", default=None, type=str, required=True, help="Config name of SwitchTransformers model."
+    )
     parser.add_argument(
         "--flax_dump_folder_path", default=None, type=str, required=True, help="Path to the output FLAX model."
     )
     args = parser.parse_args()
-    convert_switchtransformersx_checkpoint_to_flax(args.switchtransformersx_checkpoint_path, args.config_name, args.flax_dump_folder_path)
+    convert_switchtransformersx_checkpoint_to_flax(
+        args.switchtransformersx_checkpoint_path, args.config_name, args.flax_dump_folder_path
+    )

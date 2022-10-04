@@ -1292,7 +1292,9 @@ class TFSwitchTransformersModel(TFSwitchTransformersPreTrainedModel):
         )
 
 
-@add_start_docstrings("""SWITCHTRANSFORMERS Model with a `language modeling` head on top.""", SWITCHTRANSFORMERS_START_DOCSTRING)
+@add_start_docstrings(
+    """SWITCHTRANSFORMERS Model with a `language modeling` head on top.""", SWITCHTRANSFORMERS_START_DOCSTRING
+)
 class TFSwitchTransformersForConditionalGeneration(TFSwitchTransformersPreTrainedModel, TFCausalLanguageModelingLoss):
     def __init__(self, config, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
@@ -1569,7 +1571,8 @@ class TFSwitchTransformersForConditionalGeneration(TFSwitchTransformersPreTraine
 
 
 @add_start_docstrings(
-    "The bare SWITCHTRANSFORMERS Model transformer outputting encoder's raw hidden-stateswithout any specific head on top.",
+    "The bare SWITCHTRANSFORMERS Model transformer outputting encoder's raw hidden-stateswithout any specific head on"
+    " top.",
     SWITCHTRANSFORMERS_START_DOCSTRING,
 )
 class TFSwitchTransformersEncoderModel(TFSwitchTransformersPreTrainedModel):
