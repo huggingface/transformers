@@ -21,7 +21,7 @@ import unittest
 import numpy as np
 
 from transformers import WhisperConfig
-from transformers.testing_utils import is_tf_available, require_tf, slow
+from transformers.testing_utils import is_tf_available, require_tf, require_tokenizers, slow
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
 
@@ -30,7 +30,6 @@ from ...test_modeling_tf_common import TFModelTesterMixin, floats_tensor, ids_te
 
 
 if is_datasets_available():
-    import datasets
     from datasets import load_dataset
 
 
@@ -131,7 +130,7 @@ class TFWhisperModelTester:
     def prepare_config_and_inputs(self):
         input_features = floats_tensor([self.batch_size, self.num_mel_bins, self.seq_length], self.vocab_size)
 
-        decoder_input_ids = tf.convert_to_tensor(self.batch_size * [[self.decoder_start_token_id]])
+        decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         config = self.get_config()
         inputs_dict = prepare_whisper_inputs_dict(
@@ -380,7 +379,7 @@ class TFWhisperModelTest(TFModelTesterMixin, unittest.TestCase):
                 self.assertIsInstance(hidden_states, (list, tuple))
                 self.assertEqual(len(hidden_states), expected_num_layers)
 
-                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", 1)
+                decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_length)
 
                 self.assertListEqual(
                     list(hidden_states[0].shape[-2:]),
@@ -404,10 +403,10 @@ class TFWhisperModelTest(TFModelTesterMixin, unittest.TestCase):
         config.return_dict = True
 
         seq_len = getattr(self.model_tester, "seq_length", None)
-        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", 1)
+        decoder_seq_length = getattr(self.model_tester, "decoder_seq_length", seq_len)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
-        decoder_key_length = getattr(self.model_tester, "decoder_key_length", 1)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
+        decoder_key_length = getattr(self.model_tester, "decoder_key_length", encoder_key_length)
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -644,6 +643,7 @@ class TFWhisperModelTest(TFModelTesterMixin, unittest.TestCase):
 
 
 @require_tf
+@require_tokenizers
 class TFWhisperModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_processor(self):
@@ -677,10 +677,10 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS = tf.convert_to_tensor(
             [
-                2.9547, -6.7057, 5.6948, 3.6060, 0.2028, -5.7131, 4.8454, -1.8480,
-                0.2464, -1.3995, 10.3491, 3.3373, 0.0177, -7.9847, 3.5646, 8.4769,
-                4.0122, -2.3344, 11.2626, 1.0067, 0.9832, -8.6476, -3.3424, -9.3303,
-                1.1144, 3.4940, 7.2391, -5.2304, -1.5814, 10.5482
+                2.9892, -6.7607, 5.7348, 3.6096, 0.2152, -5.7321, 4.8855, -1.6407,
+                0.2823, -1.5718, 10.4269, 3.4427, 0.0219, -8.0612, 3.4784, 8.4246,
+                4.0575, -2.2864, 11.1084, 0.9963, 0.9884, -8.5154, -3.5469, -9.3713,
+                0.9786, 3.5435, 7.4850, -5.2579, -1.4366, 10.4841
             ]
         )
         # fmt: on
@@ -689,10 +689,10 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_GENERATION = tf.convert_to_tensor(
             [
-                -1.4729, -2.7544, 2.7368, 2.3457, 4.0224, -0.0156, -3.3636, 1.9609,
-                0.0326, 0.6874, 1.0637, 0.2784, -3.7079, -0.5307, 0.2900, 4.7735,
-                1.1159, 1.2945, 0.5803, -0.3822, 1.6661, 1.2853, 0.9415, 2.1819,
-                1.8381, -5.7385, -0.7763, 3.9704, 2.6306, 2.8336
+                -1.4651, -2.6944, 2.7821, 2.3793, 4.0738, 0.0188, -3.3203, 1.9836,
+                0.0520, 0.7095, 1.1063, 0.2952, -3.6786, -0.5249, 0.3105, 4.7691,
+                1.1562, 1.3046, 0.5810, -0.3624, 1.7006, 1.3424, 0.9817, 2.1958,
+                1.8775, -5.7046, -0.7679, 4.0113, 2.6848, 2.8609
             ]
         )
         # fmt: on
@@ -723,11 +723,11 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS = tf.convert_to_tensor(
             [
-                -5.7431, -9.3231, -10.7072, -13.4309, -9.2928, -11.4487, -7.4086,
-                -9.8974, -6.1540, -6.8334, -10.7648, -5.6510, -7.5492, -5.1742,
-                -8.3994, -9.3752, -8.7796, -9.2042, -9.4592, -10.1895, -11.8376,
-                -12.6912, -12.5018, -13.2994, -11.4461, -8.8825, -7.9569, -13.6898,
-                -12.6563, -9.7243
+                -3.6784, -7.7211, -9.5070, -11.9286, -7.6489, -9.7026, -5.6188,
+                -8.0104, -4.6238, -5.1833, -9.0485, -3.4079, -5.4874, -2.6935,
+                -6.3479, -7.3398, -6.9558, -7.6867, -7.4748, -8.3463, -9.9781,
+                -10.8389, -10.3105, -11.7201, -9.7261, -7.1590, -5.9272, -12.4509,
+                -11.1146, -8.1918
             ]
         )
         # fmt: on
@@ -759,10 +759,10 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS = tf.convert_to_tensor(
             [
-                1.8844, 0.8033, 4.4131, 3.5382, 2.3053, 3.8265, -0.7464, 2.4677,
-                1.7290, 1.8508, 2.2446, 1.1164, 0.3844, 1.9060, 1.4199, 2.4646,
-                1.1612, 0.6382, 1.0921, 1.8465, 2.3622, 1.6158, 2.3126, 1.2661,
-                1.9403, 1.7156, 3.7835, 5.3524, 4.3426, 3.8247
+                2.1382, 0.9381, 4.4671, 3.5589, 2.4022, 3.8576, -0.6521, 2.5472,
+                1.8301, 1.9957, 2.3432, 1.4678, 0.5459, 2.2597, 1.5179, 2.5357,
+                1.1624, 0.6194, 1.0757, 1.8259, 2.4076, 1.6601, 2.3503, 1.3376,
+                1.9891, 1.8635, 3.8931, 5.3699, 4.4772, 3.9184
             ]
         )
         # fmt: on

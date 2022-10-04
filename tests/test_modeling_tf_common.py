@@ -194,9 +194,7 @@ class TFModelTesterMixin:
                 *get_values(TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING),
             ] and "labels" in dict(inspect.signature(model_class.call).parameters):
                 inputs_dict["labels"] = tf.zeros(
-                    # (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
-                    (self.model_tester.batch_size, self.model_tester.max_target_positions),
-                    dtype=tf.int32,
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
                 )
             elif model_class in get_values(TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING):
                 num_patches = self.model_tester.image_size // self.model_tester.patch_size
@@ -1242,8 +1240,17 @@ class TFModelTesterMixin:
 
             # fetch the output for an input exclusively made of new members of the vocabulary
             inputs_dict = copy.deepcopy(original_inputs_dict)
-            new_vocab_input_ids = ids_tensor(inputs_dict["input_ids"].shape, new_tokens_size)
+            ids_feat_name = None
+            if "input_ids" in inputs_dict:
+                ids_feat_name = "input_ids"
+            elif "decoder_input_ids" in inputs_dict:
+                ids_feat_name = "decoder_input_ids"
+            else:
+                assert False, "No input ids feature found in the inputs dict"
+
+            new_vocab_input_ids = ids_tensor(inputs_dict[ids_feat_name].shape, new_tokens_size)
             new_vocab_input_ids += old_total_size
+            inputs_dict[ids_feat_name] = new_vocab_input_ids
             if "input_ids" in inputs_dict:
                 inputs_dict["input_ids"] = new_vocab_input_ids
             if "decoder_input_ids" in inputs_dict:

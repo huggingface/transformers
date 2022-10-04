@@ -480,7 +480,6 @@ class TFWhisperPreTrainedModel(TFPreTrainedModel):
         input_signature=[
             {
                 "input_features": tf.TensorSpec((None, None, None), tf.float32, name="input_features"),
-                "attention_mask": tf.TensorSpec((None, None), tf.int64, name="attention_mask"),
                 "decoder_input_ids": tf.TensorSpec((None, None), tf.int64, name="decoder_input_ids"),
                 "decoder_attention_mask": tf.TensorSpec((None, None), tf.int64, name="decoder_attention_mask"),
             }
@@ -754,21 +753,23 @@ class TFWhisperDecoder(TFWhisperPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
+    def _prepare_decoder_attention_mask(self, attention_mask, input_shape, past_key_values_length):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-        combined_attention_mask = None
+        batch_size, seq_len = input_shape[0], input_shape[1]
 
-        if input_shape[-1] > 1:
-            combined_attention_mask = _make_causal_mask(input_shape, past_key_values_length=past_key_values_length)
-        else:
-            combined_attention_mask = _expand_mask(
-                tf.ones((input_shape[0], input_shape[1] + past_key_values_length)), tgt_len=input_shape[-1]
-            )
+        combined_attention_mask = tf.cond(
+            tf.math.greater(seq_len, 1),
+            lambda: _make_causal_mask(input_shape, past_key_values_length=past_key_values_length),
+            lambda: _expand_mask(tf.ones((batch_size, seq_len + past_key_values_length)), tgt_len=seq_len),
+        )
 
         if attention_mask is not None:
-            if tf.shape(attention_mask)[-1] > input_shape[-1] > 0:
-                attention_mask = attention_mask[:, : input_shape[-1] + past_key_values_length]
+            attention_mask = tf.cond(
+                tf.greater(tf.shape(attention_mask)[-1], seq_len) & tf.greater(seq_len, 0),
+                lambda: attention_mask[:, : seq_len + past_key_values_length],
+                lambda: attention_mask,
+            )
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             expanded_attn_mask = _expand_mask(attention_mask, tgt_len=input_shape[-1])
             combined_attention_mask = (
@@ -873,9 +874,7 @@ class TFWhisperDecoder(TFWhisperPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        attention_mask = self._prepare_decoder_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
-        )
+        attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
 
         # embed positions
         positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
@@ -952,11 +951,11 @@ class TFWhisperDecoder(TFWhisperPreTrainedModel):
         )
 
 
-@keras_serializable
 @add_start_docstrings(
     "The bare Whisper Model outputting raw hidden-states without any specific head on top.",
     WHISPER_START_DOCSTRING,
 )
+@keras_serializable
 class TFWhisperMainLayer(tf.keras.layers.Layer):
     config_class = WhisperConfig
 
@@ -1080,7 +1079,6 @@ class TFWhisperMainLayer(tf.keras.layers.Layer):
     WHISPER_START_DOCSTRING,
 )
 class TFWhisperModel(TFWhisperPreTrainedModel):
-
     def __init__(self, config: WhisperConfig, **kwargs):
         super().__init__(config, **kwargs)
 
@@ -1186,7 +1184,6 @@ class ProjectionLayer(tf.keras.layers.Layer):
     """
     Linear layer
     """
-
 
 
 @add_start_docstrings(
