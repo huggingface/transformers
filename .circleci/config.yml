@@ -3,6 +3,11 @@ setup: true
 orbs:
     continuation: circleci/continuation@0.1.0
 
+parameters:
+    nightly:
+        type: boolean
+        default: false
+
 jobs:
     # Fetch the tests to run
     fetch_tests:
@@ -131,19 +136,15 @@ jobs:
 workflows:
     version: 2
     setup_and_quality:
+        when:
+            not: <<pipeline.parameters.nightly>>
         jobs:
             - check_code_quality
             - check_repository_consistency
             - fetch_tests
 
     nightly:
-        triggers:
-            - schedule:
-                  cron: "0 0 * * *"
-                  filters:
-                      branches:
-                          only:
-                              - main
+        when: <<pipeline.parameters.nightly>>
         jobs:
             - check_code_quality
             - check_repository_consistency
