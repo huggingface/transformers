@@ -772,8 +772,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
             # No mask found
             if mask_probs_item.shape[0] <= 0:
-                segmentation = torch.zeros(target_sizes[i])
-                segmentation -= 1
+                segmentation = torch.zeros(target_sizes[i]) - 1
                 segments: List[Dict] = []
                 continue
 
@@ -861,8 +860,7 @@ class MaskFormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionM
 
             # No mask found
             if mask_probs_item.shape[0] <= 0:
-                segmentation = torch.zeros(target_sizes[i])
-                segmentation -= 1
+                segmentation = torch.zeros(target_sizes[i]) - 1
                 segments: List[Dict] = []
                 continue
 
