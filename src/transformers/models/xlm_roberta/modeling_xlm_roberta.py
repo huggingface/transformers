@@ -584,7 +584,7 @@ class XLMRobertaPreTrainedModel(PreTrainedModel):
     """
 
     config_class = XLMRobertaConfig
-    base_model_prefix = "xlm-roberta"
+    base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
@@ -707,7 +707,7 @@ class XLMRobertaModel(XLMRobertaPreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Roberta
+    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->XLMRoberta
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -888,7 +888,7 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel):
         if not config.is_decoder:
             logger.warning("If you want to use `XLMRobertaLMHeadModel` as a standalone, add `is_decoder=True.`")
 
-        self.xlm_roberta = XLMRobertaModel(config, add_pooling_layer=False)
+        self.roberta = XLMRobertaModel(config, add_pooling_layer=False)
         self.lm_head = XLMRobertaLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
@@ -955,10 +955,10 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel):
         >>> from transformers import XLMRobertaTokenizer, XLMRobertaForCausalLM, XLMRobertaConfig
         >>> import torch
 
-        >>> tokenizer = XLMRobertaTokenizer.from_pretrained("xlm-roberta-base")
-        >>> config = XLMRobertaConfig.from_pretrained("xlm-roberta-base")
+        >>> tokenizer = XLMRobertaTokenizer.from_pretrained("roberta-base")
+        >>> config = XLMRobertaConfig.from_pretrained("roberta-base")
         >>> config.is_decoder = True
-        >>> model = XLMRobertaForCausalLM.from_pretrained("xlm-roberta-base", config=config)
+        >>> model = XLMRobertaForCausalLM.from_pretrained("roberta-base", config=config)
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -969,7 +969,7 @@ class XLMRobertaForCausalLM(XLMRobertaPreTrainedModel):
         if labels is not None:
             use_cache = False
 
-        outputs = self.xlm_roberta(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1047,7 +1047,7 @@ class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
                 "bi-directional self-attention."
             )
 
-        self.xlm_roberta = XLMRobertaModel(config, add_pooling_layer=False)
+        self.roberta = XLMRobertaModel(config, add_pooling_layer=False)
         self.lm_head = XLMRobertaLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
@@ -1097,7 +1097,7 @@ class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.xlm_roberta(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1132,7 +1132,7 @@ class XLMRobertaForMaskedLM(XLMRobertaPreTrainedModel):
 
 # Copied from transformers.models.roberta.modeling_roberta.RobertaLMHead
 class XLMRobertaLMHead(nn.Module):
-    """XLMRoberta Head for masked language modeling."""
+    """Roberta Head for masked language modeling."""
 
     def __init__(self, config):
         super().__init__()
@@ -1174,7 +1174,7 @@ class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
         self.num_labels = config.num_labels
         self.config = config
 
-        self.xlm_roberta = XLMRobertaModel(config, add_pooling_layer=False)
+        self.roberta = XLMRobertaModel(config, add_pooling_layer=False)
         self.classifier = XLMRobertaClassificationHead(config)
 
         # Initialize weights and apply final processing
@@ -1210,7 +1210,7 @@ class XLMRobertaForSequenceClassification(XLMRobertaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.xlm_roberta(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1273,7 +1273,7 @@ class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.xlm_roberta = XLMRobertaModel(config)
+        self.roberta = XLMRobertaModel(config)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.classifier = nn.Linear(config.hidden_size, 1)
 
@@ -1321,7 +1321,7 @@ class XLMRobertaForMultipleChoice(XLMRobertaPreTrainedModel):
             else None
         )
 
-        outputs = self.xlm_roberta(
+        outputs = self.roberta(
             flat_input_ids,
             position_ids=flat_position_ids,
             token_type_ids=flat_token_type_ids,
@@ -1371,7 +1371,7 @@ class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.xlm_roberta = XLMRobertaModel(config, add_pooling_layer=False)
+        self.roberta = XLMRobertaModel(config, add_pooling_layer=False)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -1409,7 +1409,7 @@ class XLMRobertaForTokenClassification(XLMRobertaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.xlm_roberta(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -1482,7 +1482,7 @@ class XLMRobertaForQuestionAnswering(XLMRobertaPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.xlm_roberta = XLMRobertaModel(config, add_pooling_layer=False)
+        self.roberta = XLMRobertaModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
@@ -1523,7 +1523,7 @@ class XLMRobertaForQuestionAnswering(XLMRobertaPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.xlm_roberta(
+        outputs = self.roberta(
             input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
