@@ -122,7 +122,7 @@ class WhisperConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie input and output embeddings.
-        suppress_tokens (`List[int]`, *optional*, defaults to None):
+        suppress_tokens (`List[int]`, *optional*):
             A list containing the non-speech tokens that will be used by the logit processor in the `generate`
             function. NON_SPEECH_TOKENS and NON_SPEECH_TOKENS_MULTI each correspond to the `english-only` and the
             `multilingual` model.
