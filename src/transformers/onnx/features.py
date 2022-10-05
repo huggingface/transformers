@@ -262,7 +262,7 @@ class FeaturesManager:
             "question-answering",
             onnx_config_cls="models.deberta_v2.DebertaV2OnnxConfig",
         ),
-        "decision_transformer": supported_features_mapping(
+        "decision-transformer": supported_features_mapping(
             "default",
             onnx_config_cls="models.decision_transformer.DecisionTransformerOnnxConfig",
         ),
