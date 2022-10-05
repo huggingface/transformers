@@ -26,11 +26,14 @@ from tensorflow.compiler.tf2xla.python.xla import dynamic_update_slice
 from .generation_tf_logits_process import (
     TFForcedBOSTokenLogitsProcessor,
     TFForcedEOSTokenLogitsProcessor,
+    TFForceTokensLogitsProcessor,
     TFLogitsProcessorList,
     TFMinLengthLogitsProcessor,
     TFNoBadWordsLogitsProcessor,
     TFNoRepeatNGramLogitsProcessor,
     TFRepetitionPenaltyLogitsProcessor,
+    TFSuppressTokensAtBeginLogitsProcessor,
+    TFSuppressTokensLogitsProcessor,
     TFTemperatureLogitsWarper,
     TFTopKLogitsWarper,
     TFTopPLogitsWarper,
@@ -401,6 +404,9 @@ class TFGenerationMixin:
         return_dict_in_generate=None,
         forced_bos_token_id=None,
         forced_eos_token_id=None,
+        suppress_tokens: Optional[List[int]] = None,
+        begin_suppress_tokens: Optional[List[int]] = None,
+        forced_decoder_ids: Optional[List[int]] = None,
         **model_kwargs,
     ) -> Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
         r"""
@@ -494,6 +500,14 @@ class TFGenerationMixin:
                 the target language token.
             forced_eos_token_id (`int`, *optional*):
                 The id of the token to force as the last generated token when `max_length` is reached.
+            suppress_tokens  (`List[int]`, *optional*, defaults to `model.config.suppress_tokens`):
+                A list of tokens that will be supressed at generation. The `SupressTokens` logit processor will set
+                their log probs to `-inf` so that they are not sampled.
+            begin_suppress_tokens  (`List[int]`, *optional*, defaults to `model.config.begin_suppress_tokens`):
+                A list of tokens that will be supressed at the begining of the generation. The `SupressBeginTokens`
+                logit processor will set their log probs to `-inf` so that they are not sampled.
+            forced_decoder_ids (`List[int]`, *optional*, defaults to `model.config.forced_decoder_ids`):
+                A list of tokens that will be forced as beginning tokens.
             model_specific_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model.
 
@@ -609,6 +623,9 @@ class TFGenerationMixin:
                 return_dict_in_generate=return_dict_in_generate,
                 forced_bos_token_id=forced_bos_token_id,
                 forced_eos_token_id=forced_eos_token_id,
+                suppress_tokens=suppress_tokens,
+                begin_suppress_tokens=begin_suppress_tokens,
+                forced_decoder_ids=forced_decoder_ids,
                 **model_kwargs,
             )
 
@@ -648,6 +665,12 @@ class TFGenerationMixin:
         forced_eos_token_id = (
             forced_eos_token_id if forced_eos_token_id is not None else self.config.forced_eos_token_id
         )
+        suppress_tokens = suppress_tokens if suppress_tokens is not None else self.config.suppress_tokens
+        begin_suppress_tokens = (
+            begin_suppress_tokens if begin_suppress_tokens is not None else self.config.begin_suppress_tokens
+        )
+        if forced_decoder_ids is None and hasattr(self.config, "forced_decoder_ids"):
+            forced_decoder_ids = self.config.forced_decoder_ids
 
         output_scores = output_scores if output_scores is not None else self.config.output_scores
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -844,6 +867,10 @@ class TFGenerationMixin:
             use_cache=use_cache,
             forced_bos_token_id=forced_bos_token_id,
             forced_eos_token_id=forced_eos_token_id,
+            suppress_tokens=suppress_tokens,
+            begin_suppress_tokens=begin_suppress_tokens,
+            input_ids_seq_len=cur_len,
+            forced_decoder_ids=forced_decoder_ids,
             return_dict_in_generate=return_dict_in_generate,
             **model_kwargs,
         )
@@ -874,6 +901,10 @@ class TFGenerationMixin:
         use_cache,
         forced_bos_token_id,
         forced_eos_token_id,
+        suppress_tokens,
+        begin_suppress_tokens,
+        input_ids_seq_len,
+        forced_decoder_ids,
         return_dict_in_generate,
         **kwargs,
     ) -> Union[TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
@@ -963,6 +994,10 @@ class TFGenerationMixin:
                     max_length=max_length,
                     forced_bos_token_id=forced_bos_token_id,
                     forced_eos_token_id=forced_eos_token_id,
+                    suppress_tokens=suppress_tokens,
+                    input_ids_seq_length=input_ids_seq_length,
+                    begin_suppress_tokens=begin_suppress_tokens,
+                    forced_decoder_ids=forced_decoder_ids,
                 )
             #             calculate log softmax score
             scores = tf.nn.log_softmax(next_token_logits, axis=-1)  # (batch_size * num_beams, vocab_size)
@@ -1270,7 +1305,17 @@ class TFGenerationMixin:
         return tuple(tf.gather(layer_past, beam_idx, axis=1) for layer_past in past)
 
     def adjust_logits_during_generation(
-        self, logits, cur_len, max_length, forced_bos_token_id, forced_eos_token_id, **kwargs
+        self,
+        logits,
+        cur_len,
+        max_length,
+        forced_bos_token_id,
+        forced_eos_token_id,
+        suppress_tokens,
+        input_ids_seq_length,
+        begin_suppress_tokens,
+        forced_decoder_ids,
+        **kwargs
     ):
         """
         Implement in subclasses of [`PreTrainedModel`] for custom behavior to adjust the logits in the generate method.
@@ -1287,6 +1332,26 @@ class TFGenerationMixin:
         elif cur_len == max_length - 1 and forced_eos_token_id is not None:
             vocab_range = tf.constant(range(vocab_size))
             return tf.where(vocab_range != forced_eos_token_id, -1e8, logits)
+
+        elif suppress_tokens is not None:
+            mask_condition = tf.constant(
+                [token_id in suppress_tokens for token_id in range(vocab_size)], dtype=tf.bool
+            )
+            return tf.where(mask_condition, -1e8, logits)
+        elif begin_suppress_tokens is not None:
+            begin_index = input_ids_seq_length
+            begin_index = begin_index if (input_ids_seq_length > 1 or forced_bos_token_id is None) else begin_index + 1
+            if begin_index == cur_len:
+                mask_condition = tf.constant(
+                    [token_id in begin_suppress_tokens for token_id in range(vocab_size)], dtype=tf.bool
+                )
+            else:
+                mask_condition = False
+            return tf.where(mask_condition, -1e8, logits)
+        elif forced_decoder_ids is not None and cur_len in forced_decoder_ids:
+            vocab_range = tf.constant(range(vocab_size))
+            current_token = forced_decoder_ids[cur_len]
+            return tf.where(vocab_range == current_token, 1e8, logits)
         else:
             return logits
 
@@ -1368,6 +1433,9 @@ class TFGenerationMixin:
         return_dict_in_generate=None,
         forced_bos_token_id=None,
         forced_eos_token_id=None,
+        suppress_tokens=None,
+        begin_suppress_tokens=None,
+        forced_decoder_ids=None,
         **model_kwargs,
     ) -> Union[TFGreedySearchOutput, TFSampleOutput, TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
         r"""
@@ -1461,6 +1529,15 @@ class TFGenerationMixin:
                 the target language token.
             forced_eos_token_id (`int`, *optional*):
                 The id of the token to force as the last generated token when `max_length` is reached.
+            suppress_tokens  (`List[int]`, *optional*, defaults to `model.config.suppress_tokens`):
+                A list of tokens that will be supressed at generation. The `SupressTokens` logit processor will set
+                their log probs to `-inf` so that they are not sampled.
+            begin_suppress_tokens  (`List[int]`, *optional*, defaults to `model.config.begin_suppress_tokens`):
+                A list of tokens that will be supressed at the begining of the generation. The `SupressBeginTokens`
+                logit processor will set their log probs to `-inf` so that they are not sampled.
+            forced_decoder_ids (`List[int]`, *optional*, defaults to `model.config.forced_decoder_ids`):
+                A list of tokens that will be forced as beginning tokens.
+
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `call` function of the model.
 
@@ -1695,12 +1772,16 @@ class TFGenerationMixin:
         logits_processor = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
+            input_ids_seq_length=input_ids_seq_length,
             bad_words_ids=bad_words_ids,
             min_length=min_length,
             max_length=max_length,
             eos_token_id=eos_token_id,
             forced_bos_token_id=forced_bos_token_id,
             forced_eos_token_id=forced_eos_token_id,
+            suppress_tokens=suppress_tokens,
+            begin_suppress_tokens=begin_suppress_tokens,
+            forced_decoder_ids=forced_decoder_ids,
         )
 
         # 9. go into different generation modes
@@ -2099,12 +2180,16 @@ class TFGenerationMixin:
         self,
         repetition_penalty: float,
         no_repeat_ngram_size: int,
+        input_ids_seq_length: int,
         bad_words_ids: List[List[int]],
         min_length: int,
         max_length: int,
         eos_token_id: int,
         forced_bos_token_id: int,
         forced_eos_token_id: int,
+        suppress_tokens: Optional[List[int]] = None,
+        begin_suppress_tokens: Optional[List[int]] = None,
+        forced_decoder_ids: Optional[List[int]] = None,
     ) -> TFLogitsProcessorList:
         """
         This class returns a [`TFLogitsProcessorList`] list object that contains all relevant [`TFLogitsProcessor`]
@@ -2118,6 +2203,12 @@ class TFGenerationMixin:
         )
         bad_words_ids = bad_words_ids if bad_words_ids is not None else self.config.bad_words_ids
         eos_token_id = eos_token_id if eos_token_id is not None else self.config.eos_token_id
+        suppress_tokens = suppress_tokens if suppress_tokens is not None else self.config.suppress_tokens
+        begin_suppress_tokens = (
+            begin_suppress_tokens if begin_suppress_tokens is not None else self.config.begin_suppress_tokens
+        )
+        if forced_decoder_ids is None and hasattr(self.config, "forced_decoder_ids"):
+            forced_decoder_ids = self.config.forced_decoder_ids
 
         # instantiate processors list
         if repetition_penalty is not None and repetition_penalty != 1.0:
@@ -2132,7 +2223,14 @@ class TFGenerationMixin:
             processors.append(TFForcedBOSTokenLogitsProcessor(forced_bos_token_id))
         if forced_eos_token_id is not None:
             processors.append(TFForcedEOSTokenLogitsProcessor(max_length, forced_eos_token_id))
-
+        if suppress_tokens is not None:
+            processors.append(TFSuppressTokensLogitsProcessor(suppress_tokens))
+        if begin_suppress_tokens is not None:
+            begin_index = input_ids_seq_length
+            begin_index = begin_index if (input_ids_seq_length > 1 or forced_bos_token_id is None) else begin_index + 1
+            processors.append(TFSuppressTokensAtBeginLogitsProcessor(begin_suppress_tokens, begin_index))
+        if forced_decoder_ids is not None:
+            processors.append(TFForceTokensLogitsProcessor(forced_decoder_ids))
         return processors
 
     def greedy_search(

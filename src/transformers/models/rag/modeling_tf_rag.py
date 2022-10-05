@@ -1262,6 +1262,8 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
                 eos_token_id=eos_token_id,
                 forced_bos_token_id=None,
                 forced_eos_token_id=None,
+                supress_tokens=None,  # Not used for RAG, were added after the whisper pull request
+                begin_supress_tokens=None,  # Not used for RAG, were added after the whisper pull request
             )
             model_kwargs["attention_mask"] = context_attention_mask
 

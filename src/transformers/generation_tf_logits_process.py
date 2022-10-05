@@ -504,3 +504,64 @@ class TFForcedEOSTokenLogitsProcessor(TFLogitsProcessor):
                     axis=-1,
                 )
         return scores
+
+
+class TFSuppressTokensAtBeginLogitsProcessor(TFLogitsProcessor):
+    r"""
+    [`SuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function starts
+    generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` at not
+    sampled at the begining of the generation.
+    """
+
+    def __init__(self, begin_suppress_tokens, begin_index):
+        self.begin_suppress_tokens = list(begin_suppress_tokens)
+        self.begin_index = begin_index
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        scores = tf.cond(
+            tf.equal(cur_len, self.begin_index),
+            lambda: tf.tensor_scatter_nd_update(
+                scores,
+                [[i, token] for i in range(scores.shape[0]) for token in self.begin_suppress_tokens],
+                [-np.inf for _ in range(scores.shape[0] * len(self.begin_suppress_tokens))],
+            ),
+            lambda: scores,
+        )
+        return scores
+
+
+class TFSuppressTokensLogitsProcessor(TFLogitsProcessor):
+    r"""This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so that they
+    are not sampled."""
+
+    def __init__(self, suppress_tokens):
+        self.suppress_tokens = list(suppress_tokens)
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        scores = tf.tensor_scatter_nd_update(
+            scores,
+            [[i, token] for i in range(scores.shape[0]) for token in self.suppress_tokens],
+            [-np.inf for _ in range(scores.shape[0] * len(self.suppress_tokens))],
+        )
+        return scores
+
+
+class TFForceTokensLogitsProcessor(TFLogitsProcessor):
+    r"""This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so that they
+    are not sampled."""
+
+    def __init__(self, force_token_map):
+        self.force_token_map = dict(force_token_map)
+
+    def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
+        generation_idx = cur_len
+        current_token = self.force_token_map.get(int(generation_idx), -999)
+
+        scores = tf.cond(
+            tf.equal(current_token, -999),
+            lambda: scores,
+            lambda: tf.tensor_scatter_nd_update(
+                scores, [[i, current_token] for i in range(scores.shape[0])], [np.inf for _ in range(scores.shape[0])]
+            ),
+        )
+        return scores
