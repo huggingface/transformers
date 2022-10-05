@@ -59,8 +59,8 @@ class LongformerConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BertModel`] or [`TFBertModel`].
+            Vocabulary size of the Longformer model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`LongformerModel`] or [`TFLongformerModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -80,7 +80,7 @@ class LongformerConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`BertModel`] or [`TFBertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`LongformerModel`] or [`TFLongformerModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -118,26 +118,26 @@ class LongformerConfig(PretrainedConfig):
 
     def __init__(
         self,
-        attention_window: Union[List[int], int] = 512,  # Longformer Default
-        sep_token_id: int = 2,  # Longformer Default
-        pad_token_id: int = 1,  # Roberta Default
-        bos_token_id: int = 0,  # Roberta Default
-        eos_token_id: int = 2,  # Roberta Default
-        vocab_size: int = 30522,  # Bert Default
-        hidden_size: int = 768,  # Bert Default
-        num_hidden_layers: int = 12,  # Bert Default
-        num_attention_heads: int = 12,  # Bert Default
-        intermediate_size: int = 3072,  # Bert Default
-        hidden_act: str = "gelu",  # Bert Default
-        hidden_dropout_prob: float = 0.1,  # Bert Default
-        attention_probs_dropout_prob: float = 0.1,  # Bert Default
-        max_position_embeddings: int = 512,  # Bert Default
-        type_vocab_size: int = 2,  # Bert Default
-        initializer_range: float = 0.02,  # Bert Default
-        layer_norm_eps: float = 1e-12,  # Bert Default
-        position_embedding_type: str = "absolute",  # Bert Default
-        use_cache: bool = True,  # Bert Default
-        classifier_dropout: float = None,  # Bert Default
+        attention_window: Union[List[int], int] = 512,
+        sep_token_id: int = 2,
+        pad_token_id: int = 1,
+        bos_token_id: int = 0,
+        eos_token_id: int = 2,
+        vocab_size: int = 30522,
+        hidden_size: int = 768,
+        num_hidden_layers: int = 12,
+        num_attention_heads: int = 12,
+        intermediate_size: int = 3072,
+        hidden_act: str = "gelu",
+        hidden_dropout_prob: float = 0.1,
+        attention_probs_dropout_prob: float = 0.1,
+        max_position_embeddings: int = 512,
+        type_vocab_size: int = 2,
+        initializer_range: float = 0.02,
+        layer_norm_eps: float = 1e-12,
+        position_embedding_type: str = "absolute",
+        use_cache: bool = True,
+        classifier_dropout: float = None,
         onnx_export: bool = False,
         **kwargs
     ):
