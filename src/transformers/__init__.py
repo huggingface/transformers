@@ -1024,6 +1024,7 @@ else:
             "CamembertForSequenceClassification",
             "CamembertForTokenClassification",
             "CamembertModel",
+            "CamembertPreTrainedModel",
         ]
     )
     _import_structure["models.canine"].extend(
@@ -3873,6 +3874,7 @@ if TYPE_CHECKING:
             CamembertForSequenceClassification,
             CamembertForTokenClassification,
             CamembertModel,
+            CamembertPreTrainedModel,
         )
         from .models.canine import (
             CANINE_PRETRAINED_MODEL_ARCHIVE_LIST,
