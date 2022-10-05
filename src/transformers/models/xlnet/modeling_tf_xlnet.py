@@ -190,16 +190,16 @@ class TFXLNetRelativeAttention(tf.keras.layers.Layer):
 
     def call(
         self,
-        h: Optional[Union[np.ndarray, tf.Tensor]],
-        g: Optional[Union[np.ndarray, tf.Tensor]],
-        attn_mask_h: Optional[Union[np.ndarray, tf.Tensor]],
-        attn_mask_g: Optional[Union[np.ndarray, tf.Tensor]],
-        r: Optional[Union[np.ndarray, tf.Tensor]],
-        seg_mat: Optional[Union[np.ndarray, tf.Tensor]],
-        mems: Optional[Union[np.ndarray, tf.Tensor]],
-        target_mapping: Optional[Union[np.ndarray, tf.Tensor]],
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]],
-        output_attentions: Optional[bool],
+        h,
+        g,
+        attn_mask_h,
+        attn_mask_g,
+        r,
+        seg_mat,
+        mems: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        target_mapping: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = False,
         training: Optional[bool] = False,
     ):
         if g is not None:
@@ -364,16 +364,16 @@ class TFXLNetLayer(tf.keras.layers.Layer):
 
     def call(
         self,
-        output_h: Optional[Union[np.ndarray, tf.Tensor]],
-        output_g: Optional[Union[np.ndarray, tf.Tensor]],
-        non_tgt_mask: Optional[Union[np.ndarray, tf.Tensor]],
-        attn_mask: Optional[Union[np.ndarray, tf.Tensor]],
-        pos_emb: Optional[Union[np.ndarray, tf.Tensor]],
-        seg_mat: Optional[Union[np.ndarray, tf.Tensor]],
-        mems: Optional[Union[np.ndarray, tf.Tensor]],
-        target_mapping: Optional[Union[np.ndarray, tf.Tensor]],
-        head_mask: Optional[Union[np.ndarray, tf.Tensor]],
-        output_attentions: Optional[bool],
+        output_h,
+        output_g,
+        non_tgt_mask,
+        attn_mask,
+        pos_emb,
+        seg_mat,
+        mems: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        target_mapping: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = False,
         training: Optional[bool] = False,
     ):
         outputs = self.rel_attn(
