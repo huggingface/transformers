@@ -101,6 +101,8 @@ class WhisperTokenizer(PreTrainedTokenizer):
             Path to the vocabulary file.
         merges_file (`str`):
             Path to the merges file.
+        normalizer_file (`str`, *optional*, defaults to `None`):
+            Path to the normalizer_file file.
         errors (`str`, *optional*, defaults to `"replace"`):
             Paradigm to follow when decoding bytes to UTF-8. See
             [bytes.decode](https://docs.python.org/3/library/stdtypes.html#bytes.decode) for more information.
@@ -113,7 +115,10 @@ class WhisperTokenizer(PreTrainedTokenizer):
             The end of sequence token.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (GPT2 tokenizer detect beginning of words by the preceding space).
+            other word.
+        add_bos_token (`bool`, *optional*, defaults to `False`):
+            Whether or not to add an initial <|endoftext|> to the input. This allows to treat the leading word just as
+            any other word.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -126,8 +131,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
         vocab_file,
         merges_file,
         normalizer_file=None,
-        task=None,
-        language="en",
         errors="replace",
         unk_token="<|endoftext|>",
         bos_token="<|endoftext|>",
@@ -153,8 +156,6 @@ class WhisperTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
         self.add_bos_token = add_bos_token
-        self.language = language
-        self.task = task
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
             self.encoder = json.load(vocab_handle)

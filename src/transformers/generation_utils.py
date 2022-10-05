@@ -779,6 +779,8 @@ class GenerationMixin:
         if begin_suppress_tokens is not None:
             begin_index = input_ids_seq_length
             begin_index = begin_index if (input_ids_seq_length > 1 or forced_bos_token_id is None) else begin_index + 1
+            if forced_decoder_ids is not None:
+                begin_index += forced_decoder_ids[-1][0]  # generation starts after the last token that is forced
             processors.append(SuppressTokensAtBeginLogitsProcessor(begin_suppress_tokens, begin_index))
         if forced_decoder_ids is not None:
             processors.append(ForceTokensLogitsProcessor(forced_decoder_ids))
@@ -1120,7 +1122,7 @@ class GenerationMixin:
                 A list of tokens that will be supressed at the begining of the generation. The `SupressBeginTokens`
                 logit processor will set their log probs to `-inf` so that they are not sampled.
             forced_decoder_ids (`List[int]`, *optional*, defaults to `model.config.forced_decoder_ids`):
-                A list of tokens that will be forced as beginning tokens.
+                A list of tokens that will be forced as beginning tokens, before sampling.
 
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If the model

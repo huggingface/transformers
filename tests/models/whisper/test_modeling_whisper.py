@@ -949,7 +949,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
         model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
-        generated_ids = model.generate(input_features,do_sample=False,)
+        generated_ids = model.generate(
+            input_features,
+            do_sample=False,
+        )
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         EXPECTED_TRANSCRIPT = " Kimura san ni denwa wo kaite moraimashita"

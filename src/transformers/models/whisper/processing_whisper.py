@@ -61,7 +61,7 @@ class WhisperProcessor(ProcessorMixin):
                     " '<|as|>', '<|tt|>', '<|haw|>', '<|ln|>', '<|ha|>', '<|ba|>', '<|jw|>', '<|su|>'"
                 )
             forced_decoder_tokens += f"<|{language}|>"
-        
+
         if task is not None:
             if f"<|{task}|>" not in self.tokenizer.additional_special_tokens:
                 raise ValueError(
