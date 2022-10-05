@@ -43,6 +43,8 @@ LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
+# Copied from transformers.models.bert.configuration_bert.BertConfig
+# Copied from transformers.models.roberta.configuration_roberta.RobertaConfig
 class LongformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LongformerModel`] or a [`TFLongformerModel`]. It
