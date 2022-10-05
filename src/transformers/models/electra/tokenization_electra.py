@@ -84,6 +84,7 @@ def whitespace_tokenize(text):
     tokens = text.split()
     return tokens
 
+# Copied from transformers.models.bert.tokenization_bert.BertTokenizer with Bert->Electra
 class ElectraTokenizer(PreTrainedTokenizer):
     r"""
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
