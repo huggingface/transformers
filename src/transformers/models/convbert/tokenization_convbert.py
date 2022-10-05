@@ -305,7 +305,7 @@ class BertTokenizer(PreTrainedTokenizer):
                 index += 1
         return (vocab_file,)
 
-
+# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
 class BasicTokenizer(object):
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
