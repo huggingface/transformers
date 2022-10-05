@@ -2314,6 +2314,7 @@ else:
             "TFCamembertForSequenceClassification",
             "TFCamembertForTokenClassification",
             "TFCamembertModel",
+            "TFCamembertPreTrainedModel",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -4981,6 +4982,7 @@ if TYPE_CHECKING:
             TFCamembertForSequenceClassification,
             TFCamembertForTokenClassification,
             TFCamembertModel,
+            TFCamembertPreTrainedModel,
         )
         from .models.clip import (
             TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
