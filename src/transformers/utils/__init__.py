@@ -100,6 +100,7 @@ from .import_utils import (
     is_ipex_available,
     is_jumanpp_available,
     is_librosa_available,
+    is_more_itertools_available,
     is_ninja_available,
     is_onnx_available,
     is_pandas_available,

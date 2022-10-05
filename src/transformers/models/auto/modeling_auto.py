@@ -146,6 +146,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("wav2vec2", "Wav2Vec2Model"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerModel"),
         ("wavlm", "WavLMModel"),
+        ("whisper", "WhisperModel"),
         ("xclip", "XCLIPModel"),
         ("xglm", "XGLMModel"),
         ("xlm", "XLMModel"),
@@ -273,6 +274,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("tapas", "TapasForMaskedLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("wav2vec2", "Wav2Vec2ForMaskedLM"),
+        ("whisper", "WhisperForConditionalGeneration"),
         ("xlm", "XLMWithLMHeadModel"),
         ("xlm-roberta", "XLMRobertaForMaskedLM"),
         ("xlm-roberta-xl", "XLMRobertaXLForMaskedLM"),
@@ -500,6 +502,7 @@ MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
         ("speech-encoder-decoder", "SpeechEncoderDecoderModel"),
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
+        ("whisper", "WhisperForConditionalGeneration"),
     ]
 )
 

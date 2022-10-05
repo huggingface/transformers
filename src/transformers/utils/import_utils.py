@@ -456,6 +456,10 @@ def is_detectron2_available():
     return _detectron2_available
 
 
+def is_more_itertools_available():
+    return importlib.util.find_spec("more_itertools") is not None
+
+
 def is_rjieba_available():
     return importlib.util.find_spec("rjieba") is not None
 

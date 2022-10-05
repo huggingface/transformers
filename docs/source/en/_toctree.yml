@@ -449,6 +449,8 @@
         title: Wav2Vec2Phoneme
       - local: model_doc/wavlm
         title: WavLM
+      - local: model_doc/whisper
+        title: Whisper
       - local: model_doc/xls_r
         title: XLS-R
       - local: model_doc/xlsr_wav2vec2

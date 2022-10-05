@@ -390,6 +390,13 @@ _import_structure = {
         "WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "WavLMConfig",
     ],
+    "models.whisper": [
+        "WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP",
+        "WhisperConfig",
+        "WhisperFeatureExtractor",
+        "WhisperProcessor",
+        "WhisperTokenizer",
+    ],
     "models.x_clip": [
         "XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "XCLIPConfig",
@@ -1861,6 +1868,14 @@ else:
             "Speech2TextForConditionalGeneration",
             "Speech2TextModel",
             "Speech2TextPreTrainedModel",
+        ]
+    )
+    _import_structure["models.whisper"].extend(
+        [
+            "WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "WhisperForConditionalGeneration",
+            "WhisperModel",
+            "WhisperPreTrainedModel",
         ]
     )
     _import_structure["models.speech_to_text_2"].extend(["Speech2Text2ForCausalLM", "Speech2Text2PreTrainedModel"])
@@ -3339,6 +3354,13 @@ if TYPE_CHECKING:
     from .models.wav2vec2_phoneme import Wav2Vec2PhonemeCTCTokenizer
     from .models.wav2vec2_with_lm import Wav2Vec2ProcessorWithLM
     from .models.wavlm import WAVLM_PRETRAINED_CONFIG_ARCHIVE_MAP, WavLMConfig
+    from .models.whisper import (
+        WHISPER_PRETRAINED_CONFIG_ARCHIVE_MAP,
+        WhisperConfig,
+        WhisperFeatureExtractor,
+        WhisperProcessor,
+        WhisperTokenizer,
+    )
     from .models.x_clip import (
         XCLIP_PRETRAINED_CONFIG_ARCHIVE_MAP,
         XCLIPConfig,
@@ -4723,6 +4745,12 @@ if TYPE_CHECKING:
             WavLMForXVector,
             WavLMModel,
             WavLMPreTrainedModel,
+        )
+        from .models.whisper import (
+            WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            WhisperForConditionalGeneration,
+            WhisperModel,
+            WhisperPreTrainedModel,
         )
         from .models.x_clip import (
             XCLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
