@@ -44,13 +44,6 @@ class WhisperProcessor(ProcessorMixin):
     def get_decoder_prompt_ids(self, task=None, language=None, no_timestamps=True):
         forced_decoder_tokens = ""
 
-        if task is not None:
-            if f"<|{task}|>" not in self.tokenizer.additional_special_tokens:
-                raise ValueError(
-                    f"'{task}' is not supported. The language should be in : {{'transcribe', 'translate'}}"
-                )
-            forced_decoder_tokens += f"<|{task}|>"
-
         if language is not None:
             if f"<|{language}|>" not in self.tokenizer.additional_special_tokens:
                 raise ValueError(
@@ -68,6 +61,13 @@ class WhisperProcessor(ProcessorMixin):
                     " '<|as|>', '<|tt|>', '<|haw|>', '<|ln|>', '<|ha|>', '<|ba|>', '<|jw|>', '<|su|>'"
                 )
             forced_decoder_tokens += f"<|{language}|>"
+        
+        if task is not None:
+            if f"<|{task}|>" not in self.tokenizer.additional_special_tokens:
+                raise ValueError(
+                    f"'{task}' is not supported. The language should be in : {{'transcribe', 'translate'}}"
+                )
+            forced_decoder_tokens += f"<|{task}|>"
 
         forced_decoder_tokens += "<|notimestamps|>" if no_timestamps else ""
         ids = self.tokenizer.encode(forced_decoder_tokens)
