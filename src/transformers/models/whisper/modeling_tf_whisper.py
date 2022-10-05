@@ -663,9 +663,9 @@ class TFWhisperEncoder(TFWhisperPreTrainedModel):
 
         # TF 2.0 layers can't use channels first format when running on CPU.
         input_features = tf.transpose(input_features, perm=(0, 2, 1))
-        input_features = tf.pad(input_features, [[0, 0], [1, 1], [0, 0]], constant_values=0)
+        input_features = tf.pad(input_features, [[0, 0], [1, 1], [0, 0]])
         inputs_embeds = tf.keras.activations.gelu(self.conv1(input_features))
-        inputs_embeds = tf.pad(inputs_embeds, [[0, 0], [1, 1], [0, 0]], constant_values=0)
+        inputs_embeds = tf.pad(inputs_embeds, [[0, 0], [1, 1], [0, 0]])
         inputs_embeds = tf.keras.activations.gelu(self.conv2(inputs_embeds))
         inputs_embeds = tf.transpose(inputs_embeds, perm=(0, 1, 2))
 
@@ -1178,12 +1178,6 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
             encoder_hidden_states=enc_hs,
             encoder_attentions=enc_attns,
         )
-
-
-class ProjectionLayer(tf.keras.layers.Layer):
-    """
-    Linear layer
-    """
 
 
 @add_start_docstrings(
