@@ -445,7 +445,7 @@ class TFGPT2ModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
                 continue
 
             model = model_class(config)
-            model.build_from_serving_sig_and_dummies()
+            model(model.dummy_inputs)
 
             onnx_model_proto, _ = tf2onnx.convert.from_keras(model, opset=self.onnx_min_opset)
 
