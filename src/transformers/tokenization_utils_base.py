@@ -27,7 +27,6 @@ from collections import OrderedDict, UserDict
 from collections.abc import Mapping
 from contextlib import contextmanager
 from dataclasses import dataclass, field
-from functools import cached_property
 from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
@@ -808,6 +807,7 @@ class SpecialTokensMixin:
         self._cls_token = None
         self._mask_token = None
         self._pad_token_type_id = 0
+        self._all_special_ids = None
         self._additional_special_tokens = []
         self.verbose = verbose
 
@@ -1267,14 +1267,17 @@ class SpecialTokensMixin:
         all_toks = list(OrderedDict.fromkeys(all_toks))
         return all_toks
 
-    @cached_property
+    @property
     def all_special_ids(self) -> List[int]:
         """
         `List[int]`: List the ids of the special tokens(`'<unk>'`, `'<cls>'`, etc.) mapped to class attributes.
         """
+        if self._all_special_ids is not None:
+            return self._all_special_ids
         all_toks = self.all_special_tokens
-        all_ids = self.convert_tokens_to_ids(all_toks)
-        return set(all_ids)
+        all_ids = set(self.convert_tokens_to_ids(all_toks))
+        self._all_special_ids = all_ids
+        return all_ids
 
 
 ENCODE_KWARGS_DOCSTRING = r"""
