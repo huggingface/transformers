@@ -112,10 +112,10 @@ def get_pairs(word):
     return pairs
 
 
-# Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer
+# Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer with roberta-base->allenai/longformer-base-4096, RoBERTa->Longformer all-casing, RobertaTokenizer->LongformerTokenizer
 class LongformerTokenizer(PreTrainedTokenizer):
     """
-    Constructs a LongformerTokenizer tokenizer, derived from the GPT-2 tokenizer, using byte-level Byte-Pair-Encoding.
+    Constructs a Longformer tokenizer, derived from the GPT-2 tokenizer, using byte-level Byte-Pair-Encoding.
 
     This tokenizer has been trained to treat spaces like parts of the tokens (a bit like sentencepiece) so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
@@ -124,7 +124,7 @@ class LongformerTokenizer(PreTrainedTokenizer):
     >>> from transformers import LongformerTokenizer
     >>> tokenizer = LongformerTokenizer.from_pretrained("allenai/longformer-base-4096")
     >>> tokenizer("Hello world")['input_ids']
-    [0, 31414, 232, 2]
+    [0, 31414, 232, 328, 2]
     >>> tokenizer(" Hello world")['input_ids']
     [0, 20920, 232, 2]
     ```
@@ -186,7 +186,7 @@ class LongformerTokenizer(PreTrainedTokenizer):
             modeling. This is the token which the model will try to predict.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (RoBERTa tokenizer detect beginning of words by the preceding space).
+            other word. (Longformer tokenizer detect beginning of words by the preceding space).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -355,7 +355,7 @@ class LongformerTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A RoBERTa sequence has the following format:
+        adding special tokens. A Longformer sequence has the following format:
 
         - single sequence: `<s> X </s>`
         - pair of sequences: `<s> A </s></s> B </s>`
@@ -406,8 +406,8 @@ class LongformerTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not
-        make use of token type ids, therefore a list of zeros is returned.
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. Longformer does
+        not make use of token type ids, therefore a list of zeros is returned.
 
         Args:
             token_ids_0 (`List[int]`):
