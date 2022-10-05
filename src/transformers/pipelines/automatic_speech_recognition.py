@@ -415,12 +415,12 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     )
 
         if return_timestamps:
-            ratio = outputs.pop("ratio", None)
             if return_timestamps == "word":
                 offsets = word_offsets
             else:
                 offsets = char_offsets
             chunks = []
+            ratio = model_outputs[0].pop("ratio", None)
             for item in offsets:
                 if ratio is None:
                     ratio = self.model.config.inputs_to_logits_ratio
@@ -439,6 +439,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             output.pop("tokens", None)
             output.pop("logits", None)
             output.pop("is_last", None)
+            output.pop("ratio", None)
             for k, v in output.items():
                 extra[k].append(v)
         return {"text": text, **optional, **extra}
