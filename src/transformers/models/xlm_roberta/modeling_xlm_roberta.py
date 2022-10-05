@@ -576,7 +576,7 @@ class XLMRobertaPooler(nn.Module):
         return pooled_output
 
 
-# Copied from transformers.models.bert.modeling_roberta.RobertaPreTrainedModel with Roberta->XLMRoberta
+# Copied from transformers.models.roberta.modeling_roberta.RobertaPreTrainedModel with Roberta->XLMRoberta
 class XLMRobertaPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained

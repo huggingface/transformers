@@ -45,7 +45,7 @@ XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 class XLMRobertaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XLMRobertaModel`] or a [`TFXLMRobertaModel`]. It is used to
-    instantiate a BERT model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    instantiate a XLM-RoBERTa model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     XLMRoBERTa [xlm-roberta-base](https://huggingface.co/xlm-roberta-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -54,8 +54,8 @@ class XLMRobertaConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BertModel`] or [`TFBertModel`].
+            Vocabulary size of the XLM-RoBERTa model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`XLMRobertaModel`] or [`TFXLMRobertaModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -75,7 +75,7 @@ class XLMRobertaConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`BertModel`] or [`TFBertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`XLMRobertaModel`] or [`TFXLMRobertaModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -97,10 +97,10 @@ class XLMRobertaConfig(PretrainedConfig):
     ```python
     >>> from transformers import XLMRobertaModel, XLMRobertaConfig
 
-    >>> # Initializing a BERT bert-base-uncased style configuration
+    >>> # Initializing a XLM-RoBERTa xlm-roberta-base style configuration
     >>> configuration = XLMRobertaConfig()
 
-    >>> # Initializing a model from the bert-base-uncased style configuration
+    >>> # Initializing a model from the xlm-roberta-base style configuration
     >>> model = XLMRobertaModel(configuration)
 
     >>> # Accessing the model configuration
