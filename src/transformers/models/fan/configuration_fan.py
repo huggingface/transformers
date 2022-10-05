@@ -126,7 +126,15 @@ class FANConfig(PretrainedConfig):
         feat_downsample=False,
         out_index=-1,
         rounding_mode="floor",
-        **kwargs
+        in_channels=[128, 256, 480, 480],
+        in_index=[0, 1, 2, 3],
+        feature_strides=[4, 8, 16, 32],
+        channels=256,
+        dropout_ratio=0.1,
+        decoder_hidden_size=768,
+        reshape_last_stage=False,
+        semantic_loss_ignore_index=-100,
+        **kwargs,
     ):
 
         self.patch_size = patch_size
@@ -149,9 +157,11 @@ class FANConfig(PretrainedConfig):
         self.use_pos_embed = use_pos_embed
         self.mlp_ratio = mlp_ratio
         self.qkv_bias = qkv_bias
+        # TODO: Clean Different Dropout Rates
         self.drop_rate = drop_rate
         self.attn_drop_rate = attn_drop_rate
         self.drop_path_rate = drop_path_rate
+        self.dropout_ratio = dropout_ratio  # TODO: Decoder Dropout
         self.norm_layer = norm_layer
         self.act_layer = act_layer
         self.cls_attn_layers = cls_attn_layers
@@ -162,4 +172,12 @@ class FANConfig(PretrainedConfig):
         self.out_index = out_index
         self.feat_downsample = feat_downsample
         self.rounding_mode = rounding_mode
+        self.in_channels = in_channels
+        self.in_index = in_index
+        self.feature_strides = feature_strides
+        self.channels = channels
+
+        self.decoder_hidden_size = decoder_hidden_size
+        self.reshape_last_stage = reshape_last_stage
+        self.semantic_loss_ignore_index = semantic_loss_ignore_index
         super().__init__(**kwargs)

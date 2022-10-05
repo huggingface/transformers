@@ -73,8 +73,6 @@ FAN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 
 # BELOW: utilities copied from
 # https://github.com/NVlabs/FAN/blob/master/models/fan.py
-
-
 class PositionalEncodingFourier(nn.Module):
     """
     Positional encoding relying on a fourier kernel matching the one used in the "Attention is all of Need" paper.
@@ -90,6 +88,7 @@ class PositionalEncodingFourier(nn.Module):
         self.eps = 1e-6
         self.rounding_mode = rounding_mode  # Uses Floor for Classifier and None for Segmentation
         # Segmentation Positional Encoder link https://github.com/NVlabs/FAN/blob/master/segmentation/mmseg/models/backbones/fan.py
+        # Classifier Positional Encoder link https://github.com/NVlabs/FAN/blob/master/models/fan.py
 
     def forward(self, B: int, H: int, W: int):
         device = self.token_projection.weight.device
@@ -815,8 +814,6 @@ class OverlapPatchEmbed(nn.Module):
 
 
 # ConvNext Utils for Hybrid Backbones
-
-
 def _is_contiguous(tensor: torch.Tensor) -> bool:
     # jit is oh so lovely :/
     # if torch.jit.is_tracing():
@@ -1060,75 +1057,13 @@ class ConvNeXt(nn.Module):
         self.stages = nn.Sequential(*stages)
 
         self.num_features = prev_chs
-        # TODO: Remove Head
-        if head_norm_first:
-            # norm -> global pool -> fc ordering, like most other nets (not compat with FB weights)
-            self.norm_pre = norm_layer(self.num_features)  # final norm layer, before pooling
-            if use_head:
-                self.head = ClassifierHead(
-                    self.num_features,
-                    num_classes,
-                    pool_type=global_pool,
-                    drop_rate=drop_rate,
-                )
-        else:
-            # pool -> norm -> fc, the default ConvNeXt ordering (pretrained FB weights)
-            self.norm_pre = nn.Identity()
-            if use_head:
-                self.head = nn.Sequential(
-                    OrderedDict(
-                        [
-                            (
-                                "global_pool",
-                                SelectAdaptivePool2d(pool_type=global_pool),
-                            ),
-                            ("norm", norm_layer(self.num_features)),
-                            (
-                                "flatten",
-                                nn.Flatten(1) if global_pool else nn.Identity(),
-                            ),
-                            ("drop", nn.Dropout(self.drop_rate)),
-                            (
-                                "fc",
-                                nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity(),
-                            ),
-                        ]
-                    )
-                )
-
-    def get_classifier(self):
-        return self.head.fc
-
-    def reset_classifier(self, num_classes=0, global_pool="avg"):
-        if isinstance(self.head, ClassifierHead):
-            # norm -> global pool -> fc
-            self.head = ClassifierHead(
-                self.num_features,
-                num_classes,
-                pool_type=global_pool,
-                drop_rate=self.drop_rate,
-            )
-        else:
-            # pool -> norm -> fc
-            self.head = nn.Sequential(
-                OrderedDict(
-                    [
-                        ("global_pool", SelectAdaptivePool2d(pool_type=global_pool)),
-                        ("norm", self.head.norm),
-                        ("flatten", nn.Flatten(1) if global_pool else nn.Identity()),
-                        ("drop", nn.Dropout(self.drop_rate)),
-                        (
-                            "fc",
-                            nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity(),
-                        ),
-                    ]
-                )
-            )
+        # TODO: Check if any config has norm_pre
+        self.norm_pre = nn.Identity()
+        # DONE: Remove Head
 
     def forward_features(self, x, return_feat=False):
         x = self.stem(x)
         out_list = []
-        # import pdb; pdb.set_trace()
         for i in range(len(self.stages)):
             x = self.stages[i](x)
             out_list.append(x)
@@ -1138,221 +1073,7 @@ class ConvNeXt(nn.Module):
 
     def forward(self, x):
         x = self.forward_features(x)
-        x = self.head(x)
         return x
-
-
-class FAN(nn.Module):
-    """
-    Based on timm code bases
-    https://github.com/rwightman/pytorch-image-models/tree/master/timm
-    """
-
-    def __init__(
-        self,
-        img_size=224,
-        patch_size=16,
-        in_chans=3,
-        num_classes=1000,
-        embed_dim=768,
-        depth=12,
-        sharpen_attn=False,
-        channel_dims=None,
-        num_heads=12,
-        mlp_ratio=4.0,
-        qkv_bias=True,
-        drop_rate=0.0,
-        attn_drop_rate=0.0,
-        drop_path_rate=0.0,
-        sr_ratio=None,
-        backbone=None,
-        use_checkpoint=False,
-        act_layer=None,
-        norm_layer=None,
-        se_mlp=False,
-        cls_attn_layers=2,
-        use_pos_embed=True,
-        eta=1.0,
-        tokens_norm=False,
-        c_head_num=None,
-        hybrid_patch_size=2,
-        head_init_scale=1.0,
-    ):
-
-        super().__init__()
-        img_size = to_2tuple(img_size)
-        self.use_checkpoint = use_checkpoint
-        assert (img_size[0] % patch_size == 0) and (
-            img_size[0] % patch_size == 0
-        ), "`patch_size` should divide image dimensions evenly"
-
-        self.num_classes = num_classes
-        num_heads = [num_heads] * depth if not isinstance(num_heads, list) else num_heads
-
-        channel_dims = [embed_dim] * depth if channel_dims is None else channel_dims
-        norm_layer = norm_layer or partial(nn.LayerNorm, eps=1e-6)
-        act_layer = act_layer or nn.GELU
-        if backbone == None:
-            self.patch_embed = ConvPatchEmbed(
-                img_size=img_size,
-                patch_size=patch_size,
-                in_chans=in_chans,
-                embed_dim=embed_dim,
-                act_layer=act_layer,
-            )
-        else:
-            self.patch_embed = HybridEmbed(backbone=backbone, patch_size=hybrid_patch_size, embed_dim=embed_dim)
-
-        self.use_pos_embed = use_pos_embed
-        if use_pos_embed:
-            self.pos_embed = PositionalEncodingFourier(dim=embed_dim)
-        self.pos_drop = nn.Dropout(p=drop_rate)
-
-        if se_mlp:
-            build_block = FANBlock_SE
-        else:
-            build_block = FANBlock
-        self.blocks = nn.ModuleList([])
-        for i in range(depth):
-            if i < depth - 1 and channel_dims[i] != channel_dims[i + 1]:
-                downsample = OverlapPatchEmbed(
-                    img_size=img_size,
-                    patch_size=3,
-                    stride=2,
-                    in_chans=channel_dims[i],
-                    embed_dim=channel_dims[i + 1],
-                )
-            else:
-                downsample = None
-            self.blocks.append(
-                build_block(
-                    dim=channel_dims[i],
-                    num_heads=num_heads[i],
-                    mlp_ratio=mlp_ratio,
-                    qkv_bias=qkv_bias,
-                    drop=drop_rate,
-                    sr_ratio=sr_ratio[i],
-                    attn_drop=attn_drop_rate,
-                    drop_path=drop_path_rate,
-                    act_layer=act_layer,
-                    norm_layer=norm_layer,
-                    eta=eta,
-                    downsample=downsample,
-                    c_head_num=c_head_num[i] if c_head_num is not None else None,
-                )
-            )
-        self.num_features = self.embed_dim = channel_dims[i]
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, channel_dims[i]))
-        self.cls_attn_blocks = nn.ModuleList(
-            [
-                ClassAttentionBlock(
-                    dim=channel_dims[-1],
-                    num_heads=num_heads[-1],
-                    mlp_ratio=mlp_ratio,
-                    qkv_bias=qkv_bias,
-                    drop=drop_rate,
-                    attn_drop=attn_drop_rate,
-                    act_layer=act_layer,
-                    norm_layer=norm_layer,
-                    eta=eta,
-                    tokens_norm=tokens_norm,
-                )
-                for _ in range(cls_attn_layers)
-            ]
-        )
-
-        # Classifier head
-        self.norm = norm_layer(channel_dims[i])
-        self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
-
-        # Init weights
-        trunc_normal_(self.cls_token, std=0.02)
-        self.apply(self._init_weights)
-        self.head.weight.data.mul_(head_init_scale)
-        self.head.bias.data.mul_(head_init_scale)
-
-    def _init_weights(self, m):
-        if isinstance(m, nn.Linear):
-            trunc_normal_(m.weight, std=0.02)
-            if isinstance(m, nn.Linear) and m.bias is not None:
-                nn.init.constant_(m.bias, 0)
-        elif isinstance(m, nn.LayerNorm):
-            nn.init.constant_(m.bias, 0)
-            nn.init.constant_(m.weight, 1.0)
-
-    @torch.jit.ignore
-    def no_weight_decay(self):
-        return {"pos_embed", "cls_token"}  # , 'patch_embed'}
-
-    def get_classifier(self):
-        return self.head
-
-    def reset_classifier(self, num_classes, global_pool=""):
-        self.num_classes = num_classes
-        self.head = nn.Linear(self.num_features, num_classes) if num_classes > 0 else nn.Identity()
-
-    def forward_features(self, x):
-        B = x.shape[0]
-        x, (Hp, Wp) = self.patch_embed(x)
-
-        if self.use_pos_embed:
-            pos_encoding = self.pos_embed(B, Hp, Wp).reshape(B, -1, x.shape[1]).permute(0, 2, 1)
-            x = x + pos_encoding
-
-        x = self.pos_drop(x)
-        H, W = Hp, Wp
-        for blk in self.blocks:
-            blk.H, blk.W = H, W
-            if self.use_checkpoint:
-                x = torch.utils.checkpoint.checkpoint(blk, x)
-            else:
-                x = blk(x)
-            H, W = blk.H, blk.W
-
-        cls_tokens = self.cls_token.expand(B, -1, -1)
-        x = torch.cat((cls_tokens, x), dim=1)
-
-        for blk in self.cls_attn_blocks:
-            x = blk(x)
-
-        x = self.norm(x)[:, 0]
-        return x
-
-    def forward(self, x):
-        x = self.forward_features(x)
-        x = self.head(x)
-        return x
-
-    def get_last_selfattention(self, x, use_cls_attn=False, layer_idx=11):
-        B = x.shape[0]
-        x, (Hp, Wp) = self.patch_embed(x)
-
-        if self.use_pos_embed:
-            pos_encoding = self.pos_embed(B, Hp, Wp).reshape(B, -1, x.shape[1]).permute(0, 2, 1)
-            x = x + pos_encoding
-
-        x = self.pos_drop(x)
-
-        return_idx = layer_idx or len(self.blocks) - 1
-
-        for i, blk in enumerate(self.blocks):
-            if i == return_idx:
-                x, attn = blk(x, Hp, Wp, return_attention=True)
-            else:
-                x, Hp, Wp = blk(x, Hp, Wp)
-
-        if use_cls_attn:
-            cls_tokens = self.cls_token.expand(B, -1, -1)
-            x = torch.cat((cls_tokens, x), dim=1)
-
-            for i, blk in enumerate(self.cls_attn_blocks):
-                if i < len(self.cls_attn_blocks) - 1:
-                    x = blk(x)
-                else:
-                    attn = blk(x, return_attention=True)
-                    return attn
-        else:
-            return attn
 
 
 class FANPreTrainedModel(PreTrainedModel):
