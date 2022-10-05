@@ -15,6 +15,7 @@
 
 import collections
 import os
+import unicodedata
 from typing import Iterable, List, Optional, Tuple
 
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
@@ -40,6 +41,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "microsoft/prophetnet-large-uncased": 512,
 }
+
 
 # Copied from transformers.models.bert.tokenization_bert.whitespace_tokenize
 def whitespace_tokenize(text):
