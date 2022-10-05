@@ -174,3 +174,17 @@ class SpeechToTextTokenizerMultilinguialTest(unittest.TestCase):
         expected_spanish = self.tokenizer.decode(generated_ids[1:], skip_special_tokens=True)
         self.assertEqual(result, expected_spanish)
         self.assertNotIn(self.tokenizer.eos_token, result)
+
+    def test_batch_encoding(self):
+        multilingual_tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny.en")
+        batch = ["<|en|><|notimestamps|>", "<|en|><|notimestamps|>I am sure that"]
+        batch_output = multilingual_tokenizer.batch_encode_plus(batch, padding=True).input_ids
+
+        # fmt: off
+        EXPECTED_MULTI = [
+            [50258, 50362, 50256, 50256, 50256, 50256],
+            [50258, 50362, 40, 716, 1654, 326]
+        ]
+        # fmt: on
+
+        self.assertListEqual(batch_output, EXPECTED_MULTI)
