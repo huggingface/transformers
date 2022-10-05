@@ -281,7 +281,6 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         self.lang_with_custom_tokenizer = set(["zh", "th", "ja"])
         # True for current supported model (v1.2.0), False for XLM-17 & 100
         self.do_lowercase_and_remove_accent = False
-        self.do_lowercase = do_lowercase
         self.lang2id = lang2id
         self.id2lang = id2lang
         if lang2id is not None and id2lang is not None:
@@ -299,8 +298,8 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
 
-    # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.do_lower_case
     @property
+    # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.do_lower_case
     def do_lower_case(self):
         return self.do_lowercase_and_remove_accent
 
@@ -351,8 +350,8 @@ class FlaubertTokenizer(PreTrainedTokenizer):
                 raise
         return list(self.ja_word_tokenizer.getWS(text))
 
-    # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.vocab_size
     @property
+    # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.vocab_size
     def vocab_size(self):
         return len(self.encoder)
 
@@ -474,7 +473,7 @@ class FlaubertTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An Flaubert sequence has the following format:
+        adding special tokens. An XLM sequence has the following format:
 
         - single sequence: `<s> X </s>`
         - pair of sequences: `<s> A </s> B </s>`
@@ -530,8 +529,8 @@ class FlaubertTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. An Flaubert
-        sequence pair mask has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. An XLM sequence
+        pair mask has the following format:
 
         ```
         0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
@@ -598,7 +597,7 @@ class FlaubertTokenizer(PreTrainedTokenizer):
             import sacremoses
         except ImportError:
             raise ImportError(
-                "You need to install sacremoses to use FlaubertTokenizer. "
+                "You need to install sacremoses to use XLMTokenizer. "
                 "See https://pypi.org/project/sacremoses/ for installation."
             )
 
