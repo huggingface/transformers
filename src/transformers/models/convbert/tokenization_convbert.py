@@ -71,6 +71,7 @@ def whitespace_tokenize(text):
     tokens = text.split()
     return tokens
 
+
 # Copied from transformers.models.bert.tokenization_bert.BertTokenizer with ConvBertTokenizer->BertTokenizer
 class ConvBertTokenizer(PreTrainedTokenizer):
     r"""

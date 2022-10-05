@@ -13,15 +13,21 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for ConvBERT."""
-import json
 import collections
+import json
 import os
-from typing import List, Optional, Tuple
 import unicodedata
+from typing import List, Optional, Tuple
 
 from tokenizers import normalizers
 
-from ...tokenization_utils_fast import PreTrainedTokenizerFast, _is_control, _is_punctuation, _is_whitespace, PreTrainedTokenizer
+from ...tokenization_utils_fast import (
+    PreTrainedTokenizer,
+    PreTrainedTokenizerFast,
+    _is_control,
+    _is_punctuation,
+    _is_whitespace,
+)
 from ...utils import logging
 from .tokenization_convbert import ConvBertTokenizer
 
@@ -74,6 +80,7 @@ def whitespace_tokenize(text):
         return []
     tokens = text.split()
     return tokens
+
 
 # Copied from transformers.models.bert.tokenization_bert.BertTokenizer with ConvBertTokenizer->BertTokenizer
 class BertTokenizer(PreTrainedTokenizer):
@@ -667,10 +674,9 @@ class BertTokenizerFast(PreTrainedTokenizerFast):
 
 class ConvBertTokenizerFast(BertTokenizerFast):
     r"""
-    Construct a "fast" ConvBERT tokenizer (backed by HuggingFace's *tokenizers* library).
-    [`ConvBertTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation
-    splitting and wordpiece.
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
+    Construct a "fast" ConvBERT tokenizer (backed by HuggingFace's *tokenizers* library). [`ConvBertTokenizerFast`] is
+    identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation splitting and wordpiece. Refer to
+    superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
     """
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
