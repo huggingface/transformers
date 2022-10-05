@@ -16,9 +16,9 @@
 from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, List, Mapping, Optional, Union
 
+from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import TensorType, logging
-from ...configuration_utils import PretrainedConfig
 
 
 if TYPE_CHECKING:
@@ -43,8 +43,6 @@ LONGFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 }
 
 
-# Copied from transformers.models.bert.configuration_bert.BertConfig
-# Copied from transformers.models.roberta.configuration_roberta.RobertaConfig
 class LongformerConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LongformerModel`] or a [`TFLongformerModel`]. It
@@ -119,29 +117,29 @@ class LongformerConfig(PretrainedConfig):
     model_type = "longformer"
 
     def __init__(
-            self,
-            attention_window: Union[List[int], int] = 512,  # Longformer Default
-            sep_token_id: int = 2,                          # Longformer Default
-            pad_token_id: int = 1,                          # Roberta Default
-            bos_token_id: int = 0,                          # Roberta Default
-            eos_token_id: int = 2,                          # Roberta Default
-            vocab_size: int = 30522,                        # Bert Default
-            hidden_size: int = 768,                         # Bert Default
-            num_hidden_layers: int = 12,                    # Bert Default
-            num_attention_heads: int = 12,                  # Bert Default
-            intermediate_size: int = 3072,                  # Bert Default
-            hidden_act: str = "gelu",                       # Bert Default
-            hidden_dropout_prob: float = 0.1,               # Bert Default
-            attention_probs_dropout_prob: float = 0.1,      # Bert Default
-            max_position_embeddings: int = 512,             # Bert Default
-            type_vocab_size: int = 2,                       # Bert Default
-            initializer_range: float = 0.02,                # Bert Default
-            layer_norm_eps: float = 1e-12,                  # Bert Default
-            position_embedding_type: str = "absolute",      # Bert Default
-            use_cache: bool = True,                         # Bert Default
-            classifier_dropout: float = None,               # Bert Default
-            onnx_export: bool = False,
-            **kwargs
+        self,
+        attention_window: Union[List[int], int] = 512,  # Longformer Default
+        sep_token_id: int = 2,  # Longformer Default
+        pad_token_id: int = 1,  # Roberta Default
+        bos_token_id: int = 0,  # Roberta Default
+        eos_token_id: int = 2,  # Roberta Default
+        vocab_size: int = 30522,  # Bert Default
+        hidden_size: int = 768,  # Bert Default
+        num_hidden_layers: int = 12,  # Bert Default
+        num_attention_heads: int = 12,  # Bert Default
+        intermediate_size: int = 3072,  # Bert Default
+        hidden_act: str = "gelu",  # Bert Default
+        hidden_dropout_prob: float = 0.1,  # Bert Default
+        attention_probs_dropout_prob: float = 0.1,  # Bert Default
+        max_position_embeddings: int = 512,  # Bert Default
+        type_vocab_size: int = 2,  # Bert Default
+        initializer_range: float = 0.02,  # Bert Default
+        layer_norm_eps: float = 1e-12,  # Bert Default
+        position_embedding_type: str = "absolute",  # Bert Default
+        use_cache: bool = True,  # Bert Default
+        classifier_dropout: float = None,  # Bert Default
+        onnx_export: bool = False,
+        **kwargs
     ):
         """Constructs LongformerConfig."""
         super().__init__(pad_token_id=pad_token_id, **kwargs)
