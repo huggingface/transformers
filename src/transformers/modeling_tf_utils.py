@@ -1049,6 +1049,11 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
+        # Building the model while skipping the dummies effectively just sets the save spec
+        # without building any layers. We do this the moment the model is initialized to make sure the
+        # dummy inputs (or any other specific input tensors passed by the user) won't ever be used as the default
+        # signature.
+        self.build_from_serving_sig_and_dummies(skip_dummies=True)
 
     def build(self, input_shape: Dict[str, tf.TensorShape]):
         # Bypass the default tf.keras.Model.build() logic, which doesn't work for our models anyway.
@@ -1056,19 +1061,18 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # self.built to True, which is conveniently exactly what we want.
         super(tf.keras.Model, self).build(input_shape)
 
-    def build_from_serving_sig_and_dummies(self):
+    def build_from_serving_sig_and_dummies(self, skip_dummies=False):
         """
         A replacement for just calling model(model.dummy_inputs). This method first uses self.build() to set more
         flexible input shapes that are usable for serving, then calls model(model.dummy_inputs) to actually build the
         model.
         """
-        if not hasattr(self, "serving") or not hasattr(self.serving, "input_signature"):
-            return
         serving_sig = self.serving.input_signature[0]
         serving_shapes = {k: v.shape for k, v in serving_sig.items()}
         self.build(serving_shapes)  # Sets some shapes in the model internals - not sure if necessary but can't hurt
         self._set_save_spec(serving_sig)  # Fully set the model save spec
-        self(self.dummy_inputs)  # Actually builds the model with fixed dummies now the flexible serving shapes are set
+        if not skip_dummies:
+            self(self.dummy_inputs)  # Actually builds the model with dummy inputs
 
     def get_config(self):
         return self.config.to_dict()
