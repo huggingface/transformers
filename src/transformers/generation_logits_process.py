@@ -735,8 +735,8 @@ class SuppressTokensLogitsProcessor(LogitsProcessor):
 
 
 class ForceTokensLogitsProcessor(LogitsProcessor):
-    r"""This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so that they
-    are not sampled."""
+    r"""This processor can be used to force a list of tokens. The processor will set their log probs to `inf` so that they
+    are sampled at their corresponding index."""
 
     def __init__(self, force_token_map):
         self.force_token_map = dict(force_token_map)

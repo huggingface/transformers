@@ -21,7 +21,6 @@ import tempfile
 import unittest
 
 from transformers import WhisperConfig
-from transformers.models.whisper.configuration_whisper import NON_SPEECH_TOKENS_MULTI
 from transformers.testing_utils import is_torch_available, require_torch, require_torchaudio, slow, torch_device
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
@@ -43,7 +42,6 @@ if is_torch_available():
         WhisperForConditionalGeneration,
         WhisperModel,
         WhisperProcessor,
-        WhisperTokenizer,
         set_seed,
     )
     from transformers.models.whisper.modeling_whisper import WhisperDecoder, WhisperEncoder
@@ -864,18 +862,18 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch_device = "cpu"
         set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model.to(torch_device)
         model.config.decoder_start_token_id = 50257
 
         input_speech = self._load_datasamples(1)
-        feaure_extractor = WhisperFeatureExtractor()
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
+            torch_device
+        )
 
-        input_features = feaure_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(torch_device)
-
-        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny.en")
-        generated_ids = model.generate(input_features, num_beams=5, forced_bos_token_id=50362)
-        transcript = tokenizer.batch_decode(generated_ids)[0]
+        generated_ids = model.generate(input_features, num_beams=5)
+        transcript = processor.tokenizer.batch_decode(generated_ids)[0]
 
         EXPECTED_TRANSCRIPT = (
             "<|startoftranscript|><|notimestamps|> Mr. Quilter is the apostle of the middle"
@@ -888,20 +886,17 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         torch_device = "cpu"
         set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
         model.to(torch_device)
-        model.config.begin_suppress_tokens = None
-        model.config.suppress_tokens = None
+
         input_speech = self._load_datasamples(1)
-        feaure_extractor = WhisperFeatureExtractor()
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
+            torch_device
+        )
 
-        input_features = feaure_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(torch_device)
-
-        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-large")
-
-        decoder_input_ids = torch.tensor([[50258]]).long()
-        generated_ids = model.generate(input_features, num_beams=5, decoder_input_ids=decoder_input_ids)
-        transcript = tokenizer.decode(generated_ids[0])
+        generated_ids = model.generate(input_features, num_beams=5)
+        transcript = processor.tokenizer.decode(generated_ids[0])
 
         EXPECTED_TRANSCRIPT = (
             "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> Mr. Quilter is the apostle of the middle"
@@ -913,23 +908,21 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def test_large_generation(self):
         torch_device = "cpu"
         set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
         input_speech = self._load_datasamples(1)
-        feaure_extractor = WhisperFeatureExtractor()
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
+            torch_device
+        )
 
-        input_features = feaure_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(torch_device)
-
-        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-large")
-
-        decoder_input_ids = torch.tensor([[50258]]).long()
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
         generated_ids = model.generate(
             input_features,
             do_sample=False,
-            decoder_input_ids=decoder_input_ids,
         )
-        transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
@@ -938,52 +931,34 @@ class WhisperModelIntegrationTests(unittest.TestCase):
     def test_large_generation_multilingual(self):
         torch_device = "cpu"
         set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
-        model.config.suppress_tokens = NON_SPEECH_TOKENS_MULTI
 
         ds = load_dataset("common_voice", "ja", split="test", streaming=True)
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
-        ds_iter = iter(ds)
-        input_speech = next(ds_iter)["audio"]["array"]
-
-        feaure_extractor = WhisperFeatureExtractor()
-
-        input_features = feaure_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(torch_device)
-
-        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-large")
-
-        model.config.begin_suppress_tokens = [tokenizer.encode(" ")[0], tokenizer.eos_token_id]
-        decoder_input_ids = torch.tensor([[50258, 50359, 50266, 50363]]).long().to(torch_device)
-        generated_ids = model.generate(
-            input_features,
-            do_sample=True,
-            decoder_input_ids=decoder_input_ids,
+        input_speech = next(iter(ds))["audio"]["array"]
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="pt").input_features.to(
+            torch_device
         )
-        transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = "木村さんに電話を貸してもらいました。 木"
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="transcribe")
+        generated_ids = model.generate(input_features, do_sample=False)
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        EXPECTED_TRANSCRIPT = "木村さんに電話を貸してもらいました"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-        decoder_input_ids = torch.tensor([[50258, 50359, 50357]]).long().to(torch_device)
-        generated_ids = model.generate(
-            input_features,
-            do_sample=False,
-            decoder_input_ids=decoder_input_ids,
-        )
-        transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
+        generated_ids = model.generate(input_features,do_sample=False,)
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = " Kimura san ni denwa wo kaite moraimashita."
+        EXPECTED_TRANSCRIPT = " Kimura san ni denwa wo kaite moraimashita"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-        decoder_input_ids = torch.tensor([[50258, 50266, 50358, 50363]]).long().to(torch_device)
-        generated_ids = model.generate(
-            input_features,
-            do_sample=False,
-            decoder_input_ids=decoder_input_ids,
-        )
-        transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="translate")
+        generated_ids = model.generate(input_features, do_sample=False)
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = " I borrowed a phone from Kimura san. Thank you for watching. Please subscribe"
-        # should only be "I borrowed a phone from Kimura san. But it seems like it is a well known bug"
+        EXPECTED_TRANSCRIPT = " I borrowed a phone from Kimura san"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
