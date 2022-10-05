@@ -41,6 +41,7 @@ XLM_ROBERTA_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     ),
 }
 
+
 class XLMRobertaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XLMRobertaModel`] or a [`TFXLMRobertaModel`]. It is used to
@@ -146,6 +147,7 @@ class XLMRobertaConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
+
 
 # Copied from transformers.models.roberta.configuration_roberta.RobertaOnnxConfig with Roberta->XLMRoberta
 class XLMRobertaOnnxConfig(OnnxConfig):
