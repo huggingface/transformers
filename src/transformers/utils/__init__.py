@@ -97,6 +97,7 @@ from .import_utils import (
     is_ftfy_available,
     is_in_notebook,
     is_ipex_available,
+    is_kenlm_available,
     is_librosa_available,
     is_ninja_available,
     is_onnx_available,

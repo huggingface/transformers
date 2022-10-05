@@ -246,6 +246,12 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _pyctcdecode_available = False
 
+_kenlm_available = importlib.util.find_spec("kenlm") is not None
+try:
+    _kenlm_version = importlib_metadata.version("kenlm")
+    logger.debug(f"Successfully imported kenlm version {_kenlm_version}")
+except importlib_metadata.PackageNotFoundError:
+    _kenlm_available = False
 
 _librosa_available = importlib.util.find_spec("librosa") is not None
 try:
@@ -276,6 +282,10 @@ def is_torch_available():
 
 def is_pyctcdecode_available():
     return _pyctcdecode_available
+
+
+def is_kenlm_available():
+    return _kenlm_available
 
 
 def is_librosa_available():
@@ -876,6 +886,12 @@ PYCTCDECODE_IMPORT_ERROR = """
 """
 
 # docstyle-ignore
+KENLM_IMPORT_ERROR = """
+{0} requires the kenlm library but it was not found in your environment. You can install it with pip:
+`pip install https://github.com/kpu/kenlm/archive/master.zip`
+"""
+
+# docstyle-ignore
 ACCELERATE_IMPORT_ERROR = """
 {0} requires the accelerate library but it was not found in your environment. You can install it with pip:
 `pip install accelerate`
@@ -898,6 +914,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("phonemizer", (is_phonemizer_available, PHONEMIZER_IMPORT_ERROR)),
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
+        ("kenlm", (is_kenlm_available, KENLM_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
         ("sacremoses", (is_sacremoses_available, SACREMOSES_IMPORT_ERROR)),
         ("scatter", (is_scatter_available, SCATTER_IMPORT_ERROR)),

@@ -51,6 +51,7 @@ from .utils import (
     is_flax_available,
     is_ftfy_available,
     is_ipex_available,
+    is_kenlm_available,
     is_librosa_available,
     is_onnx_available,
     is_pandas_available,
@@ -635,6 +636,13 @@ def require_pyctcdecode(test_case):
     Decorator marking a test that requires pyctcdecode
     """
     return unittest.skipUnless(is_pyctcdecode_available(), "test requires pyctcdecode")(test_case)
+
+
+def require_kenlm(test_case):
+    """
+    Decorator marking a test that requires kenlm
+    """
+    return unittest.skipUnless(is_kenlm_available(), "test requires kenlm")(test_case)
 
 
 def require_librosa(test_case):
@@ -1537,6 +1545,8 @@ def nested_simplify(obj, decimals=3):
         return round(obj, decimals)
     elif isinstance(obj, (np.int32, np.float32)):
         return nested_simplify(obj.item(), decimals)
+    elif isinstance(obj, (tuple)):
+        return tuple(nested_simplify(list(obj), decimals))
     else:
         raise Exception(f"Not supported: {type(obj)}")
 

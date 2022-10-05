@@ -57,11 +57,15 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right):
         # add start and end paddings to the chunk
         chunk = inputs[i : i + chunk_len]
         processed = feature_extractor(chunk, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt")
+
+        _main = chunk.shape[0]
         _stride_left = 0 if i == 0 else stride_left
         is_last = i + step + stride_left >= inputs_len
         _stride_right = 0 if is_last else stride_right
+        if "input_features" in processed:
+            processed["input_to_features_ratio"] = _main / processed["input_features"].shape[1]
         if chunk.shape[0] > _stride_left:
-            yield {"is_last": is_last, "stride": (chunk.shape[0], _stride_left, _stride_right), **processed}
+            yield {"is_last": is_last, "stride": (_main, _stride_left, _stride_right), **processed}
 
 
 class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
@@ -258,7 +262,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             # XXX: Carefuly, this variable will not exist in `seq2seq` setting.
             # Currently chunking is not possible at this level for `seq2seq` so
             # it's ok.
-            align_to = self.model.config.inputs_to_logits_ratio
+            # If this variable is not available we cannot know how to align
+            # properly. timestamps are likely to be wrong.
+            align_to = getattr(self.model.config, "inputs_to_logits_ratio", 1)
             chunk_len = int(round(chunk_length_s * self.feature_extractor.sampling_rate / align_to)) * align_to
             stride_left = int(round(stride_length_s[0] * self.feature_extractor.sampling_rate / align_to)) * align_to
             stride_right = int(round(stride_length_s[1] * self.feature_extractor.sampling_rate / align_to)) * align_to
@@ -312,9 +318,13 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             out = {"tokens": tokens}
         else:
             stride = model_inputs.pop("stride", None)
-            input_values = model_inputs.pop("input_values")
+            input_to_features_ratio = model_inputs.pop("input_to_features_ratio", None)
+            if "input_features" in model_inputs:
+                inputs = model_inputs.pop("input_features")
+            elif "input_values" in model_inputs:
+                inputs = model_inputs.pop("input_values")
             attention_mask = model_inputs.pop("attention_mask", None)
-            outputs = self.model(input_values=input_values, attention_mask=attention_mask)
+            outputs = self.model(inputs, attention_mask=attention_mask)
             logits = outputs.logits
 
             if self.type == "ctc_with_lm":
@@ -325,11 +335,31 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                 # Send stride to `postprocess`.
                 # it needs to be handled there where
                 # the pieces are to be concatenated.
-                ratio = 1 / self.model.config.inputs_to_logits_ratio
-                if isinstance(stride, tuple):
-                    out["stride"] = rescale_stride(logits, [stride], ratio)[0]
+                if input_to_features_ratio is None:
+                    ratio = self.model.config.inputs_to_logits_ratio
                 else:
-                    out["stride"] = rescale_stride(logits, stride, ratio)
+                    new_ratio = inputs.shape[1] / logits.shape[1]
+                    if isinstance(input_to_features_ratio, list):
+                        f = input_to_features_ratio[0]
+                        batch_size = len(input_to_features_ratio)
+                        if any([abs(f - r) / f > 1e-2 for r in input_to_features_ratio]):
+                            # This shouldn't trigger since ratios should be consistent
+                            # through the pipeline, however since everything is calculated
+                            # a check shouldn't hurt
+                            raise Exception("The ratios are not similar enough")
+                        ratio = input_to_features_ratio[0] * new_ratio
+                        outratio = [ratio] * batch_size
+                    else:
+                        ratio = input_to_features_ratio * new_ratio
+                        outratio = ratio
+                    out["ratio"] = outratio
+
+                if isinstance(stride, tuple):
+                    stride = rescale_stride(logits, [stride], 1 / ratio)[0]
+                else:
+                    stride = rescale_stride(logits, stride, 1 / ratio)
+                out["stride"] = stride
+
         # Leftover
         extra = model_inputs
         return {"is_last": is_last, **out, **extra}
@@ -385,16 +415,20 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     )
 
         if return_timestamps:
+            ratio = outputs.pop("ratio", None)
             if return_timestamps == "word":
                 offsets = word_offsets
             else:
                 offsets = char_offsets
             chunks = []
             for item in offsets:
-                start = item["start_offset"] * self.model.config.inputs_to_logits_ratio
+                if ratio is None:
+                    ratio = self.model.config.inputs_to_logits_ratio
+
+                start = item["start_offset"] * ratio
                 start /= self.feature_extractor.sampling_rate
 
-                stop = item["end_offset"] * self.model.config.inputs_to_logits_ratio
+                stop = item["end_offset"] * ratio
                 stop /= self.feature_extractor.sampling_rate
 
                 chunks.append({"text": item[return_timestamps], "timestamp": (start, stop)})

@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     is_pipeline_test,
     is_torch_available,
     nested_simplify,
+    require_kenlm,
     require_pyctcdecode,
     require_tf,
     require_torch,
@@ -153,6 +154,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
     @slow
     @require_torch
     @require_pyctcdecode
+    @require_kenlm
     def test_large_model_pt_with_lm(self):
         dataset = load_dataset("Narsil/asr_dummy")
         filename = dataset["test"][3]["file"]
@@ -378,6 +380,49 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
         self.assertEqual(output[0]["text"][:6], "ZBT ZC")
 
     @require_torch
+    @slow
+    def test_mctct(self):
+        speech_recognizer = pipeline(
+            model="speechbrain/m-ctc-t-large",
+            chunk_length_s=10.0,
+            return_timestamps="word",
+            framework="pt",
+        )
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        # It should work for a single non-batched input
+        output = speech_recognizer(audio)
+        self.assertEqual(
+            nested_simplify(output),
+            {
+                "text": "A man said to the universe, Sir, I exist.",
+                "chunks": [
+                    {"text": "A", "timestamp": (0.3, 0.33)},
+                    {"text": "man", "timestamp": (0.51, 0.72)},
+                    {"text": "said", "timestamp": (0.93, 1.14)},
+                    {"text": "to", "timestamp": (1.2, 1.29)},
+                    {"text": "the", "timestamp": (1.38, 1.47)},
+                    {"text": "universe,", "timestamp": (1.59, 2.4)},
+                    {"text": "Sir,", "timestamp": (2.67, 3.15)},
+                    {"text": "I", "timestamp": (3.33, 3.36)},
+                    {"text": "exist.", "timestamp": (3.6, 4.59)},
+                ],
+            },
+        )
+
+        # And also for multiple batched inputs
+        n_repeats = 2
+        audio_tiled = np.tile(audio, n_repeats)
+        output = speech_recognizer([audio_tiled], batch_size=2)
+        self.assertEqual(
+            # XXX: This is a probable bug
+            output[0]["text"],
+            "A man said to the universe, Sir, I exist, a man said to the universe, Sirxist.",
+        )
+
+    @require_torch
     def test_return_timestamps_ctc_fast(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -450,6 +495,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
     @require_torch
     @require_pyctcdecode
+    @require_kenlm
     def test_with_lm_fast(self):
         speech_recognizer = pipeline(
             model="hf-internal-testing/processor_with_lm",
@@ -476,6 +522,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=Pipel
 
     @require_torch
     @require_pyctcdecode
+    @require_kenlm
     def test_with_local_lm_fast(self):
         local_dir = snapshot_download("hf-internal-testing/processor_with_lm")
         speech_recognizer = pipeline(

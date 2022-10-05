@@ -166,6 +166,7 @@ else:
                     "MBart50TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("mctct", ("Wav2Vec2CTCTokenizer", None)),
             ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
             ("mobilebert", ("MobileBertTokenizer", "MobileBertTokenizerFast" if is_tokenizers_available() else None)),
