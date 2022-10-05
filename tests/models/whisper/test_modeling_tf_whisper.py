@@ -94,8 +94,7 @@ class TFWhisperModelTester:
         attention_probs_dropout_prob=0.1,
         max_position_embeddings=20,
         max_source_positions=30,
-        # max_target_positions=40, # FIXME - double check this
-        max_target_positions=70,
+        max_target_positions=60,
         bos_token_id=98,
         eos_token_id=98,
         pad_token_id=0,
