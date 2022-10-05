@@ -306,7 +306,7 @@ jobs:
                   key: v0.5-flax-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_flax $(cat test_preparation/test_list.txt) | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_flax $(cat test_preparation/test_list.txt) --ignore=tests/pipelines | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
