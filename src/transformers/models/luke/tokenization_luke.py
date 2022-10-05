@@ -253,6 +253,15 @@ class LukeTokenizer(PreTrainedTokenizer):
         merges_file,
         entity_vocab_file,
         task=None,
+        errors="replace",
+        bos_token="<s>",
+        eos_token="</s>",
+        sep_token="</s>",
+        cls_token="<s>",
+        unk_token="<unk>",
+        pad_token="<pad>",
+        mask_token="<mask>",
+        add_prefix_space=False,
         max_entity_length=32,
         max_mention_length=30,
         entity_token_1="<ent>",
@@ -263,6 +272,15 @@ class LukeTokenizer(PreTrainedTokenizer):
         entity_mask2_token="[MASK2]",
         **kwargs
     ):
+        bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
+        eos_token = AddedToken(eos_token, lstrip=False, rstrip=False) if isinstance(eos_token, str) else eos_token
+        sep_token = AddedToken(sep_token, lstrip=False, rstrip=False) if isinstance(sep_token, str) else sep_token
+        cls_token = AddedToken(cls_token, lstrip=False, rstrip=False) if isinstance(cls_token, str) else cls_token
+        unk_token = AddedToken(unk_token, lstrip=False, rstrip=False) if isinstance(unk_token, str) else unk_token
+        pad_token = AddedToken(pad_token, lstrip=False, rstrip=False) if isinstance(pad_token, str) else pad_token
+
+        # Mask token behave like a normal word, i.e. include the space before it
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
         # we add 2 special tokens for downstream tasks
         # for more information about lstrip and rstrip, see https://github.com/huggingface/transformers/pull/2778
         entity_token_1 = (
@@ -290,9 +308,34 @@ class LukeTokenizer(PreTrainedTokenizer):
             entity_pad_token=entity_pad_token,
             entity_mask_token=entity_mask_token,
             entity_mask2_token=entity_mask2_token,
+            errors=errors,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            unk_token=unk_token,
+            sep_token=sep_token,
+            cls_token=cls_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
+        with open(vocab_file, encoding="utf-8") as vocab_handle:
+            self.encoder = json.load(vocab_handle)
+        self.decoder = {v: k for k, v in self.encoder.items()}
+        self.errors = errors  # how to handle errors in decoding
+        self.byte_encoder = bytes_to_unicode()
+        self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
+        with open(merges_file, encoding="utf-8") as merges_handle:
+            bpe_merges = merges_handle.read().split("\n")[1:-1]
+        bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
+        self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
+        self.cache = {}
+        self.add_prefix_space = add_prefix_space
+
+        # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
+        self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        
         with open(entity_vocab_file, encoding="utf-8") as entity_vocab_handle:
             self.entity_vocab = json.load(entity_vocab_handle)
         for entity_special_token in [entity_unk_token, entity_pad_token, entity_mask_token, entity_mask2_token]:
