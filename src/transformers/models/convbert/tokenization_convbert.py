@@ -49,6 +49,7 @@ PRETRAINED_INIT_CONFIGURATION = {
     "YituTech/conv-bert-small": {"do_lower_case": True},
 }
 
+
 # Copied from transformers.models.bert.tokenization_bert.load_vocab
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
