@@ -48,7 +48,6 @@ from transformers.testing_utils import (
     USER,
     CaptureLogger,
     RequestCounter,
-    is_pipeline_test,
     is_staging_test,
     nested_simplify,
     require_scatter,
@@ -307,7 +306,6 @@ class PipelineTestCaseMeta(type):
         return type.__new__(mcs, name, bases, dct)
 
 
-@is_pipeline_test
 class CommonPipelineTest(unittest.TestCase):
     @require_torch
     def test_pipeline_iteration(self):
@@ -416,7 +414,6 @@ class CommonPipelineTest(unittest.TestCase):
         self.assertEqual(len(outputs), 20)
 
 
-@is_pipeline_test
 class PipelinePadTest(unittest.TestCase):
     @require_torch
     def test_pipeline_padding(self):
@@ -498,7 +495,6 @@ class PipelinePadTest(unittest.TestCase):
         )
 
 
-@is_pipeline_test
 class PipelineUtilsTest(unittest.TestCase):
     @require_torch
     def test_pipeline_dataset(self):
@@ -795,7 +791,6 @@ class CustomPipeline(Pipeline):
         return model_outputs["logits"].softmax(-1).numpy()
 
 
-@is_pipeline_test
 class CustomPipelineTest(unittest.TestCase):
     def test_warning_logs(self):
         transformers_logging.set_verbosity_debug()

@@ -318,7 +318,6 @@ jobs:
             - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
-            RUN_PIPELINE_TESTS: yes
             TRANSFORMERS_IS_CI: yes
             PYTEST_TIMEOUT: 120
         resource_class: xlarge
@@ -345,7 +344,7 @@ jobs:
                   key: v0.5-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test $(cat test_preparation/test_list.txt) | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch tests/pipelines | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -357,7 +356,6 @@ jobs:
             - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
-            RUN_PIPELINE_TESTS: yes
             TRANSFORMERS_IS_CI: yes
             PYTEST_TIMEOUT: 120
         resource_class: xlarge
@@ -382,7 +380,7 @@ jobs:
                   key: v0.5-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf $(cat test_preparation/test_list.txt) -m is_pipeline_test | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf tests/pipelines | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
