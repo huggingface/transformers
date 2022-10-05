@@ -37,8 +37,6 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
-    IBertConfig,
-    RobertaConfig,
     TextClassificationPipeline,
     TFAutoModelForSequenceClassification,
     pipeline,
@@ -204,7 +202,7 @@ class PipelineTestCaseMeta(type):
                     try:
                         tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
                         # XLNet actually defines it as -1.
-                        if model.config.__name__ in ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS:
+                        if model.config.__class__.__name__ in ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS:
                             tokenizer.model_max_length = model.config.max_position_embeddings - 2
                         elif (
                             hasattr(model.config, "max_position_embeddings")
