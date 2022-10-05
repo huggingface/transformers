@@ -71,6 +71,16 @@ from test_module.custom_pipeline import PairClassificationPipeline  # noqa E402
 logger = logging.getLogger(__name__)
 
 
+ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS = [
+    "CamembertConfig",
+    "IBertConfig",
+    "LongformerConfig",
+    "MarkupLMConfig",
+    "RobertaConfig",
+    "XLMRobertaConfig",
+]
+
+
 def get_checkpoint_from_architecture(architecture):
     try:
         module = importlib.import_module(architecture.__module__)
@@ -194,7 +204,7 @@ class PipelineTestCaseMeta(type):
                     try:
                         tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
                         # XLNet actually defines it as -1.
-                        if isinstance(model.config, (RobertaConfig, IBertConfig)):
+                        if model.config.__name__ in ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS:
                             tokenizer.model_max_length = model.config.max_position_embeddings - 2
                         elif (
                             hasattr(model.config, "max_position_embeddings")
