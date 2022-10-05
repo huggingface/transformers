@@ -22,7 +22,7 @@ from transformers import (
 )
 from transformers.data.processors.squad import SquadExample
 from transformers.pipelines import QuestionAnsweringArgumentHandler, pipeline
-from transformers.testing_utils import nested_simplify, require_tf, require_torch, slow
+from transformers.testing_utils import nested_simplify, require_tf, require_torch, require_torch_or_tf, slow
 
 from .test_pipelines_common import ANY, PipelineTestCaseMeta
 
@@ -344,6 +344,7 @@ between them. It's straightforward to train your models with one before loading 
         self.assertEqual(nested_simplify(outputs), {"score": 0.979, "start": 27, "end": 32, "answer": "Paris"})
 
 
+@require_torch_or_tf
 class QuestionAnsweringArgumentHandlerTests(unittest.TestCase):
     def test_argument_handler(self):
         qa = QuestionAnsweringArgumentHandler()

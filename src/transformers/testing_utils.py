@@ -289,6 +289,18 @@ def require_torch(test_case):
     return unittest.skipUnless(is_torch_available(), "test requires PyTorch")(test_case)
 
 
+def require_torch_or_tf(test_case):
+    """
+    Decorator marking a test that requires PyTorch or TensorFlow.
+
+    These tests are skipped when neither PyTorch not TensorFlow is installed.
+
+    """
+    return unittest.skipUnless(is_torch_available() or is_tf_available(), "test requires PyTorch or TensorFlow")(
+        test_case
+    )
+
+
 def require_intel_extension_for_pytorch(test_case):
     """
     Decorator marking a test that requires Intel Extension for PyTorch.
