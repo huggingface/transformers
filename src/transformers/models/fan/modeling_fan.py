@@ -1234,7 +1234,7 @@ class FANEmbeddings(FANPreTrainedModel):
         if output_hidden_states:
             return hidden_states, (Hp, Wp), encoder_states
 
-        return hidden_states, (Hp, Wp)
+        return hidden_states, (Hp, Wp), encoder_states
 
 
 # TODO: Update Docstring
@@ -1267,24 +1267,26 @@ class FANEncoder(FANPreTrainedModel):
         norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
         act_layer = config.act_layer or nn.GELU
 
-        if config.backbone == None:
-            self.patch_embed = ConvPatchEmbed(
-                img_size=img_size,
-                patch_size=config.patch_size,
-                in_chans=config.in_chans,
-                embed_dim=config.embed_dim,
-                act_layer=act_layer,
-            )
-        elif config.backbone == "hybrid":
-            backbone = ConvNeXt(depths=self.config.depths, dims=self.config.dims, use_head=False)
-            self.patch_embed = HybridEmbed(
-                backbone=backbone, patch_size=config.hybrid_patch_size, embed_dim=config.embed_dim
-            )
-        else:
-            raise ValueError(f"{config.backbone} has to be either hybrid or None")
-        if config.use_pos_embed:
-            self.pos_embed = PositionalEncodingFourier(dim=config.embed_dim, rounding_mode=self.config.rounding_mode)
-        self.pos_drop = nn.Dropout(p=config.drop_rate)
+        # if config.backbone == None:
+        #     self.patch_embed = ConvPatchEmbed(
+        #         img_size=img_size,
+        #         patch_size=config.patch_size,
+        #         in_chans=config.in_chans,
+        #         embed_dim=config.embed_dim,
+        #         act_layer=act_layer,
+        #     )
+        # elif config.backbone == "hybrid":
+        #     backbone = ConvNeXt(depths=self.config.depths, dims=self.config.dims, use_head=False)
+        #     self.patch_embed = HybridEmbed(
+        #         backbone=backbone, patch_size=config.hybrid_patch_size, embed_dim=config.embed_dim
+        #     )
+        # else:
+        #     raise ValueError(f"{config.backbone} has to be either hybrid or None")
+        # if config.use_pos_embed:
+        #     self.pos_embed = PositionalEncodingFourier(dim=config.embed_dim, rounding_mode=self.config.rounding_mode)
+        # self.pos_drop = nn.Dropout(p=config.drop_rate)
+
+        self.embeddings = FANEmbeddings(config)
 
         if config.se_mlp:
             build_block = FANBlock_SE
@@ -1338,7 +1340,7 @@ class FANEncoder(FANPreTrainedModel):
                 for _ in range(config.cls_attn_layers)
             ]
         )
-        if isinstance(self.patch_embed, HybridEmbed) and self.config.feat_downsample:
+        if self.config.backbone == "hybrid" and self.config.feat_downsample:
             self.learnable_downsample = nn.Conv2d(
                 in_channels=self.config.embed_dim,
                 out_channels=768,
@@ -1366,21 +1368,29 @@ class FANEncoder(FANPreTrainedModel):
         out_index = [4, 7, 11]
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
-        if isinstance(self.patch_embed, HybridEmbed):
-            hidden_states, (Hp, Wp), out_list = self.patch_embed(inputs_embeds, return_feat=True)
-            if output_hidden_states:
-                encoder_states = encoder_states + tuple(out_list)
-                out_index = [self.config.out_index]
-        else:
-            hidden_states, (Hp, Wp) = self.patch_embed(inputs_embeds)
+        is_backbone_hybrid = self.config.backbone == "hybrid"
 
-        if self.config.use_pos_embed:
-            pos_encoding = (
-                self.pos_embed(batch_size, Hp, Wp).reshape(batch_size, -1, hidden_states.shape[1]).permute(0, 2, 1)
-            )
-            hidden_states = hidden_states + pos_encoding
+        hidden_states, (Hp, Wp), embeddings_encoder_states = self.embeddings(
+            inputs_embeds, output_hidden_states=output_hidden_states
+        )
+        if output_hidden_states and is_backbone_hybrid:
+            encoder_states = encoder_states + embeddings_encoder_states
+            out_index = [self.config.out_index]
+        # if isinstance(self.patch_embed, HybridEmbed):
+        #     hidden_states, (Hp, Wp), out_list = self.patch_embed(inputs_embeds, return_feat=True)
+        #     if output_hidden_states:
+        #         encoder_states = encoder_states + tuple(out_list)
+        #         out_index = [self.config.out_index]
+        # else:
+        #     hidden_states, (Hp, Wp) = self.patch_embed(inputs_embeds)
 
-        hidden_states = self.pos_drop(hidden_states)
+        # if self.config.use_pos_embed:
+        #     pos_encoding = (
+        #         self.pos_embed(batch_size, Hp, Wp).reshape(batch_size, -1, hidden_states.shape[1]).permute(0, 2, 1)
+        #     )
+        #     hidden_states = hidden_states + pos_encoding
+
+        # hidden_states = self.pos_drop(hidden_states)
 
         for idx, blk in enumerate(self.blocks):
             blk.H, blk.W = Hp, Wp
@@ -1406,7 +1416,7 @@ class FANEncoder(FANPreTrainedModel):
             hidden_states = blk(hidden_states)
 
         if output_hidden_states:
-            if isinstance(self.patch_embed, HybridEmbed) and self.config.feat_downsample:
+            if is_backbone_hybrid and self.config.feat_downsample:
                 tmp = hidden_states[:, 1:, :].reshape(batch_size, Hp, Wp, -1).permute(0, 3, 1, 2).contiguous()
                 tmp = self.learnable_downsample(tmp)
                 encoder_states + (tmp,)
