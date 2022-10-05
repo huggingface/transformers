@@ -96,7 +96,7 @@ class ConvBertTokenizerFast(PreTrainedTokenizerFast):
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    slow_tokenizer_class = BertTokenizer
+    slow_tokenizer_class = ConvBertTokenizer
 
     def __init__(
         self,

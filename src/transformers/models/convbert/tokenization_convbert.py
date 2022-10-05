@@ -49,6 +49,7 @@ PRETRAINED_INIT_CONFIGURATION = {
     "YituTech/conv-bert-small": {"do_lower_case": True},
 }
 
+
 # Copied from transformers.models.bert.tokenization_bert.load_vocab
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -60,6 +61,7 @@ def load_vocab(vocab_file):
         vocab[token] = index
     return vocab
 
+
 # Copied from transformers.models.bert.tokenization_bert.whitespace_tokenize
 def whitespace_tokenize(text):
     """Runs basic whitespace cleaning and splitting on a piece of text."""
@@ -70,8 +72,7 @@ def whitespace_tokenize(text):
     return tokens
 
 
-# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BertTokenizer(PreTrainedTokenizer):
+class ConvBertTokenizer(PreTrainedTokenizer):
     r"""
     Construct a BERT tokenizer. Based on WordPiece.
 
@@ -305,6 +306,7 @@ class BertTokenizer(PreTrainedTokenizer):
         return (vocab_file,)
 
 
+# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
 class BasicTokenizer(object):
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
@@ -454,6 +456,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
 
+# Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
 class WordpieceTokenizer(object):
     """Runs WordPiece tokenization."""
 
@@ -509,16 +512,3 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
-
-
-class ConvBertTokenizer(BertTokenizer):
-    r"""
-    Construct a ConvBERT tokenizer. [`ConvBertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end
-    tokenization: punctuation splitting and wordpiece. Refer to superclass [`BertTokenizer`] for usage examples and
-    documentation concerning parameters.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
