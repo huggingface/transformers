@@ -76,4 +76,7 @@ deps = {
     "unidic_lite": "unidic_lite>=1.0.7",
     "uvicorn": "uvicorn",
     "beautifulsoup4": "beautifulsoup4",
+    "sudachipy": "sudachipy>=0.6.6",
+    "sudachidict_core": "sudachidict_core>=20220729",
+    "pyknp": "pyknp>=0.6.1",
 }
