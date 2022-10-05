@@ -81,7 +81,8 @@ class ImageSegmentationPipeline(Pipeline):
                 The pipeline accepts either a single image or a batch of images. Images in a batch must all be in the
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
             task (`str`, defaults to `semantic`):
-                Segmentation task to be performed, choose [`semantic`, `instance` and `panoptic`] depending on model capabilities.
+                Segmentation task to be performed, choose [`semantic`, `instance` and `panoptic`] depending on model
+                capabilities.
             threshold (`float`, *optional*, defaults to 0.9):
                 Probability threshold to filter out predicted masks.
             overlap_mask_area_threshold (`float`, *optional*, defaults to 0.5):
@@ -165,7 +166,8 @@ class ImageSegmentationPipeline(Pipeline):
 
         elif hasattr(self.feature_extractor, "post_process_semantic_segmentation"):
             outputs = self.feature_extractor.post_process_semantic_segmentation(
-                model_outputs, target_sizes=model_outputs["target_size"])[0]
+                model_outputs, target_sizes=model_outputs["target_size"]
+            )[0]
 
             annotation = []
             segmentation = outputs.numpy()

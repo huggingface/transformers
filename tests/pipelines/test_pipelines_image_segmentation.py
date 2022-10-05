@@ -156,10 +156,10 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
 
         outputs = image_segmenter(
-            "http://images.cocodataset.org/val2017/000000039769.jpg", 
-            task="panoptic", 
-            threshold=0.0, 
-            overlap_mask_area_threshold=0.0
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            task="panoptic",
+            threshold=0.0,
+            overlap_mask_area_threshold=0.0,
         )
 
         for o in outputs:
@@ -254,10 +254,10 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         image_segmenter = pipeline("image-segmentation", model=model_id)
 
         outputs = image_segmenter(
-            "http://images.cocodataset.org/val2017/000000039769.jpg", 
-            task="panoptic", 
-            threshold=0, 
-            overlap_mask_area_threshold=0.0
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            task="panoptic",
+            threshold=0,
+            overlap_mask_area_threshold=0.0,
         )
         for o in outputs:
             o["mask"] = hashimage(o["mask"])
@@ -281,7 +281,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             ],
             task="panoptic",
             threshold=0.0,
-            overlap_mask_area_threshold=0.0
+            overlap_mask_area_threshold=0.0,
         )
         for output in outputs:
             for o in output:
@@ -317,7 +317,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
         image_segmenter = pipeline("image-segmentation", model=model_id)
 
-        outputs = image_segmenter("http://images.cocodataset.org/val2017/000000039769.jpg", task="panoptic", threshold=threshold)
+        outputs = image_segmenter(
+            "http://images.cocodataset.org/val2017/000000039769.jpg", task="panoptic", threshold=threshold
+        )
 
         for o in outputs:
             o["mask"] = hashimage(o["mask"])
@@ -351,12 +353,12 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {"score": 0.9974, 'label': 'wall', 'mask': 'a547b7c062917f4f3e36501827ad3cd6'},
-                {'score': 0.949, 'label': 'house', 'mask': '0da9b7b38feac47bd2528a63e5ea7b19'},
-                {'score': 0.9995, 'label': 'grass', 'mask': '1d07ea0a263dcf38ca8ae1a15fdceda1'},
-                {'score': 0.9976, 'label': 'tree', 'mask': '6cdc97c7daf1dc596fa181f461ddd2ba'},
-                {'score': 0.8239, 'label': 'plant', 'mask': '1ab4ce378f6ceff57d428055cfbd742f'},
-                {'score': 0.9942, 'label': 'road, route', 'mask': '39c5d17be53b2d1b0f46aad8ebb15813'},
-                {'score': 1.0, 'label': 'sky', 'mask': 'a3756324a692981510c39b1a59510a36'}
+                {"score": 0.9974, "label": "wall", "mask": "a547b7c062917f4f3e36501827ad3cd6"},
+                {"score": 0.949, "label": "house", "mask": "0da9b7b38feac47bd2528a63e5ea7b19"},
+                {"score": 0.9995, "label": "grass", "mask": "1d07ea0a263dcf38ca8ae1a15fdceda1"},
+                {"score": 0.9976, "label": "tree", "mask": "6cdc97c7daf1dc596fa181f461ddd2ba"},
+                {"score": 0.8239, "label": "plant", "mask": "1ab4ce378f6ceff57d428055cfbd742f"},
+                {"score": 0.9942, "label": "road, route", "mask": "39c5d17be53b2d1b0f46aad8ebb15813"},
+                {"score": 1.0, "label": "sky", "mask": "a3756324a692981510c39b1a59510a36"},
             ],
         )
