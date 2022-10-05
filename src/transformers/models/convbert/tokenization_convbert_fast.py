@@ -50,7 +50,6 @@ PRETRAINED_INIT_CONFIGURATION = {
     "YituTech/conv-bert-small": {"do_lower_case": True},
 }
 
-"""Copied from transformers.models.bert.tokenization_bert.BertTokenizerFast"""
 
 # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast
 class BertTokenizerFast(PreTrainedTokenizerFast):
