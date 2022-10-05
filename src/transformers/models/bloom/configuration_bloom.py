@@ -55,8 +55,7 @@ class BloomConfig(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 250880):
             Vocabulary size of the Bloom model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BloomModel`]. Check
-            https://huggingface.co/bigscience/bloom/discussions/120#633d28389addb8530b406c2a on how the `vocab_size`
+            `inputs_ids` passed when calling [`BloomModel`]. Check [this discussion](https://huggingface.co/bigscience/bloom/discussions/120#633d28389addb8530b406c2a) on how the `vocab_size`
             has been defined.
         hidden_size (`int`, *optional*, defaults to 64):
             Dimensionality of the embeddings and hidden states.
