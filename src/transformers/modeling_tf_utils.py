@@ -1066,7 +1066,8 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             return
         serving_sig = self.serving.input_signature[0]
         serving_shapes = {k: v.shape for k, v in serving_sig.items()}
-        self.build(serving_shapes)  # Just sets the shapes in the model internals
+        self.build(serving_shapes)  # Sets some shapes in the model internals - not sure if necessary but can't hurt
+        self._set_save_spec(serving_sig)  # Fully set the model save spec
         self(self.dummy_inputs)  # Actually builds the model with fixed dummies now the flexible serving shapes are set
 
     def get_config(self):
