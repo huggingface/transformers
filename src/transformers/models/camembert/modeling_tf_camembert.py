@@ -176,7 +176,6 @@ CAMEMBERT_INPUTS_DOCSTRING = r"""
 """
 
 
-
 # Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaEmbeddings
 class TFCamembertEmbeddings(tf.keras.layers.Layer):
     """
@@ -446,7 +445,6 @@ class TFCamembertSelfOutput(tf.keras.layers.Layer):
         return hidden_states
 
 
-
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertAttention with Bert->Camembert
 class TFCamembertAttention(tf.keras.layers.Layer):
     def __init__(self, config: CamembertConfig, **kwargs):
@@ -487,6 +485,7 @@ class TFCamembertAttention(tf.keras.layers.Layer):
 
         return outputs
 
+
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->Camembert
 class TFCamembertIntermediate(tf.keras.layers.Layer):
     def __init__(self, config: CamembertConfig, **kwargs):
@@ -525,7 +524,6 @@ class TFCamembertOutput(tf.keras.layers.Layer):
         hidden_states = self.LayerNorm(inputs=hidden_states + input_tensor)
 
         return hidden_states
-
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertLayer with Bert->Camembert
@@ -613,7 +611,6 @@ class TFCamembertLayer(tf.keras.layers.Layer):
             outputs = outputs + (present_key_value,)
 
         return outputs
-
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertEncoder with Bert->Camembert
@@ -926,7 +923,6 @@ class TFCamembertPreTrainedModel(TFPreTrainedModel):
         return self.serving_output(output)
 
 
-
 @add_start_docstrings(
     "The bare CamemBERT Model transformer outputting raw hidden-states without any specific head on top.",
     CAMEMBERT_START_DOCSTRING,
@@ -1075,11 +1071,12 @@ class TFCamembertLMHead(tf.keras.layers.Layer):
 
         return hidden_states
 
+
 @add_start_docstrings(
     """CamemBERT Model with a `language modeling` head on top.""",
     CAMEMBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForMaskedLM with Roberta->Camembert
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaForMaskedLM with Roberta->Camembert, ROBERTA->CAMEMBERT
 class TFCamembertForMaskedLM(TFCamembertPreTrainedModel, TFMaskedLanguageModelingLoss):
     # names with a '.' represents the authorized unexpected/missing layers when a TF model is loaded from a PT model
     _keys_to_ignore_on_load_unexpected = [r"pooler", r"lm_head.decoder.weight"]
@@ -1192,7 +1189,6 @@ class TFCamembertClassificationHead(tf.keras.layers.Layer):
         x = self.dropout(x, training=training)
         x = self.out_proj(x)
         return x
-
 
 
 @add_start_docstrings(
@@ -1405,7 +1401,9 @@ class TFCamembertForMultipleChoice(TFCamembertPreTrainedModel, TFMultipleChoiceL
         return {"input_ids": tf.constant(MULTIPLE_CHOICE_DUMMY_INPUTS)}
 
     @unpack_inputs
-    @add_start_docstrings_to_model_forward(CAMEMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length"))
+    @add_start_docstrings_to_model_forward(
+        CAMEMBERT_INPUTS_DOCSTRING.format("batch_size, num_choices, sequence_length")
+    )
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
