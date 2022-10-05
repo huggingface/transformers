@@ -447,13 +447,8 @@ class TFWhisperPreTrainedModel(TFPreTrainedModel):
     config_class = WhisperConfig
     base_model_prefix = "model"
     main_input_name = "input_features"
-    supports_gradient_checkpointing = True
 
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, (TFWhisperDecoder, TFWhisperEncoder)):
-            module.gradient_checkpointing = value
-
-    def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor):
+    def _get_feat_extract_output_lengths(self, input_lengths: tf.Tensor) -> int:
         """
         Computes the output length of the convolutional layers
         """
@@ -588,7 +583,7 @@ WHISPER_INPUTS_DOCSTRING = r"""
 
 
 @keras_serializable
-class TFWhisperEncoder(TFWhisperPreTrainedModel):
+class TFWhisperEncoder(tf.keras.layers.Layer):
     config_class = WhisperConfig
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -600,7 +595,8 @@ class TFWhisperEncoder(TFWhisperPreTrainedModel):
     """
 
     def __init__(self, config: WhisperConfig, **kwargs):
-        super().__init__(config, **kwargs)
+        super().__init__(**kwargs)
+        self.config = config
         self.layerdrop = config.encoder_layerdrop
 
         self.embed_dim = config.d_model
@@ -718,7 +714,7 @@ class TFWhisperEncoder(TFWhisperPreTrainedModel):
 
 
 @keras_serializable
-class TFWhisperDecoder(TFWhisperPreTrainedModel):
+class TFWhisperDecoder(tf.keras.layers.Layer):
     config_class = WhisperConfig
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`WhisperDecoderLayer`]
@@ -728,7 +724,8 @@ class TFWhisperDecoder(TFWhisperPreTrainedModel):
     """
 
     def __init__(self, config: WhisperConfig, **kwargs):
-        super().__init__(config, **kwargs)
+        super().__init__(**kwargs)
+        self.config = config
         self.dropout = tf.keras.layers.Dropout(config.dropout)
         self.layerdrop = config.decoder_layerdrop
         self.padding_idx = config.pad_token_id

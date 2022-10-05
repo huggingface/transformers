@@ -507,7 +507,7 @@ class TFGenerationMixin:
                 A list of tokens that will be supressed at the begining of the generation. The `SupressBeginTokens`
                 logit processor will set their log probs to `-inf` so that they are not sampled.
             forced_decoder_ids (`List[int]`, *optional*, defaults to `model.config.forced_decoder_ids`):
-                A list of tokens that will be forced as beginning tokens.
+                A list of tokens that will be forced as beginning tokens, before sampling.
             model_specific_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model.
 
@@ -995,7 +995,7 @@ class TFGenerationMixin:
                     forced_bos_token_id=forced_bos_token_id,
                     forced_eos_token_id=forced_eos_token_id,
                     suppress_tokens=suppress_tokens,
-                    input_ids_seq_length=input_ids_seq_length,
+                    input_ids_seq_length=input_ids_seq_len,
                     begin_suppress_tokens=begin_suppress_tokens,
                     forced_decoder_ids=forced_decoder_ids,
                 )
@@ -1341,6 +1341,8 @@ class TFGenerationMixin:
         elif begin_suppress_tokens is not None:
             begin_index = input_ids_seq_length
             begin_index = begin_index if (input_ids_seq_length > 1 or forced_bos_token_id is None) else begin_index + 1
+            if forced_decoder_ids is not None:
+                begin_index += forced_decoder_ids[-1][0]  # generation starts after the last token that is forced
             if begin_index == cur_len:
                 mask_condition = tf.constant(
                     [token_id in begin_suppress_tokens for token_id in range(vocab_size)], dtype=tf.bool
@@ -2228,6 +2230,8 @@ class TFGenerationMixin:
         if begin_suppress_tokens is not None:
             begin_index = input_ids_seq_length
             begin_index = begin_index if (input_ids_seq_length > 1 or forced_bos_token_id is None) else begin_index + 1
+            if forced_decoder_ids is not None:
+                begin_index += forced_decoder_ids[-1][0]  # generation starts after the last token that is forced
             processors.append(TFSuppressTokensAtBeginLogitsProcessor(begin_suppress_tokens, begin_index))
         if forced_decoder_ids is not None:
             processors.append(TFForceTokensLogitsProcessor(forced_decoder_ids))

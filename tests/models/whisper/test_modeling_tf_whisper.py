@@ -21,7 +21,6 @@ import unittest
 import numpy as np
 
 from transformers import WhisperConfig
-from transformers.models.whisper.configuration_whisper import NON_SPEECH_TOKENS_MULTI
 from transformers.testing_utils import is_tf_available, require_tf, require_tokenizers, slow
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
@@ -43,7 +42,6 @@ if is_tf_available():
         TFWhisperModel,
         WhisperFeatureExtractor,
         WhisperProcessor,
-        WhisperTokenizer,
         set_seed,
     )
     from transformers.models.whisper.modeling_tf_whisper import TFWhisperDecoder, TFWhisperEncoder
@@ -60,7 +58,6 @@ def prepare_whisper_inputs_dict(
     cross_attn_head_mask=None,
 ):
     if decoder_attention_mask is None:
-        # decoder_attention_mask = decoder_input_ids.ne(config.pad_token_id)
         decoder_attention_mask = tf.where(decoder_input_ids != config.pad_token_id, 1, 0)
     if head_mask is None:
         head_mask = tf.ones((config.encoder_layers, config.encoder_attention_heads))
@@ -69,7 +66,6 @@ def prepare_whisper_inputs_dict(
     if cross_attn_head_mask is None:
         cross_attn_head_mask = tf.ones((config.decoder_layers, config.decoder_attention_heads))
     return {
-        # "input_ids": input_features,
         "input_features": input_features,
         "decoder_input_ids": decoder_input_ids,
         "decoder_attention_mask": decoder_attention_mask,
@@ -781,17 +777,15 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_tiny_en_generation(self):
         set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
         model.config.decoder_start_token_id = 50257
 
         input_speech = self._load_datasamples(1)
-        feaure_extractor = WhisperFeatureExtractor()
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
 
-        input_features = feaure_extractor(raw_speech=input_speech, return_tensors="tf").input_features
-
-        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-tiny.en")
-        generated_ids = model.generate(input_features, num_beams=5, forced_bos_token_id=50362)
-        transcript = tokenizer.batch_decode(generated_ids)[0]
+        generated_ids = model.generate(input_features, num_beams=5)
+        transcript = processor.tokenizer.batch_decode(generated_ids)[0]
 
         EXPECTED_TRANSCRIPT = (
             "<|startoftranscript|><|notimestamps|> Mr. Quilter is the apostle of the middle"
@@ -801,21 +795,15 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_generation(self):
-
         set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny", from_pt=True)
-        model.config.begin_suppress_tokens = None
-        model.config.suppress_tokens = None
+
         input_speech = self._load_datasamples(1)
-        feaure_extractor = WhisperFeatureExtractor()
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
 
-        input_features = feaure_extractor(raw_speech=input_speech, return_tensors="tf").input_features
-
-        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-large")
-
-        decoder_input_ids = tf.convert_to_tensor([[50258]], dtype=tf.int64)
-        generated_ids = model.generate(input_features, num_beams=5, decoder_input_ids=decoder_input_ids)
-        transcript = tokenizer.decode(generated_ids[0])
+        generated_ids = model.generate(input_features, num_beams=5)
+        transcript = processor.tokenizer.decode(generated_ids[0])
 
         EXPECTED_TRANSCRIPT = (
             "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> Mr. Quilter is the apostle of the middle"
@@ -826,22 +814,18 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_large_generation(self):
         set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large", from_pt=True)
 
         input_speech = self._load_datasamples(1)
-        feaure_extractor = WhisperFeatureExtractor()
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
 
-        input_features = feaure_extractor(raw_speech=input_speech, return_tensors="tf").input_features
-
-        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-large")
-
-        decoder_input_ids = tf.convert_to_tensor([[50258]], dtype=tf.int64)
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
         generated_ids = model.generate(
             input_features,
             do_sample=False,
-            decoder_input_ids=decoder_input_ids,
         )
-        transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
         EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
@@ -849,51 +833,34 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_large_generation_multilingual(self):
         set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large", from_pt=True)
-        model.config.suppress_tokens = NON_SPEECH_TOKENS_MULTI
 
         ds = load_dataset("common_voice", "ja", split="test", streaming=True)
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
-        ds_iter = iter(ds)
-        input_speech = next(ds_iter)["audio"]["array"]
+        input_speech = next(iter(ds))["audio"]["array"]
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
 
-        feaure_extractor = WhisperFeatureExtractor()
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="transcribe")
+        generated_ids = model.generate(input_features, do_sample=False)
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        input_features = feaure_extractor(raw_speech=input_speech, return_tensors="tf").input_features
-
-        tokenizer = WhisperTokenizer.from_pretrained("openai/whisper-large")
-
-        model.config.begin_suppress_tokens = [tokenizer.encode(" ")[0], tokenizer.eos_token_id]
-        decoder_input_ids = tf.convert_to_tensor([[50258, 50359, 50266, 50363]], dtype=tf.int64)
-        generated_ids = model.generate(
-            input_features,
-            do_sample=True,
-            decoder_input_ids=decoder_input_ids,
-        )
-        transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
-
-        EXPECTED_TRANSCRIPT = "木村さんに電話を貸してもらいました。 木"
+        EXPECTED_TRANSCRIPT = "木村さんに電話を貸してもらいました"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-        decoder_input_ids = tf.convert_to_tensor([[50258, 50359, 50357]], dtype=tf.int64)
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="en", task="transcribe")
         generated_ids = model.generate(
             input_features,
             do_sample=False,
-            decoder_input_ids=decoder_input_ids,
         )
-        transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = " Kimura san ni denwa wo kaite moraimashita."
+        EXPECTED_TRANSCRIPT = " Kimura san ni denwa wo kaite moraimashita"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
-        decoder_input_ids = tf.convert_to_tensor([[50258, 50266, 50358, 50363]], dtype=tf.int64)
-        generated_ids = model.generate(
-            input_features,
-            do_sample=False,
-            decoder_input_ids=decoder_input_ids,
-        )
-        transcript = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        model.config.forced_decoder_ids = processor.get_decoder_prompt_ids(language="ja", task="translate")
+        generated_ids = model.generate(input_features, do_sample=False)
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
 
-        EXPECTED_TRANSCRIPT = " I borrowed a phone from Kimura san. Thank you for watching. Please subscribe"
-        # should only be "I borrowed a phone from Kimura san. But it seems like it is a well known bug"
+        EXPECTED_TRANSCRIPT = " I borrowed a phone from Kimura san"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)

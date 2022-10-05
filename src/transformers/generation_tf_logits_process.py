@@ -522,8 +522,8 @@ class TFSuppressTokensAtBeginLogitsProcessor(TFLogitsProcessor):
             tf.equal(cur_len, self.begin_index),
             lambda: tf.tensor_scatter_nd_update(
                 scores,
-                [[i, token] for i in range(scores.shape[0]) for token in self.begin_suppress_tokens],
-                [-np.inf for _ in range(scores.shape[0] * len(self.begin_suppress_tokens))],
+                indices=[[i, token] for i in range(scores.shape[0]) for token in self.begin_suppress_tokens],
+                updates=[-float("inf") for _ in range(scores.shape[0] * len(self.begin_suppress_tokens))],
             ),
             lambda: scores,
         )
@@ -540,15 +540,15 @@ class TFSuppressTokensLogitsProcessor(TFLogitsProcessor):
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
         scores = tf.tensor_scatter_nd_update(
             scores,
-            [[i, token] for i in range(scores.shape[0]) for token in self.suppress_tokens],
-            [-np.inf for _ in range(scores.shape[0] * len(self.suppress_tokens))],
+            indices=[[i, token] for i in range(scores.shape[0]) for token in self.suppress_tokens],
+            updates=[-float("inf") for _ in range(scores.shape[0] * len(self.suppress_tokens))],
         )
         return scores
 
 
 class TFForceTokensLogitsProcessor(TFLogitsProcessor):
-    r"""This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so that they
-    are not sampled."""
+    r"""This processor can be used to force a list of tokens. The processor will set their log probs to `0` and all
+    other tokens to `-inf` so that they are sampled at their corresponding index."""
 
     def __init__(self, force_token_map):
         self.force_token_map = dict(force_token_map)
@@ -557,11 +557,11 @@ class TFForceTokensLogitsProcessor(TFLogitsProcessor):
         generation_idx = cur_len
         current_token = self.force_token_map.get(int(generation_idx), -999)
 
+        vocab_range = tf.range(scores.shape[-1], dtype=scores.dtype)
+
         scores = tf.cond(
             tf.equal(current_token, -999),
             lambda: scores,
-            lambda: tf.tensor_scatter_nd_update(
-                scores, [[i, current_token] for i in range(scores.shape[0])], [np.inf for _ in range(scores.shape[0])]
-            ),
+            lambda: tf.where(tf.tile([vocab_range == current_token], [scores.shape[0], 1]), 0.0, -float("inf")),
         )
         return scores
