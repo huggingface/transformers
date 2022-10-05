@@ -22,15 +22,6 @@ from typing import Optional, Tuple, Union
 import numpy as np
 import tensorflow as tf
 
-# from ..roberta.modeling_tf_roberta import (
-#     TFRobertaForCausalLM,
-#     TFRobertaForMaskedLM,
-#     TFRobertaForMultipleChoice,
-#     TFRobertaForQuestionAnswering,
-#     TFRobertaForSequenceClassification,
-#     TFRobertaForTokenClassification,
-#     TFRobertaModel,
-# )
 from ...activations_tf import get_tf_activation
 from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPastAndCrossAttentions,
