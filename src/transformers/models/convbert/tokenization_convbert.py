@@ -61,6 +61,7 @@ def load_vocab(vocab_file):
         vocab[token] = index
     return vocab
 
+
 # Copied from transformers.models.bert.tokenization_bert.whitespace_tokenize
 def whitespace_tokenize(text):
     """Runs basic whitespace cleaning and splitting on a piece of text."""
@@ -304,6 +305,7 @@ class ConvBertTokenizer(PreTrainedTokenizer):
                 index += 1
         return (vocab_file,)
 
+
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
 class BasicTokenizer(object):
     """
@@ -454,6 +456,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
 
+# Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
 class WordpieceTokenizer(object):
     """Runs WordPiece tokenization."""
 
