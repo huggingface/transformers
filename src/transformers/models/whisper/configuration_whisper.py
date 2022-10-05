@@ -90,11 +90,11 @@ class WhisperConfig(PretrainedConfig):
             Corresponds to the "<|startoftranscript|>" token, which is automatically used when no `decoder_input_ids`
             are provided to the `generate` function. It is used to guide the model`s generation process depending on
             the task.
-        use_cache (`bool`, *optional*, defaults to True):
+        use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        is_encoder_decoder (`bool`, *optional*, defaults to True):
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
-        activation_function (`str`, *optional*, defaults to "gelu"):
+        activation_function (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         d_model (`int`, *optional*, defaults to 256):
