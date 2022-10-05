@@ -285,7 +285,7 @@ def is_pyctcdecode_available():
 
 
 def is_kenlm_available():
-    return _kenlm_available
+    return importlib.util.find_spec("kenlm") is not None
 
 
 def is_librosa_available():
