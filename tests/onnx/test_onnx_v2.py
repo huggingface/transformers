@@ -297,9 +297,20 @@ class OnnxExportTestCaseV2(TestCase):
         if model.__class__.__name__.startswith("Yolos") and device != "cpu":
             return
 
-        # ONNX inference fails on bert, camembert, and roberta multiple-choice when exported with TensorFlow.
-        # Skip for now
-        if name in ("bert", "camembert", "roberta") and feature == "multiple-choice" and framework == "tf":
+        # ONNX inference fails with the following name, feature, framework parameterizations
+        # See: https://github.com/huggingface/transformers/issues/19357
+        if (name, feature, framework) in {
+            ("deberta-v2", "question-answering", "pt"),
+            ("deberta-v2", "multiple-choice", "pt"),
+            ("roformer", "multiple-choice", "pt"),
+            ("groupvit", "default", "pt"),
+            ("perceiver", "masked-lm", "pt"),
+            ("perceiver", "sequence-classification", "pt"),
+            ("perceiver", "image-classification", "pt"),
+            ("bert", "multiple-choice", "tf"),
+            ("camembert", "multiple-choice", "tf"),
+            ("roberta", "multiple-choice", "tf"),
+        }:
             return
 
         onnx_config = onnx_config_class_constructor(model.config)
