@@ -246,12 +246,6 @@ try:
 except importlib_metadata.PackageNotFoundError:
     _pyctcdecode_available = False
 
-_kenlm_available = importlib.util.find_spec("kenlm") is not None
-try:
-    _kenlm_version = importlib_metadata.version("kenlm")
-    logger.debug(f"Successfully imported kenlm version {_kenlm_version}")
-except importlib_metadata.PackageNotFoundError:
-    _kenlm_available = False
 
 _librosa_available = importlib.util.find_spec("librosa") is not None
 try:
