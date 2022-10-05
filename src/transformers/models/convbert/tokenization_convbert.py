@@ -49,7 +49,7 @@ PRETRAINED_INIT_CONFIGURATION = {
     "YituTech/conv-bert-small": {"do_lower_case": True},
 }
 
-
+# Copied from transformers.models.bert.tokenization_bert.load_vocab
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
@@ -60,7 +60,7 @@ def load_vocab(vocab_file):
         vocab[token] = index
     return vocab
 
-
+# Copied from transformers.models.bert.tokenization_bert.whitespace_tokenize
 def whitespace_tokenize(text):
     """Runs basic whitespace cleaning and splitting on a piece of text."""
     text = text.strip()
@@ -70,9 +70,7 @@ def whitespace_tokenize(text):
     return tokens
 
 
-"""Copied from transformers.models.bert.tokenization_bert.BertTokenizer"""
-
-
+# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
 class BertTokenizer(PreTrainedTokenizer):
     r"""
     Construct a BERT tokenizer. Based on WordPiece.

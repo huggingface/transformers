@@ -52,7 +52,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 """Copied from transformers.models.bert.tokenization_bert.BertTokenizerFast"""
 
-
+# Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast
 class BertTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" BERT tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
