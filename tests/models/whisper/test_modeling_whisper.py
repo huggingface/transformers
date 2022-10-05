@@ -859,7 +859,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_en_generation(self):
-        
+
         torch_device = "cpu"
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
