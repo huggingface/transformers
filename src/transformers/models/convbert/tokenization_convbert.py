@@ -71,8 +71,7 @@ def whitespace_tokenize(text):
     return tokens
 
 
-# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BertTokenizer(PreTrainedTokenizer):
+class ConvBertTokenizer(PreTrainedTokenizer):
     r"""
     Construct a BERT tokenizer. Based on WordPiece.
 
@@ -510,16 +509,3 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
-
-
-class ConvBertTokenizer(BertTokenizer):
-    r"""
-    Construct a ConvBERT tokenizer. [`ConvBertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end
-    tokenization: punctuation splitting and wordpiece. Refer to superclass [`BertTokenizer`] for usage examples and
-    documentation concerning parameters.
-    """
-
-    vocab_files_names = VOCAB_FILES_NAMES
-    pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
-    pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
