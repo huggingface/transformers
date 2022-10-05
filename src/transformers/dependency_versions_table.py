@@ -78,7 +78,5 @@ deps = {
     "beautifulsoup4": "beautifulsoup4",
     "sudachipy": "sudachipy>=0.6.6",
     "sudachidict_core": "sudachidict_core>=20220729",
-    "sudachidict_small": "sudachidict_small>=20220729",
-    "sudachidict_full": "sudachidict_full>=20220729",
     "pyknp": "pyknp>=0.6.1",
 }
