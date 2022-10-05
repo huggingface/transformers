@@ -1049,7 +1049,7 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         # Save config and origin of the pretrained weights if given in model
         self.config = config
         self.name_or_path = config.name_or_path
-        # Set the save spec in the init to ensure that Keras can't write the specific dummy shapes in anywhere
+        # Set the serving spec quickly to ensure that Keras doesn't use the specific dummy input shapes as the spec
         self._set_save_spec(self.serving.input_signature[0])
 
     def get_config(self):
