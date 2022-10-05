@@ -70,6 +70,7 @@ def whitespace_tokenize(text):
     return tokens
 
 
+# Copied from transformers.models.bert.tokenization_bert.BertTokenizer
 class BertTokenizer(PreTrainedTokenizer):
     r"""
     Construct a BERT tokenizer. Based on WordPiece.

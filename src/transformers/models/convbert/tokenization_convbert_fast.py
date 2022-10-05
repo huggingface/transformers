@@ -50,7 +50,7 @@ PRETRAINED_INIT_CONFIGURATION = {
     "YituTech/conv-bert-small": {"do_lower_case": True},
 }
 
-
+# Copied from transformers.models.bert.tokenization_bert.BertTokenizerFast
 class BertTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" BERT tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
