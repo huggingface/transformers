@@ -72,7 +72,7 @@ class FeatureExtractionPipeline(Pipeline):
 
     def postprocess(self, model_outputs, return_tensors=False):
         # [0] is the first available tensor, logits or last_hidden_state.
-        if self.return_tensors:
+        if return_tensors:
             return model_outputs[0]
         if self.framework == "pt":
             return model_outputs[0].tolist()
