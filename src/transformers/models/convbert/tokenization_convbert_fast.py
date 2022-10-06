@@ -51,10 +51,10 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
-# Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with bert-base-cased->YituTech/conv-bert-base, Bert->ConvBert all-casing, ConvBertTokenizerFast->BertTokenizerFast
+# Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with bert-base-cased->YituTech/conv-bert-base, Bert->ConvBert, BERT->ConvBERT
 class ConvBertTokenizerFast(PreTrainedTokenizerFast):
     r"""
-    Construct a "fast" CONVBERT tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
+    Construct a "fast" ConvBERT tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
 
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
@@ -87,7 +87,7 @@ class ConvBertTokenizerFast(PreTrainedTokenizerFast):
             issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original CONVBERT).
+            value for `lowercase` (as in the original ConvBERT).
         wordpieces_prefix (`str`, *optional*, defaults to `"##"`):
             The prefix for subwords.
     """
@@ -143,7 +143,7 @@ class ConvBertTokenizerFast(PreTrainedTokenizerFast):
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A CONVBERT sequence has the following format:
+        adding special tokens. A ConvBERT sequence has the following format:
 
         - single sequence: `[CLS] X [SEP]`
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
@@ -168,7 +168,7 @@ class ConvBertTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A CONVBERT
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A ConvBERT
         sequence pair mask has the following format:
 
         ```
