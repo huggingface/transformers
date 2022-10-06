@@ -317,8 +317,7 @@ class TFWhisperModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    unittest.skip("Training is not yet supported")
-
+    @unittest.skip("Training is not yet supported")
     def test_training(self):
         pass
 
