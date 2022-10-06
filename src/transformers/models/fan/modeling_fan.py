@@ -1412,8 +1412,8 @@ class FANEncoder(FANPreTrainedModel):
             # blk.H, blk.W = Hp, Wp
 
             if self.use_checkpoint:
-                current_hidden_state = torch.utils.checkpoint.checkpoint(
-                    blk, current_hidden_state
+                current_hidden_state, Hp, Wp = torch.utils.checkpoint.checkpoint(
+                    blk, current_hidden_state, Hp, Wp
                 )  # TODO: Check Forward pass for SE with checkpoints
             # elif isinstance(blk, FANBlock_SE):
             #     (current_hidden_state, Hp, Wp) = blk(current_hidden_state, Hp, Wp)
