@@ -1031,7 +1031,7 @@ class AutoModelForZeroShotObjectDetection(_BaseAutoModelClass):
 
 
 AutoModelForZeroShotObjectDetection = auto_class_update(
-    AutoModelForZeroShotObjectDetection, head_doc="zero shot object detection"
+    AutoModelForZeroShotObjectDetection, head_doc="zero-shot object detection"
 )
 
 

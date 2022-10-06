@@ -58,26 +58,21 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase, metaclass=Pipeline
         return object_detector, examples
 
     def run_pipeline_test(self, object_detector, examples):
-        batch_outputs = object_detector(
-            examples,
-            threshold=0.0,
-        )
+        batch_outputs = object_detector(examples, threshold=0.0)
 
         self.assertEqual(len(examples), len(batch_outputs))
         for outputs in batch_outputs:
             for output_per_image in outputs:
-                scores = output_per_image["scores"]
-                labels = output_per_image["labels"]
-                boxes = output_per_image["boxes"]
-
-                assert len(scores) == len(boxes) and len(boxes) == len(labels)
-
-                for score in scores:
-                    self.assertEqual(score, ANY(float))
-                for label in labels:
-                    self.assertEqual(label, ANY(str))
-                for box in boxes:
-                    self.assertEqual(box, {"xmin": ANY(int), "ymin": ANY(int), "xmax": ANY(int), "ymax": ANY(int)})
+                self.assertGreater(len(output_per_image), 0)
+                for detected_object in output_per_image:
+                    self.assertEqual(
+                        detected_object,
+                        {
+                            "score": ANY(float),
+                            "label": ANY(str),
+                            "box": {"xmin": ANY(int), "ymin": ANY(int), "xmax": ANY(int), "ymax": ANY(int)},
+                        },
+                    )
 
     @require_tf
     @unittest.skip("Zero Shot Object Detection not implemented in TF")
@@ -99,16 +94,12 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase, metaclass=Pipeline
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {
-                    "scores": [0.6748, 0.6456, 0.7235, 0.642],
-                    "labels": ["remote", "remote", "cat", "remote"],
-                    "boxes": [
-                        {"xmin": 571, "ymin": 83, "xmax": 598, "ymax": 103},
-                        {"xmin": 494, "ymin": 105, "xmax": 521, "ymax": 127},
-                        {"xmin": 204, "ymin": 167, "xmax": 232, "ymax": 190},
-                        {"xmin": 67, "ymin": 274, "xmax": 93, "ymax": 297},
-                    ],
-                }
+                [
+                    {"score": 0.7235, "label": "cat", "box": {"xmin": 204, "ymin": 167, "xmax": 232, "ymax": 190}},
+                    {"score": 0.6748, "label": "remote", "box": {"xmin": 571, "ymin": 83, "xmax": 598, "ymax": 103}},
+                    {"score": 0.6456, "label": "remote", "box": {"xmin": 494, "ymin": 105, "xmax": 521, "ymax": 127}},
+                    {"score": 0.642, "label": "remote", "box": {"xmin": 67, "ymin": 274, "xmax": 93, "ymax": 297}},
+                ]
             ],
         )
 
@@ -121,16 +112,12 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase, metaclass=Pipeline
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {
-                    "scores": [0.6748, 0.6456, 0.7235, 0.642],
-                    "labels": ["remote", "remote", "cat", "remote"],
-                    "boxes": [
-                        {"xmin": 571, "ymin": 83, "xmax": 598, "ymax": 103},
-                        {"xmin": 494, "ymin": 105, "xmax": 521, "ymax": 127},
-                        {"xmin": 204, "ymin": 167, "xmax": 232, "ymax": 190},
-                        {"xmin": 67, "ymin": 274, "xmax": 93, "ymax": 297},
-                    ],
-                }
+                [
+                    {"score": 0.7235, "label": "cat", "box": {"xmin": 204, "ymin": 167, "xmax": 232, "ymax": 190}},
+                    {"score": 0.6748, "label": "remote", "box": {"xmin": 571, "ymin": 83, "xmax": 598, "ymax": 103}},
+                    {"score": 0.6456, "label": "remote", "box": {"xmin": 494, "ymin": 105, "xmax": 521, "ymax": 127}},
+                    {"score": 0.642, "label": "remote", "box": {"xmin": 67, "ymin": 274, "xmax": 93, "ymax": 297}},
+                ]
             ],
         )
 
@@ -143,16 +130,12 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase, metaclass=Pipeline
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {
-                    "scores": [0.6748, 0.6456, 0.7235, 0.642],
-                    "labels": ["remote", "remote", "cat", "remote"],
-                    "boxes": [
-                        {"xmin": 571, "ymin": 83, "xmax": 598, "ymax": 103},
-                        {"xmin": 494, "ymin": 105, "xmax": 521, "ymax": 127},
-                        {"xmin": 204, "ymin": 167, "xmax": 232, "ymax": 190},
-                        {"xmin": 67, "ymin": 274, "xmax": 93, "ymax": 297},
-                    ],
-                }
+                [
+                    {"score": 0.7235, "label": "cat", "box": {"xmin": 204, "ymin": 167, "xmax": 232, "ymax": 190}},
+                    {"score": 0.6748, "label": "remote", "box": {"xmin": 571, "ymin": 83, "xmax": 598, "ymax": 103}},
+                    {"score": 0.6456, "label": "remote", "box": {"xmin": 494, "ymin": 105, "xmax": 521, "ymax": 127}},
+                    {"score": 0.642, "label": "remote", "box": {"xmin": 67, "ymin": 274, "xmax": 93, "ymax": 297}},
+                ]
             ],
         )
 
@@ -168,26 +151,18 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase, metaclass=Pipeline
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {
-                    "scores": [0.6748, 0.6456, 0.7235, 0.642],
-                    "labels": ["remote", "remote", "cat", "remote"],
-                    "boxes": [
-                        {"xmin": 571, "ymin": 83, "xmax": 598, "ymax": 103},
-                        {"xmin": 494, "ymin": 105, "xmax": 521, "ymax": 127},
-                        {"xmin": 204, "ymin": 167, "xmax": 232, "ymax": 190},
-                        {"xmin": 67, "ymin": 274, "xmax": 93, "ymax": 297},
-                    ],
-                },
-                {
-                    "scores": [0.6748, 0.6456, 0.7235, 0.642],
-                    "labels": ["remote", "remote", "cat", "remote"],
-                    "boxes": [
-                        {"xmin": 571, "ymin": 83, "xmax": 598, "ymax": 103},
-                        {"xmin": 494, "ymin": 105, "xmax": 521, "ymax": 127},
-                        {"xmin": 204, "ymin": 167, "xmax": 232, "ymax": 190},
-                        {"xmin": 67, "ymin": 274, "xmax": 93, "ymax": 297},
-                    ],
-                },
+                [
+                    {"score": 0.7235, "label": "cat", "box": {"xmin": 204, "ymin": 167, "xmax": 232, "ymax": 190}},
+                    {"score": 0.6748, "label": "remote", "box": {"xmin": 571, "ymin": 83, "xmax": 598, "ymax": 103}},
+                    {"score": 0.6456, "label": "remote", "box": {"xmin": 494, "ymin": 105, "xmax": 521, "ymax": 127}},
+                    {"score": 0.642, "label": "remote", "box": {"xmin": 67, "ymin": 274, "xmax": 93, "ymax": 297}},
+                ],
+                [
+                    {"score": 0.7235, "label": "cat", "box": {"xmin": 204, "ymin": 167, "xmax": 232, "ymax": 190}},
+                    {"score": 0.6748, "label": "remote", "box": {"xmin": 571, "ymin": 83, "xmax": 598, "ymax": 103}},
+                    {"score": 0.6456, "label": "remote", "box": {"xmin": 494, "ymin": 105, "xmax": 521, "ymax": 127}},
+                    {"score": 0.642, "label": "remote", "box": {"xmin": 67, "ymin": 274, "xmax": 93, "ymax": 297}},
+                ],
             ],
         )
 
@@ -202,17 +177,13 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase, metaclass=Pipeline
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {
-                    "scores": [0.277, 0.1474, 0.2868, 0.2537, 0.1208],
-                    "labels": ["remote", "remote", "cat", "cat", "couch"],
-                    "boxes": [
-                        {"xmin": 40, "ymin": 72, "xmax": 177, "ymax": 115},
-                        {"xmin": 335, "ymin": 74, "xmax": 371, "ymax": 187},
-                        {"xmin": 324, "ymin": 20, "xmax": 640, "ymax": 373},
-                        {"xmin": 1, "ymin": 55, "xmax": 315, "ymax": 472},
-                        {"xmin": 4, "ymin": 0, "xmax": 642, "ymax": 476},
-                    ],
-                }
+                [
+                    {"score": 0.2868, "label": "cat", "box": {"xmin": 324, "ymin": 20, "xmax": 640, "ymax": 373}},
+                    {"score": 0.277, "label": "remote", "box": {"xmin": 40, "ymin": 72, "xmax": 177, "ymax": 115}},
+                    {"score": 0.2537, "label": "cat", "box": {"xmin": 1, "ymin": 55, "xmax": 315, "ymax": 472}},
+                    {"score": 0.1474, "label": "remote", "box": {"xmin": 335, "ymin": 74, "xmax": 371, "ymax": 187}},
+                    {"score": 0.1208, "label": "couch", "box": {"xmin": 4, "ymin": 0, "xmax": 642, "ymax": 476}},
+                ]
             ],
         )
 
@@ -226,28 +197,20 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase, metaclass=Pipeline
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {
-                    "scores": [0.277, 0.1474, 0.2868, 0.2537, 0.1208],
-                    "labels": ["remote", "remote", "cat", "cat", "couch"],
-                    "boxes": [
-                        {"xmin": 40, "ymin": 72, "xmax": 177, "ymax": 115},
-                        {"xmin": 335, "ymin": 74, "xmax": 371, "ymax": 187},
-                        {"xmin": 324, "ymin": 20, "xmax": 640, "ymax": 373},
-                        {"xmin": 1, "ymin": 55, "xmax": 315, "ymax": 472},
-                        {"xmin": 4, "ymin": 0, "xmax": 642, "ymax": 476},
-                    ],
-                },
-                {
-                    "scores": [0.277, 0.1474, 0.2868, 0.2537, 0.1208],
-                    "labels": ["remote", "remote", "cat", "cat", "couch"],
-                    "boxes": [
-                        {"xmin": 40, "ymin": 72, "xmax": 177, "ymax": 115},
-                        {"xmin": 335, "ymin": 74, "xmax": 371, "ymax": 187},
-                        {"xmin": 324, "ymin": 20, "xmax": 640, "ymax": 373},
-                        {"xmin": 1, "ymin": 55, "xmax": 315, "ymax": 472},
-                        {"xmin": 4, "ymin": 0, "xmax": 642, "ymax": 476},
-                    ],
-                },
+                [
+                    {"score": 0.2868, "label": "cat", "box": {"xmin": 324, "ymin": 20, "xmax": 640, "ymax": 373}},
+                    {"score": 0.277, "label": "remote", "box": {"xmin": 40, "ymin": 72, "xmax": 177, "ymax": 115}},
+                    {"score": 0.2537, "label": "cat", "box": {"xmin": 1, "ymin": 55, "xmax": 315, "ymax": 472}},
+                    {"score": 0.1474, "label": "remote", "box": {"xmin": 335, "ymin": 74, "xmax": 371, "ymax": 187}},
+                    {"score": 0.1208, "label": "couch", "box": {"xmin": 4, "ymin": 0, "xmax": 642, "ymax": 476}},
+                ],
+                [
+                    {"score": 0.2868, "label": "cat", "box": {"xmin": 324, "ymin": 20, "xmax": 640, "ymax": 373}},
+                    {"score": 0.277, "label": "remote", "box": {"xmin": 40, "ymin": 72, "xmax": 177, "ymax": 115}},
+                    {"score": 0.2537, "label": "cat", "box": {"xmin": 1, "ymin": 55, "xmax": 315, "ymax": 472}},
+                    {"score": 0.1474, "label": "remote", "box": {"xmin": 335, "ymin": 74, "xmax": 371, "ymax": 187}},
+                    {"score": 0.1208, "label": "couch", "box": {"xmin": 4, "ymin": 0, "xmax": 642, "ymax": 476}},
+                ],
             ],
         )
 
@@ -270,14 +233,31 @@ class ZeroShotObjectDetectionPipelineTests(unittest.TestCase, metaclass=Pipeline
         self.assertEqual(
             nested_simplify(outputs, decimals=4),
             [
-                {
-                    "scores": [0.277, 0.2868, 0.2537],
-                    "labels": ["remote", "cat", "cat"],
-                    "boxes": [
-                        {"xmin": 40, "ymin": 72, "xmax": 177, "ymax": 115},
-                        {"xmin": 324, "ymin": 20, "xmax": 640, "ymax": 373},
-                        {"xmin": 1, "ymin": 55, "xmax": 315, "ymax": 472},
-                    ],
-                }
+                [
+                    {"score": 0.2868, "label": "cat", "box": {"xmin": 324, "ymin": 20, "xmax": 640, "ymax": 373}},
+                    {"score": 0.277, "label": "remote", "box": {"xmin": 40, "ymin": 72, "xmax": 177, "ymax": 115}},
+                    {"score": 0.2537, "label": "cat", "box": {"xmin": 1, "ymin": 55, "xmax": 315, "ymax": 472}},
+                ]
+            ],
+        )
+
+    @require_torch
+    @slow
+    def test_top_k(self):
+        top_k = 2
+        object_detector = pipeline("zero-shot-object-detection")
+
+        outputs = object_detector(
+            "http://images.cocodataset.org/val2017/000000039769.jpg",
+            text_queries=["cat", "remote", "couch"],
+            top_k=top_k,
+        )
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                [
+                    {"score": 0.2868, "label": "cat", "box": {"xmin": 324, "ymin": 20, "xmax": 640, "ymax": 373}},
+                    {"score": 0.277, "label": "remote", "box": {"xmin": 40, "ymin": 72, "xmax": 177, "ymax": 115}},
+                ]
             ],
         )

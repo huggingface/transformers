@@ -5,7 +5,6 @@ import numpy as np
 from ..tokenization_utils_base import BatchEncoding
 from ..utils import (
     add_end_docstrings,
-    is_flax_available,
     is_tf_available,
     is_torch_available,
     is_vision_available,
@@ -63,7 +62,7 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
             images (`str`, `List[str]`, `PIL.Image` or `List[PIL.Image]`):
                 The pipeline handles three types of images:
 
-                - A string containing a http link pointing to an image
+                - A string containing an http url pointing to an image
                 - A string containing a local path to an image
                 - An image loaded in PIL directly
 
@@ -71,14 +70,22 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
             If given multiple images, `text_queries` should be provided as a list of lists, where each nested list
             contains the text queries for the corresponding image.
 
-        Return:
-            A list of dictionaries containing prediction results, one dictionary per each input image. The dictionaries
-            contain the following keys:
+            threshold (`float`, *optional*, defaults to 0.1):
+                The probability necessary to make a prediction.
 
-            - **labels** (`List[str]`) -- The list of text queries corresponding to the found objects.
-            - **scores** (`List[float]`) -- The list of scores corresponding to each object (between 0 and 1).
-            - **boxes** (`List[Dict[str,int]]`) -- A nested list of bounding boxes of all detected objects in image's
-              original size. Each list contains a dictionary with `x_min`, `x_max`, `y_min`, `y_max` keys.
+            top_k (`int`, *optional*, defaults to None):
+                The number of top predictions that will be returned by the pipeline. If the provided number is `None`
+                or higher than the number of predictions available, it will default to the number of predictions.
+
+
+        Return:
+            A list of lists containing prediction results, one list per input image. Each list contains dictionaries
+            with the following keys:
+
+            - **label** (`str`) -- Text query corresponding to the found object.
+            - **score** (`float`) -- Score corresponding to the object (between 0 and 1).
+            - **box** (`Dict[str,int]`) -- Bounding box of the detected object in image's original size. It is a
+              dictionary with `x_min`, `x_max`, `y_min`, `y_max` keys.
         """
         if isinstance(text_queries, str) or (isinstance(text_queries, List) and not isinstance(text_queries[0], List)):
             if isinstance(images, (str, Image.Image)):
@@ -107,6 +114,8 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
         postprocess_params = {}
         if "threshold" in kwargs:
             postprocess_params["threshold"] = kwargs["threshold"]
+        if "top_k" in kwargs:
+            postprocess_params["top_k"] = kwargs["top_k"]
         return {}, {}, postprocess_params
 
     def preprocess(self, inputs):
@@ -130,7 +139,7 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
         model_outputs = outputs.__class__({"target_sizes": target_sizes, "text_queries": text_queries, **outputs})
         return model_outputs
 
-    def postprocess(self, model_outputs, threshold=0.1):
+    def postprocess(self, model_outputs, threshold=0.1, top_k=None):
         texts = model_outputs["text_queries"]
 
         outputs = self.feature_extractor.post_process(
@@ -144,7 +153,14 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
             scores = outputs[i]["scores"][keep].tolist()
             boxes = [self._get_bounding_box(box) for box in outputs[i]["boxes"][keep]]
 
-            result = {"scores": scores, "labels": [texts[i][label] for label in labels], "boxes": boxes}
+            result = [
+                {"score": score, "label": texts[i][label], "box": box}
+                for score, label, box in zip(scores, labels, boxes)
+            ]
+
+            result = sorted(result, key=lambda x: x["score"], reverse=True)
+            if top_k:
+                result = result[:top_k]
             results.append(result)
 
         return results
@@ -230,12 +246,6 @@ class ZeroShotObjectDetectionPipeline(Pipeline):
             if return_tensors == "np":
                 input_ids = np.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
                 attention_mask = np.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
-
-            elif return_tensors == "jax" and is_flax_available():
-                import jax.numpy as jnp
-
-                input_ids = jnp.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
-                attention_mask = jnp.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
 
             elif return_tensors == "pt" and is_torch_available():
                 import torch
