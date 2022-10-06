@@ -1215,7 +1215,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
     def set_output_embeddings(self, value):
         self.set_input_embeddings(value)
 
-    def resize_token_embeddings(self, new_num_tokens: int) -> tf.Variable:
+    def resize_token_embeddings(self, new_num_tokens: int) -> tf.keras.layers.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens)
         return new_embeddings
 
