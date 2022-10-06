@@ -2033,7 +2033,7 @@ class TFGenerationMixin:
         def _initialize_past(past, num_padding_values, batch_axis):
             """initialize past with zeros -- the structure depends on `batch_axis`"""
             if batch_axis == 0:
-                padding_values = tf.scatter_nd(indices=[[2, 1]], updates=[num_padding_values], shape=(4, 2))
+                padding_values = tf.constant([[0, 0], [0, 0], [0, num_padding_values], [0, 0]], dtype=tf.int32)
                 new_past = ()
                 for past_layer in past:
                     new_past_layer = list(past_layer)

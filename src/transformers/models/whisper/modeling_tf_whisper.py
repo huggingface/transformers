@@ -120,7 +120,9 @@ class TFWhisperPositionalEmbedding(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(self, input_ids, past_key_values_length=0):
-        return self.weight[past_key_values_length : past_key_values_length + tf.shape(input_ids)[-1]]
+        past_key_values_length = tf.cast(past_key_values_length, tf.int32)
+        gather_indices = tf.range(tf.shape(input_ids)[-1], delta=1) + past_key_values_length
+        return tf.gather(self.weight, gather_indices)
 
 
 class TFWhisperAttention(tf.keras.layers.Layer):
@@ -789,6 +791,7 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
         self,
         input_ids=None,
         attention_mask=None,
+        position_ids=None,
         encoder_hidden_states=None,
         head_mask=None,
         cross_attn_head_mask=None,
@@ -817,6 +820,9 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
+            position_ids (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the
+                range `[0, config.max_position_embeddings - 1]`.
             encoder_hidden_states (`tf.Tensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
@@ -894,7 +900,8 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
         attention_mask = self._prepare_decoder_attention_mask(attention_mask, input_shape, past_key_values_length)
 
         # embed positions
-        positions = self.embed_positions(input_ids, past_key_values_length=past_key_values_length)
+        filled_past_positions = past_key_values_length if position_ids is None else position_ids[0, -1]
+        positions = self.embed_positions(input_ids, past_key_values_length=filled_past_positions)
 
         hidden_states = inputs_embeds + positions
         hidden_states = self.dropout(hidden_states, training=training)
@@ -1002,6 +1009,7 @@ class TFWhisperMainLayer(tf.keras.layers.Layer):
         input_features=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        decoder_position_ids=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
@@ -1064,6 +1072,7 @@ class TFWhisperMainLayer(tf.keras.layers.Layer):
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
+            position_ids=decoder_position_ids,
             encoder_hidden_states=encoder_outputs[0],
             head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
@@ -1127,6 +1136,7 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
         input_features=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        decoder_position_ids=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
@@ -1165,6 +1175,7 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
             input_features=input_features,
             decoder_input_ids=decoder_input_ids,
             decoder_attention_mask=decoder_attention_mask,
+            decoder_position_ids=decoder_position_ids,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
@@ -1217,7 +1228,6 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
     def __init__(self, config: WhisperConfig, **kwargs):
         super().__init__(config, **kwargs)
         self.model = TFWhisperMainLayer(config, name="model")
-        self.supports_xla_generation = False
 
     def get_encoder(self):
         return self.model.get_encoder()
@@ -1243,6 +1253,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         input_features=None,
         decoder_input_ids=None,
         decoder_attention_mask=None,
+        decoder_position_ids=None,
         head_mask=None,
         decoder_head_mask=None,
         cross_attn_head_mask=None,
@@ -1298,6 +1309,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
+            decoder_position_ids=decoder_position_ids,
             head_mask=head_mask,
             decoder_head_mask=decoder_head_mask,
             cross_attn_head_mask=cross_attn_head_mask,
@@ -1351,11 +1363,26 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         )
 
     def prepare_inputs_for_generation(
-        self, decoder_input_ids, past=None, use_cache=None, encoder_outputs=None, attention_mask=None, **kwargs
+        self,
+        decoder_input_ids,
+        past=None,
+        use_cache=None,
+        encoder_outputs=None,
+        attention_mask=None,
+        decoder_attention_mask=None,
+        **kwargs
     ):
         # cut decoder_input_ids if past is used
         if past is not None:
             decoder_input_ids = decoder_input_ids[:, -1:]
+
+        if decoder_attention_mask is not None:  # xla
+            decoder_position_ids = tf.math.cumsum(decoder_attention_mask, axis=-1, exclusive=True)[:, -1:]
+        elif past is not None:  # no xla + past
+            decoder_position_ids = past[0][0].shape[2]
+        else:  # no xla + no past
+            decoder_position_ids = tf.range(decoder_input_ids.shape[1])
+        decoder_position_ids = tf.broadcast_to(decoder_position_ids, decoder_input_ids.shape)
 
         return {
             "input_features": None,  # Needs to be passed to make Keras.layer.__call__ happy
@@ -1363,7 +1390,8 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             "past_key_values": past,
             "decoder_input_ids": decoder_input_ids,
             "use_cache": use_cache,
-            "decoder_attention_mask": None,
+            "decoder_attention_mask": decoder_attention_mask,
+            "decoder_position_ids": decoder_position_ids,
         }
 
     #
