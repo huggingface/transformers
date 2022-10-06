@@ -472,7 +472,7 @@ class TFWhisperPreTrainedModel(TFPreTrainedModel):
             self.main_input_name: tf.random.uniform(
                 [2, self.config.num_mel_bins, self.config.max_source_positions * 2 - 1], dtype=tf.float32
             ),
-            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int32),
+            "decoder_input_ids": tf.constant([[2, 3]], dtype=tf.int64),
         }
 
     @tf.function(
