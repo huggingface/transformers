@@ -100,7 +100,7 @@ class LEDTokenizer(PreTrainedTokenizer):
 
     ```
     >>> from transformers import LEDTokenizer
-    >>> tokenizer = LEDTokenizer.from_pretrained("facebook/bart-base") <<< what goes here?
+    >>> tokenizer = LEDTokenizer.from_pretrained("allenai/led-base-16384")
     >>> tokenizer("Hello world")['input_ids']
     [0, 31414, 232, 2]
     >>> tokenizer(" Hello world")['input_ids']
