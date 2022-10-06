@@ -791,6 +791,31 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
+    @unittest.skip("XLA is not currently supported for this model.")
+    def test_tiny_xla_generation(self):
+        set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny", from_pt=True)
+
+        input_speech = self._load_datasamples(1)
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
+
+        xla_generate = tf.function(model.generate, jit_compile=True)
+
+        generated_ids = model.generate(input_features, num_beams=5)
+        generated_ids_xla = xla_generate(input_features, num_beams=5)
+
+        transcript = processor.tokenizer.decode(generated_ids[0])
+        transcript_xla = processor.tokenizer.decode(generated_ids_xla[0])
+
+        EXPECTED_TRANSCRIPT = (
+            "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> Mr. Quilter is the apostle of the middle"
+            " classes and we are glad"
+        )
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+        self.assertEqual(transcript_xla, EXPECTED_TRANSCRIPT)
+
+    @slow
     def test_large_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
@@ -914,3 +939,47 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
 
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    @slow
+    @unittest.skip("XLA is not currently supported")
+    def test_tiny_en_batched_xla_generation(self):
+        set_seed(0)
+        processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
+
+        input_speech = self._load_datasamples(4)
+        input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
+
+        xla_generate = tf.function(model.generate, jit_compile=True)
+
+        generated_ids = model.generate(input_features)
+        generated_ids_xla = xla_generate(input_features)
+
+        # fmt: off
+        EXPECTED_LOGITS = tf.convert_to_tensor(
+            [
+                [50257, 50362, 1770, 13, 2264, 346, 353, 318, 262, 46329, 286, 262, 3504, 6097, 11, 290, 356, 389, 9675, 284],
+                [50257, 50362, 5414, 318, 1770, 13, 2264, 346, 353, 338, 5642, 1342, 3499, 621, 465, 2300, 13, 50256, 50256, 50256],
+                [50257, 50362, 679, 4952, 514, 326, 379, 428, 43856, 1622, 286, 262, 614, 11, 351, 6786, 290, 32595, 12023, 28236],
+                [50257, 50362, 679, 468, 12296, 17188, 1771, 7361, 26113, 18881, 1122, 338, 670, 318, 1107, 8312, 706, 477, 290, 460]
+            ]
+
+        )
+        # fmt: on
+
+        self.assertTrue(np.allclose(generated_ids, EXPECTED_LOGITS))
+        self.assertTrue(np.allclose(generated_ids_xla, EXPECTED_LOGITS))
+
+        # fmt: off
+        EXPECTED_TRANSCRIPT = [
+            " Mr. Quilter is the apostle of the middle classes, and we are glad to",
+            " Nor is Mr. Quilter's manner less interesting than his matter.",
+            " He tells us that at this festive season of the year, with Christmas and roast beef looming",
+            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can",
+        ]
+        # fmt: on
+
+        transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
+        transcript_xla = processor.batch_decode(generated_ids_xla, skip_special_tokens=True)
+        self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
+        self.assertListEqual(transcript_xla, EXPECTED_TRANSCRIPT)
