@@ -14,16 +14,18 @@
 # limitations under the License.
 """PyTorch BERT model specific for generation."""
 
+import math
 from typing import Optional, Tuple, Union
 
-import math
 import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
+from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -31,9 +33,8 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...activations import ACT2FN
 from .configuration_bert_generation import BertGenerationConfig
-from ...pytorch_utils import apply_chunking_to_forward, find_pruneable_heads_and_indices, prune_linear_layer
+
 
 logger = logging.get_logger(__name__)
 
@@ -64,12 +65,12 @@ class BertEmbeddings(nn.Module):
         )
 
     def forward(
-            self,
-            input_ids: Optional[torch.LongTensor] = None,
-            token_type_ids: Optional[torch.LongTensor] = None,
-            position_ids: Optional[torch.LongTensor] = None,
-            inputs_embeds: Optional[torch.FloatTensor] = None,
-            past_key_values_length: int = 0,
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        token_type_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        past_key_values_length: int = 0,
     ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -79,7 +80,7 @@ class BertEmbeddings(nn.Module):
         seq_length = input_shape[1]
 
         if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length: seq_length + past_key_values_length]
+            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length]
 
         # Setting the token_type_ids to the registered buffer in constructor where it is all zeros, which usually occurs
         # when its auto-generated, registered buffer helps users when tracing the model without passing token_type_ids, solves
@@ -154,14 +155,14 @@ class BertSelfAttention(nn.Module):
         return x.permute(0, 2, 1, 3)
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            head_mask: Optional[torch.FloatTensor] = None,
-            encoder_hidden_states: Optional[torch.FloatTensor] = None,
-            encoder_attention_mask: Optional[torch.FloatTensor] = None,
-            past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-            output_attentions: Optional[bool] = False,
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         mixed_query_layer = self.query(hidden_states)
 
@@ -275,14 +276,14 @@ class BertAttention(nn.Module):
         self.pruned_heads = self.pruned_heads.union(heads)
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            head_mask: Optional[torch.FloatTensor] = None,
-            encoder_hidden_states: Optional[torch.FloatTensor] = None,
-            encoder_attention_mask: Optional[torch.FloatTensor] = None,
-            past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-            output_attentions: Optional[bool] = False,
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
@@ -346,14 +347,14 @@ class BertLayer(nn.Module):
         self.output = BertOutput(config)
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            head_mask: Optional[torch.FloatTensor] = None,
-            encoder_hidden_states: Optional[torch.FloatTensor] = None,
-            encoder_attention_mask: Optional[torch.FloatTensor] = None,
-            past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-            output_attentions: Optional[bool] = False,
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor]:
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
@@ -425,17 +426,17 @@ class BertEncoder(nn.Module):
         self.gradient_checkpointing = False
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            attention_mask: Optional[torch.FloatTensor] = None,
-            head_mask: Optional[torch.FloatTensor] = None,
-            encoder_hidden_states: Optional[torch.FloatTensor] = None,
-            encoder_attention_mask: Optional[torch.FloatTensor] = None,
-            past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
-            use_cache: Optional[bool] = None,
-            output_attentions: Optional[bool] = False,
-            output_hidden_states: Optional[bool] = False,
-            return_dict: Optional[bool] = True,
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = False,
+        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = True,
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
