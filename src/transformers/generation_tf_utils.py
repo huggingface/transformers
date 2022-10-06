@@ -994,10 +994,6 @@ class TFGenerationMixin:
                     max_length=max_length,
                     forced_bos_token_id=forced_bos_token_id,
                     forced_eos_token_id=forced_eos_token_id,
-                    suppress_tokens=suppress_tokens,
-                    input_ids_seq_length=input_ids_seq_len,
-                    begin_suppress_tokens=begin_suppress_tokens,
-                    forced_decoder_ids=forced_decoder_ids,
                 )
             #             calculate log softmax score
             scores = tf.nn.log_softmax(next_token_logits, axis=-1)  # (batch_size * num_beams, vocab_size)
@@ -1305,17 +1301,7 @@ class TFGenerationMixin:
         return tuple(tf.gather(layer_past, beam_idx, axis=1) for layer_past in past)
 
     def adjust_logits_during_generation(
-        self,
-        logits,
-        cur_len,
-        max_length,
-        forced_bos_token_id,
-        forced_eos_token_id,
-        suppress_tokens,
-        input_ids_seq_length,
-        begin_suppress_tokens,
-        forced_decoder_ids,
-        **kwargs
+        self, logits, cur_len, max_length, forced_bos_token_id, forced_eos_token_id, **kwargs
     ):
         """
         Implement in subclasses of [`PreTrainedModel`] for custom behavior to adjust the logits in the generate method.
@@ -1332,28 +1318,6 @@ class TFGenerationMixin:
         elif cur_len == max_length - 1 and forced_eos_token_id is not None:
             vocab_range = tf.constant(range(vocab_size))
             return tf.where(vocab_range != forced_eos_token_id, -1e8, logits)
-
-        elif suppress_tokens is not None:
-            mask_condition = tf.constant(
-                [token_id in suppress_tokens for token_id in range(vocab_size)], dtype=tf.bool
-            )
-            return tf.where(mask_condition, -1e8, logits)
-        elif begin_suppress_tokens is not None:
-            begin_index = input_ids_seq_length
-            begin_index = begin_index if (input_ids_seq_length > 1 or forced_bos_token_id is None) else begin_index + 1
-            if forced_decoder_ids is not None:
-                begin_index += forced_decoder_ids[-1][0]  # generation starts after the last token that is forced
-            if begin_index == cur_len:
-                mask_condition = tf.constant(
-                    [token_id in begin_suppress_tokens for token_id in range(vocab_size)], dtype=tf.bool
-                )
-            else:
-                mask_condition = False
-            return tf.where(mask_condition, -1e8, logits)
-        elif forced_decoder_ids is not None and cur_len in forced_decoder_ids:
-            vocab_range = tf.constant(range(vocab_size))
-            current_token = forced_decoder_ids[cur_len]
-            return tf.where(vocab_range == current_token, 1e8, logits)
         else:
             return logits
 
