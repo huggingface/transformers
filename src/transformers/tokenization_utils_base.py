@@ -1275,7 +1275,7 @@ class SpecialTokensMixin:
         if self._all_special_ids is not None:
             return self._all_special_ids
         all_toks = self.all_special_tokens
-        all_ids = set(self.convert_tokens_to_ids(all_toks))
+        all_ids = self.convert_tokens_to_ids(all_toks)
         self._all_special_ids = all_ids
         return all_ids
 
