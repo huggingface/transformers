@@ -867,10 +867,6 @@ class TFGenerationMixin:
             use_cache=use_cache,
             forced_bos_token_id=forced_bos_token_id,
             forced_eos_token_id=forced_eos_token_id,
-            suppress_tokens=suppress_tokens,
-            begin_suppress_tokens=begin_suppress_tokens,
-            input_ids_seq_len=cur_len,
-            forced_decoder_ids=forced_decoder_ids,
             return_dict_in_generate=return_dict_in_generate,
             **model_kwargs,
         )
@@ -901,10 +897,6 @@ class TFGenerationMixin:
         use_cache,
         forced_bos_token_id,
         forced_eos_token_id,
-        suppress_tokens,
-        begin_suppress_tokens,
-        input_ids_seq_len,
-        forced_decoder_ids,
         return_dict_in_generate,
         **kwargs,
     ) -> Union[TFBeamSearchOutput, TFBeamSampleOutput, tf.Tensor]:
