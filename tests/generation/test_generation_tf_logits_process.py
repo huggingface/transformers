@@ -399,12 +399,11 @@ class TFLogitsProcessorTest(unittest.TestCase):
         input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores = logits_processor(input_ids, scores, cur_len)
-        self.assertTrue(
-            tf.math.reduce_all(tf.math.is_inf(tf.gather(scores, [force_token_map[cur_len]], axis=1))),
-        )
+        tf.debugging.assert_near(tf.gather(scores, [force_token_map[cur_len]], axis=1), 0.0)
+
         non_forced_inds = [i for i in range(vocab_size) if i != force_token_map[cur_len]]
-        self.assertFalse(
-            tf.math.reduce_any(tf.math.is_inf(tf.gather(scores, [non_forced_inds], axis=1))),
+        self.assertTrue(
+            tf.math.reduce_all(tf.math.is_inf(tf.gather(scores, [non_forced_inds], axis=1))),
         )
 
         # check that if the cur_len is not contained in the force_token_map, the logits are not modified
