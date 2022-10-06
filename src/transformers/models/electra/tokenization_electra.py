@@ -315,7 +315,7 @@ class ElectraTokenizer(PreTrainedTokenizer):
                 writer.write(token + "\n")
                 index += 1
         return (vocab_file,)
-# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
+# Copied from transformers.models.bert.tokenization_bert.BasicTokenizer with Bert->Electra
 class BasicTokenizer(object):
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
@@ -465,7 +465,7 @@ class BasicTokenizer(object):
         return "".join(output)
 
 
-# Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
+# Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer with Bert->Electra
 class WordpieceTokenizer(object):
     """Runs WordPiece tokenization."""
 
