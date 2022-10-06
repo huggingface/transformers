@@ -28,7 +28,6 @@ if is_tf_available():
 
 @dataclass
 class TFTrainingArguments(TrainingArguments):
-    framework = "tf"
     """
     TrainingArguments is the subset of the arguments we use in our example scripts **which relate to the training loop
     itself**.
@@ -162,6 +161,7 @@ class TFTrainingArguments(TrainingArguments):
             Whether to activate the XLA compilation or not.
     """
 
+    framework = "tf"
     tpu_name: Optional[str] = field(
         default=None,
         metadata={"help": "Name of TPU"},

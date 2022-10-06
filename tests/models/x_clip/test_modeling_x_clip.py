@@ -633,7 +633,7 @@ class XCLIPModelTest(ModelTesterMixin, unittest.TestCase):
 # We will verify our results on a spaghetti video
 def prepare_video():
     file = hf_hub_download(
-        repo_id="datasets/hf-internal-testing/spaghetti-video", filename="eating_spaghetti_8_frames.npy"
+        repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti_8_frames.npy", repo_type="dataset"
     )
     video = np.load(file)
     return list(video)

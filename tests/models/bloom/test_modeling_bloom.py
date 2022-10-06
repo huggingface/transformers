@@ -31,6 +31,7 @@ if is_torch_available():
     from transformers import (
         BLOOM_PRETRAINED_MODEL_ARCHIVE_LIST,
         BloomForCausalLM,
+        BloomForQuestionAnswering,
         BloomForSequenceClassification,
         BloomForTokenClassification,
         BloomModel,
@@ -274,6 +275,14 @@ class BloomModelTester:
         result = model(input_ids, attention_mask=input_mask)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
+    def create_and_check_question_answering_model(self, config, input_ids, input_mask, *args):
+        model = BloomForQuestionAnswering(config)
+        model.to(torch_device)
+        model.eval()
+
+        result = model(input_ids, attention_mask=input_mask)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
+
     def create_and_check_forward_and_backwards(
         self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):
@@ -314,6 +323,7 @@ class BloomModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
             BloomForCausalLM,
             BloomForSequenceClassification,
             BloomForTokenClassification,
+            BloomForQuestionAnswering,
         )
         if is_torch_available()
         else ()
@@ -771,8 +781,8 @@ class BloomEmbeddingTest(unittest.TestCase):
 
         output_gpu_1, output_gpu_2 = output.split(125440, dim=-1)
         if cuda_available:
-            self.assertEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1)
-            self.assertEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2)
+            self.assertAlmostEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1, places=6)
+            self.assertAlmostEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2, places=6)
         else:
             self.assertAlmostEqual(output_gpu_1.mean().item(), MEAN_LOGITS_GPU_1, places=6)  # 1e-06 precision!!
             self.assertAlmostEqual(output_gpu_2.mean().item(), MEAN_LOGITS_GPU_2, places=6)

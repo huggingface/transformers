@@ -14,17 +14,29 @@ specific language governing permissions and limitations under the License.
 
 [[open-in-colab]]
 
-Before you can use your data in a model, the data needs to be processed into an acceptable format for the model. A model does not understand raw text, images or audio. These inputs need to be converted into numbers and assembled into tensors. In this tutorial, you will:
+Before you can train a model on a dataset, it needs to be preprocessed into the expected model input format. Whether your data is text, images, or audio, they need to be converted and assembled into batches of tensors. 🤗 Transformers provides a set of preprocessing classes to help prepare your data for the model. In this tutorial, you'll learn that for:
 
-* Preprocess textual data with a tokenizer.
-* Preprocess image or audio data with a feature extractor.
-* Preprocess data for a multimodal task with a processor.
+* Text, use a [Tokenizer](./main_classes/tokenizer) to convert text into a sequence of tokens, create a numerical representation of the tokens, and assemble them into tensors.
+* Computer vision and speech, use a [Feature extractor](./main_classes/feature_extractor) to extract sequential features from audio waveforms and images and convert them into tensors.
+* Multimodal inputs, use a [Processor](./main_classes/processors) to combine a tokenizer and a feature extractor.
 
-## NLP
+<Tip>
+
+`AutoProcessor` **always** works and automatically chooses the correct class for the model you're using, whether you're using a tokenizer, feature extractor or processor.
+
+</Tip>
+
+Before you begin, install 🤗 Datasets so you can load some datasets to experiment with:
+
+```bash
+pip install datasets
+```
+
+## Natural Language Processing
 
 <Youtube id="Yffk5aydLzg"/>
 
-The main tool for processing textual data is a [tokenizer](main_classes/tokenizer). A tokenizer starts by splitting text into *tokens* according to a set of rules. The tokens are converted into numbers, which are used to build tensors as input to a model. Any additional inputs required by a model are also added by the tokenizer.
+The main tool for preprocessing textual data is a [tokenizer](main_classes/tokenizer). A tokenizer splits text into *tokens* according to a set of rules. The tokens are converted into numbers and then tensors, which become the model inputs. Any additional inputs required by the model are added by the tokenizer.
 
 <Tip>
 
@@ -32,11 +44,7 @@ If you plan on using a pretrained model, it's important to use the associated pr
 
 </Tip>
 
-Get started quickly by loading a pretrained tokenizer with the [`AutoTokenizer`] class. This downloads the *vocab* used when a model is pretrained.
-
-### Tokenize
-
-Load a pretrained tokenizer with [`AutoTokenizer.from_pretrained`]:
+Get started by loading a pretrained tokenizer with the [`AutoTokenizer.from_pretrained`] method. This downloads the *vocab* a model was pretrained with:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -44,7 +52,7 @@ Load a pretrained tokenizer with [`AutoTokenizer.from_pretrained`]:
 >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-cased")
 ```
 
-Then pass your sentence to the tokenizer:
+Then pass your text to the tokenizer:
 
 ```py
 >>> encoded_input = tokenizer("Do not meddle in the affairs of wizards, for they are subtle and quick to anger.")
@@ -60,7 +68,7 @@ The tokenizer returns a dictionary with three important items:
 * [attention_mask](glossary#attention-mask) indicates whether a token should be attended to or not.
 * [token_type_ids](glossary#token-type-ids) identifies which sequence a token belongs to when there is more than one sequence.
 
-You can decode the `input_ids` to return the original input:
+Return your input by decoding the `input_ids`:
 
 ```py
 >>> tokenizer.decode(encoded_input["input_ids"])
@@ -68,9 +76,9 @@ You can decode the `input_ids` to return the original input:
 ```
 
 As you can see, the tokenizer added two special tokens - `CLS` and `SEP` (classifier and separator) - to the sentence. Not all models need
-special tokens, but if they do, the tokenizer will automatically add them for you.
+special tokens, but if they do, the tokenizer automatically adds them for you.
 
-If there are several sentences you want to process, pass the sentences as a list to the tokenizer:
+If there are several sentences you want to preprocess, pass them as a list to the tokenizer:
 
 ```py
 >>> batch_sentences = [
@@ -93,7 +101,7 @@ If there are several sentences you want to process, pass the sentences as a list
 
 ### Pad
 
-This brings us to an important topic. When you process a batch of sentences, they aren't always the same length. This is a problem because tensors, the input to the model, need to have a uniform shape. Padding is a strategy for ensuring tensors are rectangular by adding a special *padding token* to sentences with fewer tokens.
+Sentences aren't always the same length which can be an issue because tensors, the model inputs, need to have a uniform shape. Padding is a strategy for ensuring tensors are rectangular by adding a special *padding token* to shorter sentences.
 
 Set the `padding` parameter to `True` to pad the shorter sequences in the batch to match the longest sequence:
 
@@ -116,11 +124,11 @@ Set the `padding` parameter to `True` to pad the shorter sequences in the batch 
                     [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]]}
 ```
 
-Notice the tokenizer padded the first and third sentences with a `0` because they are shorter!
+The first and third sentences are now padded with `0`'s because they are shorter.
 
 ### Truncation
 
-On the other end of the spectrum, sometimes a sequence may be too long for a model to handle. In this case, you will need to truncate the sequence to a shorter length.
+On the other end of the spectrum, sometimes a sequence may be too long for a model to handle. In this case, you'll need to truncate the sequence to a shorter length.
 
 Set the `truncation` parameter to `True` to truncate a sequence to the maximum length accepted by the model:
 
@@ -143,9 +151,15 @@ Set the `truncation` parameter to `True` to truncate a sequence to the maximum l
                     [1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0]]}
 ```
 
+<Tip>
+
+Check out the [Padding and truncation](./pad_truncation) concept guide to learn more different padding and truncation arguments.
+
+</Tip>
+
 ### Build tensors
 
-Finally, you want the tokenizer to return the actual tensors that are fed to the model.
+Finally, you want the tokenizer to return the actual tensors that get fed to the model.
 
 Set the `return_tensors` parameter to either `pt` for PyTorch, or `tf` for TensorFlow:
 
@@ -199,13 +213,9 @@ array([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0],
 
 ## Audio
 
-Audio inputs are preprocessed differently than textual inputs, but the end goal remains the same: create numerical sequences the model can understand. A [feature extractor](main_classes/feature_extractor) is designed for the express purpose of extracting features from raw image or audio data and converting them into tensors. Before you begin, install 🤗 Datasets to load an audio dataset to experiment with:
+For audio tasks, you'll need a [feature extractor](main_classes/feature_extractor) to prepare your dataset for the model. The feature extractor is designed to extract features from raw audio data, and convert them into tensors.
 
-```bash
-pip install datasets
-```
-
-Load the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset (see the 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub.html) for more details on how to load a dataset):
+Load the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset (see the 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub.html) for more details on how to load a dataset) to see how you can use a feature extractor with audio datasets:
 
 ```py
 >>> from datasets import load_dataset, Audio
@@ -213,7 +223,7 @@ Load the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset (see
 >>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")
 ```
 
-Access the first element of the `audio` column to take a look at the input. Calling the `audio` column will automatically load and resample the audio file:
+Access the first element of the `audio` column to take a look at the input. Calling the `audio` column automatically loads and resamples the audio file:
 
 ```py
 >>> dataset[0]["audio"]
@@ -229,20 +239,7 @@ This returns three items:
 * `path` points to the location of the audio file.
 * `sampling_rate` refers to how many data points in the speech signal are measured per second.
 
-### Resample
-
-For this tutorial, you will use the [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) model. As you can see from the model card, the Wav2Vec2 model is pretrained on 16kHz sampled speech audio. It is important your audio data's sampling rate matches the sampling rate of the dataset used to pretrain the model. If your data's sampling rate isn't the same, then you need to resample your audio data. 
-
-For example, the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset has a sampling rate of 8000kHz. In order to use the Wav2Vec2 model with this dataset, upsample the sampling rate to 16kHz:
-
-```py
->>> dataset = load_dataset("PolyAI/minds14", name="en-US", split="train")
->>> dataset[0]["audio"]
-{'array': array([ 0.        ,  0.00024414, -0.00024414, ..., -0.00024414,
-         0.        ,  0.        ], dtype=float32),
- 'path': '/root/.cache/huggingface/datasets/downloads/extracted/f14948e0e84be638dd7943ac36518a4cf3324e8b7aa331c5ab11541518e9368c/en-US~JOINT_ACCOUNT/602ba55abb1e6d0fbce92065.wav',
- 'sampling_rate': 8000}
-```
+For this tutorial, you'll use the [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) model. Take a look at the model card, and you'll learn Wav2Vec2 is pretrained on 16kHz sampled speech audio. It is important your audio data's sampling rate matches the sampling rate of the dataset used to pretrain the model. If your data's sampling rate isn't the same, then you need to resample your data. 
 
 1. Use 🤗 Datasets' [`~datasets.Dataset.cast_column`] method to upsample the sampling rate to 16kHz:
 
@@ -250,7 +247,7 @@ For example, the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) data
 >>> dataset = dataset.cast_column("audio", Audio(sampling_rate=16_000))
 ```
 
-2. Load the audio file:
+2. Call the `audio` column again to resample the audio file:
 
 ```py
 >>> dataset[0]["audio"]
@@ -260,11 +257,7 @@ For example, the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) data
  'sampling_rate': 16000}
 ```
 
-As you can see, the `sampling_rate` is now 16kHz!
-
-### Feature extractor
-
-The next step is to load a feature extractor to normalize and pad the input. When padding textual data, a `0` is added for shorter sequences. The same idea applies to audio data, and the audio feature extractor will add a `0` - interpreted as silence - to `array`.
+Next, load a feature extractor to normalize and pad the input. When padding textual data, a `0` is added for shorter sequences. The same idea applies to audio data. The feature extractor adds a `0` - interpreted as silence - to `array`.
 
 Load the feature extractor with [`AutoFeatureExtractor.from_pretrained`]:
 
@@ -283,8 +276,6 @@ Pass the audio `array` to the feature extractor. We also recommend adding the `s
         5.6335266e-04,  4.6588284e-06, -1.7142107e-04], dtype=float32)]}
 ```
 
-### Pad and truncate
-
 Just like the tokenizer, you can apply padding or truncation to handle variable sequences in a batch. Take a look at the sequence length of these two audio samples:
 
 ```py
@@ -295,7 +286,7 @@ Just like the tokenizer, you can apply padding or truncation to handle variable 
 (106496,)
 ```
 
-As you can see, the first sample has a longer sequence than the second sample. Let's create a function that will preprocess the dataset. Specify a maximum sample length, and the feature extractor will either pad or truncate the sequences to match it:
+Create a function to preprocess the dataset so the audio samples are the same lengths. Specify a maximum sample length, and the feature extractor will either pad or truncate the sequences to match it:
 
 ```py
 >>> def preprocess_function(examples):
@@ -310,13 +301,13 @@ As you can see, the first sample has a longer sequence than the second sample. L
 ...     return inputs
 ```
 
-Apply the function to the the first few examples in the dataset:
+Apply the `preprocess_function` to the the first few examples in the dataset:
 
 ```py
 >>> processed_dataset = preprocess_function(dataset[:5])
 ```
 
-Now take another look at the processed sample lengths:
+The sample lengths are now the same and match the specified maximum length. You can pass your processed dataset to the model now!
 
 ```py
 >>> processed_dataset["input_values"][0].shape
@@ -326,13 +317,17 @@ Now take another look at the processed sample lengths:
 (100000,)
 ```
 
-The lengths of the first two samples now match the maximum length you specified.
+## Computer vision
 
-## Vision
+For computer vision tasks, you'll need a [feature extractor](main_classes/feature_extractor) to prepare your dataset for the model. The feature extractor is designed to extract features from images, and convert them into tensors.
 
-A feature extractor is also used to process images for vision tasks. Once again, the goal is to convert the raw image into a batch of tensors as input.
+Load the [food101](https://huggingface.co/datasets/food101) dataset (see the 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub.html) for more details on how to load a dataset) to see how you can use a feature extractor with computer vision datasets: 
 
-Let's load the [food101](https://huggingface.co/datasets/food101) dataset for this tutorial. Use 🤗 Datasets `split` parameter to only load a small sample from the training split since the dataset is quite large:
+<Tip>
+
+Use 🤗 Datasets `split` parameter to only load a small sample from the training split since the dataset is quite large!
+
+</Tip>
 
 ```py
 >>> from datasets import load_dataset
@@ -346,9 +341,9 @@ Next, take a look at the image with 🤗 Datasets [`Image`](https://huggingface.
 >>> dataset[0]["image"]
 ```
 
-![vision-preprocess-tutorial.png](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vision-preprocess-tutorial.png)
-
-### Feature extractor
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/vision-preprocess-tutorial.png"/>
+</div>
 
 Load the feature extractor with [`AutoFeatureExtractor.from_pretrained`]:
 
@@ -358,11 +353,9 @@ Load the feature extractor with [`AutoFeatureExtractor.from_pretrained`]:
 >>> feature_extractor = AutoFeatureExtractor.from_pretrained("google/vit-base-patch16-224")
 ```
 
-### Data augmentation
+For computer vision tasks, it is common to add some type of data augmentation to the images as a part of preprocessing. You can add augmentations with any library you'd like, but in this tutorial, you'll use torchvision's [`transforms`](https://pytorch.org/vision/stable/transforms.html) module. If you're interested in using another data augmentation library, learn how in the [Albumentations](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_albumentations.ipynb) or [Kornia notebooks](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/image_classification_kornia.ipynb).
 
-For vision tasks, it is common to add some type of data augmentation to the images as a part of preprocessing. You can add augmentations with any library you'd like, but in this tutorial, you will use torchvision's [`transforms`](https://pytorch.org/vision/stable/transforms.html) module.
-
-1. Normalize the image and use [`Compose`](https://pytorch.org/vision/master/generated/torchvision.transforms.Compose.html) to chain some transforms - [`RandomResizedCrop`](https://pytorch.org/vision/main/generated/torchvision.transforms.RandomResizedCrop.html) and [`ColorJitter`](https://pytorch.org/vision/main/generated/torchvision.transforms.ColorJitter.html) - together:
+1. Normalize the image with the feature extractor and use [`Compose`](https://pytorch.org/vision/master/generated/torchvision.transforms.Compose.html) to chain some transforms - [`RandomResizedCrop`](https://pytorch.org/vision/main/generated/torchvision.transforms.RandomResizedCrop.html) and [`ColorJitter`](https://pytorch.org/vision/main/generated/torchvision.transforms.ColorJitter.html) - together:
 
 ```py
 >>> from torchvision.transforms import Compose, Normalize, RandomResizedCrop, ColorJitter, ToTensor
@@ -373,7 +366,7 @@ For vision tasks, it is common to add some type of data augmentation to the imag
 ... )
 ```
 
-2. The model accepts [`pixel_values`](model_doc/visionencoderdecoder#transformers.VisionEncoderDecoderModel.forward.pixel_values) as it's input. This value is generated by the feature extractor. Create a function that generates `pixel_values` from the transforms:
+2. The model accepts [`pixel_values`](model_doc/visionencoderdecoder#transformers.VisionEncoderDecoderModel.forward.pixel_values) as its input, which is generated by the feature extractor. Create a function that generates `pixel_values` from the transforms:
 
 ```py
 >>> def transforms(examples):
@@ -381,13 +374,13 @@ For vision tasks, it is common to add some type of data augmentation to the imag
 ...     return examples
 ```
 
-3. Then use 🤗 Datasets [`set_transform`](https://huggingface.co/docs/datasets/process.html#format-transform) to apply the transforms on-the-fly:
+3. Then use 🤗 Datasets [`set_transform`](https://huggingface.co/docs/datasets/process.html#format-transform) to apply the transforms on the fly:
 
 ```py
 >>> dataset.set_transform(transforms)
 ```
 
-4. Now when you access the image, you will notice the feature extractor has added the model input `pixel_values`:
+4. Now when you access the image, you'll notice the feature extractor has added `pixel_values`. You can pass your processed dataset to the model now!
 
 ```py
 >>> dataset[0]["image"]
@@ -418,7 +411,7 @@ For vision tasks, it is common to add some type of data augmentation to the imag
           [-0.1922, -0.1922, -0.1922,  ..., -0.2941, -0.2863, -0.3412]]])}
 ```
 
-Here is what the image looks like after you preprocess it. Just as you'd expect from the applied transforms, the image has been randomly cropped and it's color properties are different.
+Here is what the image looks like after the transforms are applied. The image has been randomly cropped and it's color properties are different.
 
 ```py
 >>> import numpy as np
@@ -428,16 +421,15 @@ Here is what the image looks like after you preprocess it. Just as you'd expect 
 >>> plt.imshow(img.permute(1, 2, 0))
 ```
 
-![preprocessed_image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/preprocessed_image.png)
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/preprocessed_image.png"/>
+</div>
 
 ## Multimodal
 
-For multimodal tasks. you will use a combination of everything you've learned so far and apply your skills to a automatic speech recognition (ASR) task. This means you will need a:
+For tasks involving multimodal inputs, you'll need a [processor](main_classes/processors) to prepare your dataset for the model. A processor couples a tokenizer and feature extractor.
 
-* Feature extractor to preprocess the audio data.
-* Tokenizer to process the text.
-
-Let's return to the [LJ Speech](https://huggingface.co/datasets/lj_speech) dataset:
+Load the [LJ Speech](https://huggingface.co/datasets/lj_speech) dataset (see the 🤗 [Datasets tutorial](https://huggingface.co/docs/datasets/load_hub.html) for more details on how to load a dataset) to see how you can use a processor for automatic speech recognition (ASR):
 
 ```py
 >>> from datasets import load_dataset
@@ -445,7 +437,7 @@ Let's return to the [LJ Speech](https://huggingface.co/datasets/lj_speech) datas
 >>> lj_speech = load_dataset("lj_speech", split="train")
 ```
 
-Since you are mainly interested in the `audio` and `text` column, remove the other columns:
+For ASR, you're mainly focused on `audio` and `text` so you can remove the other columns:
 
 ```py
 >>> lj_speech = lj_speech.map(remove_columns=["file", "id", "normalized_text"])
@@ -464,15 +456,13 @@ Now take a look at the `audio` and `text` columns:
 'Printing, in the only sense with which we are at present concerned, differs from most if not from all the arts and crafts represented in the Exhibition'
 ```
 
-Remember from the earlier section on processing audio data, you should always [resample](preprocessing#audio) your audio data's sampling rate to match the sampling rate of the dataset used to pretrain a model:
+Remember you should always [resample](preprocessing#audio) your audio dataset's sampling rate to match the sampling rate of the dataset used to pretrain a model!
 
 ```py
 >>> lj_speech = lj_speech.cast_column("audio", Audio(sampling_rate=16_000))
 ```
 
-### Processor
-
-A processor combines a feature extractor and tokenizer. Load a processor with [`AutoProcessor.from_pretrained]:
+Load a processor with [`AutoProcessor.from_pretrained`]:
 
 ```py
 >>> from transformers import AutoProcessor
@@ -480,7 +470,7 @@ A processor combines a feature extractor and tokenizer. Load a processor with [`
 >>> processor = AutoProcessor.from_pretrained("facebook/wav2vec2-base-960h")
 ```
 
-1. Create a function to process the audio data to `input_values`, and tokenizes the text to `labels`. These are your inputs to the model:
+1. Create a function to process the audio data contained in `array` to `input_values`, and tokenize `text` to `labels`. These are the inputs to the model:
 
 ```py
 >>> def prepare_dataset(example):
@@ -497,6 +487,4 @@ A processor combines a feature extractor and tokenizer. Load a processor with [`
 >>> prepare_dataset(lj_speech[0])
 ```
 
-Notice the processor has added `input_values` and `labels`. The sampling rate has also been correctly downsampled to 16kHz.
-
-Awesome, you should now be able to preprocess data for any modality and even combine different modalities! In the next tutorial, learn how to fine-tune a model on your newly preprocessed data.
+The processor has now added `input_values` and `labels`, and the sampling rate has also been correctly downsampled to 16kHz. You can pass your processed dataset to the model now!

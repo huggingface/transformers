@@ -15,6 +15,11 @@ on:
       version:
         required: true
         type: string
+      # Use this to control the commit to test against
+      sha:
+        default: 'main'
+        required: false
+        type: string
 
 env:
   HF_HOME: /mnt/cache
@@ -67,18 +72,19 @@ jobs:
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
     steps:
-      - name: Checkout transformers
-        uses: actions/checkout@v2
-        with:
-          fetch-depth: 2
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ inputs.sha }}
 
       - name: Cleanup
+        working-directory: /transformers
         run: |
           rm -rf tests/__pycache__
           rm -rf tests/models/__pycache__
           rm -rf reports
 
       - id: set-matrix
+        working-directory: /transformers
         name: Identify models to test
         run: |
           cd tests
@@ -99,7 +105,7 @@ jobs:
     steps:
       - name: Update clone
         working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.sha }}
 
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
@@ -129,6 +135,15 @@ jobs:
         if: ${{ failure() }}
         continue-on-error: true
         run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
+
+      - name: Save job name
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          matrix_folders=${matrix_folders/'models_'/'models/'}
+          job_name="Model tests ($matrix_folders, ${{ matrix.machine_type }})"
+          echo "$job_name"
+          echo "$job_name" > /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/job_name.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}
@@ -152,7 +167,7 @@ jobs:
     steps:
       - name: Update clone
         working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
+        run: git fetch && git checkout ${{ inputs.sha }}
 
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
@@ -182,6 +197,15 @@ jobs:
         if: ${{ failure() }}
         continue-on-error: true
         run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
+
+      - name: Save job name
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          matrix_folders=${matrix_folders/'models_'/'models/'}
+          job_name="Model tests ($matrix_folders, ${{ matrix.machine_type }})"
+          echo "$job_name"
+          echo "$job_name" > /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/job_name.txt
 
       - name: Test suite reports artifacts
         if: ${{ always() }}

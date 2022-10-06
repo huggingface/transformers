@@ -18,6 +18,7 @@ Import utilities: Utilities related to imports and our lazy inits.
 import importlib.util
 import json
 import os
+import shutil
 import sys
 import warnings
 from collections import OrderedDict
@@ -386,6 +387,10 @@ def is_torch_fx_available():
     return _torch_fx_available
 
 
+def is_bs4_available():
+    return importlib.util.find_spec("bs4") is not None
+
+
 def is_torch_onnx_dict_inputs_support_available():
     return _torch_onnx_dict_inputs_support_available
 
@@ -449,6 +454,10 @@ def is_datasets_available():
 
 def is_detectron2_available():
     return _detectron2_available
+
+
+def is_more_itertools_available():
+    return importlib.util.find_spec("more_itertools") is not None
 
 
 def is_rjieba_available():
@@ -527,6 +536,10 @@ def is_protobuf_available():
 
 def is_accelerate_available():
     return importlib.util.find_spec("accelerate") is not None
+
+
+def is_safetensors_available():
+    return importlib.util.find_spec("safetensors") is not None
 
 
 def is_tokenizers_available():
@@ -663,6 +676,14 @@ def is_ccl_available():
     return _is_ccl_available
 
 
+def is_sudachi_available():
+    return importlib.util.find_spec("sudachipy") is not None
+
+
+def is_jumanpp_available():
+    return (importlib.util.find_spec("pyknp") is not None) and (shutil.which("jumanpp") is not None)
+
+
 # docstyle-ignore
 DATASETS_IMPORT_ERROR = """
 {0} requires the 🤗 Datasets library but it was not found in your environment. You can install it with:
@@ -746,6 +767,12 @@ If you want to use PyTorch, please use those classes instead!
 
 If you really do want to use TensorFlow, please follow the instructions on the
 installation page https://www.tensorflow.org/install that match your environment.
+"""
+
+# docstyle-ignore
+BS4_IMPORT_ERROR = """
+{0} requires the Beautiful Soup library but it was not found in your environment. You can install it with pip:
+`pip install beautifulsoup4`
 """
 
 
@@ -889,6 +916,7 @@ CCL_IMPORT_ERROR = """
 
 BACKENDS_MAPPING = OrderedDict(
     [
+        ("bs4", (is_bs4_available, BS4_IMPORT_ERROR)),
         ("datasets", (is_datasets_available, DATASETS_IMPORT_ERROR)),
         ("detectron2", (is_detectron2_available, DETECTRON2_IMPORT_ERROR)),
         ("faiss", (is_faiss_available, FAISS_IMPORT_ERROR)),
