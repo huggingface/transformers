@@ -737,7 +737,12 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        self.embed_tokens = tf.keras.layers.Embedding(config.vocab_size, config.d_model, name="embed_tokens")
+        self.embed_tokens = tf.keras.layers.Embedding(
+            input_dim=config.vocab_size, 
+            output_dim=config.d_model, 
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std), 
+            name="embed_tokens"
+        )
         self.embed_positions = TFWhisperPositionalEmbedding(
             self.max_target_positions, config.d_model, name="embed_positions"
         )
