@@ -34,12 +34,11 @@ from huggingface_hub import (
     HfFolder,
     create_commit,
     create_repo,
+    get_hf_file_metadata,
     hf_hub_download,
     hf_hub_url,
     whoami,
-    get_hf_file_metadata,
 )
-from huggingface_hub.constants import HUGGINGFACE_HEADER_X_LINKED_ETAG, HUGGINGFACE_HEADER_X_REPO_COMMIT
 from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
     EntryNotFoundError,
