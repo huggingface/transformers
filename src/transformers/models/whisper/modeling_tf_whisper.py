@@ -1309,8 +1309,9 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             return_dict=return_dict,
             training=training,
         )
+        decoder_last_hidden_state = outputs[0]
         # Decoder and encoder embeddings are tied
-        lm_logits = tf.matmul(outputs[0], self.model.get_input_embeddings().weights, transpose_b=True)
+        lm_logits = tf.matmul(decoder_last_hidden_state, self.get_output_embeddings().weights, transpose_b=True)
 
         loss = None if labels is None else self.hf_compute_loss(labels, lm_logits)
 
