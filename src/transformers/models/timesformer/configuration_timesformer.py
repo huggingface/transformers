@@ -114,10 +114,6 @@ class TimeSformerConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         qkv_bias=True,
         use_mean_pooling=False,
-        decoder_num_attention_heads=6,
-        decoder_hidden_size=384,
-        decoder_num_hidden_layers=4,
-        decoder_intermediate_size=1536,
         norm_pix_loss=True,
         attention_type="divided_space_time",
         drop_path_prob=0.1,
@@ -143,10 +139,6 @@ class TimeSformerConfig(PretrainedConfig):
         self.qkv_bias = qkv_bias
         self.use_mean_pooling = use_mean_pooling
 
-        self.decoder_num_attention_heads = decoder_num_attention_heads
-        self.decoder_hidden_size = decoder_hidden_size
-        self.decoder_num_hidden_layers = decoder_num_hidden_layers
-        self.decoder_intermediate_size = decoder_intermediate_size
         self.norm_pix_loss = norm_pix_loss
 
         self.attention_type = attention_type
