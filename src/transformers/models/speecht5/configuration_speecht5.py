@@ -252,7 +252,7 @@ class SpeechT5Config(PretrainedConfig):
         decoder_layerdrop=0.1,
         scale_embedding=False,
 
-        # initializer_range=0.02,
+        initializer_range=0.02,
         layer_norm_eps=1e-5,
         feat_extract_norm="group",
         feat_extract_activation="gelu",
@@ -318,7 +318,7 @@ class SpeechT5Config(PretrainedConfig):
         self.final_dropout = final_dropout
         self.layerdrop = layerdrop
         self.layer_norm_eps = layer_norm_eps
-        # self.initializer_range = initializer_range
+        self.initializer_range = initializer_range
         self.vocab_size = vocab_size
         # self.do_stable_layer_norm = do_stable_layer_norm
         # self.use_weighted_layer_sum = use_weighted_layer_sum

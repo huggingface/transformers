@@ -1054,44 +1054,39 @@ class SpeechT5PreTrainedModel(PreTrainedModel):
 
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    #TODO: implement this
     def _init_weights(self, module):
         """Initialize the weights"""
-        # # gumbel softmax requires special init
-        # if isinstance(module, SpeechT5GumbelVectorQuantizer):
-        #     module.weight_proj.weight.data.normal_(mean=0.0, std=1)
-        #     module.weight_proj.bias.data.zero_()
-        #     nn.init.uniform_(module.codevectors)
-        # elif isinstance(module, SpeechT5PositionalConvEmbedding):
-        #     nn.init.normal_(
-        #         module.conv.weight,
-        #         mean=0,
-        #         std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
-        #     )
-        #     nn.init.constant_(module.conv.bias, 0)
-        # elif isinstance(module, SpeechT5FeatureProjection):
-        #     k = math.sqrt(1 / module.projection.in_features)
-        #     nn.init.uniform_(module.projection.weight, a=-k, b=k)
-        #     nn.init.uniform_(module.projection.bias, a=-k, b=k)
-        # elif isinstance(module, nn.Linear):
-        #     module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, SpeechT5PositionalConvEmbedding):
+            nn.init.normal_(
+                module.conv.weight,
+                mean=0,
+                std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
+            )
+            nn.init.constant_(module.conv.bias, 0)
+        elif isinstance(module, SpeechT5FeatureProjection):
+            k = math.sqrt(1 / module.projection.in_features)
+            nn.init.uniform_(module.projection.weight, a=-k, b=k)
+            nn.init.uniform_(module.projection.bias, a=-k, b=k)
+        elif isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, nn.Conv1d):
+            nn.init.kaiming_normal_(module.weight)
+            if module.bias is not None:
+                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                nn.init.uniform_(module.bias, a=-k, b=k)
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
-        #     if module.bias is not None:
-        #         module.bias.data.zero_()
-        # elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-        #     module.bias.data.zero_()
-        #     module.weight.data.fill_(1.0)
-        # elif isinstance(module, nn.Conv1d):
-        #     nn.init.kaiming_normal_(module.weight)
-
-        #     if module.bias is not None:
-        #         k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-        #         nn.init.uniform_(module.bias, a=-k, b=k)
-        pass
-
-    # def _set_gradient_checkpointing(self, module, value=False):
-    #     if isinstance(module, (SpeechT5Encoder, SpeechT5Decoder)):
-    #         module.gradient_checkpointing = value
+    def _set_gradient_checkpointing(self, module, value=False):
+        if isinstance(module, (SpeechT5Encoder, SpeechT5Decoder)):
+            module.gradient_checkpointing = value
 
 
 class SpeechT5Encoder(SpeechT5PreTrainedModel):
