@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 
-from transformers import WhisperConfig
+from transformers import WhisperConfig, WhisperFeatureExtractor, WhisperProcessor
 from transformers.testing_utils import is_tf_available, require_tf, require_tokenizers, slow
 from transformers.utils import cached_property
 from transformers.utils.import_utils import is_datasets_available
@@ -40,8 +40,6 @@ if is_tf_available():
     from transformers import (
         TFWhisperForConditionalGeneration,
         TFWhisperModel,
-        WhisperFeatureExtractor,
-        WhisperProcessor,
         set_seed,
     )
     from transformers.models.whisper.modeling_tf_whisper import TFWhisperDecoder, TFWhisperEncoder
