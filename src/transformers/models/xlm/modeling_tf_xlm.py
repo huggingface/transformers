@@ -854,10 +854,10 @@ class TFXLMWithLMHeadModel(TFXLMPreTrainedModel):
         cache: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        training: Optional[bool] = None,
+        training: bool = False,
     ):
         transformer_outputs = self.transformer(
             input_ids=input_ids,
@@ -926,11 +926,11 @@ class TFXLMForSequenceClassification(TFXLMPreTrainedModel, TFSequenceClassificat
         cache: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = None,
+        training: bool = False,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
@@ -1033,11 +1033,11 @@ class TFXLMForMultipleChoice(TFXLMPreTrainedModel, TFMultipleChoiceLoss):
         cache: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = None,
+        training: bool = False,
     ):
         if input_ids is not None:
             num_choices = shape_list(input_ids)[1]
@@ -1157,11 +1157,11 @@ class TFXLMForTokenClassification(TFXLMPreTrainedModel, TFTokenClassificationLos
         cache: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        training: Optional[bool] = None,
+        training: bool = False,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1242,12 +1242,12 @@ class TFXLMForQuestionAnsweringSimple(TFXLMPreTrainedModel, TFQuestionAnsweringL
         cache: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_attentions: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        output_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        start_positions: Optional[bool] = None,
-        end_positions: Optional[bool] = None,
-        training: Optional[bool] = None,
+        start_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        end_positions: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        training: bool = False,
     ):
         r"""
         start_positions (`tf.Tensor` of shape `(batch_size,)`, *optional*):
