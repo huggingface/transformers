@@ -37,7 +37,12 @@ if is_torch_available():
     from transformers.models.switchtransformers.modeling_switchtransformers import (
         SWITCHTRANSFORMERS_PRETRAINED_MODEL_ARCHIVE_LIST,
     )
-    from transformers.models.switchtransformers.router import load_balancing_loss_func, router_z_loss_func
+    from transformers.models.switchtransformers.router import (
+        ExpertsChooseMaskedRouter,
+        TokensChooseMaskedRouter,
+        load_balancing_loss_func,
+        router_z_loss_func,
+    )
 
 
 class SwitchTransformersModelTester:
@@ -917,3 +922,146 @@ class SwitchTransformerRouterTest(unittest.TestCase):
 
         loss = router_z_loss_func(logits)
         self.assertAlmostEqual(loss.item(), 13.786719, places=5)
+
+    def test_equivalency_token_chose_masked_router(self):
+        r"""
+        This test tests the equivalency between the `TokensChooseMaskedRouter`
+        originally implemented from here: TODO: provide link
+        """
+        hidden_dim = 4
+        num_experts = 2
+        num_selected_experts = 1  # Switch routing case
+        expert_capacity = 1  # Total capacity = 2*2*1 = 4 < num_tokens
+        jitter_noise = 0.0
+
+        input_tokens = torch.Tensor(
+            [
+                [
+                    [0.6433916, 0.18188512, 0.02240455, 0.563781],
+                    [0.5526401, 0.0958724, 0.34253013, 0.03644359],
+                    [0.08744538, 0.7909105, 0.35205448, 0.53364205],
+                ],
+                [
+                    [0.02900076, 0.4168595, 0.5802449, 0.91486526],
+                    [0.27414513, 0.14991808, 0.9383501, 0.5209162],
+                    [0.51207185, 0.90618336, 0.7309413, 0.95533276],
+                ],
+            ]
+        )
+
+        config = SwitchTransformersConfig(
+            num_experts=num_experts,
+            hidden_size=hidden_dim,
+            num_selected_experts=num_selected_experts,
+            router_jitter_noise=jitter_noise,
+            expert_capacity=expert_capacity,
+            batch_prioritized_routing=False,
+        )
+        model = TokensChooseMaskedRouter(config)
+
+        model.router_weights.weight = torch.nn.Parameter(
+            torch.Tensor(
+                [
+                    [0.02008116, 0.00620062],
+                    [-0.00811031, -0.00031623],
+                    [-0.03542127, 0.02703803],
+                    [0.02335377, -0.02971946],
+                ],
+            ).t()
+        )
+
+        output = model(input_tokens, expert_capacity=expert_capacity)
+
+        expected_dispatch_mask = torch.Tensor(
+            [
+                [[[True], [False]], [[False], [True]], [[False], [False]]],
+                [[[True], [False]], [[False], [True]], [[False], [False]]],
+            ]
+        )
+
+        expected_combine_array = torch.Tensor(
+            [
+                [[[0.5090], [0.0000]], [[0.0000], [0.5031]], [[0.0000], [0.0000]]],
+                [[[0.5024], [0.0000]], [[0.0000], [0.5071]], [[0.0000], [0.0000]]],
+            ]
+        )
+
+        self.assertAlmostEqual(output.auxiliary_loss.item(), 1.000308, places=5)
+        self.assertAlmostEqual(output.router_z_loss.item(), 0.4789799, places=5)
+
+        self.assertTrue(torch.allclose(output.dispatch_mask, expected_dispatch_mask))
+        self.assertTrue(torch.allclose(output.combine_array, expected_combine_array))
+
+    def test_equivalency_experts_chose_masked_router(self):
+        r"""
+        This test tests the equivalency between the `ExpertsChooseMaskedRouter`
+        originally implemented from here: TODO: provide link
+        """
+        hidden_dim = 3
+        num_experts = 2
+        expert_capacity = 2  # Total capacity = 2*2*1 = 4 < num_tokens
+        jitter_noise = 0.0
+
+        input_tokens = torch.Tensor(
+            [
+                [
+                    [0.6433916, 0.18188512, 0.02240455],
+                    [0.563781, 0.5526401, 0.0958724],
+                    [0.34253013, 0.03644359, 0.08744538],
+                    [0.7909105, 0.35205448, 0.53364205],
+                ],
+                [
+                    [0.02900076, 0.4168595, 0.5802449],
+                    [0.91486526, 0.27414513, 0.14991808],
+                    [0.9383501, 0.5209162, 0.51207185],
+                    [0.90618336, 0.7309413, 0.95533276],
+                ],
+            ]
+        )
+
+        config = SwitchTransformersConfig(
+            num_experts=num_experts,
+            hidden_size=hidden_dim,
+            router_jitter_noise=jitter_noise,
+            expert_capacity=expert_capacity,
+            batch_prioritized_routing=False,
+        )
+
+        model = ExpertsChooseMaskedRouter(config)
+
+        model.router_weights.weight = torch.nn.Parameter(
+            torch.Tensor([[-0.00107201, 0.01544739], [-0.0087319, 0.01314363], [0.03530733, 0.03709853]]).t()
+        )
+
+        output = model(input_tokens, expert_capacity=expert_capacity)
+
+        self.assertEqual(output.auxiliary_loss, 0.0)
+        self.assertAlmostEqual(output.router_z_loss.item(), 0.507016, places=5)
+
+        expected_dispatch_mask = torch.Tensor(
+            [
+                [[[0, 1], [0, 0]], [[0, 0], [0, 1]], [[1, 0], [0, 0]], [[0, 0], [1, 0]]],
+                [[[1, 0], [0, 0]], [[0, 1], [0, 0]], [[0, 0], [0, 1]], [[0, 0], [1, 0]]],
+            ]
+        )
+
+        self.assertTrue(torch.allclose(output.dispatch_mask, expected_dispatch_mask))
+
+        expected_combined_array = torch.Tensor(
+            [
+                [
+                    [[0.0000, 0.4963], [0.0000, 0.0000]],
+                    [[0.0000, 0.0000], [0.0000, 0.5054]],
+                    [[0.4983, 0.0000], [0.0000, 0.0000]],
+                    [[0.0000, 0.0000], [0.5054, 0.0000]],
+                ],
+                [
+                    [[0.4973, 0.0000], [0.0000, 0.0000]],
+                    [[0.0000, 0.4947], [0.0000, 0.0000]],
+                    [[0.0000, 0.0000], [0.0000, 0.5070]],
+                    [[0.0000, 0.0000], [0.5082, 0.0000]],
+                ],
+            ]
+        )
+
+        self.assertTrue(torch.allclose(output.combine_array, expected_combined_array))

@@ -485,124 +485,6 @@ class TokensChooseScatterRouter(ScatterRouter):
         return RouterIndices(dispatch_indices, combine_weights, auxiliary_loss)
 
 
-class TokensChooseMaskedRouter(MaskedRouter):
-    """Masked matmul router using tokens choose top-k experts assignment.
-
-    This router uses the same mechanism as in Switch Transformer (https://arxiv.org/abs/2101.03961) and V-MoE
-    (https://arxiv.org/abs/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
-    routed to their choice of expert until the expert's expert_capacity is reached. There is no guarantee that each
-    token is processed by an expert, or that each expert receives at least one token.
-
-    Attributes:
-      num_selected_experts: Maximum number of experts to which each token is
-        routed. Tokens may be routed to fewer experts if particular experts are oversubscribed / reach capacity.
-      batch_prioritized_routing: Whether or not to use Batch Prioritized Routing
-        (BPR), originally introduced in V-MoE (https://arxiv.org/abs/2106.05974).
-          With BPR, we prioritize routing those top-k tokens with the highest router probability, rather than simply
-          using each tokens left-to-right ordering in the batch. This prioritization is important because the experts
-          have limited capacity.
-    """
-
-    num_selected_experts: int
-    batch_prioritized_routing: bool
-
-    def _compute_routing_instructions(
-        self, router_probs: Array, padding_mask: Optional[Array], expert_capacity: int
-    ) -> RouterMask:
-        """Computes masks for the top-k experts per token.
-
-        Args:
-          router_probs: <float32>[num_groups, tokens_per_group, num_experts]
-            probabilities used to determine the routing of tokens to the experts.
-          padding_mask: <float32>[num_groups, tokens_per_group] padding logit mask
-            used to identify padding tokens that should be ignored by the router.
-          expert_capacity: Each group will send this many tokens to each expert.
-
-        Returns:
-            Dispatch and combine arrays for routing with masked matmuls.
-        """
-        num_groups, _, num_experts = router_probs.shape
-
-        # Top-k router probability and corresponding expert indices for each token.
-        # Shape: [num_groups, tokens_per_group, num_selected_experts].
-        expert_gate, expert_index = _top_k(router_probs, k=self.num_selected_experts)
-
-        if padding_mask is not None:
-            # Mask applied to gate. Exclude choices corresponding to padding tokens.
-            gate_mask = jnp.expand_dims(padding_mask, axis=-1)
-            expert_gate *= gate_mask
-
-            # Set `expert_index` elements corresponding to padding to negative
-            # numbers. Negative `expert_index` elements will ultimately be dropped in
-            # the one_hot conversion to the `expert_mask`.
-            # First convert nonzero padding elements to negative values.
-            expert_index *= 2 * gate_mask - 1.0
-            # Handle zero padding elements by negatively shifting all padding.
-            expert_index += jnp.repeat(gate_mask - 1.0, self.num_selected_experts, axis=-1)
-
-            # To correctly compute load balancing loss, we also mask out probs.
-            router_probs *= gate_mask
-
-        auxiliary_loss = _load_balancing_loss(router_probs, expert_index)
-
-        if self.batch_prioritized_routing:
-            # Sort tokens according to their routing probability per group, so that
-            # the highest probability tokens are routed first.
-            permutation = jnp.argsort(-expert_gate[..., 0], axis=-1)
-            # Shape: [num_groups, tokens_per_group, num_selected_experts]
-            expert_index = _take_along_axis(expert_index, jnp.expand_dims(permutation, axis=-1), axis=-2)
-
-        # Make num_selected_experts the leading axis to ensure that top-1 choices
-        # have priority over top-2 choices, which have priority over top-3 choices,
-        # etc.
-        expert_index = jnp.swapaxes(expert_index, 1, 2)
-        # Shape: [num_groups, num_selected_experts * tokens_per_group]
-        expert_index = expert_index.reshape(num_groups, -1)
-
-        # Create mask out of indices.
-        # Shape: [num_groups, tokens_per_group * num_selected_experts, num_experts].
-        expert_mask = jax.nn.one_hot(expert_index, num_experts, dtype=jnp.int32)
-
-        # Experts have a fixed capacity that we cannot exceed. A token's priority
-        # within the expert's buffer is given by the masked, cumulative capacity of
-        # its target expert.
-        # Shape: [num_groups, tokens_per_group * num_selected_experts, num_experts].
-        token_priority = jnp.cumsum(expert_mask, axis=1) * expert_mask - 1.0
-        # Shape: [num_groups, num_selected_experts, tokens_per_group, num_experts].
-        token_priority = token_priority.reshape((num_groups, self.num_selected_experts, -1, num_experts))
-        # Shape: [num_groups, tokens_per_group, num_selected_experts, num_experts].
-        token_priority = jnp.swapaxes(token_priority, 1, 2)
-        # For each token, across all selected experts, select the only non-negative
-        # (unmasked) priority. Now, for group G routing to expert E, token T has
-        # non-negative priority (i.e. token_priority[G,T,E] >= 0) if and only if E
-        # is its targeted expert.
-        # Shape: [num_groups, tokens_per_group, num_experts].
-        token_priority = jnp.max(token_priority, axis=2)
-
-        if self.batch_prioritized_routing:
-            # Place token priorities in original ordering of tokens.
-            inv_permutation = jnp.argsort(permutation, axis=-1)
-            token_priority = _take_along_axis(token_priority, jnp.expand_dims(inv_permutation, axis=-1), axis=-2)
-
-        # Token T can only be routed to expert E if its priority is positive and
-        # less than the expert capacity. One-hot matrix will ignore indices outside
-        # the range [0, expert_capacity).
-        # Shape: [num_groups, tokens_per_group, num_experts, expert_capacity].
-        dispatch_mask = jax.nn.one_hot(token_priority, expert_capacity, dtype=jnp.bool_)
-
-        # The combine array will be used for combining expert outputs, scaled by the
-        # router probabilities. Shape: [num_groups, tokens_per_group, num_experts,
-        # expert_capacity].
-        combine_array = jnp.einsum(
-            "...te,...tec->...tec", router_probs, dispatch_mask, precision=jax.lax.Precision.DEFAULT
-        )
-
-        # Return to default dtype now that router computation is complete.
-        combine_array = jax.lax.convert_element_type(combine_array, self.dtype)
-
-        return RouterMask(dispatch_mask, combine_array, auxiliary_loss)
-
-
 class ExpertsChooseMaskedRouter(MaskedRouter):
     """Masked matmul router using experts choose tokens assignment.
 
@@ -674,23 +556,18 @@ class TokensChooseMaskedRouter(MaskedRouter):
     """
     Masked matmul router using tokens choose top-k experts assignment.
 
-    This router uses the same mechanism as in Switch Transformer
-    (https://arxiv.org/abs/2101.03961) and V-MoE
-    (https://arxiv.org/abs/2106.05974): tokens choose their top experts. Items are
-    sorted by router_probs and then routed to their choice of expert until the
-    expert's expert_capacity is reached. There is no guarantee that each token is
-    processed by an expert, or that each expert receives at least one token.
+    This router uses the same mechanism as in Switch Transformer (https://arxiv.org/abs/2101.03961) and V-MoE
+    (https://arxiv.org/abs/2106.05974): tokens choose their top experts. Items are sorted by router_probs and then
+    routed to their choice of expert until the expert's expert_capacity is reached. There is no guarantee that each
+    token is processed by an expert, or that each expert receives at least one token.
 
     Attributes:
     num_selected_experts: Maximum number of experts to which each token is
-        routed. Tokens may be routed to fewer experts if particular experts are
-        oversubscribed / reach capacity.
+        routed. Tokens may be routed to fewer experts if particular experts are oversubscribed / reach capacity.
     batch_prioritized_routing: Whether or not to use Batch Prioritized Routing
-        (BPR), originally introduced in V-MoE (https://arxiv.org/abs/2106.05974).
-        With BPR, we prioritize routing those top-k tokens with the highest
-        router probability, rather than simply using each tokens left-to-right
-        ordering in the batch. This prioritization is important because the
-        experts have limited capacity.
+        (BPR), originally introduced in V-MoE (https://arxiv.org/abs/2106.05974). With BPR, we prioritize routing those
+        top-k tokens with the highest router probability, rather than simply using each tokens left-to-right ordering
+        in the batch. This prioritization is important because the experts have limited capacity.
     """
 
     num_selected_experts: int
