@@ -37,11 +37,7 @@ if is_datasets_available():
 if is_tf_available():
     import tensorflow as tf
 
-    from transformers import (
-        TFWhisperForConditionalGeneration,
-        TFWhisperModel,
-        set_seed,
-    )
+    from transformers import TFWhisperForConditionalGeneration, TFWhisperModel, set_seed
     from transformers.models.whisper.modeling_tf_whisper import TFWhisperDecoder, TFWhisperEncoder
 
 
@@ -322,6 +318,7 @@ class TFWhisperModelTest(TFModelTesterMixin, unittest.TestCase):
     def test_generate_with_head_masking(self):
         pass
 
+    @unittest.skip("fp16 is not yet supported for TF models")
     def test_generate_fp16(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs()
         config.max_target_positions = 400
@@ -486,21 +483,6 @@ class TFWhisperModelTest(TFModelTesterMixin, unittest.TestCase):
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, subsampled_encoder_seq_length, subsampled_encoder_key_length],
             )
-
-    def test_resize_token_embeddings(self):
-        # Overwritten method from parent; see `test_resize_embeddings_untied`
-        pass
-
-    def test_resize_tokens_embeddings(self):
-        # see `test_resize_embeddings_untied`
-        pass
-
-    def test_resize_embeddings_untied(self):
-        # TODO: copy test from PT. Not working at the moment because the test relies on `model.resize_token_embeddings`,
-        # whose TF implementation assumes the use of `TFWrappedEmbeddings`. But with a `TFWrappedEmbeddings` we can't
-        # load the weights from PT (also, it induces TF1 behavior, so we might want to rework how
-        # `model.resize_token_embeddings` operates).
-        pass
 
     def test_generate_without_input_ids(self):
         pass
