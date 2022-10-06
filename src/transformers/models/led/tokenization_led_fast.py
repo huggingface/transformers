@@ -121,7 +121,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
             modeling. This is the token which the model will try to predict.
         add_prefix_space (`bool`, *optional*, defaults to `False`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
-            other word. (BART tokenizer detect beginning of words by the preceding space).
+            other word. (LED tokenizer detect beginning of words by the preceding space).
         trim_offsets (`bool`, *optional*, defaults to `True`):
             Whether the post processing step should trim offsets to avoid including whitespaces.
     """
@@ -207,7 +207,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
         `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
         having been set.
 
-        BART tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will greedily
+        LED tokenizer has a special mask token to be usable in the fill-mask pipeline. The mask token will greedily
         comprise the space before the *<mask>*.
         """
         if self._mask_token is None:
@@ -221,7 +221,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
         """
         Overriding the default behavior of the mask token to have it eat the space before it.
 
-        This is needed to preserve backward compatibility with all the previously used models based on Bart.
+        This is needed to preserve backward compatibility with all the previously used models based on LED.
         """
         # Mask token behave like a normal word, i.e. include the space before it
         # So we set lstrip to True
@@ -265,7 +265,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. BART does not
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. LED does not
         make use of token type ids, therefore a list of zeros is returned.
 
         Args:
