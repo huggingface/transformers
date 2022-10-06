@@ -746,24 +746,24 @@ class FANBlock(nn.Module):
         self.weight2 = nn.Parameter(eta * torch.ones(dim), requires_grad=True)
 
         self.downsample = downsample
-        self.H = None
-        self.W = None
+        # self.H = None
+        # self.W = None
 
-    def forward(self, x, attn=None, return_attention=False):
-        H, W = self.H, self.W
+    def forward(self, x, Hp, Wp, attn=None, return_attention=False):
+        # H, W = self.H, self.W
 
-        x_new, attn_s = self.attn(self.norm1(x), H, W)
+        x_new, attn_s = self.attn(self.norm1(x), Hp, Wp)
         x = x + self.drop_path(self.weight1 * x_new)
 
-        x_new, attn_c = self.mlp(self.norm2(x), H, W, atten=attn)
+        x_new, attn_c = self.mlp(self.norm2(x), Hp, Wp, atten=attn)
         x = x + self.drop_path(self.weight2 * x_new)
         if return_attention:
             return x, attn_s
 
         if self.downsample is not None:
-            x, H, W = self.downsample(x, H, W)
-        self.H, self.W = H, W
-        return x
+            x, Hp, Wp = self.downsample(x, Hp, Wp)
+        # self.H, self.W = H, W
+        return x, Hp, Wp
 
 
 class OverlapPatchEmbed(nn.Module):
@@ -1318,41 +1318,41 @@ class FANEncoder(FANPreTrainedModel):
         norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
         act_layer = config.act_layer or nn.GELU
 
-        if config.se_mlp:
-            build_block = FANBlock_SE
-        else:
-            build_block = FANBlock
-        self.blocks = nn.ModuleList([])
-        for i in range(config.depth):
-            if i < config.depth - 1 and channel_dims[i] != channel_dims[i + 1]:
-                downsample = OverlapPatchEmbed(
-                    img_size=img_size,
-                    patch_size=3,
-                    stride=2,
-                    in_chans=channel_dims[i],
-                    embed_dim=channel_dims[i + 1],
-                )
-            else:
-                downsample = None
-            self.blocks.append(
-                build_block(
-                    dim=channel_dims[i],
-                    num_heads=num_heads[i],
-                    mlp_ratio=config.mlp_ratio,
-                    qkv_bias=config.qkv_bias,
-                    drop=config.drop_rate,
-                    sr_ratio=config.sr_ratio[i],
-                    attn_drop=config.attn_drop_rate,
-                    drop_path=config.drop_path_rate,
-                    act_layer=act_layer,
-                    norm_layer=norm_layer,
-                    eta=config.eta,
-                    downsample=downsample,
-                    c_head_num=config.c_head_num[i] if config.c_head_num is not None else None,
-                )
-            )
-        self.num_features = self.embed_dim = channel_dims[i]
-        self.cls_token = nn.Parameter(torch.zeros(1, 1, channel_dims[i]))
+        # if config.se_mlp:
+        #     build_block = FANBlock_SE
+        # else:
+        #     build_block = FANBlock
+        self.blocks = nn.ModuleList([FANEncoderLayer(config, i) for i in range(config.depth)])
+        # for i in range(config.depth):
+        #     if i < config.depth - 1 and channel_dims[i] != channel_dims[i + 1]:
+        #         downsample = OverlapPatchEmbed(
+        #             img_size=img_size,
+        #             patch_size=3,
+        #             stride=2,
+        #             in_chans=channel_dims[i],
+        #             embed_dim=channel_dims[i + 1],
+        #         )
+        #     else:
+        #         downsample = None
+        #     self.blocks.append(
+        #         build_block(
+        #             dim=channel_dims[i],
+        #             num_heads=num_heads[i],
+        #             mlp_ratio=config.mlp_ratio,
+        #             qkv_bias=config.qkv_bias,
+        #             drop=config.drop_rate,
+        #             sr_ratio=config.sr_ratio[i],
+        #             attn_drop=config.attn_drop_rate,
+        #             drop_path=config.drop_path_rate,
+        #             act_layer=act_layer,
+        #             norm_layer=norm_layer,
+        #             eta=config.eta,
+        #             downsample=downsample,
+        #             c_head_num=config.c_head_num[i] if config.c_head_num is not None else None,
+        #         )
+        #     )
+        self.num_features = self.embed_dim = channel_dims[-1]
+        self.cls_token = nn.Parameter(torch.zeros(1, 1, channel_dims[-1]))
         self.cls_attn_blocks = nn.ModuleList(
             [
                 ClassAttentionBlock(
@@ -1409,23 +1409,23 @@ class FANEncoder(FANPreTrainedModel):
 
         current_hidden_state = inputs_embeds
         for idx, blk in enumerate(self.blocks):
-            blk.H, blk.W = Hp, Wp
+            # blk.H, blk.W = Hp, Wp
 
             if self.use_checkpoint:
                 current_hidden_state = torch.utils.checkpoint.checkpoint(
                     blk, current_hidden_state
                 )  # TODO: Check Forward pass for SE with checkpoints
-            elif isinstance(blk, FANBlock_SE):
-                (current_hidden_state, Hp, Wp) = blk(current_hidden_state, Hp, Wp)
+            # elif isinstance(blk, FANBlock_SE):
+            #     (current_hidden_state, Hp, Wp) = blk(current_hidden_state, Hp, Wp)
             else:
-                current_hidden_state = blk(current_hidden_state)
+                (current_hidden_state, Hp, Wp) = blk(current_hidden_state, Hp, Wp)
 
             if idx in out_index and output_hidden_states:
                 hidden_state_reshaped = (
                     current_hidden_state.reshape(batch_size, Hp, Wp, -1).permute(0, 3, 1, 2).contiguous()
                 )
                 encoder_states = encoder_states + (hidden_state_reshaped,)
-            Hp, Wp = blk.H, blk.W
+            # Hp, Wp = blk.H, blk.W
 
         cls_tokens = self.cls_token.expand(batch_size, -1, -1)
         current_hidden_state = torch.cat((cls_tokens, current_hidden_state), dim=1)
