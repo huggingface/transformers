@@ -32,7 +32,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_timesformer"] = [
         "TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "TimeSformerForPreTraining",
         "TimeSformerModel",
         "TimeSformerPreTrainedModel",
         "TimeSformerForVideoClassification",
