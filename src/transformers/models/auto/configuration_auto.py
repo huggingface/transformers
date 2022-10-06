@@ -265,11 +265,8 @@ CONFIG_ARCHIVE_MAP_MAPPING_NAMES = OrderedDict(
         ("swinv2", "SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("t5", "T5_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("tapas", "TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-<<<<<<< HEAD
         ("timesformer", "TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
-=======
         ("time_series_transformer", "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP"),
->>>>>>> f0b490151e4a851c0821e1f215bb7a26565d24f7
         ("transfo-xl", "TRANSFO_XL_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("unispeech", "UNISPEECH_PRETRAINED_CONFIG_ARCHIVE_MAP"),
         ("unispeech-sat", "UNISPEECH_SAT_PRETRAINED_CONFIG_ARCHIVE_MAP"),
@@ -421,11 +418,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("t5v1.1", "T5v1.1"),
         ("tapas", "TAPAS"),
         ("tapex", "TAPEX"),
-<<<<<<< HEAD
         ("timesformer", "TimeSformer"),
-=======
         ("time_series_transformer", "Time Series Transformer"),
->>>>>>> f0b490151e4a851c0821e1f215bb7a26565d24f7
         ("trajectory_transformer", "Trajectory Transformer"),
         ("transfo-xl", "Transformer-XL"),
         ("trocr", "TrOCR"),
