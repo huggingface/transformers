@@ -49,6 +49,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
+# Copied from transformers.models.bart.tokenization_bart.bytes_to_unicode
 @lru_cache()
 def bytes_to_unicode():
     """
@@ -74,6 +75,7 @@ def bytes_to_unicode():
     return dict(zip(bs, cs))
 
 
+# Copied from transformers.models.bart.tokenization_bart.get_pairs
 def get_pairs(word):
     """
     Return set of symbol pairs in a word.
