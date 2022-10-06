@@ -270,7 +270,7 @@ If you aren't familiar with finetuning a model with the [`Trainer`], take a look
 
 At this point, only three steps remain:
 
-1. Define your training hyperparameters in [`TrainingArguments`]. The only required parameter is `output_dir` which specifies where to save your model. You'll push this model to the Hub by setting `push_to_hub=True` (you need to be signed in to Hugging Face to upload your model). At the end of each epoch, the [`Trainer`] will evaluate the accuracy and save the training checkpoint.
+1. Define your training hyperparameters in [`TrainingArguments`]. The only required parameter is `output_dir` which specifies where to save your model. You'll push this model to the Hub by setting `push_to_hub=True` (you need to be signed in to Hugging Face to upload your model). At the end of each epoch, the [`Trainer`] will evaluate the seqeval scores and save the training checkpoint.
 2. Pass the training arguments to [`Trainer`] along with the model, dataset, tokenizer, data collator, and `compute_metrics` function.
 3. Call [`~Trainer.train`] to finetune your model.
 
@@ -439,7 +439,7 @@ Once training is completed, your model is automatically uploaded to the Hub so e
 
 <Tip>
 
-For a more in-depth example of how to fine-tune a model for token classification, take a look at the corresponding
+For a more in-depth example of how to finetune a model for token classification, take a look at the corresponding
 [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)
 or [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
 
