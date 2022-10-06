@@ -45,7 +45,7 @@ def get_timesformer_config(model_name):
     if "finetuned" not in model_name:
         config.use_mean_pooling = False
 
-    repo_id = "datasets/huggingface/label-files"
+    repo_id = "huggingface/label-files"
     if "k400" in model_name:
         config.num_labels = 400
         filename = "kinetics400-id2label.json"
@@ -57,7 +57,7 @@ def get_timesformer_config(model_name):
         filename = "something-something-v2-id2label.json"
     else:
         raise ValueError("Model name should either contain 'k400', 'k600' or 'ssv2'.")
-    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type='dataset'), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -138,7 +138,7 @@ def convert_state_dict(orig_state_dict, config):
 # We will verify our results on a video of eating spaghetti
 # Frame indices used: [164 168 172 176 181 185 189 193 198 202 206 210 215 219 223 227]
 def prepare_video():
-    file = hf_hub_download(repo_id="datasets/hf-internal-testing/spaghetti-video", filename="eating_spaghetti.npy")
+    file = hf_hub_download(repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti.npy", repo_type='dataset')
     video = np.load(file)
     return list(video)
 
@@ -166,7 +166,7 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
     # verify model on basic input
     feature_extractor = VideoMAEFeatureExtractor(image_mean=[0.5, 0.5, 0.5], image_std=[0.5, 0.5, 0.5])
     video = prepare_video()
-    inputs = feature_extractor(video, return_tensors="pt")
+    inputs = feature_extractor(video[:8], return_tensors="pt")
 
     outputs = model(**inputs)
     logits = outputs.logits
