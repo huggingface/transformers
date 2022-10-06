@@ -81,9 +81,9 @@ class SpeechT5Config(PretrainedConfig):
         scale_embedding (`bool`, *optional*, defaults to `False`):
             Scale embeddings by diving by sqrt(d_model).
         feat_extract_norm (`str`, *optional*, defaults to `"group"`):
-            The norm to be applied to 1D convolutional layers in the speech encoder pre-net. One of `"group"` for
-            group normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all
-            1D convolutional layers.
+            The norm to be applied to 1D convolutional layers in the speech encoder pre-net. One of `"group"` for group
+            normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
+            convolutional layers.
         feat_proj_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for output of the speech encoder pre-net.
         feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
@@ -93,11 +93,12 @@ class SpeechT5Config(PretrainedConfig):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
             speech encoder pre-net. The length of *conv_dim* defines the number of 1D convolutional layers.
         conv_stride (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
-            A tuple of integers defining the stride of each 1D convolutional layer in the speech encoder pre-net. The length
-            of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
+            A tuple of integers defining the stride of each 1D convolutional layer in the speech encoder pre-net. The
+            length of *conv_stride* defines the number of convolutional layers and has to match the length of
+            *conv_dim*.
         conv_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
-            A tuple of integers defining the kernel size of each 1D convolutional layer in the speech encoder pre-net. The
-            length of *conv_kernel* defines the number of convolutional layers and has to match the length of
+            A tuple of integers defining the kernel size of each 1D convolutional layer in the speech encoder pre-net.
+            The length of *conv_kernel* defines the number of convolutional layers and has to match the length of
             *conv_dim*.
         conv_bias (`bool`, *optional*, defaults to `False`):
             Whether the 1D convolutional layers have a bias.
@@ -107,8 +108,8 @@ class SpeechT5Config(PretrainedConfig):
         num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
             Number of groups of 1D convolutional positional embeddings layer.
         apply_spec_augment (`bool`, *optional*, defaults to `True`):
-            Whether to apply *SpecAugment* data augmentation to the outputs of the speech encoder pre-net. For reference see
-            [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
+            Whether to apply *SpecAugment* data augmentation to the outputs of the speech encoder pre-net. For
+            reference see [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
             Recognition](https://arxiv.org/abs/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
             Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
@@ -245,7 +246,6 @@ class SpeechT5Config(PretrainedConfig):
         mask_feature_prob=0.0,
         mask_feature_length=10,
         mask_feature_min_masks=0,
-
         # num_codevectors_per_group=320,
         # num_codevector_groups=2,
         # contrastive_logits_temperature=0.1,
@@ -261,14 +261,13 @@ class SpeechT5Config(PretrainedConfig):
         # tdnn_kernel=(5, 3, 3, 1, 1),
         # tdnn_dilation=(1, 2, 3, 1, 1),
         # xvector_output_dim=512,
-
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
         max_source_positions=4000,
-        #max_target_positions=1024,
+        # max_target_positions=1024,
         encoder_max_relative_position=160,
-        #decoder_max_relative_position=160,
+        # decoder_max_relative_position=160,
         use_cache=True,
         is_encoder_decoder=True,
         **kwargs
@@ -326,13 +325,13 @@ class SpeechT5Config(PretrainedConfig):
         self.mask_feature_min_masks = mask_feature_min_masks
 
         self.max_source_positions = max_source_positions
-        #self.max_target_positions = max_target_positions
+        # self.max_target_positions = max_target_positions
         self.encoder_max_relative_position = encoder_max_relative_position
-        #self.decoder_max_relative_position = decoder_max_relative_position
+        # self.decoder_max_relative_position = decoder_max_relative_position
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
 
-        #TODO: which of the following options do we need?
+        # TODO: which of the following options do we need?
 
         # # parameters for pretraining with codevector quantized representations
         # self.num_codevectors_per_group = num_codevectors_per_group
