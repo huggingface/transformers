@@ -721,7 +721,7 @@ class TFWhisperEncoder(tf.keras.layers.Layer):
 class TFWhisperDecoder(tf.keras.layers.Layer):
     config_class = WhisperConfig
     """
-    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`WhisperDecoderLayer`]
+    Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TFWhisperDecoderLayer`]
 
     Args:
         config: WhisperConfig
