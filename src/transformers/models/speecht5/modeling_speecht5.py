@@ -774,7 +774,6 @@ class SpeechT5Attention(nn.Module):
                 f" {attn_weights.size()}"
             )
 
-        # TODO: maybe rewrite this like position_embedding_type as in BertSelfAttention
         # relative attention bias
         if position_bias is not None:
             reshape_q = query_states.contiguous().view(bsz * self.num_heads, -1, self.head_dim).transpose(0, 1)
@@ -872,17 +871,36 @@ class SpeechT5EncoderLayer(nn.Module):
         self.feed_forward = SpeechT5FeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, position_bias=None, output_attentions=False):
-        attn_residual = hidden_states
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_bias: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ):
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`):
+                input to the layer of shape `(batch, seq_len, hidden_size)`
+            attention_mask (`torch.FloatTensor`):
+                attention mask of size `(batch, 1, tgt_len, src_len)` where padding elements are
+                indicated by very large negative values.
+            position_bias (`torch.FloatTensor`):
+                relative position embeddings of size `(seq_len, seq_len, hidden_size // num_attention_heads)`
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+        """
+        residual = hidden_states
         hidden_states, attn_weights, _ = self.attention(
-            hidden_states,
+            hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_bias=position_bias,
             output_attentions=output_attentions,
         )
 
         hidden_states = self.dropout(hidden_states)
-        hidden_states = attn_residual + hidden_states
+        hidden_states = residual + hidden_states
 
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = hidden_states + self.feed_forward(hidden_states)
@@ -899,31 +917,25 @@ class SpeechT5EncoderLayer(nn.Module):
 class SpeechT5DecoderLayer(nn.Module):
     def __init__(self, config: SpeechT5Config):
         super().__init__()
-        self.embed_dim = config.hidden_size
-
         self.self_attn = SpeechT5Attention(
-            embed_dim=self.embed_dim,
+            embed_dim=config.hidden_size,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
         )
-        self.dropout = config.hidden_dropout
-        self.activation_fn = ACT2FN[config.hidden_act]
-        self.activation_dropout = config.activation_dropout
+        self.dropout = nn.Dropout(config.hidden_dropout)
+        self.self_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.encoder_attn = SpeechT5Attention(
-            self.embed_dim,
+            config.hidden_size,
             config.decoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=True,
         )
+        self.encoder_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        # TODO: why does this not use SpeechT5FeedForward? how do other decoder models do this?
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.feed_forward = SpeechT5FeedForward(config)
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -939,11 +951,11 @@ class SpeechT5DecoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
         Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
+            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, hidden_size)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             encoder_hidden_states (`torch.FloatTensor`):
-                cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
+                cross attention input to the layer of shape `(batch, seq_len, hidden_size)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
             layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
@@ -968,7 +980,7 @@ class SpeechT5DecoderLayer(nn.Module):
             layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.dropout(hidden_states)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
@@ -988,7 +1000,7 @@ class SpeechT5DecoderLayer(nn.Module):
                 past_key_value=cross_attn_past_key_value,
                 output_attentions=output_attentions,
             )
-            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+            hidden_states = self.dropout(hidden_states)
             hidden_states = residual + hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
@@ -996,12 +1008,7 @@ class SpeechT5DecoderLayer(nn.Module):
             present_key_value = present_key_value + cross_attn_present_key_value
 
         # Fully Connected
-        residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        hidden_states = residual + hidden_states
+        hidden_states = hidden_states + self.feed_forward(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
@@ -1490,8 +1497,7 @@ class SpeechT5TextDecoder(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
 
-        # TODO: (this line is from the original code)
-        # incremental_state is similar to our past_key_values
+        # TODO: anything I need to do with tgt_mask?
         #prev_output_tokens, tgt_mask, incremental_state = self.text_decoder_prenet(tokens, incremental_state)
 
         decoder_hidden_states = self.prenet(input_values)

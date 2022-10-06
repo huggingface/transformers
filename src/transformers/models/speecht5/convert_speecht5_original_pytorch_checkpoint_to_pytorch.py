@@ -64,8 +64,8 @@ MAPPING_S2T = {
     "decoder.layers.*.encoder_attn.q_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.q_proj",
     "decoder.layers.*.encoder_attn.out_proj": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn.out_proj",
     "decoder.layers.*.encoder_attn_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.encoder_attn_layer_norm",
-    "decoder.layers.*.fc1": "speecht5.decoder.wrapped_decoder.layers.*.fc1",
-    "decoder.layers.*.fc2": "speecht5.decoder.wrapped_decoder.layers.*.fc2",
+    "decoder.layers.*.fc1": "speecht5.decoder.wrapped_decoder.layers.*.feed_forward.intermediate_dense",
+    "decoder.layers.*.fc2": "speecht5.decoder.wrapped_decoder.layers.*.feed_forward.output_dense",
     "decoder.layers.*.final_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.final_layer_norm",
 
     "text_decoder_postnet.output_projection": "text_decoder_postnet.lm_head",
