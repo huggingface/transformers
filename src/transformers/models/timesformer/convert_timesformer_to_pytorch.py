@@ -188,33 +188,33 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
 
     # NOTE: logits were tested with image_mean and image_std equal to [0.5, 0.5, 0.5] and [0.5, 0.5, 0.5]
     if model_name == "timesformer-base-finetuned-k400":
-        expected_shape = torch.Size([1, 1408, 1536])
+        expected_shape = torch.Size([1, 400])
         expected_slice = torch.tensor([[0.7739, 0.7968, 0.7089], [0.6701, 0.7487, 0.6209], [0.4287, 0.5158, 0.4773]])
     elif model_name == "timesformer-base-finetuned-k600":
-        expected_shape = torch.Size([1, 1408, 1536])
+        expected_shape = torch.Size([1, 600])
         expected_slice = torch.tensor([[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]])
         # we verified the loss both for normalized and unnormalized targets for this one
         expected_loss = torch.tensor([0.5142]) if config.norm_pix_loss else torch.tensor([0.6469])
     elif model_name == "timesformer-base-finetuned-ssv2":
-        expected_shape = torch.Size([1, 1408, 1536])
+        expected_shape = torch.Size([1, 174])
         expected_slice = torch.tensor([[0.7149, 0.7997, 0.6966], [0.6768, 0.7869, 0.6948], [0.5139, 0.6221, 0.5605]])
     elif model_name == "timesformer-large-finetuned-k400":
         expected_shape = torch.Size([1, 400])
         expected_slice = torch.tensor([0.0771, 0.0011, -0.3625])
     elif model_name == "timesformer-large-finetuned-k600":
-        expected_shape = torch.Size([1, 400])
+        expected_shape = torch.Size([1, 600])
         expected_slice = torch.tensor([0.6588, 0.0990, -0.2493])
     elif model_name == "timesformer-large-finetuned-ssv2":
-        expected_shape = torch.Size([1, 400])
+        expected_shape = torch.Size([1, 174])
         expected_slice = torch.tensor([0.3669, -0.0688, -0.2421])
     elif model_name == "timesformer-hr-finetuned-k400":
-        expected_shape = torch.Size([1, 1408, 1536])
+        expected_shape = torch.Size([1, 400])
         expected_slice = torch.tensor([[0.4712, 0.5296, 0.5786], [0.2278, 0.2729, 0.4026], [0.0352, 0.0730, 0.2506]])
     elif model_name == "timesformer-hr-finetuned-k600":
-        expected_shape = torch.Size([1, 174])
+        expected_shape = torch.Size([1, 600])
         expected_slice = torch.tensor([-0.0537, -0.1539, -0.3266])
     elif model_name == "timesformer-hr-finetuned-ssv2":
-        expected_shape = torch.Size([1, 1408, 1536])
+        expected_shape = torch.Size([1, 174])
         expected_slice = torch.tensor([[0.8131, 0.8727, 0.8546], [0.7366, 0.9377, 0.8870], [0.5935, 0.8874, 0.8564]])
     else:
         raise ValueError(f"Model name not supported. Should be one of {model_names}")
