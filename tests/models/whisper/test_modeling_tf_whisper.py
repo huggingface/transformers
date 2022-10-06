@@ -791,7 +791,6 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
-    @unittest.skip("XLA is not currently supported for this model.")
     def test_tiny_xla_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
@@ -941,7 +940,6 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
-    @unittest.skip("XLA is not currently supported")
     def test_tiny_en_batched_xla_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
