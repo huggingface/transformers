@@ -350,14 +350,14 @@ class TFLogitsProcessorTest(unittest.TestCase):
 
         # Check that no scores are suppressed if begin_index is not reached
         cur_len = 4
-        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
+        input_ids = tf.convert_to_tensor([[11, 17, 15, 8], [14, 0, 19, 5], [13, 11, 18, 19], [11, 12, 16, 15]])
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores = logits_processor(input_ids, scores, cur_len)
         self.assertFalse(tf.math.reduce_any(tf.math.is_inf((scores))))
 
         # Check that scores are suppressed if begin_index is reached
         cur_len = 5
-        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
+        input_ids = tf.convert_to_tensor([[5, 5, 5, 0, 17], [18, 1, 9, 14, 17], [18, 6, 8, 15, 19], [8, 12, 17, 1, 2]])
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores = logits_processor(input_ids, scores, cur_len)
         self.assertTrue(tf.math.reduce_all(tf.math.is_inf(tf.gather(scores, begin_suppress_tokens, axis=1))))
@@ -376,7 +376,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
 
         # Check that suppress_tokens are suppressed and others are not
         cur_len = 5
-        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
+        input_ids = tf.convert_to_tensor([[0, 10, 19, 6, 3], [17, 4, 8, 17, 2], [7, 1, 11, 6, 15], [5, 8, 13, 16, 0]])
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores = logits_processor(input_ids, scores, cur_len)
         self.assertTrue(tf.math.reduce_all(tf.math.is_inf(tf.gather(scores, suppress_tokens, axis=1))))
@@ -396,7 +396,8 @@ class TFLogitsProcessorTest(unittest.TestCase):
         # check that if the cur_len is contained in the force_token_map, the logits are the same
         # for all tokens except the one the force_token_map points to
         cur_len = 1
-        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
+        input_ids = tf.convert_to_tensor([[11], [7], [5], [15]])
+        ids_tensor((batch_size, cur_len), vocab_size=20)
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores = logits_processor(input_ids, scores, cur_len)
         tf.debugging.assert_near(tf.gather(scores, [force_token_map[cur_len]], axis=1), 0.0)
@@ -408,7 +409,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
 
         # check that if the cur_len is not contained in the force_token_map, the logits are not modified
         cur_len = 2
-        input_ids = ids_tensor((batch_size, cur_len), vocab_size=20)
+        input_ids = tf.convert_to_tensor([[2, 19], [19, 15], [4, 9], [7, 6]])
         scores = self._get_uniform_logits(batch_size, vocab_size)
         scores = logits_processor(input_ids, scores, cur_len)
         self.assertFalse(tf.math.reduce_any(tf.math.is_inf((scores))))
