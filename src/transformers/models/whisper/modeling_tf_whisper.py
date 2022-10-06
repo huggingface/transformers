@@ -22,8 +22,12 @@ from typing import Dict, Optional, Tuple
 import tensorflow as tf
 
 from ...activations_tf import get_tf_activation
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions
-from ...modeling_tf_outputs import TFSeq2SeqLMOutput, TFSeq2SeqModelOutput
+from ...modeling_tf_outputs import (
+    TFBaseModelOutput,
+    TFBaseModelOutputWithPastAndCrossAttentions,
+    TFSeq2SeqLMOutput,
+    TFSeq2SeqModelOutput,
+)
 from ...modeling_tf_utils import TFCausalLanguageModelingLoss, TFPreTrainedModel, keras_serializable, unpack_inputs
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
@@ -708,7 +712,7 @@ class TFWhisperEncoder(tf.keras.layers.Layer):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
+        return TFBaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
 
@@ -939,7 +943,7 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
                 for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
                 if v is not None
             )
-        return BaseModelOutputWithPastAndCrossAttentions(
+        return TFBaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
@@ -1030,9 +1034,9 @@ class TFWhisperMainLayer(tf.keras.layers.Layer):
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
-            encoder_outputs = BaseModelOutput(
+        # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
+        elif return_dict and not isinstance(encoder_outputs, TFBaseModelOutput):
+            encoder_outputs = TFBaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
