@@ -62,7 +62,7 @@ _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND
 _CTC_EXPECTED_LOSS = 53.48
 
 
-#TODO implement this
+# TODO implement this
 @dataclass
 class SpeechT5ForPreTrainingOutput(ModelOutput):
     """
@@ -71,6 +71,7 @@ class SpeechT5ForPreTrainingOutput(ModelOutput):
     Args:
         loss (TODO)
     """
+
     loss: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -2128,7 +2129,7 @@ class SpeechT5ForPreTraining(SpeechT5PreTrainedModel):
         if mask_time_indices is not None:
             mask_time_indices = mask_time_indices.to(torch.bool)
 
-        #TODO run the model
+        # TODO run the model
 
         if not return_dict:
             return (None,)

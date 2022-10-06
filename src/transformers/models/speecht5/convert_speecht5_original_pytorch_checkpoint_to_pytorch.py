@@ -22,7 +22,13 @@ import argparse
 
 import torch
 
-from transformers import SpeechT5Config, SpeechT5ForConditionalGeneration, SpeechT5ForCTC, SpeechT5ForPreTraining, logging
+from transformers import (
+    SpeechT5Config,
+    SpeechT5ForConditionalGeneration,
+    SpeechT5ForCTC,
+    SpeechT5ForPreTraining,
+    logging,
+)
 
 
 logging.set_verbosity_info()

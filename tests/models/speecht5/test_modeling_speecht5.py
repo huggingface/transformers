@@ -17,30 +17,19 @@
 import math
 import unittest
 
+from transformers import SpeechT5Config, is_torch_available
+from transformers.testing_utils import require_torch, torch_device
+
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, random_attention_mask
+
+
 # import numpy as np
 # from datasets import load_dataset
 
-from transformers import SpeechT5Config, is_torch_available
-from transformers.testing_utils import (
-    require_torch,
-    torch_device,
-)
-
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    floats_tensor,
-    random_attention_mask,
-)
-
 
 if is_torch_available():
-    from transformers import (
-        SpeechT5ForConditionalGeneration,
-        SpeechT5ForCTC,
-        SpeechT5ForPreTraining,
-        SpeechT5Model,
-    )
+    from transformers import SpeechT5ForConditionalGeneration, SpeechT5ForCTC, SpeechT5ForPreTraining, SpeechT5Model
 
 
 class SpeechT5ModelTester:
@@ -108,4 +97,3 @@ class SpeechT5ModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
