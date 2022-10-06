@@ -2441,12 +2441,9 @@ else:
     _import_structure["models.speecht5"].extend(
         [
             "SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "SpeechT5ForAudioFrameClassification",
             "SpeechT5ForConditionalGeneration",
             "SpeechT5ForCTC",
             "SpeechT5ForPreTraining",
-            "SpeechT5ForSequenceClassification",
-            "SpeechT5ForXVector",
             "SpeechT5Model",
             "SpeechT5PreTrainedModel",
         ]
@@ -5353,12 +5350,9 @@ if TYPE_CHECKING:
         from .models.speech_to_text_2 import Speech2Text2ForCausalLM, Speech2Text2PreTrainedModel
         from .models.speecht5 import (
             SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SpeechT5ForAudioFrameClassification,
             SpeechT5ForConditionalGeneration,
             SpeechT5ForCTC,
             SpeechT5ForPreTraining,
-            SpeechT5ForSequenceClassification,
-            SpeechT5ForXVector,
             SpeechT5Model,
             SpeechT5PreTrainedModel,
         )

@@ -16,6 +16,7 @@
 
 import math
 import random
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import numpy as np
@@ -36,6 +37,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import torch_int_div
 from ...utils import (
+    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -58,6 +60,20 @@ _CHECKPOINT_FOR_DOC = "TODO"
 # CTC docstring
 _CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
 _CTC_EXPECTED_LOSS = 53.48
+
+
+#TODO implement this
+@dataclass
+class SpeechT5ForPreTrainingOutput(ModelOutput):
+    """
+    Output type of [`SpeechT5ForPreTraining`], with potential hidden states and attentions.
+
+    Args:
+        loss (TODO)
+    """
+    loss: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
@@ -537,7 +553,6 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
 
         return hidden_states, attention_mask
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2PreTrainedModel._get_feature_vector_attention_mask
     def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
         # Effectively attention_mask.sum(-1), but not inplace to be able to run
         # on inference mode.
@@ -2072,4 +2087,54 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
+        )
+
+
+@add_start_docstrings("""SpeechT5 Model with a TODO on top.""", SPEECHT5_START_DOCSTRING)
+class SpeechT5ForPreTraining(SpeechT5PreTrainedModel):
+    def __init__(self, config: SpeechT5Config):
+        super().__init__(config)
+        self.speecht5 = SpeechT5Model(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def freeze_feature_encoder(self):
+        """
+        Calling this function will disable the gradient computation for the feature encoder so that its parameter will
+        not be updated during training.
+        """
+        self.speecht5.encoder.prenet._freeze_parameters()
+
+    @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=SpeechT5ForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_values: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        mask_time_indices: Optional[torch.BoolTensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, SpeechT5ForPreTrainingOutput]:
+        r"""
+        Returns:
+
+        Example: TODO
+        """
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if mask_time_indices is not None:
+            mask_time_indices = mask_time_indices.to(torch.bool)
+
+        #TODO run the model
+
+        if not return_dict:
+            return (None,)
+
+        return SpeechT5ForPreTrainingOutput(
+            loss=None,
+            hidden_states=None,
+            attentions=None,
         )

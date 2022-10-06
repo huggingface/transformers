@@ -22,7 +22,7 @@ import argparse
 
 import torch
 
-from transformers import SpeechT5Config, SpeechT5ForConditionalGeneration, SpeechT5ForCTC, logging
+from transformers import SpeechT5Config, SpeechT5ForConditionalGeneration, SpeechT5ForCTC, SpeechT5ForPreTraining, logging
 
 
 logging.set_verbosity_info()
@@ -299,8 +299,8 @@ def convert_speecht5_checkpoint(
         model = SpeechT5ForConditionalGeneration(config)
     elif task == "ctc":
         model = SpeechT5ForCTC(config)
-    # elif task == "pretrain":
-    #     model = SpeechT5ForPreTraining(config)
+    elif task == "pretrain":
+        model = SpeechT5ForPreTraining(config)
     else:
         raise ValueError(f"Unknown task name: {task}")
 
@@ -316,7 +316,7 @@ if __name__ == "__main__":
         "--task",
         default="s2t",
         type=str,
-        help="Type of the SpeechT5 model you'd like to convert. Should be one of 's2t', 'pretrain'.",
+        help="Type of the SpeechT5 model you'd like to convert. Should be one of 's2t', 'ctc', 'pretrain'.",
     )
     parser.add_argument("--checkpoint_path", required=True, default=None, type=str, help="Path to fairseq checkpoint")
     parser.add_argument("--dict_path", default=None, type=str, help="Path to dict of fine-tuned model")

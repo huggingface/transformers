@@ -35,12 +35,9 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_speecht5"] = [
         "SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "SpeechT5ForAudioFrameClassification",
         "SpeechT5ForConditionalGeneration",
         "SpeechT5ForCTC",
         "SpeechT5ForPreTraining",
-        "SpeechT5ForSequenceClassification",
-        "SpeechT5ForXVector",
         "SpeechT5Model",
         "SpeechT5PreTrainedModel",
     ]
@@ -58,12 +55,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_speecht5 import (
             SPEECHT5_PRETRAINED_MODEL_ARCHIVE_LIST,
-            SpeechT5ForAudioFrameClassification,
             SpeechT5ForConditionalGeneration,
             SpeechT5ForCTC,
             SpeechT5ForPreTraining,
-            SpeechT5ForSequenceClassification,
-            SpeechT5ForXVector,
             SpeechT5Model,
             SpeechT5PreTrainedModel,
         )
