@@ -194,8 +194,9 @@ class TFWhisperModelTester:
 
     def create_and_check_decoder_model_past_large_inputs(self, config, inputs_dict):
         model = TFWhisperModel(config=config).get_decoder()
-        input_ids = inputs_dict["decoder_input_ids"]
-        attention_mask = inputs_dict["decoder_attention_mask"]
+        # take a slice so we're shorter than the seqeuence length and can append later
+        input_ids = inputs_dict["decoder_input_ids"][:, :-10]
+        attention_mask = inputs_dict["decoder_attention_mask"][:, :-10]
 
         # first forward pass
         outputs = model(input_ids, attention_mask=attention_mask, use_cache=True)
@@ -218,7 +219,7 @@ class TFWhisperModelTester:
 
         # select random slice
         random_slice_idx = np.random.randint(0, output_from_past.shape[-1])
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx]  # FIXME - double check
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx]
         output_from_past_slice = output_from_past[:, :, random_slice_idx]
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
