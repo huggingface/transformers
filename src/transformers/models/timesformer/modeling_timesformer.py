@@ -160,6 +160,7 @@ class TimeSformerEmbeddings(nn.Module):
         drop_rate = config.hidden_dropout_prob
         attention_type = config.attention_type
 
+        self.attention_type = attention_type
         self.patch_embeddings = TimeSformerPatchEmbed(config)
         self.num_patches = self.patch_embeddings.num_patches
 
@@ -170,8 +171,6 @@ class TimeSformerEmbeddings(nn.Module):
         if attention_type != "space_only":
             self.time_embeddings = nn.Parameter(torch.zeros(1, num_frames, embed_dim))
             self.time_drop = nn.Dropout(p=drop_rate)
-
-        self.config = config
 
     def forward(self, pixel_values, bool_masked_pos):
         batch_size = pixel_values.shape[0]
@@ -861,6 +860,8 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
         eating spaghetti
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        pixel_values = pixel_values.permute(0,2,1,3,4)
 
         outputs = self.timesformer(
             pixel_values,
