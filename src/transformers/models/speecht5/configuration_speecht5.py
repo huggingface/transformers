@@ -14,8 +14,8 @@
 # limitations under the License.
 """ SpeechT5 model configuration"""
 
-# import functools
-# import operator
+import functools
+import operator
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -30,11 +30,6 @@ SPEECHT5_PRETRAINED_CONFIG_ARCHIVE_MAP = {
 
 class SpeechT5Config(PretrainedConfig):
     r"""
-    TODO: where it says "feature encoder", replace this by "speech encoder pre-net"
-
-    TODO: fix up the descriptions because they are not always correct
-
-
     This is the configuration class to store the configuration of a [`SpeechT5Model`]. It is used to instantiate an
     SpeechT5 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the SpeechT5 [TODO](https://huggingface.co/TODO)
@@ -47,31 +42,27 @@ class SpeechT5Config(PretrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 81):
             Vocabulary size of the SpeechT5 model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`SpeechT5Model`] or [`TFSpeechT5Model`]. Vocabulary size of the
-            model. Defines the different tokens that can be represented by the *inputs_ids* passed to the forward
-            method of [`SpeechT5Model`].
+            the `inputs_ids` passed to the forward method of [`SpeechT5Model`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-
         encoder_layers (`int`, *optional*, defaults to 12):
-            Number of encoder layers.
-        decoder_layers (`int`, *optional*, defaults to 12):
-            Number of decoder layers.
-        encoder_attention_heads (`int`, *optional*, defaults to 16):
+            Number of hidden layers in the Transformer encoder.
+        encoder_attention_heads (`int`, *optional*, defaults to 12):
             Number of attention heads for each attention layer in the Transformer encoder.
-        decoder_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads for each attention layer in the Transformer decoder.
-        decoder_ffn_dim (`int`, *optional*, defaults to 4096):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-        encoder_ffn_dim (`int`, *optional*, defaults to 4096):
-            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
-
-        intermediate_size (`int`, *optional*, defaults to 3072):
+        encoder_ffn_dim (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
+            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
+        decoder_layers (`int`, *optional*, defaults to 6):
+            Number of decoder layers.
+        decoder_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        decoder_ffn_dim (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in decoder.
+        decoder_layerdrop (`float`, *optional*, defaults to 0.1):
+            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
+            for more details.
         hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` are supported.
@@ -79,31 +70,33 @@ class SpeechT5Config(PretrainedConfig):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
+        activation_dropout (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for activations inside the fully connected layer.
         final_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for the final projection layer of [`SpeechT5ForCTC`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
+        scale_embedding (`bool`, *optional*, defaults to `False`):
+            Scale embeddings by diving by sqrt(d_model).
         feat_extract_norm (`str`, *optional*, defaults to `"group"`):
-            The norm to be applied to 1D convolutional layers in feature encoder. One of `"group"` for group
-            normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all 1D
-            convolutional layers.
+            The norm to be applied to 1D convolutional layers in the speech encoder pre-net. One of `"group"` for
+            group normalization of only the first 1D convolutional layer or `"layer"` for layer normalization of all
+            1D convolutional layers.
         feat_proj_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probability for output of the feature encoder.
+            The dropout probability for output of the speech encoder pre-net.
         feat_extract_activation (`str, `optional`, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the 1D convolutional layers of the feature
             extractor. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for quantized feature encoder states.
         conv_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 512, 512, 512)`):
             A tuple of integers defining the number of input and output channels of each 1D convolutional layer in the
-            feature encoder. The length of *conv_dim* defines the number of 1D convolutional layers.
+            speech encoder pre-net. The length of *conv_dim* defines the number of 1D convolutional layers.
         conv_stride (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 2, 2, 2, 2, 2, 2)`):
-            A tuple of integers defining the stride of each 1D convolutional layer in the feature encoder. The length
+            A tuple of integers defining the stride of each 1D convolutional layer in the speech encoder pre-net. The length
             of *conv_stride* defines the number of convolutional layers and has to match the length of *conv_dim*.
         conv_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(10, 3, 3, 3, 3, 3, 3)`):
-            A tuple of integers defining the kernel size of each 1D convolutional layer in the feature encoder. The
+            A tuple of integers defining the kernel size of each 1D convolutional layer in the speech encoder pre-net. The
             length of *conv_kernel* defines the number of convolutional layers and has to match the length of
             *conv_dim*.
         conv_bias (`bool`, *optional*, defaults to `False`):
@@ -113,12 +106,8 @@ class SpeechT5Config(PretrainedConfig):
             embeddings layer.
         num_conv_pos_embedding_groups (`int`, *optional*, defaults to 16):
             Number of groups of 1D convolutional positional embeddings layer.
-        do_stable_layer_norm (`bool`, *optional*, defaults to `False`):
-            Whether to apply *stable* layer norm architecture of the Transformer encoder. `do_stable_layer_norm is
-            True` corresponds to applying layer norm before the attention layer, whereas `do_stable_layer_norm is
-            False` corresponds to applying layer norm after the attention layer.
         apply_spec_augment (`bool`, *optional*, defaults to `True`):
-            Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
+            Whether to apply *SpecAugment* data augmentation to the outputs of the speech encoder pre-net. For reference see
             [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
             Recognition](https://arxiv.org/abs/1904.08779).
         mask_time_prob (`float`, *optional*, defaults to 0.05):
@@ -146,6 +135,9 @@ class SpeechT5Config(PretrainedConfig):
             The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
             step, irrespectively of `mask_feature_prob`. Only relevant if
             ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
+
+
+        TODO: do we need any of the following options?
         num_codevectors_per_group (`int`, *optional*, defaults to 320):
             Number of entries in each quantization codebook (group).
         num_codevector_groups (`int`, *optional*, defaults to 2):
@@ -153,7 +145,7 @@ class SpeechT5Config(PretrainedConfig):
         contrastive_logits_temperature (`float`, *optional*, defaults to 0.1):
             The temperature *kappa* in the contrastive loss.
         feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for the output of the feature encoder that's used by the quantizer.
+            The dropout probabilitiy for the output of the speech encoder pre-net that's used by the quantizer.
         num_negatives (`int`, *optional*, defaults to 100):
             Number of negative samples for the contrastive loss.
         codevector_dim (`int`, *optional*, defaults to 256):
@@ -185,25 +177,19 @@ class SpeechT5Config(PretrainedConfig):
             *XVector* model. The length of *tdnn_dilation* has to match the length of *tdnn_dim*.
         xvector_output_dim (`int`, *optional*, defaults to 512):
             Dimensionality of the *XVector* embedding vectors.
+
         max_source_positions (`int`, *optional*, defaults to 4000):
-            The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
-            TODO: they're not actually log-mel features in this model!
+            The maximum sequence length of input features that this model might ever be used with.
+        encoder_max_relative_position (`int`, *optional*, defaults to 160):
+            Maximum distance for relative position embedding in the encoder.
+
+        TODO: not sure if we'll need these two
         max_target_positions (`int`, *optional*, defaults to 1024):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-            TODO: still need this?
-        encoder_max_relative_position (`int`, *optional*, defaults to 160):
-            Maximum distance for relative position embedding in the encoder.
         decoder_max_relative_position (`int`, *optional*, defaults to 64):
             Maximum distance for relative position embedding in the dencoder.
-        encoder_layerdrop (`float`, *optional*, defaults to 0.1):
-            The LayerDrop probability for the encoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
-        decoder_layerdrop (`float`, *optional*, defaults to 0.1):
-            The LayerDrop probability for the decoder. See the [LayerDrop paper](see https://arxiv.org/abs/1909.11556)
-            for more details.
-        scale_embedding (`bool`, *optional*, defaults to `False`):
-            Scale embeddings by diving by sqrt(d_model).
+
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
@@ -227,34 +213,24 @@ class SpeechT5Config(PretrainedConfig):
         self,
         vocab_size=81,
         hidden_size=768,
-
-#TODO: rename to
-        # encoder_layers
-        # encoder_ffn_dim
-        # encoder_attention_heads
-        # encoder_layerdrop
-
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        intermediate_size=3072,
-        hidden_act="gelu",
-        hidden_dropout=0.1,
-        activation_dropout=0.1,
-        attention_dropout=0.1,
-        feat_proj_dropout=0.0,
-        # feat_quantizer_dropout=0.0,
-        final_dropout=0.1,
-        layerdrop=0.1,
-
+        encoder_layers=12,
+        encoder_attention_heads=12,
+        encoder_ffn_dim=3072,
+        encoder_layerdrop=0.1,
         decoder_layers=6,
         decoder_ffn_dim=3072,
         decoder_attention_heads=12,
         decoder_layerdrop=0.1,
-        scale_embedding=False,
-
+        hidden_act="gelu",
+        hidden_dropout=0.1,
+        attention_dropout=0.1,
+        activation_dropout=0.1,
+        final_dropout=0.1,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
+        scale_embedding=False,
         feat_extract_norm="group",
+        feat_proj_dropout=0.0,
         feat_extract_activation="gelu",
         conv_dim=(512, 512, 512, 512, 512, 512, 512),
         conv_stride=(5, 2, 2, 2, 2, 2, 2),
@@ -262,7 +238,6 @@ class SpeechT5Config(PretrainedConfig):
         conv_bias=False,
         num_conv_pos_embeddings=128,
         num_conv_pos_embedding_groups=16,
-        # do_stable_layer_norm=False,
         apply_spec_augment=True,
         mask_time_prob=0.05,
         mask_time_length=10,
@@ -270,6 +245,7 @@ class SpeechT5Config(PretrainedConfig):
         mask_feature_prob=0.0,
         mask_feature_length=10,
         mask_feature_min_masks=0,
+
         # num_codevectors_per_group=320,
         # num_codevector_groups=2,
         # contrastive_logits_temperature=0.1,
@@ -285,20 +261,40 @@ class SpeechT5Config(PretrainedConfig):
         # tdnn_kernel=(5, 3, 3, 1, 1),
         # tdnn_dilation=(1, 2, 3, 1, 1),
         # xvector_output_dim=512,
+
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
         max_source_positions=4000,
-        max_target_positions=1024,
+        #max_target_positions=1024,
         encoder_max_relative_position=160,
-        decoder_max_relative_position=160,
+        #decoder_max_relative_position=160,
         use_cache=True,
         is_encoder_decoder=True,
         **kwargs
     ):
         super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
+        self.vocab_size = vocab_size
         self.hidden_size = hidden_size
+        self.encoder_layers = encoder_layers
+        self.encoder_ffn_dim = encoder_ffn_dim
+        self.encoder_attention_heads = encoder_attention_heads
+        self.encoder_layerdrop = encoder_layerdrop
+        self.decoder_layers = decoder_layers
+        self.decoder_ffn_dim = decoder_ffn_dim
+        self.decoder_attention_heads = decoder_attention_heads
+        self.decoder_layerdrop = decoder_layerdrop
+        self.hidden_act = hidden_act
+        self.hidden_dropout = hidden_dropout
+        self.attention_dropout = attention_dropout
+        self.activation_dropout = activation_dropout
+        self.final_dropout = final_dropout
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.scale_embedding = scale_embedding
+
         self.feat_extract_norm = feat_extract_norm
+        self.feat_proj_dropout = feat_proj_dropout
         self.feat_extract_activation = feat_extract_activation
         self.conv_dim = list(conv_dim)
         self.conv_stride = list(conv_stride)
@@ -307,33 +303,6 @@ class SpeechT5Config(PretrainedConfig):
         self.num_conv_pos_embeddings = num_conv_pos_embeddings
         self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
         self.num_feat_extract_layers = len(self.conv_dim)
-        self.num_hidden_layers = num_hidden_layers
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.num_attention_heads = num_attention_heads
-        self.hidden_dropout = hidden_dropout
-        self.attention_dropout = attention_dropout
-        self.activation_dropout = activation_dropout
-        self.feat_proj_dropout = feat_proj_dropout
-        self.final_dropout = final_dropout
-        self.layerdrop = layerdrop
-        self.layer_norm_eps = layer_norm_eps
-        self.initializer_range = initializer_range
-        self.vocab_size = vocab_size
-        # self.do_stable_layer_norm = do_stable_layer_norm
-        # self.use_weighted_layer_sum = use_weighted_layer_sum
-        self.max_source_positions = max_source_positions
-        self.max_target_positions = max_target_positions
-        self.encoder_max_relative_position = encoder_max_relative_position
-        self.decoder_max_relative_position = decoder_max_relative_position
-        self.use_cache = use_cache
-        self.is_encoder_decoder = is_encoder_decoder
-        self.scale_embedding = scale_embedding  # scale factor will be sqrt(hidden_size) if True
-
-        self.decoder_layers = decoder_layers
-        self.decoder_ffn_dim = decoder_ffn_dim
-        self.decoder_attention_heads = decoder_attention_heads
-        self.decoder_layerdrop = decoder_layerdrop
 
         if (
             (len(self.conv_stride) != self.num_feat_extract_layers)
@@ -355,6 +324,15 @@ class SpeechT5Config(PretrainedConfig):
         self.mask_feature_prob = mask_feature_prob
         self.mask_feature_length = mask_feature_length
         self.mask_feature_min_masks = mask_feature_min_masks
+
+        self.max_source_positions = max_source_positions
+        #self.max_target_positions = max_target_positions
+        self.encoder_max_relative_position = encoder_max_relative_position
+        #self.decoder_max_relative_position = decoder_max_relative_position
+        self.use_cache = use_cache
+        self.is_encoder_decoder = is_encoder_decoder
+
+        #TODO: which of the following options do we need?
 
         # # parameters for pretraining with codevector quantized representations
         # self.num_codevectors_per_group = num_codevectors_per_group
@@ -379,6 +357,5 @@ class SpeechT5Config(PretrainedConfig):
         # self.tdnn_dilation = list(tdnn_dilation)
         # self.xvector_output_dim = xvector_output_dim
 
-    # @property
-    # def inputs_to_logits_ratio(self):
-    #     return functools.reduce(operator.mul, self.conv_stride, 1)
+    def inputs_to_logits_ratio(self):
+        return functools.reduce(operator.mul, self.conv_stride, 1)

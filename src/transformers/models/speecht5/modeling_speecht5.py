@@ -832,19 +832,18 @@ class SpeechT5Attention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward with Wav2Vec2->SpeechT5
 class SpeechT5FeedForward(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config, intermediate_size):
         super().__init__()
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
 
-        self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.intermediate_dense = nn.Linear(config.hidden_size, intermediate_size)
         if isinstance(config.hidden_act, str):
             self.intermediate_act_fn = ACT2FN[config.hidden_act]
         else:
             self.intermediate_act_fn = config.hidden_act
 
-        self.output_dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.output_dense = nn.Linear(intermediate_size, config.hidden_size)
         self.output_dropout = nn.Dropout(config.hidden_dropout)
 
     def forward(self, hidden_states):
@@ -862,19 +861,20 @@ class SpeechT5EncoderLayer(nn.Module):
         super().__init__()
         self.attention = SpeechT5Attention(
             embed_dim=config.hidden_size,
-            num_heads=config.num_attention_heads,
+            num_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
             is_decoder=False,
         )
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = SpeechT5FeedForward(config)
+        self.feed_forward = SpeechT5FeedForward(config, config.encoder_ffn_dim)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
         position_bias: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ):
@@ -885,8 +885,10 @@ class SpeechT5EncoderLayer(nn.Module):
             attention_mask (`torch.FloatTensor`):
                 attention mask of size `(batch, 1, tgt_len, src_len)` where padding elements are
                 indicated by very large negative values.
+            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
+                `(config.encoder_attention_heads,)`.
             position_bias (`torch.FloatTensor`):
-                relative position embeddings of size `(seq_len, seq_len, hidden_size // num_attention_heads)`
+                relative position embeddings of size `(seq_len, seq_len, hidden_size // encoder_attention_heads)`
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -895,6 +897,7 @@ class SpeechT5EncoderLayer(nn.Module):
         hidden_states, attn_weights, _ = self.attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
+            layer_head_mask=layer_head_mask,
             position_bias=position_bias,
             output_attentions=output_attentions,
         )
@@ -934,7 +937,7 @@ class SpeechT5DecoderLayer(nn.Module):
         )
         self.encoder_attn_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        self.feed_forward = SpeechT5FeedForward(config)
+        self.feed_forward = SpeechT5FeedForward(config, config.decoder_ffn_dim)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(
@@ -948,7 +951,7 @@ class SpeechT5DecoderLayer(nn.Module):
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = True,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ):
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, hidden_size)`
@@ -1098,9 +1101,12 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
         super().__init__(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([SpeechT5EncoderLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layerdrop = config.encoder_layerdrop
+
+        self.layers = nn.ModuleList([SpeechT5EncoderLayer(config) for _ in range(config.encoder_layers)])
+
         self.embed_positions = SpeechT5RelativePositionalEncoding(
-            config.hidden_size // config.num_attention_heads, config.encoder_max_relative_position
+            config.hidden_size // config.encoder_attention_heads, config.encoder_max_relative_position
         )
 
         self.gradient_checkpointing = False
@@ -1112,15 +1118,43 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
         self,
         hidden_states: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
+                Features extracted from the speech or text input by the encoder prenet.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing convolution and attention on padding token indices. Mask values selected in
+                `[0, 1]`:
 
-        #TODO: make this look more like the Speech2TextEncoder implementation!
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
 
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
+                [What are attention masks?](../glossary#attention-mask)
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
+                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
+
+                - 1 indicates the head is **not masked**,
+                - 0 indicates the head is **masked**.
+
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
+                for more detail.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # expand attention_mask
         if attention_mask is not None:
@@ -1134,14 +1168,23 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
 
         deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
 
-        for layer in self.layers:
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+
+        # check if head_mask has a correct number of layers specified if desired
+        if head_mask is not None:
+            assert head_mask.size()[0] == (
+                len(self.layers)
+            ), f"The head_mask should be specified for {len(self.layers)} layers, but it is for {head_mask.size()[0]}."
+
+        for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
             # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = np.random.uniform(0, 1)
 
-            skip_the_layer = True if self.training and (dropout_probability < self.config.layerdrop) else False
+            skip_the_layer = self.training and (dropout_probability < self.layerdrop)
             if not skip_the_layer or deepspeed_zero3_is_enabled:
                 # under deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
@@ -1153,16 +1196,18 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
                         return custom_forward
 
                     layer_outputs = torch.utils.checkpoint.checkpoint(
-                        create_custom_forward(layer),
+                        create_custom_forward(encoder_layer),
                         hidden_states,
                         attention_mask,
+                        (head_mask[idx] if head_mask is not None else None),
                         position_bias,
                     )
                 else:
-                    layer_outputs = layer(
+                    layer_outputs = encoder_layer(
                         hidden_states,
                         attention_mask=attention_mask,
                         position_bias=position_bias,
+                        layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                         output_attentions=output_attentions,
                     )
                 hidden_states = layer_outputs[0]
@@ -1189,7 +1234,7 @@ class SpeechT5Encoder(SpeechT5PreTrainedModel):
 class SpeechT5SpeechEncoder(SpeechT5PreTrainedModel):
     """
     Wrapper around SpeechT5Encoder that applies SpeechT5SpeechEncoderPrenet to convert
-    raw audio to hidden features.
+    the audio waveform data to hidden features.
     """
 
     def __init__(self, config: SpeechT5Config):
@@ -1235,18 +1280,15 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         super().__init__(config)
         self.dropout = config.hidden_dropout
         self.layerdrop = config.decoder_layerdrop
-        self.layers = nn.ModuleList([SpeechT5DecoderLayer(config) for _ in range(config.decoder_layers)])
 
-        #TODO: The original model has this but it's not used.
-        #self.embed_positions = SpeechT5RelativePositionalEncoding(
-        #    config.hidden_size // config.num_attention_heads, config.decoder_max_relative_position
-        #)
+        self.layers = nn.ModuleList([SpeechT5DecoderLayer(config) for _ in range(config.decoder_layers)])
 
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
 
+    # Copied from transformers.models.bart.modeling_bart.BartDecoder._prepare_decoder_attention_mask
     def _prepare_decoder_attention_mask(self, attention_mask, input_shape, inputs_embeds, past_key_values_length):
         # create causal mask
         # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
@@ -1282,17 +1324,9 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
-        TODO fix this
-
         Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you
-                provide it.
-
-                Indices can be obtained using [`BartTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                [What are input IDs?](../glossary#input-ids)
+            hidden_states (`torch.FloatTensor` of shape `(batch_size, sequence_length, feature_size)`):
+                Features extracted from the speech or text input by the decoder prenet.
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -1368,9 +1402,11 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, hidden_states.dtype, tgt_len=input_shape[-1])
 
+        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
+        all_self_attentions = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
         next_decoder_cache = () if use_cache else None
 
@@ -1384,11 +1420,14 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                     )
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             if output_hidden_states:
-                all_hidden_states += (hidden_states,)
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            # add LayerDrop (see https://arxiv.org/abs/1909.11556 for description)
             dropout_probability = random.uniform(0, 1)
-            if self.training and (dropout_probability < self.layerdrop):
+
+            skip_the_layer = self.training and (dropout_probability < self.layerdrop)
+            if skip_the_layer and not deepspeed_zero3_is_enabled:
                 continue
 
             past_key_value = past_key_values[idx] if past_key_values is not None else None
@@ -1437,27 +1476,27 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
                 next_decoder_cache += (layer_outputs[3 if output_attentions else 1],)
 
             if output_attentions:
-                all_self_attns += (layer_outputs[1],)
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
                 if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
+                    all_cross_attentions = all_cross_attentions + (layer_outputs[2],)
 
-        # add hidden states from the last decoder layer
         if output_hidden_states:
-            all_hidden_states += (hidden_states,)
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
         next_cache = next_decoder_cache if use_cache else None
         if not return_dict:
             return tuple(
                 v
-                for v in [hidden_states, next_cache, all_hidden_states, all_self_attns, all_cross_attentions]
+                for v in [hidden_states, next_cache, all_hidden_states, all_self_attentions, all_cross_attentions]
                 if v is not None
             )
+
         return BaseModelOutputWithPastAndCrossAttentions(
             last_hidden_state=hidden_states,
             past_key_values=next_cache,
             hidden_states=all_hidden_states,
-            attentions=all_self_attns,
+            attentions=all_self_attentions,
             cross_attentions=all_cross_attentions,
         )
 
