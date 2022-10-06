@@ -69,14 +69,6 @@ class TimeSformerConfig(PretrainedConfig):
             Whether to add a bias to the queries, keys and values.
         use_mean_pooling (`bool`, *optional*, defaults to `True`):
             Whether to mean pool the final hidden states instead of using the final hidden state of the [CLS] token.
-        decoder_num_attention_heads (`int`, *optional*, defaults to 6):
-            Number of attention heads for each attention layer in the decoder.
-        decoder_hidden_size (`int`, *optional*, defaults to 384):
-            Dimensionality of the decoder.
-        decoder_num_hidden_layers (`int`, *optional*, defaults to 4):
-            Number of hidden layers in the decoder.
-        decoder_intermediate_size (`int`, *optional*, defaults to 1536):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the decoder.
         norm_pix_loss (`bool`, *optional*, defaults to `True`):
             Whether to normalize the target patch pixels.
 
