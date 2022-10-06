@@ -609,6 +609,7 @@ class TFWhisperEncoder(tf.keras.layers.Layer):
         self.max_source_positions = config.max_source_positions
         self.embed_scale = math.sqrt(self.embed_dim) if config.scale_embedding else 1.0
 
+        # Padding is added in call() to match the PyTorch implementation
         self.conv1 = tf.keras.layers.Conv1D(self.embed_dim, kernel_size=3, strides=1, padding="valid", name="conv1")
         self.conv2 = tf.keras.layers.Conv1D(self.embed_dim, kernel_size=3, strides=2, padding="valid", name="conv2")
 
