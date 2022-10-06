@@ -1002,6 +1002,7 @@ class TFWhisperMainLayer(tf.keras.layers.Layer):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        training=False,
     ):
         r"""
         Returns:
@@ -1039,6 +1040,7 @@ class TFWhisperMainLayer(tf.keras.layers.Layer):
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
+                training=training,
             )
         # If the user passed a tuple for encoder_outputs, we wrap it in a TFBaseModelOutput when return_dict=True
         elif return_dict and not isinstance(encoder_outputs, TFBaseModelOutput):
@@ -1061,6 +1063,7 @@ class TFWhisperMainLayer(tf.keras.layers.Layer):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         if not return_dict:
@@ -1124,6 +1127,7 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        training=False,
     ):
         r"""
         Returns:
@@ -1161,6 +1165,7 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
         return outputs
 
@@ -1239,6 +1244,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        training=False,
     ):
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1291,6 +1297,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
         # Decoder and encoder embeddings are tied
         lm_logits = tf.matmul(outputs[0], self.model.get_input_embeddings().weights, transpose_b=True)
