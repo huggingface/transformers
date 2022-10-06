@@ -738,10 +738,10 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
         self.embed_tokens = tf.keras.layers.Embedding(
-            input_dim=config.vocab_size, 
-            output_dim=config.d_model, 
-            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std), 
-            name="embed_tokens"
+            input_dim=config.vocab_size,
+            output_dim=config.d_model,
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std),
+            name="embed_tokens",
         )
         self.embed_positions = TFWhisperPositionalEmbedding(
             self.max_target_positions, config.d_model, name="embed_positions"
@@ -1259,16 +1259,14 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
-        >>> inputs = processor(
-        ...     ds[0]["audio"]["array"], sampling_rate=ds[0]["audio"]["sampling_rate"], return_tensors="tf"
-        ... )
+        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="tf")
         >>> input_features = inputs.input_features
 
         >>> generated_ids = model.generate(inputs=input_features)
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
-        ' The quilter is the apostle of the middle classes and we are glad to welcome his'
+        ' Mr. Quilter is the apostle of the middle classes, and we are glad to'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
