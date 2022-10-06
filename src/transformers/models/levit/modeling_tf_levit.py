@@ -16,9 +16,10 @@
 
 import itertools
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict
 
 import tensorflow as tf
+from tensorflow.keras.losses import MeanSquaredError, BinaryCrossentropy, CategoricalCrossentropy
 from tensorflow.keras import backend as K
 
 from ...modeling_outputs import ModelOutput
@@ -27,7 +28,7 @@ from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPoolingAndNoAttention,
     TFImageClassifierOutputWithNoAttention,
 )
-from ...modeling_tf_utils import TFPreTrainedModel
+from ...modeling_tf_utils import TFPreTrainedModel, keras_serializable, unpack_inputs
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_levit import LevitConfig
@@ -68,7 +69,7 @@ class TFLevitForImageClassificationWithTeacherOutput(ModelOutput):
             Prediction scores of the distillation head (i.e. the linear layer on top of the final hidden state of the
             distillation token).
         hidden_states (`tuple(tf.Tensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
+            Tuple of `tf.Tensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
             plus the initial embedding outputs.
     """
@@ -263,7 +264,7 @@ class TFLevitAttention(tf.keras.layers.Layer):
         )
         super().build(input_shape)
 
-    # Todo: @ariG23498
+    # TODO @ariG23498
     @torch.no_grad()
     def train(self, mode=True):
         super().train(mode)
@@ -308,7 +309,7 @@ class TFLevitAttention(tf.keras.layers.Layer):
         return hidden_state
 
 
-class LevitAttentionSubsample(nn.Module):
+class TFLevitAttentionSubsample(tf.keras.layers.Layer):
     def __init__(
         self,
         input_dim,
@@ -319,8 +320,9 @@ class LevitAttentionSubsample(nn.Module):
         stride,
         resolution_in,
         resolution_out,
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.num_attention_heads = num_attention_heads
         self.scale = key_dim**-0.5
         self.key_dim = key_dim
@@ -329,11 +331,11 @@ class LevitAttentionSubsample(nn.Module):
         self.out_dim_projection = attention_ratio * key_dim * num_attention_heads
         self.resolution_out = resolution_out
         # resolution_in is the intial resolution, resoloution_out is final resolution after downsampling
-        self.keys_values = MLPLayerWithBN(input_dim, self.out_dim_keys_values)
-        self.queries_subsample = LevitSubsample(stride, resolution_in)
-        self.queries = MLPLayerWithBN(input_dim, key_dim * num_attention_heads)
-        self.activation = nn.Hardswish()
-        self.projection = MLPLayerWithBN(self.out_dim_projection, output_dim)
+        self.keys_values = TFMLPLayerWithBN(input_dim, self.out_dim_keys_values, name="keys_values")
+        self.queries_subsample = TFLevitSubsample(stride, resolution_in, name="queries_subsample")
+        self.queries = TFMLPLayerWithBN(input_dim, key_dim * num_attention_heads, name="queries")
+        self.activation = hard_swish
+        self.projection = TFMLPLayerWithBN(self.out_dim_projection, output_dim, name="projection")
 
         self.attention_bias_cache = {}
 
@@ -349,78 +351,97 @@ class LevitAttentionSubsample(nn.Module):
                     attention_offsets[offset] = len(attention_offsets)
                 indices.append(attention_offsets[offset])
 
-        self.attention_biases = torch.nn.Parameter(torch.zeros(num_attention_heads, len(attention_offsets)))
-        self.register_buffer("attention_bias_idxs", torch.LongTensor(indices).view(len_points_, len_points))
+        self.attention_offsets = attention_offsets
 
+    def build(self, input_shape):
+        self.attention_biases = self.add_weight(
+            shape=(self.num_attention_heads, len(self.attention_offsets)),
+            initializer="zeros",
+            trainable=True,
+            name="attention_biases",
+        )
+        super().build(input_shape)
+
+    # TODO @ariG23498
     @torch.no_grad()
     def train(self, mode=True):
         super().train(mode)
         if mode and self.attention_bias_cache:
             self.attention_bias_cache = {}  # clear ab cache
 
-    def get_attention_biases(self, device):
-        if self.training:
-            return self.attention_biases[:, self.attention_bias_idxs]
+    def get_attention_biases(self, device, attention_bias_idxs, training=None):
+        if training:
+            return self.attention_biases[:, attention_bias_idxs]
         else:
             device_key = str(device)
             if device_key not in self.attention_bias_cache:
                 self.attention_bias_cache[device_key] = self.attention_biases[:, self.attention_bias_idxs]
             return self.attention_bias_cache[device_key]
 
-    def forward(self, hidden_state):
-        batch_size, seq_length, _ = hidden_state.shape
-        key, value = (
-            self.keys_values(hidden_state)
-            .view(batch_size, seq_length, self.num_attention_heads, -1)
-            .split([self.key_dim, self.attention_ratio * self.key_dim], dim=3)
+    def call(self, hidden_state, attention_bias_idxs, training=None):
+        batch_size = tf.shape(hidden_state)[0]
+        seq_length = tf.shape(hidden_state)[1]
+        
+        # Process the hidden states and reshape it
+        reshaped_hidden_state = tf.reshape(
+            self.keys_values(hidden_state),
+            shape=(batch_size, seq_length, self.num_attention_heads, -1)
         )
-        key = key.permute(0, 2, 1, 3)
-        value = value.permute(0, 2, 1, 3)
+        # Split the reshaped hidden state into key and value
+        key, value = tf.split(
+            reshaped_hidden_state,
+            num_or_size_splits=[self.key_dim, self.attention_ratio * self.key_dim],
+            axis=3,
+        )
+        key = tf.transpose(key, perm=(0, 2, 1, 3))
+        value = tf.transpose(value, perm=(0, 2, 1, 3))
 
         query = self.queries(self.queries_subsample(hidden_state))
-        query = query.view(batch_size, self.resolution_out**2, self.num_attention_heads, self.key_dim).permute(
-            0, 2, 1, 3
-        )
+        query = tf.reshape(query, shape=(batch_size, self.resolution_out**2, self.num_attention_heads, self.key_dim))
+        query = tf.transpose(query, perm=(0, 2, 1, 3))
 
-        attention = query @ key.transpose(-2, -1) * self.scale + self.get_attention_biases(hidden_state.device)
+        attention = tf.matmul(query, key, transpose_b=True) * self.scale + self.get_attention_biases(
+            hidden_state.device, attention_bias_idxs, training=training
+        )
         attention = attention.softmax(dim=-1)
         hidden_state = (attention @ value).transpose(1, 2).reshape(batch_size, -1, self.out_dim_projection)
         hidden_state = self.projection(self.activation(hidden_state))
         return hidden_state
 
 
-class LevitMLPLayer(nn.Module):
+class TFLevitMLPLayer(tf.keras.layers.Layer):
     """
     MLP Layer with `2X` expansion in contrast to ViT with `4X`.
     """
 
-    def __init__(self, input_dim, hidden_dim):
-        super().__init__()
-        self.linear_up = MLPLayerWithBN(input_dim, hidden_dim)
-        self.activation = nn.Hardswish()
-        self.linear_down = MLPLayerWithBN(hidden_dim, input_dim)
+    def __init__(self, input_dim, hidden_dim, **kwargs):
+        super().__init__(**kwargs)
+        self.linear_up = TFMLPLayerWithBN(input_dim, hidden_dim)
+        self.activation = hard_swish
+        self.linear_down = TFMLPLayerWithBN(hidden_dim, input_dim)
 
-    def forward(self, hidden_state):
+    def call(self, hidden_state):
         hidden_state = self.linear_up(hidden_state)
         hidden_state = self.activation(hidden_state)
         hidden_state = self.linear_down(hidden_state)
         return hidden_state
 
 
-class LevitResidualLayer(nn.Module):
+class TFLevitResidualLayer(tf.keras.layers.Layer):
     """
-    Residual Block for LeViT
+    Residual Block for TFLeViT
     """
 
-    def __init__(self, module, drop_rate):
-        super().__init__()
+    def __init__(self, module, drop_rate, **kwargs):
+        super().__init__(**kwargs)
         self.module = module
         self.drop_rate = drop_rate
 
-    def forward(self, hidden_state):
-        if self.training and self.drop_rate > 0:
-            rnd = torch.rand(hidden_state.size(0), 1, 1, device=hidden_state.device)
-            rnd = rnd.ge_(self.drop_rate).div(1 - self.drop_rate).detach()
+    def call(self, hidden_state, training=None):
+        if training and self.drop_rate > 0:
+            rnd = tf.random.normal(shape=(tf.shape(hidden_state)[0], 1, 1), minval=0, maxval=1)
+            rnd = tf.math.greater(rnd, self.drop_rate)
+            rnd = tf.math.divide(rnd, (1 - self.drop_rate))
             hidden_state = hidden_state + self.module(hidden_state) * rnd
             return hidden_state
         else:
@@ -428,9 +449,9 @@ class LevitResidualLayer(nn.Module):
             return hidden_state
 
 
-class LevitStage(nn.Module):
+class TFLevitStage(tf.keras.layers.Layer):
     """
-    LeViT Stage consisting of `LevitMLPLayer` and `LevitAttention` layers.
+    LeViT Stage consisting of `TFLevitMLPLayer` and `TFLevitAttention` layers.
     """
 
     def __init__(
@@ -445,29 +466,32 @@ class LevitStage(nn.Module):
         mlp_ratio,
         down_ops,
         resolution_in,
+        **kwargs,
     ):
-        super().__init__()
+        super().__init__(**kwargs)
         self.layers = []
         self.config = config
         self.resolution_in = resolution_in
         # resolution_in is the intial resolution, resolution_out is final resolution after downsampling
-        for _ in range(depths):
+        
+        # TODO ariG23498: add the index values to the layer names
+        for idx in range(depths):
             self.layers.append(
-                LevitResidualLayer(
-                    LevitAttention(hidden_sizes, key_dim, num_attention_heads, attention_ratio, resolution_in),
+                TFLevitResidualLayer(
+                    TFLevitAttention(hidden_sizes, key_dim, num_attention_heads, attention_ratio, resolution_in),
                     self.config.drop_path_rate,
                 )
             )
             if mlp_ratio > 0:
                 hidden_dim = hidden_sizes * mlp_ratio
                 self.layers.append(
-                    LevitResidualLayer(LevitMLPLayer(hidden_sizes, hidden_dim), self.config.drop_path_rate)
+                    TFLevitResidualLayer(TFLevitMLPLayer(hidden_sizes, hidden_dim), self.config.drop_path_rate)
                 )
 
         if down_ops[0] == "Subsample":
             self.resolution_out = (self.resolution_in - 1) // down_ops[5] + 1
             self.layers.append(
-                LevitAttentionSubsample(
+                TFLevitAttentionSubsample(
                     *self.config.hidden_sizes[idx : idx + 2],
                     key_dim=down_ops[1],
                     num_attention_heads=down_ops[2],
@@ -481,36 +505,35 @@ class LevitStage(nn.Module):
             if down_ops[4] > 0:
                 hidden_dim = self.config.hidden_sizes[idx + 1] * down_ops[4]
                 self.layers.append(
-                    LevitResidualLayer(
-                        LevitMLPLayer(self.config.hidden_sizes[idx + 1], hidden_dim), self.config.drop_path_rate
+                    TFLevitResidualLayer(
+                        TFLevitMLPLayer(self.config.hidden_sizes[idx + 1], hidden_dim), self.config.drop_path_rate
                     )
                 )
-
-        self.layers = nn.ModuleList(self.layers)
 
     def get_resolution(self):
         return self.resolution_in
 
-    def forward(self, hidden_state):
+    def call(self, hidden_state):
         for layer in self.layers:
             hidden_state = layer(hidden_state)
         return hidden_state
 
 
-class LevitEncoder(nn.Module):
+class TFLevitEncoder(tf.keras.layers.Layer):
     """
-    LeViT Encoder consisting of multiple `LevitStage` stages.
+    LeViT Encoder consisting of multiple `TFLevitStage` stages.
     """
 
-    def __init__(self, config):
-        super().__init__()
+    def __init__(self, config, **kwargs):
+        super().__init__(**kwargs)
         self.config = config
         resolution = self.config.image_size // self.config.patch_size
         self.stages = []
         self.config.down_ops.append([""])
 
+        # TODO ariG23498: add the index values to the layer names
         for stage_idx in range(len(config.depths)):
-            stage = LevitStage(
+            stage = TFLevitStage(
                 config,
                 stage_idx,
                 config.hidden_sizes[stage_idx],
@@ -525,9 +548,7 @@ class LevitEncoder(nn.Module):
             resolution = stage.get_resolution()
             self.stages.append(stage)
 
-        self.stages = nn.ModuleList(self.stages)
-
-    def forward(self, hidden_state, output_hidden_states=False, return_dict=True):
+    def call(self, hidden_state, output_hidden_states=False, return_dict=True, training=None):
         all_hidden_states = () if output_hidden_states else None
 
         for stage in self.stages:
@@ -540,10 +561,10 @@ class LevitEncoder(nn.Module):
         if not return_dict:
             return tuple(v for v in [hidden_state, all_hidden_states] if v is not None)
 
-        return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=all_hidden_states)
+        return TFBaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=all_hidden_states)
 
 
-class LevitClassificationLayer(nn.Module):
+class TFLevitClassificationLayer(tf.keras.layers.Layer):
     """
     LeViT Classification Layer
     """
@@ -559,92 +580,21 @@ class LevitClassificationLayer(nn.Module):
         return logits
 
 
-class LevitPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = LevitConfig
-    base_model_prefix = "levit"
-    main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.BatchNorm1d, nn.BatchNorm2d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, LevitModel):
-            module.gradient_checkpointing = value
-
-
-LEVIT_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`LevitConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-LEVIT_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoFeatureExtractor`]. See
-            [`AutoFeatureExtractor.__call__`] for details.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
-@add_start_docstrings(
-    "The bare Levit model outputting raw features without any specific head on top.",
-    LEVIT_START_DOCSTRING,
-)
-class LevitModel(LevitPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
+@keras_serializable
+class TFLeViTMainLayer(tf.keras.layers.Layer):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
         self.config = config
-        self.patch_embeddings = LevitPatchEmbeddings(config)
-        self.encoder = LevitEncoder(config)
-        # Initialize weights and apply final processing
-        self.post_init()
+        self.patch_embeddings = TFLevitPatchEmbeddings(config, name="patch_embeddings")
+        self.encoder = TFLevitEncoder(config, name="encoder")
 
-    @add_start_docstrings_to_model_forward(LEVIT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndNoAttention,
-        config_class=_CONFIG_FOR_DOC,
-        modality="vision",
-        expected_output=_EXPECTED_OUTPUT_SHAPE,
-    )
-    def forward(
+    @unpack_inputs
+    def call(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: tf.Tensor = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -658,16 +608,179 @@ class LevitModel(LevitPreTrainedModel):
         last_hidden_state = encoder_outputs[0]
 
         # global average pooling, (batch_size, seq_length, hidden_sizes) -> (batch_size, hidden_sizes)
-        pooled_output = last_hidden_state.mean(dim=1)
+        pooled_output = tf.math.reduce_mean(last_hidden_state, axis=1)
 
         if not return_dict:
             return (last_hidden_state, pooled_output) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPoolingAndNoAttention(
+        return TFBaseModelOutputWithPoolingAndNoAttention(
             last_hidden_state=last_hidden_state,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
         )
+
+class TFLevitPreTrainedModel(TFPreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = LevitConfig
+    base_model_prefix = "levit"
+    main_input_name = "pixel_values"
+
+    @property
+    def dummy_inputs(self) -> Dict[str, tf.Tensor]:
+        """
+        Dummy inputs to build the network.
+
+        Returns:
+            `Dict[str, tf.Tensor]`: The dummy inputs.
+        """
+        VISION_DUMMY_INPUTS = tf.random.uniform(
+            shape=(3, self.config.num_channels, self.config.image_size, self.config.image_size), dtype=tf.float32
+        )
+        return {"pixel_values": tf.constant(VISION_DUMMY_INPUTS)}
+
+    @tf.function(
+        input_signature=[
+            {
+                "pixel_values": tf.TensorSpec((None, None, None, None), tf.float32, name="pixel_values"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        """
+        Method used for serving the model.
+
+        Args:
+            inputs (`Dict[str, tf.Tensor]`):
+                The input of the saved model as a dictionary of tensors.
+        """
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+
+LEVIT_START_DOCSTRING = r"""
+
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass. Use it
+    as a regular TF 2.0 Keras Model and refer to the TF 2.0 documentation for all matter related to general usage and
+    behavior.
+
+    <Tip>
+
+    TensorFlow models and layers in `transformers` accept two formats as input:
+
+    - having all inputs as keyword arguments (like PyTorch models), or
+    - having all inputs as a list, tuple or dict in the first positional argument.
+
+    The reason the second format is supported is that Keras methods prefer this format when passing inputs to models
+    and layers. Because of this support, when using methods like `model.fit()` things should "just work" for you - just
+    pass your inputs and labels in any format that `model.fit()` supports! If, however, you want to use the second
+    format outside of Keras methods like `fit()` and `predict()`, such as when creating your own layers or models with
+    the Keras `Functional` API, there are three possibilities you can use to gather all the input Tensors in the first
+    positional argument:
+
+    - a single Tensor with `pixel_values` only and nothing else: `model(pixel_values)`
+    - a list of varying length with one or several input Tensors IN THE ORDER given in the docstring:
+    `model([pixel_values, attention_mask])` or `model([pixel_values, attention_mask, token_type_ids])`
+    - a dictionary with one or several input Tensors associated to the input names given in the docstring:
+    `model({"pixel_values": pixel_values, "token_type_ids": token_type_ids})`
+
+    Note that when creating models and layers with
+    [subclassing](https://keras.io/guides/making_new_layers_and_models_via_subclassing/) then you don't need to worry
+    about any of this, as you can just pass inputs like you would to any other Python function!
+
+    </Tip>
+
+    Args:
+        config ([`ViTConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+LEVIT_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`np.ndarray`, `tf.Tensor`, `List[tf.Tensor]` ``Dict[str, tf.Tensor]` or `Dict[str, np.ndarray]` and each example must have the shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`ViTFeatureExtractor`]. See
+            [`ViTFeatureExtractor.__call__`] for details.
+
+        head_mask (`np.ndarray` or `tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail. This argument can be used only in eager mode, in graph mode the value in the
+            config will be used instead.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail. This argument can be used only in eager mode, in graph mode the value in the config will be
+            used instead.
+        interpolate_pos_encoding (`bool`, *optional*):
+            Whether to interpolate the pre-trained position encodings.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple. This argument can be used in
+            eager mode, in graph mode the value will always be set to True.
+        training (`bool`, *optional*, defaults to `False``):
+            Whether or not to use the model in training mode (some modules like dropout modules have different
+            behaviors between training and evaluation).
+"""
+
+
+
+@add_start_docstrings(
+    "The bare Levit model outputting raw features without any specific head on top.",
+    LEVIT_START_DOCSTRING,
+)
+class TFLevitModel(TFLevitPreTrainedModel):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
+        
+        self.levit = TFLevitMainLayer(config=config, name="levit")
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(LEVIT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_FEAT_EXTRACTOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFBaseModelOutputWithPoolingAndNoAttention,
+        config_class=_CONFIG_FOR_DOC,
+        modality="vision",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
+    def call(
+        self,
+        pixel_values: tf.Tensor = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ):
+        outputs = self.levit(
+            pixel_values=pixel_values,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        return outputs
+    
+    def serving_output(self, output: TFBaseModelOutputWithPooling) -> TFBaseModelOutputWithPooling:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFBaseModelOutputWithPooling(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            hidden_states=hs,
+            attentions=attns,
+        )
+
 
 
 @add_start_docstrings(
@@ -677,50 +790,46 @@ class LevitModel(LevitPreTrainedModel):
     """,
     LEVIT_START_DOCSTRING,
 )
-class LevitForImageClassification(LevitPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
+class TFLevitForImageClassification(TFLevitPreTrainedModel):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
         self.config = config
         self.num_labels = config.num_labels
-        self.levit = LevitModel(config)
+        self.levit = TFLeViTMainLayer(config, name="levit")
 
         # Classifier head
         self.classifier = (
-            LevitClassificationLayer(config.hidden_sizes[-1], config.num_labels)
+            TFLevitClassificationLayer(config.hidden_sizes[-1], config.num_labels)
             if config.num_labels > 0
-            else torch.nn.Identity()
+            else tf.identity
         )
 
-        # Initialize weights and apply final processing
-        self.post_init()
-
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(LEVIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=ImageClassifierOutputWithNoAttention,
+        output_type=TFImageClassifierOutputWithNoAttention,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
-    def forward(
+    def call(
         self,
-        pixel_values: torch.FloatTensor = None,
-        labels: Optional[torch.LongTensor] = None,
+        pixel_values: tf.Tensor = None,
+        labels: Optional[tf.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+        labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.levit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         sequence_output = outputs[0]
-        sequence_output = sequence_output.mean(1)
+        sequence_output = tf.math.reduce_mean(sequence_output, axis=1)
         logits = self.classifier(sequence_output)
 
         loss = None
@@ -728,28 +837,29 @@ class LevitForImageClassification(LevitPreTrainedModel):
             if self.config.problem_type is None:
                 if self.num_labels == 1:
                     self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                elif self.num_labels > 1 and (labels.dtype == tf.float64 or labels.dtype == tf.int64):
                     self.config.problem_type = "single_label_classification"
                 else:
                     self.config.problem_type = "multi_label_classification"
-
+            # TODO @ariG23498: Check the implementation of the loss fucntions for the 
+            # various problem types
             if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
+                loss_fct = MeanSquaredError()
                 if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                    loss = loss_fct(tf.squeeze(logits), tf.squeeze(labels))
                 else:
                     loss = loss_fct(logits, labels)
             elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+                loss_fct = CategoricalCrossentropy()
+                loss = loss_fct(tf.reshape(logits, shape=(-1, self.num_labels)), tf.flatten(labels))
             elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
+                loss_fct = BinaryCrossentropy()
                 loss = loss_fct(logits, labels)
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return ImageClassifierOutputWithNoAttention(
+        return TFImageClassifierOutputWithNoAttention(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
@@ -765,48 +875,44 @@ class LevitForImageClassification(LevitPreTrainedModel):
     """,
     LEVIT_START_DOCSTRING,
 )
-class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
+class TFLevitForImageClassificationWithTeacher(TFLevitPreTrainedModel):
+    def __init__(self, config, **kwargs):
+        super().__init__(config, **kwargs)
         self.config = config
         self.num_labels = config.num_labels
-        self.levit = LevitModel(config)
+        self.levit = TFLeViTMainLayer(config, name="levit")
 
         # Classifier head
         self.classifier = (
-            LevitClassificationLayer(config.hidden_sizes[-1], config.num_labels)
+            TFLevitClassificationLayer(config.hidden_sizes[-1], config.num_labels, name="classifier")
             if config.num_labels > 0
-            else torch.nn.Identity()
+            else tf.identity
         )
         self.classifier_distill = (
-            LevitClassificationLayer(config.hidden_sizes[-1], config.num_labels)
+            TFLevitClassificationLayer(config.hidden_sizes[-1], config.num_labels, name="classifier_distill")
             if config.num_labels > 0
-            else torch.nn.Identity()
+            else tf.identity
         )
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
+    
+    @unpack_inputs
     @add_start_docstrings_to_model_forward(LEVIT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_FEAT_EXTRACTOR_FOR_DOC,
         checkpoint=_IMAGE_CLASS_CHECKPOINT,
-        output_type=LevitForImageClassificationWithTeacherOutput,
+        output_type=TFLevitForImageClassificationWithTeacherOutput,
         config_class=_CONFIG_FOR_DOC,
         expected_output=_IMAGE_CLASS_EXPECTED_OUTPUT,
     )
-    def forward(
+    def call(
         self,
-        pixel_values: torch.FloatTensor = None,
+        pixel_values: tf.Tensor = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
     ):
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.levit(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
 
         sequence_output = outputs[0]
-        sequence_output = sequence_output.mean(1)
+        sequence_output = tf.math.reduce_mean(sequence_output, axis=1)
         cls_logits, distill_logits = self.classifier(sequence_output), self.classifier_distill(sequence_output)
         logits = (cls_logits + distill_logits) / 2
 
@@ -814,7 +920,7 @@ class LevitForImageClassificationWithTeacher(LevitPreTrainedModel):
             output = (logits, cls_logits, distill_logits) + outputs[2:]
             return output
 
-        return LevitForImageClassificationWithTeacherOutput(
+        return TFLevitForImageClassificationWithTeacherOutput(
             logits=logits,
             cls_logits=cls_logits,
             distillation_logits=distill_logits,
