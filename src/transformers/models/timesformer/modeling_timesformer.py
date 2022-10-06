@@ -66,57 +66,6 @@ TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-@dataclass
-# Copied from transformers.models.videomae.modeling_videomae.VideoMAEDecoderOutput with VideoMAE->TimeSformer
-class TimeSformerDecoderOutput(ModelOutput):
-    """
-    Class for TimeSformerDecoder's outputs, with potential hidden states and attentions.
-
-    Args:
-        logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
-            Pixel reconstruction logits.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-    """
-
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-# Copied from transformers.models.videomae.modeling_videomae.VideoMAEForPreTrainingOutput with VideoMAE->TimeSformer
-class TimeSformerForPreTrainingOutput(ModelOutput):
-    """
-    Class for TimeSformerForPreTraining's outputs, with potential hidden states and attentions.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`):
-            Pixel reconstruction loss.
-        logits (`torch.FloatTensor` of shape `(batch_size, patch_size ** 2 * num_channels)`):
-            Pixel reconstruction logits.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
-            shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of the model at the output of each layer
-            plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
 # Adapted from https://github.com/facebookresearch/TimeSformer/blob/a5ef29a7b7264baff199a30b3306ac27de901133/timesformer/models/vit.py#L155
 class TimeSformerPatchEmbed(nn.Module):
     """Image to Patch Embedding"""
@@ -139,11 +88,12 @@ class TimeSformerPatchEmbed(nn.Module):
         self.projection = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, x):
-        B, C, num_frames, H, image_width = x.shape
+        B, C, num_frames, H, _ = x.shape
         x = rearrange(x, "b c t h w -> (b t) c h w")
         x = self.projection(x)
+        patch_width = x.size(-1)
         embeddings = x.flatten(2).transpose(1, 2)
-        return embeddings, num_frames, image_width
+        return embeddings, num_frames, patch_width
 
 
 class TimeSformerEmbeddings(nn.Module):
@@ -172,11 +122,11 @@ class TimeSformerEmbeddings(nn.Module):
             self.time_embeddings = nn.Parameter(torch.zeros(1, num_frames, embed_dim))
             self.time_drop = nn.Dropout(p=drop_rate)
 
-    def forward(self, pixel_values, bool_masked_pos):
+    def forward(self, pixel_values):
         batch_size = pixel_values.shape[0]
 
         # create patch embeddings
-        embeddings, num_frames, image_width = self.patch_embeddings(pixel_values)
+        embeddings, num_frames, patch_width = self.patch_embeddings(pixel_values)
 
         cls_tokens = self.cls_token.expand(embeddings.size(0), -1, -1)
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
@@ -187,9 +137,9 @@ class TimeSformerEmbeddings(nn.Module):
             cls_pos_embed = position_embeddings[0, 0, :].unsqueeze(0).unsqueeze(1)
             other_pos_embed = position_embeddings[0, 1:, :].unsqueeze(0).transpose(1, 2)
             P = int(other_pos_embed.size(2) ** 0.5)
-            H = embeddings.size(1) // image_width
+            H = embeddings.size(1) // patch_width
             other_pos_embed = other_pos_embed.reshape(1, embeddings.size(2), P, P)
-            new_pos_embed = F.interpolate(other_pos_embed, size=(H, image_width), mode="nearest")
+            new_pos_embed = F.interpolate(other_pos_embed, size=(H, patch_width), mode="nearest")
             new_pos_embed = new_pos_embed.flatten(2)
             new_pos_embed = new_pos_embed.transpose(1, 2)
             new_pos_embed = torch.cat((cls_pos_embed, new_pos_embed), 1)
@@ -213,13 +163,6 @@ class TimeSformerEmbeddings(nn.Module):
             embeddings = self.time_drop(embeddings)
             embeddings = rearrange(embeddings, "(b n) t m -> b (n t) m", b=batch_size, t=num_frames)
             embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-
-        # only keep visible patches
-        # ~bool_masked_pos means visible
-        if bool_masked_pos is not None:
-            batch_size, _, num_channels = embeddings.shape
-            embeddings = embeddings[~bool_masked_pos]
-            embeddings = embeddings.reshape(batch_size, -1, num_channels)
 
         return embeddings
 
@@ -347,7 +290,7 @@ class TimeSformerSelfAttention(nn.Module):
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.attn_drop = nn.Dropout(attn_drop)
 
-    def forward(self, hidden_states, head_mask: Optional[torch.Tensor] = None, output_attentions: bool = False):
+    def forward(self, hidden_states, output_attentions: bool = False):
         B, N, C = hidden_states.shape
         qkv = self.qkv(hidden_states).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]
@@ -355,10 +298,6 @@ class TimeSformerSelfAttention(nn.Module):
         attention_probs = (q @ k.transpose(-2, -1)) * self.scale
         attention_probs = attention_probs.softmax(dim=-1)
         attention_probs = self.attn_drop(attention_probs)
-
-        # Mask heads if we want to
-        if head_mask is not None:
-            attention_probs = attention_probs * head_mask
 
         context_layer = (attention_probs @ v).transpose(1, 2).reshape(B, N, C)
 
@@ -379,7 +318,7 @@ class TimeSformerSelfOutput(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
 
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
@@ -398,12 +337,11 @@ class TimeSformerAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        self_outputs = self.attention(hidden_states, head_mask, output_attentions)
+        self_outputs = self.attention(hidden_states, output_attentions)
 
-        attention_output = self.output(self_outputs[0], hidden_states)
+        attention_output = self.output(self_outputs[0])
 
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
@@ -438,11 +376,9 @@ class TimeSformerOutput(nn.Module):
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
-
-        hidden_states = hidden_states + input_tensor
 
         return hidden_states
 
@@ -467,6 +403,7 @@ class TimeSformerLayer(nn.Module):
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
+        self.config = config
         self.attention_type = attention_type
         assert attention_type in ["divided_space_time", "space_only", "joint_space_time"]
 
@@ -476,19 +413,46 @@ class TimeSformerLayer(nn.Module):
             self.temporal_attention = TimeSformerAttention(config)
             self.temporal_dense = nn.Linear(dim, dim)
 
-    def forward(self, hidden_states: torch.Tensor, B, T, W):
+    def forward(self, hidden_states: torch.Tensor, output_attentions: bool = False):
+        T = self.config.num_frames
+        W = self.config.image_size // self.config.patch_size
+        B = hidden_states.shape[0]
         num_spatial_tokens = (hidden_states.size(1) - 1) // T
         H = num_spatial_tokens // W
 
         if self.attention_type in ["space_only", "joint_space_time"]:
-            hidden_states = hidden_states + self.drop_path(self.attention(self.layernorm_before(hidden_states)))
-            layer_output = hidden_states + self.drop_path(self.intermediate(self.layernorm_after(hidden_states)))
-            return layer_output
+            self_attention_outputs = self.attention(
+                self.layernorm_before(hidden_states),
+                output_attentions=output_attentions
+            )
+            attention_output = self_attention_outputs[0]
+            outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
+
+            hidden_states = hidden_states + self.drop_path(attention_output)
+
+            layer_output = self.layernorm_after(hidden_states)
+            layer_output = self.intermediate(layer_output)
+            layer_output = self.output(layer_output)
+            layer_output = hidden_states + self.drop_path(layer_output)
+
+            outputs = (layer_output,) + outputs
+
+            return outputs
+
         elif self.attention_type == "divided_space_time":
             # Temporal
             xt = hidden_states[:, 1:, :]
             xt = rearrange(xt, "b (h w t) m -> (b h w) t m", b=B, h=H, w=W, t=T)
-            res_temporal = self.drop_path(self.temporal_attention(self.temporal_layernorm(xt)))
+
+            temporal_attention_outputs = self.temporal_attention(
+                self.temporal_layernorm(xt),
+                output_attentions=output_attentions
+            )
+            attention_output = temporal_attention_outputs[0]
+            outputs = temporal_attention_outputs[1:]  # add self attentions if we output attention weights
+
+            res_temporal = self.drop_path(attention_output)
+
             res_temporal = rearrange(res_temporal, "(b h w) t m -> b (h w t) m", b=B, h=H, w=W, t=T)
             res_temporal = self.temporal_dense(res_temporal)
             xt = hidden_states[:, 1:, :] + res_temporal
@@ -500,7 +464,13 @@ class TimeSformerLayer(nn.Module):
             xs = xt
             xs = rearrange(xs, "b (h w t) m -> (b t) (h w) m", b=B, h=H, w=W, t=T)
             xs = torch.cat((cls_token, xs), 1)
-            res_spatial = self.drop_path(self.attention(self.layernorm_before(xs)))
+
+            spatial_attention_outputs = self.temporal_attention(
+                self.layernorm_before(xs),
+            )
+            attention_output = spatial_attention_outputs[0]
+
+            res_spatial = self.drop_path(attention_output)
 
             # Taking care of CLS token
             cls_token = res_spatial[:, 0, :]
@@ -515,9 +485,12 @@ class TimeSformerLayer(nn.Module):
             hidden_states = torch.cat((init_cls_token, hidden_states), 1) + torch.cat((cls_token, res), 1)
             layer_output = self.layernorm_after(hidden_states)
             layer_output = self.intermediate(layer_output)
-            layer_output = self.output(layer_output, hidden_states)
-            layer_output = self.drop_path(layer_output)
-            return layer_output
+            layer_output = self.output(layer_output)
+            layer_output = hidden_states + self.drop_path(layer_output)
+
+            outputs = (layer_output,) + outputs
+
+            return outputs
 
 
 # Copied from transformers.models.vit.modeling_vit.VideoMAEEncoder
@@ -531,7 +504,6 @@ class TimeSformerEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
@@ -542,8 +514,6 @@ class TimeSformerEncoder(nn.Module):
         for i, layer_module in enumerate(self.layer):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_head_mask = head_mask[i] if head_mask is not None else None
 
             if self.gradient_checkpointing and self.training:
 
@@ -556,10 +526,9 @@ class TimeSformerEncoder(nn.Module):
                 layer_outputs = torch.utils.checkpoint.checkpoint(
                     create_custom_forward(layer_module),
                     hidden_states,
-                    layer_head_mask,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, layer_head_mask, output_attentions)
+                layer_outputs = layer_module(hidden_states, output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -680,8 +649,6 @@ class TimeSformerModel(TimeSformerPreTrainedModel):
     def forward(
         self,
         pixel_values,
-        bool_masked_pos=None,
-        head_mask=None,
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
@@ -740,18 +707,10 @@ class TimeSformerModel(TimeSformerPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # Prepare head mask if needed
-        # 1.0 in head_mask indicate we keep the head
-        # attention_probs has shape bsz x n_heads x N x N
-        # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
-        # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
-
-        embedding_output = self.embeddings(pixel_values, bool_masked_pos)
+        embedding_output = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
             embedding_output,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -796,7 +755,6 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -865,7 +823,6 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
 
         outputs = self.timesformer(
             pixel_values,
-            head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
