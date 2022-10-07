@@ -238,11 +238,13 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
 # Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). Comment by Ross Wightman:
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however, the original name is
-    misleading as 'Drop Connect' is a different form of dropout in a separate paper... See discussion:
-    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
-    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
+    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
+    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
+    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -364,7 +366,6 @@ class TimeSformerIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.videomae.modeling_videomae.VideoMAEOutput
 class TimeSformerOutput(nn.Module):
     def __init__(self, config: TimeSformerConfig) -> None:
         super().__init__()
@@ -547,7 +548,6 @@ class TimeSformerEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.videomae.modeling_videomae.VideoMAEPreTrainedModel with VideoMAE->TimeSformer,videomae->timesformer
 class TimeSformerPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -616,7 +616,6 @@ TIMESFORMER_INPUTS_DOCSTRING = r"""
     "The bare TimeSformer Model transformer outputting raw hidden-states without any specific head on top.",
     TIMESFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.videomae.modeling_videomae.VideoMAEModel with VIDEOMAE->TIMESFORMER,VideoMAE->TimeSformer,MCG-NJU/videomae-base->facebook/timesformer
 class TimeSformerModel(TimeSformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -679,21 +678,18 @@ class TimeSformerModel(TimeSformerPreTrainedModel):
         >>> file_path = hf_hub_download(
         ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
         ... )
-        >>> vr = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+        >>> videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
 
         >>> # sample 8 frames
-        >>> vr.seek(0)
-        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=4, seg_len=len(vr))
-        >>> buffer = vr.get_batch(indices).asnumpy()
+        >>> videoreader.seek(0)
+        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=4, seg_len=len(videoreader))
+        >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> # create a list of NumPy arrays
-        >>> video = [buffer[i] for i in range(buffer.shape[0])]
-
-        >>> feature_extractor = TimeSformerFeatureExtractor.from_pretrained("facebook/timesformer")
-        >>> model = TimeSformerModel.from_pretrained("facebook/timesformer")
+        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base")
+        >>> model = TimeSformerModel.from_pretrained("facebook/timesformer-base-finetuned-k400")
 
         >>> # prepare video for the model
-        >>> inputs = feature_extractor(video, return_tensors="pt")
+        >>> inputs = feature_extractor(list(video), return_tensors="pt")
 
         >>> # forward pass
         >>> outputs = model(**inputs)
@@ -735,7 +731,6 @@ of
     the [CLS] token) e.g. for ImageNet.""",
     TIMESFORMER_START_DOCSTRING,
 )
-# Copied from transformers.models.videomae.modeling_videomae.VideoMAEForVideoClassification with VIDEOMAE->TIMESFORMER,VideoMAE->TimeSformer,videomae->timesformer,MCG-NJU/videomae-base->facebook/timesformer
 class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -773,9 +768,12 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
         ```python
         >>> from decord import VideoReader, cpu
         >>> import torch
+        >>> import numpy as np
 
         >>> from transformers import TimeSformerFeatureExtractor, TimeSformerForVideoClassification
         >>> from huggingface_hub import hf_hub_download
+
+        >>> np.random.seed(0)
 
 
         >>> def sample_frame_indices(clip_len, frame_sample_rate, seg_len):
@@ -791,22 +789,17 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
         >>> file_path = hf_hub_download(
         ...     repo_id="nielsr/video-demo", filename="eating_spaghetti.mp4", repo_type="dataset"
         ... )
-        >>> vr = VideoReader(file_path, num_threads=1, ctx=cpu(0))
+        >>> videoreader = VideoReader(file_path, num_threads=1, ctx=cpu(0))
 
-        >>> # sample 16 frames
-        >>> vr.seek(0)
-        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=4, seg_len=len(vr))
-        >>> buffer = vr.get_batch(indices).asnumpy()
+        >>> # sample 8 frames
+        >>> videoreader.seek(0)
+        >>> indices = sample_frame_indices(clip_len=8, seg_len=len(videoreader))
+        >>> video = videoreader.get_batch(indices).asnumpy()
 
-        >>> # create a list of NumPy arrays
-        >>> video = [buffer[i] for i in range(buffer.shape[0])]
+        >>> feature_extractor = VideoMAEFeatureExtractor.from_pretrained("MCG-NJU/videomae-base")
+        >>> model = TimeSformerForVideoClassification.from_pretrained("facebook/timesformer-base-finetuned-k400")
 
-        >>> feature_extractor = TimeSformerFeatureExtractor.from_pretrained(
-        ...     "MCG-NJU/timesformer-base-finetuned-kinetics"
-        ... )
-        >>> model = TimeSformerForVideoClassification.from_pretrained("MCG-NJU/timesformer-base-finetuned-kinetics")
-
-        >>> inputs = feature_extractor(video, return_tensors="pt")
+        >>> inputs = feature_extractor(list(video), return_tensors="pt")
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
@@ -818,8 +811,6 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
         eating spaghetti
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
 
         outputs = self.timesformer(
             pixel_values,
