@@ -42,10 +42,8 @@ class TimeSformerConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        num_frames (`int`, *optional*, defaults to 16):
+        num_frames (`int`, *optional*, defaults to 8):
             The number of frames in each video.
-        tubelet_size (`int`, *optional*, defaults to 2):
-            The number of tubelets.
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -63,14 +61,14 @@ class TimeSformerConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-6):
             The epsilon used by the layer normalization layers.
         qkv_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
         use_mean_pooling (`bool`, *optional*, defaults to `True`):
             Whether to mean pool the final hidden states instead of using the final hidden state of the [CLS] token.
-        norm_pix_loss (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the target patch pixels.
+        attention_type (`str`, *optional*, defaults to `"divided_space_time"`):
+            The attention type to use. Must be one of `"divided_space_time"`, `"space_only"`, `"joint_space_time"`.
 
     Example:
 
@@ -94,7 +92,6 @@ class TimeSformerConfig(PretrainedConfig):
         patch_size=16,
         num_channels=3,
         num_frames=8,
-        tubelet_size=2,
         hidden_size=768,
         num_hidden_layers=12,
         num_attention_heads=12,
@@ -103,12 +100,11 @@ class TimeSformerConfig(PretrainedConfig):
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
-        layer_norm_eps=1e-5,
+        layer_norm_eps=1e-6,
         qkv_bias=True,
         use_mean_pooling=False,
-        norm_pix_loss=True,
         attention_type="divided_space_time",
-        drop_path_prob=0.1,
+        drop_path_prob=0,
         **kwargs
     ):
         super().__init__(**kwargs)
@@ -117,7 +113,6 @@ class TimeSformerConfig(PretrainedConfig):
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.num_frames = num_frames
-        self.tubelet_size = tubelet_size
 
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -130,8 +125,6 @@ class TimeSformerConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.qkv_bias = qkv_bias
         self.use_mean_pooling = use_mean_pooling
-
-        self.norm_pix_loss = norm_pix_loss
 
         self.attention_type = attention_type
         self.drop_path_prob = drop_path_prob
