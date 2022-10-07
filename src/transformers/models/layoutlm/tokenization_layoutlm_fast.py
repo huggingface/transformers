@@ -58,12 +58,10 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
+# Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with Bert->LayoutLM
 class LayoutLMTokenizerFast(PreTrainedTokenizerFast):
     r"""
-    Constructs a "Fast" LayoutLMTokenizer.
-
-    [`LayoutLMTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation
-    splitting + wordpiece.
+    Construct a "fast" LayoutLM tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
 
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
@@ -103,11 +101,10 @@ class LayoutLMTokenizerFast(PreTrainedTokenizerFast):
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = LayoutLMTokenizer
 
-    # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast.__init__
     def __init__(
         self,
         vocab_file=None,
@@ -150,7 +147,6 @@ class LayoutLMTokenizerFast(PreTrainedTokenizerFast):
 
         self.do_lower_case = do_lower_case
 
-    # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -175,7 +171,6 @@ class LayoutLMTokenizerFast(PreTrainedTokenizerFast):
 
         return output
 
-    # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -205,7 +200,6 @@ class LayoutLMTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
