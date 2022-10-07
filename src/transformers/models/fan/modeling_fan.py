@@ -36,10 +36,9 @@ from ...modeling_outputs import (
     SemanticSegmenterOutput,
 )
 from ...modeling_utils import PreTrainedModel, SequenceSummary
-from ...pytorch_utils import (
+from ...pytorch_utils import (  # is_torch_greater_than_1_6,
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
-    is_torch_greater_than_1_6,
     prune_linear_layer,
 )
 from ...utils import (

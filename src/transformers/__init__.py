@@ -854,8 +854,6 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
-
-<<<<<<< HEAD
     _import_structure["models.roc_bert"].extend(
         [
             "ROC_BERT_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -879,7 +877,8 @@ else:
             "TimeSeriesTransformerForPrediction",
             "TimeSeriesTransformerModel",
             "TimeSeriesTransformerPreTrainedModel",
-=======
+        ]
+    )
     _import_structure["models.fan"].extend(
         [
             "FAN_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -889,7 +888,16 @@ else:
             "FANModel",
             "FANPreTrainedModel",
             "load_tf_weights_in_fan",
->>>>>>> 88bf14e5d (created FAN Model)
+        ]
+    )
+
+    _import_structure["models.time_series_transformer"].extend(
+        [
+            "TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TimeSeriesTransformerForPrediction",
+            "TimeSeriesTransformerModel",
+            "TimeSeriesTransformerPreTrainedModel",
+
         ]
     )
     _import_structure["models.albert"].extend(
@@ -4324,16 +4332,10 @@ if TYPE_CHECKING:
         # PyTorch model imports
         from .models.fan import (
             FAN_PRETRAINED_MODEL_ARCHIVE_LIST,
-            FANForCausalLM,
-            FANForMaskedLM,
-            FANForMultipleChoice,
-            FANForQuestionAnswering,
-            FANForSequenceClassification,
-            FANForTokenClassification,
-            FANLayer,
+            FANForImageClassification,
+            FANForSemanticSegmentation,
             FANModel,
             FANPreTrainedModel,
-            load_tf_weights_in_fan,
         )
         from .models.flaubert import (
             FLAUBERT_PRETRAINED_MODEL_ARCHIVE_LIST,
