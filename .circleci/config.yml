@@ -79,10 +79,19 @@ jobs:
                 path: ~/transformers/tests_fetched_summary.txt
             - run: |
                 if [ -f test_list.txt ]; then
-                    mv test_list.txt test_preparation/test_list.txt
+                    cp test_list.txt test_preparation/test_list.txt
                 else
                     touch test_preparation/test_list.txt
                 fi
+            - run: python utils/tests_fetcher.py --filter_pipeline_tests
+            - run: |
+                  if [ -f test_list.txt ]; then
+                      cp test_list.txt test_preparation/filtered_test_list.txt
+                  else
+                      touch test_preparation/filtered_test_list.txt
+                  fi
+            - store_artifacts:
+                  path: ~/transformers/test_preparation/filtered_test_list.txt
             - run: python utils/tests_fetcher.py --filters tests examples | tee examples_tests_fetched_summary.txt
             - store_artifacts:
                 path: ~/transformers/examples_tests_fetched_summary.txt
@@ -97,6 +106,7 @@ jobs:
                 root: test_preparation/
                 paths:
                     test_list.txt
+                    filtered_test_list.txt
                     examples_test_list.txt
 
     # To run all tests for the nightly build
