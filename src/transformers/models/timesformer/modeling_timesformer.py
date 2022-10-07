@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" PyTorch TimeSformer (masked autoencoder) model."""
+""" PyTorch TimeSformer model."""
 
 
 import math
@@ -29,12 +29,9 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-from einops import rearrange
-
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -88,8 +85,9 @@ class TimeSformerPatchEmbed(nn.Module):
         self.projection = nn.Conv2d(in_chans, embed_dim, kernel_size=patch_size, stride=patch_size)
 
     def forward(self, x):
-        B, C, num_frames, H, _ = x.shape
-        x = rearrange(x, "b c t h w -> (b t) c h w")
+        B, C, num_frames, H, W = x.shape
+        x = x.permute(0, 2, 1, 3, 4).view(B * num_frames, C, H, W)
+
         x = self.projection(x)
         patch_width = x.size(-1)
         embeddings = x.flatten(2).transpose(1, 2)
@@ -152,7 +150,8 @@ class TimeSformerEmbeddings(nn.Module):
         if self.attention_type != "space_only":
             cls_tokens = embeddings[:batch_size, 0, :].unsqueeze(1)
             embeddings = embeddings[:, 1:]
-            embeddings = rearrange(embeddings, "(b t) n m -> (b n) t m", b=batch_size, t=num_frames)
+            _, patch_height, patch_width = embeddings.shape
+            embeddings = embeddings.view(batch_size, num_frames, patch_height, patch_width).permute(0, 2, 1, 3).view(batch_size * patch_height, num_frames, patch_width)
             # Resizing time embeddings in case they don't match
             if num_frames != self.time_embeddings.size(1):
                 time_embeddings = self.time_embeddings.transpose(1, 2)
@@ -162,7 +161,8 @@ class TimeSformerEmbeddings(nn.Module):
             else:
                 embeddings = embeddings + self.time_embeddings
             embeddings = self.time_drop(embeddings)
-            embeddings = rearrange(embeddings, "(b n) t m -> b (n t) m", b=batch_size, t=num_frames)
+            #embeddings = rearrange(embeddings, "(b n) t m -> b (n t) m", b=batch_size, t=num_frames)
+            embeddings = embeddings.view(batch_size, patch_height, num_frames, patch_width).reshape(batch_size, patch_height * num_frames, patch_width)
             embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         return embeddings
@@ -443,7 +443,7 @@ class TimeSformerLayer(nn.Module):
         elif self.attention_type == "divided_space_time":
             # Temporal
             xt = hidden_states[:, 1:, :]
-            xt = rearrange(xt, "b (h w t) m -> (b h w) t m", b=B, h=H, w=W, t=T)
+            xt = xt.reshape(B, H, W, T, xt.shape[2]).reshape(B * H * W, T, xt.shape[2])
 
             temporal_attention_outputs = self.temporal_attention(
                 self.temporal_layernorm(xt),
@@ -454,16 +454,16 @@ class TimeSformerLayer(nn.Module):
 
             res_temporal = self.drop_path(attention_output)
 
-            res_temporal = rearrange(res_temporal, "(b h w) t m -> b (h w t) m", b=B, h=H, w=W, t=T)
+            res_temporal = res_temporal.reshape(B, H, W, T, res_temporal.shape[2]).reshape(B, H * W * T, res_temporal.shape[2])
             res_temporal = self.temporal_dense(res_temporal)
             xt = hidden_states[:, 1:, :] + res_temporal
 
             # Spatial
             init_cls_token = hidden_states[:, 0, :].unsqueeze(1)
             cls_token = init_cls_token.repeat(1, T, 1)
-            cls_token = rearrange(cls_token, "b t m -> (b t) m", b=B, t=T).unsqueeze(1)
+            cls_token = cls_token.reshape(B * T, 1, cls_token.shape[2])
             xs = xt
-            xs = rearrange(xs, "b (h w t) m -> (b t) (h w) m", b=B, h=H, w=W, t=T)
+            xs = xs.reshape(B, H, W, T, xs.shape[2]).permute(0, 3, 1, 2, 4).reshape(B * T, H * W, xs.shape[2])
             xs = torch.cat((cls_token, xs), 1)
 
             spatial_attention_outputs = self.attention(
@@ -475,10 +475,12 @@ class TimeSformerLayer(nn.Module):
 
             # Taking care of CLS token
             cls_token = res_spatial[:, 0, :]
-            cls_token = rearrange(cls_token, "(b t) m -> b t m", b=B, t=T)
+            #cls_token = rearrange(cls_token, "(b t) m -> b t m", b=B, t=T)
+            cls_token = cls_token.reshape(B, T, cls_token.shape[1])
             cls_token = torch.mean(cls_token, 1, True)  # averaging for every frame
             res_spatial = res_spatial[:, 1:, :]
-            res_spatial = rearrange(res_spatial, "(b t) (h w) m -> b (h w t) m", b=B, h=H, w=W, t=T)
+            #res_spatial = rearrange(res_spatial, "(b t) (h w) m -> b (h w t) m", b=B, h=H, w=W, t=T)
+            res_spatial = res_spatial.reshape(B, T, H, W, res_spatial.shape[2]).permute(0, 2, 3, 1, 4).reshape(B, H * W * T, res_spatial.shape[2])
             res = res_spatial
             hidden_states = xt
 
