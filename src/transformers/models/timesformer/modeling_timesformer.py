@@ -146,6 +146,7 @@ class TimeSformerEmbeddings(nn.Module):
             embeddings = embeddings + new_pos_embed
         else:
             embeddings = embeddings + self.position_embeddings
+        embeddings = self.pos_drop(embeddings)
 
         # Time Embeddings
         if self.attention_type != "space_only":
@@ -465,7 +466,7 @@ class TimeSformerLayer(nn.Module):
             xs = rearrange(xs, "b (h w t) m -> (b t) (h w) m", b=B, h=H, w=W, t=T)
             xs = torch.cat((cls_token, xs), 1)
 
-            spatial_attention_outputs = self.temporal_attention(
+            spatial_attention_outputs = self.attention(
                 self.layernorm_before(xs),
             )
             attention_output = spatial_attention_outputs[0]
@@ -681,9 +682,9 @@ class TimeSformerModel(TimeSformerPreTrainedModel):
         ... )
         >>> vr = VideoReader(file_path, num_threads=1, ctx=cpu(0))
 
-        >>> # sample 16 frames
+        >>> # sample 8 frames
         >>> vr.seek(0)
-        >>> indices = sample_frame_indices(clip_len=16, frame_sample_rate=4, seg_len=len(vr))
+        >>> indices = sample_frame_indices(clip_len=8, frame_sample_rate=4, seg_len=len(vr))
         >>> buffer = vr.get_batch(indices).asnumpy()
 
         >>> # create a list of NumPy arrays
