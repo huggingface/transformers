@@ -221,7 +221,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         **kwargs
     ) -> BatchFeature:
         """
-        Main method to featurize and prepare for the model one or several sequence(s). sequences.
+        Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
