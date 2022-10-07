@@ -438,7 +438,7 @@ def validate_model_outputs(
 
         # Values
         if not np.allclose(ref_value, ort_value, atol=atol):
-            bad_idxes = np.logical_not(np.isclose(ref_value, ort_value, atol=atol))
+            bad_indices = np.logical_not(np.isclose(ref_value, ort_value, atol=atol))
             logger.info(f"\t\t-[x] values not close enough (atol: {atol})")
             raise ValueError(
                 "Outputs values doesn't match between reference model and ONNX exported model: "
