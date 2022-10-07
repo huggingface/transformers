@@ -22,7 +22,7 @@ import types
 import torch
 
 from transformers import AutoTokenizer, GPT2Config
-from transformers.modeling_utils import shard_checkpoint
+from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint
 
 
 def add_checkpointing_args(parser):
@@ -134,8 +134,6 @@ def add_transformers_checkpoint_args(parser):
     return parser
 
 
-WEIGHTS_NAME = "pytorch_model.bin"
-WEIGHTS_INDEX_NAME = "pytorch_model.bin.index.json"
 # The simple map of names for "automated" rules.
 megatron_to_transformers = {
     "attention.dense": ".attn.c_proj.",
@@ -466,17 +464,14 @@ def convert_checkpoint_from_megatron_to_transformers(args):
                 out_name = megatron_to_transformers[op_name]
                 output_state_dict[layer_name + out_name + "bias"] = params
 
-    # DEBUG.
-    assert config.n_layer == layer_idx + 1
+    if config.n_layer != (layer_idx + 1):
+        raise ValueError(f"Expected {config.n_layer} layers but found {layer_idx + 1}")
 
     # The final layernorm.
     print("Converting final layernorm")
-    output_state_dict["transformer.ln_f.weight"] = get_element_from_dict_by_path(tp_state_dicts[0], str(path))[
-        "final_layernorm.weight"
-    ].to(dtype)
-    output_state_dict["transformer.ln_f.bias"] = get_element_from_dict_by_path(tp_state_dicts[0], f"{path}")[
-        "final_layernorm.bias"
-    ].to(dtype)
+    params = get_element_from_dict_by_path(tp_state_dicts[0], str(path))
+    output_state_dict["transformer.ln_f.weight"] = params["final_layernorm.weight"].to(dtype)
+    output_state_dict["transformer.ln_f.bias"] = params["final_layernorm.bias"].to(dtype)
 
     # For LM head, transformers' wants the matrix to weight embeddings.
     print("Converting LM head")
