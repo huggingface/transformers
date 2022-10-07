@@ -21,6 +21,7 @@ from typing import List, Optional, Tuple
 from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
 
+
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
@@ -83,6 +84,7 @@ def whitespace_tokenize(text):
         return []
     tokens = text.split()
     return tokens
+
 
 # Copied from transformers.models.bert.tokenization_bert.BertTokenizer with Bert->Electra
 class ElectraTokenizer(PreTrainedTokenizer):
@@ -315,6 +317,8 @@ class ElectraTokenizer(PreTrainedTokenizer):
                 writer.write(token + "\n")
                 index += 1
         return (vocab_file,)
+
+
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
 class BasicTokenizer(object):
     """
