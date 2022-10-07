@@ -203,7 +203,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
                 setattr(self.backend_tokenizer, tokenizer_component, new_value)
 
     @property
-    # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast.mask_token
+    # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast.mask_token with BART->LED
     def mask_token(self) -> str:
         """
         `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
@@ -219,7 +219,6 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
         return str(self._mask_token)
 
     @mask_token.setter
-    # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast.mask_token
     def mask_token(self, value):
         """
         Overriding the default behavior of the mask token to have it eat the space before it.
