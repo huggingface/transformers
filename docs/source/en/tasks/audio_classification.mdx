@@ -212,8 +212,8 @@ At this point, only three steps remain:
 ```py
 >>> training_args = TrainingArguments(
 ...     output_dir="my_awesome_mind_model",
-...     evaluation_strategy = "epoch",
-...     save_strategy = "epoch",
+...     evaluation_strategy="epoch",
+...     save_strategy="epoch",
 ...     learning_rate=3e-5,
 ...     per_device_train_batch_size=32,
 ...     gradient_accumulation_steps=4,
@@ -274,11 +274,13 @@ from transformers import pipeline
 
 classifier = pipeline("audio-classification", model="stevhliu/my_awesome_minds_model")
 classifier(audio_file)
-[{'score': 0.09616563469171524, 'label': 'cash_deposit'},
- {'score': 0.08657706528902054, 'label': 'app_error'},
- {'score': 0.07833030819892883, 'label': 'joint_account'},
- {'score': 0.07660537213087082, 'label': 'pay_bill'},
- {'score': 0.07324142009019852, 'label': 'balance'}]
+[
+    {"score": 0.09616563469171524, "label": "cash_deposit"},
+    {"score": 0.08657706528902054, "label": "app_error"},
+    {"score": 0.07833030819892883, "label": "joint_account"},
+    {"score": 0.07660537213087082, "label": "pay_bill"},
+    {"score": 0.07324142009019852, "label": "balance"},
+]
 ```
 
 You can also manually replicate the results of the [`pipeline`] if you'd like:
@@ -290,9 +292,7 @@ Load a feature extractor to preprocess the audio file and return the `input` as 
 ```py
 >>> from transformers import AutoFeatureExtractor
 
->>> feature_extractor = AutoFeatureExtractor.from_pretrained(
-...     "stevhliu/my_awesome_minds_model"
-... )
+>>> feature_extractor = AutoFeatureExtractor.from_pretrained("stevhliu/my_awesome_minds_model")
 >>> inputs = feature_extractor(dataset[0]["audio"]["array"], sampling_rate=sampling_rate, return_tensors="pt")
 ```
 
@@ -301,9 +301,7 @@ Pass your inputs to the model and return the logits:
 ```py
 >>> from transformers import AutoModelForAudioClassification
 
->>> model = AutoModelForAudioClassification.from_pretrained(
-...     "stevhliu/my_awesome_minds_model"
-... )
+>>> model = AutoModelForAudioClassification.from_pretrained("stevhliu/my_awesome_minds_model")
 >>> with torch.no_grad():
 ...     logits = model(**inputs).logits
 ```
