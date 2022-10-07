@@ -33,17 +33,11 @@ def get_timesformer_config(model_name):
     config = TimeSformerConfig()
 
     if "large" in model_name:
-        config.hidden_size = 1024
-        config.intermediate_size = 4096
-        config.num_hidden_layers = 24
-        config.num_attention_heads = 16
-        config.decoder_num_hidden_layers = 12
-        config.decoder_num_attention_heads = 8
-        config.decoder_hidden_size = 512
-        config.decoder_intermediate_size = 2048
+        config.num_frames = 96
 
-    if "finetuned" not in model_name:
-        config.use_mean_pooling = False
+    if "hr" in model_name:
+        config.num_frames = 16
+        config.image_size = 448
 
     repo_id = "huggingface/label-files"
     if "k400" in model_name:
@@ -189,12 +183,10 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
     # NOTE: logits were tested with image_mean and image_std equal to [0.5, 0.5, 0.5] and [0.5, 0.5, 0.5]
     if model_name == "timesformer-base-finetuned-k400":
         expected_shape = torch.Size([1, 400])
-        expected_slice = torch.tensor([[0.7739, 0.7968, 0.7089], [0.6701, 0.7487, 0.6209], [0.4287, 0.5158, 0.4773]])
+        expected_slice = torch.tensor([-0.3016, -0.7713, -0.4205])
     elif model_name == "timesformer-base-finetuned-k600":
         expected_shape = torch.Size([1, 600])
         expected_slice = torch.tensor([[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]])
-        # we verified the loss both for normalized and unnormalized targets for this one
-        expected_loss = torch.tensor([0.5142]) if config.norm_pix_loss else torch.tensor([0.6469])
     elif model_name == "timesformer-base-finetuned-ssv2":
         expected_shape = torch.Size([1, 174])
         expected_slice = torch.tensor([[0.7149, 0.7997, 0.6966], [0.6768, 0.7869, 0.6948], [0.5139, 0.6221, 0.5605]])
@@ -224,12 +216,6 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
     assert torch.allclose(logits[0, :3], expected_slice, atol=1e-4)
     print("Logits ok!")
 
-    # verify loss, if applicable
-    if model_name == "timesformer-base-k400":
-        loss = outputs.loss
-        assert torch.allclose(loss, expected_loss, atol=1e-4)
-        print("Loss ok!")
-
     if pytorch_dump_folder_path is not None:
         print(f"Saving model and feature extractor to {pytorch_dump_folder_path}")
         feature_extractor.save_pretrained(pytorch_dump_folder_path)
@@ -237,7 +223,7 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
 
     if push_to_hub:
         print("Pushing to the hub...")
-        model.push_to_hub(model_name, organization="fcakyon")
+        model.push_to_hub(f'fcakyon/{model_name}')
 
 
 if __name__ == "__main__":
