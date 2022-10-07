@@ -1658,6 +1658,7 @@ else:
             "OPTModel",
             "OPTPreTrainedModel",
             "OPTForSequenceClassification",
+            "OPTForQuestionAnswering",
         ]
     )
     _import_structure["models.owlvit"].extend(
@@ -4401,6 +4402,7 @@ if TYPE_CHECKING:
         from .models.opt import (
             OPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OPTForCausalLM,
+            OPTForQuestionAnswering,
             OPTForSequenceClassification,
             OPTModel,
             OPTPreTrainedModel,
