@@ -27,14 +27,11 @@ from .generation_beam_constraints import Constraint, DisjunctiveConstraint, Phra
 from .generation_beam_search import BeamScorer, BeamSearchScorer, ConstrainedBeamSearchScorer
 from .generation_logits_process import (
     EncoderNoRepeatNGramLogitsProcessor,
+    EncoderRepetitionPenaltyLogitsProcessor,
     ExponentialDecayLengthPenalty,
     ForcedBOSTokenLogitsProcessor,
     ForcedEOSTokenLogitsProcessor,
-<<<<<<< HEAD
-    HallucinationPenaltyLogitsProcessor,
-=======
     ForceTokensLogitsProcessor,
->>>>>>> origin/main
     HammingDiversityLogitsProcessor,
     InfNanRemoveLogitsProcessor,
     LogitNormalization,
@@ -759,7 +756,9 @@ class GenerationMixin:
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=repetition_penalty))
         if hallucination_penalty is not None and hallucination_penalty != 1.0:
             processors.append(
-                HallucinationPenaltyLogitsProcessor(penalty=hallucination_penalty, encoder_input_ids=encoder_input_ids)
+                EncoderRepetitionPenaltyLogitsProcessor(
+                    penalty=hallucination_penalty, encoder_input_ids=encoder_input_ids
+                )
             )
         if no_repeat_ngram_size is not None and no_repeat_ngram_size > 0:
             processors.append(NoRepeatNGramLogitsProcessor(no_repeat_ngram_size))
