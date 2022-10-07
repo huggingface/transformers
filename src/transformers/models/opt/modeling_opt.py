@@ -53,6 +53,11 @@ _CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION = "ArthurZ/opt-350m-dummy-sc"
 _SEQ_CLASS_EXPECTED_LOSS = 1.71
 _SEQ_CLASS_EXPECTED_OUTPUT = "'LABEL_0'"
 
+# QuestionAnswering docstring
+_QA_EXPECTED_OUTPUT = "'a nice puppet'"
+_QA_EXPECTED_LOSS = 7.41
+_QA_TARGET_START_INDEX = 14
+_QA_TARGET_END_INDEX = 15
 
 OPT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "facebook/opt-125m",
@@ -1137,11 +1142,13 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
     @add_start_docstrings_to_model_forward(OPT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_SEQUENCE_CLASSIFICATION,
-        output_type=SequenceClassifierOutputWithPast,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=QuestionAnsweringModelOutput,
         config_class=_CONFIG_FOR_DOC,
-        expected_output=_SEQ_CLASS_EXPECTED_OUTPUT,
-        expected_loss=_SEQ_CLASS_EXPECTED_LOSS,
+        qa_target_start_index=_QA_TARGET_START_INDEX,
+        qa_target_end_index=_QA_TARGET_END_INDEX,
+        expected_output=_QA_EXPECTED_OUTPUT,
+        expected_loss=_QA_EXPECTED_LOSS,
     )
     def forward(
         self,
@@ -1156,7 +1163,7 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
+    ) -> Union[Tuple, QuestionAnsweringModelOutput]:
         r"""
         start_positions (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for position (index) of the start of the labelled span for computing the token classification loss.
