@@ -41,6 +41,7 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"allegro/herbert-base-cased": 514}
 PRETRAINED_INIT_CONFIGURATION = {}
 
+
 # Copied from transformers.models.xlm.tokenization_xlm.get_pairs
 def get_pairs(word):
     """
