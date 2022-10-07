@@ -16,6 +16,7 @@
 
 
 import argparse
+import functools
 import json
 import re
 from collections import OrderedDict
@@ -61,8 +62,42 @@ def fix_linear_fuse(key):
     return key
 
 
+def compose(*functions):
+    return functools.reduce(lambda f, g: lambda x: f(g(x)), functions, lambda x: x)
+
+
+def remap_embeddings(k):
+    if "embed" in k:
+        return f"fan.embeddings.{k}"
+    return k
+
+
+def remap_gamma(k):
+    return k.replace("gamma", "weight")
+
+
+def remap_head(k):
+    if k.split(".")[0] in ("norm", "head"):
+        return f"head.{k}"
+    return k
+
+
+def remap_encoder(k):
+    if any(x in k for x in ["fan", "head"]):
+        return k
+    return f"fan.encoder.{k}"
+
+
+def remap_blocks(k):
+    pattern = "([a-z\.]*blocks\.\d*\.)"
+    if re.match(pattern, k):
+        return re.sub(pattern, "\\1block.", k)
+    return k
+
+
+remap_fn = compose(remap_blocks, remap_encoder, remap_gamma, remap_head, remap_embeddings)
+
+
 def remap_state(state_dict):
-    new_state_dict = {f"fan.encoder.{k}": v for k, v in state_dict.items() if k.split(".")[0] not in ("norm", "head")}
-    new_state_dict.update({f"head.{k}": v for k, v in state_dict.items() if k.split(".")[0] in ("norm", "head")})
-    new_state_dict = {k.replace("gamma", "weight"): v for k, v in new_state_dict.items()}
-    return new_state_dict
+    # remap_fn = compose(remap_embeddings, remap_gamma, remap_head, remap_encoder)
+    return {remap_fn(k): v for k, v in state_dict.items()}

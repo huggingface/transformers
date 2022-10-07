@@ -1317,40 +1317,7 @@ class FANEncoder(FANPreTrainedModel):
         channel_dims = [config.embed_dim] * config.depth if config.channel_dims is None else config.channel_dims
         norm_layer = config.norm_layer or partial(nn.LayerNorm, eps=1e-6)
         act_layer = config.act_layer or nn.GELU
-
-        # if config.se_mlp:
-        #     build_block = FANBlock_SE
-        # else:
-        #     build_block = FANBlock
         self.blocks = nn.ModuleList([FANEncoderLayer(config, i) for i in range(config.depth)])
-        # for i in range(config.depth):
-        #     if i < config.depth - 1 and channel_dims[i] != channel_dims[i + 1]:
-        #         downsample = OverlapPatchEmbed(
-        #             img_size=img_size,
-        #             patch_size=3,
-        #             stride=2,
-        #             in_chans=channel_dims[i],
-        #             embed_dim=channel_dims[i + 1],
-        #         )
-        #     else:
-        #         downsample = None
-        #     self.blocks.append(
-        #         build_block(
-        #             dim=channel_dims[i],
-        #             num_heads=num_heads[i],
-        #             mlp_ratio=config.mlp_ratio,
-        #             qkv_bias=config.qkv_bias,
-        #             drop=config.drop_rate,
-        #             sr_ratio=config.sr_ratio[i],
-        #             attn_drop=config.attn_drop_rate,
-        #             drop_path=config.drop_path_rate,
-        #             act_layer=act_layer,
-        #             norm_layer=norm_layer,
-        #             eta=config.eta,
-        #             downsample=downsample,
-        #             c_head_num=config.c_head_num[i] if config.c_head_num is not None else None,
-        #         )
-        #     )
         self.num_features = self.embed_dim = channel_dims[-1]
         self.cls_token = nn.Parameter(torch.zeros(1, 1, channel_dims[-1]))
         self.cls_attn_blocks = nn.ModuleList(
@@ -1412,11 +1379,7 @@ class FANEncoder(FANPreTrainedModel):
             # blk.H, blk.W = Hp, Wp
 
             if self.use_checkpoint:
-                current_hidden_state, Hp, Wp = torch.utils.checkpoint.checkpoint(
-                    blk, current_hidden_state, Hp, Wp
-                )  # TODO: Check Forward pass for SE with checkpoints
-            # elif isinstance(blk, FANBlock_SE):
-            #     (current_hidden_state, Hp, Wp) = blk(current_hidden_state, Hp, Wp)
+                current_hidden_state, Hp, Wp = torch.utils.checkpoint.checkpoint(blk, current_hidden_state, Hp, Wp)
             else:
                 (current_hidden_state, Hp, Wp) = blk(current_hidden_state, Hp, Wp)
 
