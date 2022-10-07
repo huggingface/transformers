@@ -75,15 +75,14 @@ def whitespace_tokenize(text):
     return tokens
 
 
+# Copied from transformers.models.bert.tokenization_bert.BertTokenizer with Bert->SqueezeBert,BERT->SqueezeBERT
 class SqueezeBertTokenizer(PreTrainedTokenizer):
     r"""
-    Constructs a SqueezeBert tokenizer.
-
-    [`SqueezeBertTokenizer`] is identical to [`BertTokenizer`] and runs end-to-end tokenization: punctuation splitting
-    + wordpiece.
+    Construct a SqueezeBERT tokenizer. Based on WordPiece.
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
+
     Args:
         vocab_file (`str`):
             File containing the vocabulary.
@@ -111,19 +110,19 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
             modeling. This is the token which the model will try to predict.
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.
+
             This should likely be deactivated for Japanese (see this
             [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original BERT).
+            value for `lowercase` (as in the original SqueezeBERT).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.__init__
     def __init__(
         self,
         vocab_file,
@@ -156,7 +155,7 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
-                " model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                " model use `tokenizer = SqueezeBertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
@@ -171,20 +170,16 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
         self.wordpiece_tokenizer = WordpieceTokenizer(vocab=self.vocab, unk_token=self.unk_token)
 
     @property
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.do_lower_case
     def do_lower_case(self):
         return self.basic_tokenizer.do_lower_case
 
     @property
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.vocab_size
     def vocab_size(self):
         return len(self.vocab)
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.get_vocab
     def get_vocab(self):
         return dict(self.vocab, **self.added_tokens_encoder)
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer._tokenize
     def _tokenize(self, text):
         split_tokens = []
         if self.do_basic_tokenize:
@@ -199,17 +194,14 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
             split_tokens = self.wordpiece_tokenizer.tokenize(text)
         return split_tokens
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer._convert_token_to_id
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         return self.vocab.get(token, self.vocab.get(self.unk_token))
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer._convert_id_to_token
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.ids_to_tokens.get(index, self.unk_token)
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         out_string = " ".join(tokens).replace(" ##", "").strip()
@@ -220,7 +212,7 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A BERT sequence has the following format:
+        adding special tokens. A SqueezeBERT sequence has the following format:
 
         - single sequence: `[CLS] X [SEP]`
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
@@ -240,7 +232,6 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
         sep = [self.sep_token_id]
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
@@ -269,13 +260,12 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
         return [1] + ([0] * len(token_ids_0)) + [1]
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
-        pair mask has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A SqueezeBERT
+        sequence pair mask has the following format:
 
         ```
         0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
@@ -299,7 +289,6 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         index = 0
         if os.path.isdir(save_directory):

@@ -65,6 +65,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
+# Copied from transformers.models.bert.tokenization_bert.BertTokenizerFast with Bert->SqueezeBert,BERT->SqueezeBERT
 class SqueezeBertTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Constructs a "Fast" SqueezeBert tokenizer (backed by HuggingFace's *tokenizers* library).
