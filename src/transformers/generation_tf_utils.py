@@ -35,6 +35,12 @@ from .generation_tf_logits_process import (
     TFTopKLogitsWarper,
     TFTopPLogitsWarper,
 )
+from .models.auto import (
+    TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+    TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+    TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
+)
 from .tf_utils import shape_list, stable_softmax
 from .utils import ModelOutput, logging
 
@@ -357,12 +363,6 @@ class TFGenerationMixin:
 
     supports_xla_generation = True
 
-    def prepare_inputs_for_generation(self, inputs, **kwargs):
-        """
-        Implement in subclasses of [`TFPreTrainedModel`] for custom behavior to prepare inputs in the generate method.
-        """
-        return {"input_ids": inputs}
-
     def _use_cache(self, outputs, use_cache):
         """During generation, decide whether to pass the `past` variable to the next forward pass."""
         use_cache = getattr(self.config, "use_cache", False)
@@ -455,10 +455,10 @@ class TFGenerationMixin:
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to 1.0):
-                Exponential penalty to the length. 1.0 means no penalty.
-
-                Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
-                order to encourage the model to produce longer sequences.
+                Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
+                to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
+                the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
+                while `length_penalty` < 0.0 encourages shorter sequences.
             no_repeat_ngram_size (`int`, *optional*, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
             bad_words_ids(`List[int]`, *optional*):
@@ -475,7 +475,7 @@ class TFGenerationMixin:
                 [What are attention masks?](../glossary#attention-mask)
             decoder_start_token_id (`int`, *optional*):
                 If an encoder-decoder model starts decoding with a different token than *bos*, the id of that token.
-            use_cache: (`bool`, *optional*, defaults to `True`):
+            use_cache (`bool`, *optional*, defaults to `True`):
                 Whether or not the model should use the past last key/values attentions (if applicable to the model) to
                 speed up decoding.
             output_attentions (`bool`, *optional*, defaults to `False`):
@@ -579,6 +579,7 @@ class TFGenerationMixin:
         do_sample = do_sample if do_sample is not None else self.config.do_sample
 
         if do_sample is False or num_beams == 1:
+            seed = model_kwargs.pop("seed", None)
             return self._generate(
                 input_ids=input_ids,
                 max_length=max_length,
@@ -601,13 +602,14 @@ class TFGenerationMixin:
                 attention_mask=attention_mask,
                 decoder_start_token_id=decoder_start_token_id,
                 use_cache=use_cache,
-                seed=model_kwargs.pop("seed", None),
+                seed=seed,
                 output_scores=output_scores,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict_in_generate=return_dict_in_generate,
                 forced_bos_token_id=forced_bos_token_id,
                 forced_eos_token_id=forced_eos_token_id,
+                **model_kwargs,
             )
 
         # We cannot generate if the model does not have a LM head
@@ -1288,6 +1290,54 @@ class TFGenerationMixin:
         else:
             return logits
 
+    def _validate_model_class(self):
+        """
+        Confirms that the model class is compatible with generation. If not, raises an exception that points to the
+        right class to use.
+        """
+        if not hasattr(self, "prepare_inputs_for_generation"):
+            generate_compatible_mappings = [
+                TF_MODEL_FOR_CAUSAL_LM_MAPPING,
+                TF_MODEL_FOR_VISION_2_SEQ_MAPPING,
+                TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
+                TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING,
+            ]
+            generate_compatible_classes = set()
+            for model_mapping in generate_compatible_mappings:
+                supported_models = model_mapping.get(type(self.config), default=None)
+                if supported_models is not None:
+                    generate_compatible_classes.add(supported_models.__name__)
+            exception_message = (
+                f"The current model class ({self.__class__.__name__}) is not compatible with `.generate()`, as "
+                "it doesn't have a language model head."
+            )
+            if generate_compatible_classes:
+                exception_message += f" Please use one of the following classes instead: {generate_compatible_classes}"
+            raise TypeError(exception_message)
+
+    def _validate_model_kwargs(self, model_kwargs: Dict[str, Any]):
+        """Validates model kwargs for generation. Generate argument typos will also be caught here."""
+        # Excludes arguments that are handled before calling any model function
+        if self.config.is_encoder_decoder:
+            for key in ["decoder_input_ids"]:
+                model_kwargs.pop(key, None)
+
+        unused_model_args = []
+        model_args = set(inspect.signature(self.prepare_inputs_for_generation).parameters)
+        # `kwargs` if often used to handle optional forward pass inputs like `attention_mask`. If
+        # `prepare_inputs_for_generation` doesn't accept `kwargs`, then a stricter check can be made ;)
+        if "kwargs" in model_args:
+            model_args |= set(inspect.signature(self.call).parameters)
+        for key, value in model_kwargs.items():
+            if value is not None and key not in model_args:
+                unused_model_args.append(key)
+
+        if unused_model_args:
+            raise ValueError(
+                f"The following `model_kwargs` are not used by the model: {unused_model_args} (note: typos in the"
+                " generate arguments will also show up in this list)"
+            )
+
     def _generate(
         self,
         input_ids=None,
@@ -1369,10 +1419,10 @@ class TFGenerationMixin:
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to 1.0):
-                Exponential penalty to the length. 1.0 means no penalty.
-
-                Set to values < 1.0 in order to encourage the model to generate shorter sequences, to a value > 1.0 in
-                order to encourage the model to produce longer sequences.
+                Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
+                to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
+                the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
+                while `length_penalty` < 0.0 encourages shorter sequences.
             no_repeat_ngram_size (`int`, *optional*, defaults to 0):
                 If set to int > 0, all ngrams of that size can only occur once.
             bad_words_ids(`List[int]`, *optional*):
@@ -1483,7 +1533,35 @@ class TFGenerationMixin:
         # generate sequences without allowing bad_words to be generated
         outputs = model.generate(input_ids=input_ids, max_length=100, do_sample=True, bad_words_ids=bad_words_ids)
         ```"""
-        # 1. Set generation parameters if not already defined
+
+        # 0. Validate the `.generate()` call
+        self._validate_model_class()
+        self._validate_model_kwargs(model_kwargs.copy())
+
+        # 1. Cast input dtypes to tf.int32 unless they're floats (which happens for some image models)
+        if input_ids is not None:
+            if isinstance(input_ids, tf.Tensor) and input_ids.dtype.is_floating:
+                pass
+            elif isinstance(input_ids, np.ndarray) and np.issubdtype(input_ids.dtype, np.floating):
+                pass
+            else:
+                input_ids = tf.cast(input_ids, tf.int32)
+        if attention_mask is not None:
+            attention_mask = tf.cast(attention_mask, tf.int32)
+        if "decoder_input_ids" in model_kwargs:
+            if (
+                isinstance(model_kwargs["decoder_input_ids"], tf.Tensor)
+                and model_kwargs["decoder_input_ids"].dtype.is_floating
+            ):
+                pass
+            elif isinstance(model_kwargs["decoder_input_ids"], np.ndarray) and np.issubdtype(
+                model_kwargs["decoder_input_ids"].dtype, np.floating
+            ):
+                pass
+            else:
+                model_kwargs["decoder_input_ids"] = tf.cast(model_kwargs["decoder_input_ids"], tf.int32)
+
+        # 2. Set generation parameters if not already defined
         length_penalty = length_penalty if length_penalty is not None else self.config.length_penalty
         early_stopping = early_stopping if early_stopping is not None else self.config.early_stopping
 
@@ -1528,12 +1606,12 @@ class TFGenerationMixin:
                 "The selected model does not support Graph mode nor XLA generation (e.g. from tf.function())"
             )
 
-        # 2. Define model inputs
+        # 3. Define model inputs
         input_ids = self._prepare_model_inputs(input_ids, bos_token_id)
         # inputs_ids now has to be defined and cannot be None anymore
         batch_size = shape_list(input_ids)[0]
 
-        # 3. Prepare other model kwargs
+        # 4. Prepare other model kwargs
         if output_attentions is not None:
             model_kwargs["output_attentions"] = output_attentions
         if output_hidden_states is not None:
@@ -1551,7 +1629,15 @@ class TFGenerationMixin:
                 input_ids, pad_token_id, eos_token_id
             )
 
-        # 4. Prepare model inputs which will be used for auto-regressive generation
+        # decoder-only models should use left-padding for generation
+        if not self.config.is_encoder_decoder:
+            if pad_token_id is not None and tf.math.reduce_any(input_ids[:, -1] == pad_token_id):
+                logger.warning(
+                    "A decoder-only architecture is being used, but right-padding was detected! For correct "
+                    "generation results, please set `padding_side='left'` when initializing the tokenizer."
+                )
+
+        # 5. Prepare model inputs which will be used for auto-regressive generation
         if self.config.is_encoder_decoder:
             # if encoder-decoder, we create encoder_outputs and add to `model_kwargs`
             model_kwargs = self._prepare_encoder_decoder_kwargs_for_generation(input_ids, model_kwargs)
@@ -1563,7 +1649,7 @@ class TFGenerationMixin:
                 model_kwargs=model_kwargs,
             )
 
-        # 5. Prepare `max_length` depending on other stopping criteria.
+        # 6. Prepare `max_length` depending on other stopping criteria.
         input_ids_seq_length = input_ids.shape[-1]
         if max_length is None and max_new_tokens is None:
             warnings.warn(
@@ -1599,13 +1685,13 @@ class TFGenerationMixin:
                 "`max_new_tokens`."
             )
 
-        # 6. determine generation mode
+        # 7. determine generation mode
         # TODO(Matt, Joao, Patrick) - add more use cases here
         is_greedy_gen_mode = (num_beams == 1) and do_sample is False
         is_sample_gen_mode = (num_beams == 1) and do_sample is True
         is_beam_gen_mode = (num_beams > 1) and do_sample is False
 
-        # 7. prepare distribution pre_processing samplers
+        # 8. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
@@ -1617,7 +1703,7 @@ class TFGenerationMixin:
             forced_eos_token_id=forced_eos_token_id,
         )
 
-        # 8. go into different generation modes
+        # 9. go into different generation modes
         if is_greedy_gen_mode:
             if num_return_sequences > 1:
                 raise ValueError(
@@ -1635,10 +1721,10 @@ class TFGenerationMixin:
                 **model_kwargs,
             )
         elif is_sample_gen_mode:
-            # 9. prepare logits warper
+            # 10. prepare logits warper
             logits_warper = self._get_logits_warper(top_k=top_k, top_p=top_p, temperature=temperature)
 
-            # 10. expand input_ids with `num_return_sequences` additional sequences per batch
+            # 11. expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids,
                 expand_size=num_return_sequences,
@@ -1646,7 +1732,7 @@ class TFGenerationMixin:
                 **model_kwargs,
             )
 
-            # 11. run sample
+            # 12. run sample
             return self.sample(
                 input_ids,
                 logits_processor=logits_processor,
@@ -1667,7 +1753,7 @@ class TFGenerationMixin:
                     f"num_beams >= num_return_sequences, got {num_beams} and {num_return_sequences} (respectivelly)"
                 )
 
-            # 9. broadcast inputs to the desired number of beams
+            # 10. broadcast inputs to the desired number of beams
             input_ids = self._expand_to_num_beams(input_ids, num_beams=num_beams)
 
             if "encoder_outputs" in model_kwargs:
@@ -1680,7 +1766,7 @@ class TFGenerationMixin:
                     model_kwargs["attention_mask"], num_beams=num_beams
                 )
 
-            # 10. run beam search
+            # 11. run beam search
             return self.beam_search(
                 input_ids,
                 max_length=max_length,
@@ -1711,9 +1797,7 @@ class TFGenerationMixin:
     ) -> tf.Tensor:
         is_input_ids = len(inputs.shape) == 2 and inputs.dtype in (tf.int32, tf.int64)
         is_pad_token_in_inputs = (pad_token_id is not None) and tf.math.reduce_any(inputs == pad_token_id)
-        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (
-            (eos_token_id is not None) and (pad_token_id != eos_token_id)
-        )
+        is_pad_token_not_equal_to_eos_token_id = (eos_token_id is None) or (pad_token_id != eos_token_id)
 
         # Check if input is input_ids and padded -> only then is attention_mask defined
         if is_input_ids and is_pad_token_in_inputs and is_pad_token_not_equal_to_eos_token_id:
@@ -2113,7 +2197,7 @@ class TFGenerationMixin:
         >>> tokenizer = AutoTokenizer.from_pretrained("gpt2")
         >>> model = TFAutoModelForCausalLM.from_pretrained("gpt2")
 
-        >>> # set pad_token_id to eos_token_id because GPT2 does not have a EOS token
+        >>> # set pad_token_id to eos_token_id because GPT2 does not have a PAD token
         >>> model.config.pad_token_id = model.config.eos_token_id
 
         >>> input_prompt = "Today is a beautiful day, and"
@@ -2605,7 +2689,10 @@ class TFGenerationMixin:
             eos_token_id (`int`, *optional*):
                 The id of the *end-of-sequence* token.
             length_penalty (`float`, *optional*, defaults to 1.0):
-                Exponential penalty to the length. 1.0 means no penalty.
+                Exponential penalty to the length that is used with beam-based generation. It is applied as an exponent
+                to the sequence length, which in turn is used to divide the score of the sequence. Since the score is
+                the log likelihood of the sequence (i.e. negative), `length_penalty` > 0.0 promotes longer sequences,
+                while `length_penalty` < 0.0 encourages shorter sequences.
             early_stopping (`bool`, *optional*, defaults to `False`):
                 Whether to stop the beam search when at least `num_beams` sentences are finished per batch or not.
             logits_processor (`[TFLogitsProcessorList]`, *optional*):

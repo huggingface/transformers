@@ -16,6 +16,7 @@
 
 import io
 import pathlib
+import warnings
 from collections import defaultdict
 from typing import Dict, List, Optional, Union
 
@@ -666,14 +667,20 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             outputs ([`DetrObjectDetectionOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
-                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
-                image size (before any data augmentation). For visualization, this should be the image size after data
-                augment, but before padding.
+                Tensor containing the size (height, width) of each image of the batch. For evaluation, this must be the
+                original image size (before any data augmentation). For visualization, this should be the image size
+                after data augment, but before padding.
 
         Returns:
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
+        warnings.warn(
+            "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_object_detection`",
+            FutureWarning,
+        )
+
         out_logits, out_bbox = outputs.logits, outputs.pred_boxes
 
         if len(out_logits) != len(target_sizes):
@@ -692,7 +699,6 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
         boxes = boxes * scale_fct[:, None, :]
 
         results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
-
         return results
 
     # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.post_process_segmentation
@@ -714,6 +720,11 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, and masks for an image
             in the batch as predicted by the model.
         """
+        warnings.warn(
+            "`post_process_segmentation` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_semantic_segmentation`.",
+            FutureWarning,
+        )
         out_logits, raw_masks = outputs.logits, outputs.pred_masks
         preds = []
 
@@ -762,6 +773,11 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels, boxes and masks for an
             image in the batch as predicted by the model.
         """
+        warnings.warn(
+            "`post_process_instance` is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_instance_segmentation`.",
+            FutureWarning,
+        )
 
         if len(orig_target_sizes) != len(max_target_sizes):
             raise ValueError("Make sure to pass in as many orig_target_sizes as max_target_sizes")
@@ -805,6 +821,11 @@ class YolosFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin)
             `List[Dict]`: A list of dictionaries, each dictionary containing a PNG string and segments_info values for
             an image in the batch as predicted by the model.
         """
+        warnings.warn(
+            "`post_process_panoptic is deprecated and will be removed in v5 of Transformers, please use"
+            " `post_process_panoptic_segmentation`.",
+            FutureWarning,
+        )
         if target_sizes is None:
             target_sizes = processed_sizes
         if len(processed_sizes) != len(target_sizes):

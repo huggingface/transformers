@@ -1702,6 +1702,12 @@ class BartDecoderWrapper(BartPretrainedModel):
         return self.decoder(*args, **kwargs)
 
 
+@add_start_docstrings(
+    """
+    BART decoder with with a language modeling head on top (linear layer with weights tied to the input embeddings).
+    """,
+    BART_START_DOCSTRING,
+)
 class BartForCausalLM(BartPretrainedModel):
     def __init__(self, config):
         config = copy.deepcopy(config)

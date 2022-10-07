@@ -37,8 +37,6 @@ from transformers import (
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
-    IBertConfig,
-    RobertaConfig,
     TextClassificationPipeline,
     TFAutoModelForSequenceClassification,
     pipeline,
@@ -69,6 +67,16 @@ from test_module.custom_pipeline import PairClassificationPipeline  # noqa E402
 
 
 logger = logging.getLogger(__name__)
+
+
+ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS = [
+    "CamembertConfig",
+    "IBertConfig",
+    "LongformerConfig",
+    "MarkupLMConfig",
+    "RobertaConfig",
+    "XLMRobertaConfig",
+]
 
 
 def get_checkpoint_from_architecture(architecture):
@@ -194,7 +202,7 @@ class PipelineTestCaseMeta(type):
                     try:
                         tokenizer = get_tiny_tokenizer_from_checkpoint(checkpoint)
                         # XLNet actually defines it as -1.
-                        if isinstance(model.config, (RobertaConfig, IBertConfig)):
+                        if model.config.__class__.__name__ in ROBERTA_EMBEDDING_ADJUSMENT_CONFIGS:
                             tokenizer.model_max_length = model.config.max_position_embeddings - 2
                         elif (
                             hasattr(model.config, "max_position_embeddings")
@@ -884,8 +892,7 @@ class CustomPipelineTest(unittest.TestCase):
         with RequestCounter() as counter:
             _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
             self.assertEqual(counter.get_request_count, 0)
-            # We still have one extra call because the model does not have a added_tokens.json file
-            self.assertEqual(counter.head_request_count, 2)
+            self.assertEqual(counter.head_request_count, 1)
             self.assertEqual(counter.other_request_count, 0)
 
 

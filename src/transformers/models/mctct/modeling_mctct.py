@@ -33,7 +33,6 @@ from ...modeling_utils import (
     find_pruneable_heads_and_indices,
     prune_linear_layer,
 )
-from ...pytorch_utils import is_torch_greater_than_1_6
 from ...utils import logging
 from .configuration_mctct import MCTCTConfig
 
@@ -153,12 +152,11 @@ class MCTCTEmbeddings(nn.Module):
 
         # position_ids (1, len position emb) is contiguous in memory and exported when serialized
         self.register_buffer("position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)))
-        if is_torch_greater_than_1_6:
-            self.register_buffer(
-                "token_type_ids",
-                torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
-                persistent=False,
-            )
+        self.register_buffer(
+            "token_type_ids",
+            torch.zeros(self.position_ids.size(), dtype=torch.long, device=self.position_ids.device),
+            persistent=False,
+        )
 
     def forward(
         self, input_features=None, token_type_ids=None, position_ids=None, inputs_embeds=None, past_key_values_length=0

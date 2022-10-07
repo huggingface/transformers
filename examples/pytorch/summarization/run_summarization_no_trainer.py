@@ -56,7 +56,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.22.0.dev0")
+check_min_version("4.23.0.dev0")
 
 logger = get_logger(__name__)
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/summarization/requirements.txt")
@@ -138,7 +138,7 @@ def parse_args():
         help="The number of processes to use for the preprocessing.",
     )
     parser.add_argument(
-        "--overwrite_cache", type=bool, default=None, help="Overwrite the cached training and evaluation sets"
+        "--overwrite_cache", action="store_true", help="Overwrite the cached training and evaluation sets"
     )
     parser.add_argument(
         "--max_target_length",
@@ -573,22 +573,17 @@ def main():
     args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
 
     # Figure out how many steps we should save the Accelerator states
-    if hasattr(args.checkpointing_steps, "isdigit"):
-        checkpointing_steps = args.checkpointing_steps
-        if args.checkpointing_steps.isdigit():
-            checkpointing_steps = int(args.checkpointing_steps)
-    else:
-        checkpointing_steps = None
+    checkpointing_steps = args.checkpointing_steps
+    if checkpointing_steps is not None and checkpointing_steps.isdigit():
+        checkpointing_steps = int(checkpointing_steps)
 
     # We need to initialize the trackers we use, and also store our configuration.
-    # We initialize the trackers only on main process because `accelerator.log`
-    # only logs on main process and we don't want empty logs/runs on other processes.
+    # The trackers initializes automatically on the main process.
     if args.with_tracking:
-        if accelerator.is_main_process:
-            experiment_config = vars(args)
-            # TensorBoard cannot log Enums, need the raw value
-            experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
-            accelerator.init_trackers("summarization_no_trainer", experiment_config)
+        experiment_config = vars(args)
+        # TensorBoard cannot log Enums, need the raw value
+        experiment_config["lr_scheduler_type"] = experiment_config["lr_scheduler_type"].value
+        accelerator.init_trackers("summarization_no_trainer", experiment_config)
 
     # Metric
     metric = evaluate.load("rouge")
@@ -674,7 +669,6 @@ def main():
             "max_length": args.val_max_target_length if args is not None else config.max_length,
             "num_beams": args.num_beams,
         }
-        samples_seen = 0
         for step, batch in enumerate(eval_dataloader):
             with torch.no_grad():
                 generated_tokens = accelerator.unwrap_model(model).generate(
@@ -691,7 +685,7 @@ def main():
                     # If we did not pad to max length, we need to pad the labels too
                     labels = accelerator.pad_across_processes(batch["labels"], dim=1, pad_index=tokenizer.pad_token_id)
 
-                generated_tokens, labels = accelerator.gather((generated_tokens, labels))
+                generated_tokens, labels = accelerator.gather_for_metrics((generated_tokens, labels))
                 generated_tokens = generated_tokens.cpu().numpy()
                 labels = labels.cpu().numpy()
 
@@ -704,14 +698,8 @@ def main():
                 decoded_labels = tokenizer.batch_decode(labels, skip_special_tokens=True)
 
                 decoded_preds, decoded_labels = postprocess_text(decoded_preds, decoded_labels)
-                # If we are in a multiprocess environment, the last batch has duplicates
-                if accelerator.num_processes > 1:
-                    if step == len(eval_dataloader) - 1:
-                        decoded_preds = decoded_preds[: len(eval_dataloader.dataset) - samples_seen]
-                        decoded_labels = decoded_labels[: len(eval_dataloader.dataset) - samples_seen]
-                    else:
-                        samples_seen += len(decoded_labels)
 
+                decoded_preds, decoded_labels = accelerator.gather_for_metrics(decoded_preds, decoded_labels)
                 metric.add_batch(
                     predictions=decoded_preds,
                     references=decoded_labels,
