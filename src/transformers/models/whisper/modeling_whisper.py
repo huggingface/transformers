@@ -1101,16 +1101,16 @@ class WhisperForConditionalGeneration(WhisperPreTrainedModel):
 
     def get_decoder(self):
         return self.model.get_decoder()
+        
+    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
+        new_embeddings = super().resize_token_embeddings(new_num_tokens)
+        return new_embeddings
 
     def get_output_embeddings(self):
         return self.proj_out
 
     def set_output_embeddings(self, new_embeddings):
         self.proj_out = new_embeddings
-
-    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
-        new_embeddings = super().resize_token_embeddings(new_num_tokens)
-        return new_embeddings
 
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
