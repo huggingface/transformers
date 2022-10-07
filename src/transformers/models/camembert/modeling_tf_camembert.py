@@ -675,6 +675,7 @@ class TFCamembertEncoder(tf.keras.layers.Layer):
 
 
 @keras_serializable
+# Copied from transformers.models.roberta.modeling_tf_roberta.TFRobertaMainLayer with Roberta->Camembert
 class TFCamembertMainLayer(tf.keras.layers.Layer):
     config_class = CamembertConfig
 
