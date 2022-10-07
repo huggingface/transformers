@@ -347,7 +347,6 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         _do_init: bool = True,
         **kwargs
     ):
-
         if not _do_init:
             raise ValueError(
                 "`FlaxSpeechEncoderDecoderModel` cannot be created without initializing, `_do_init` must be `True`."
@@ -616,7 +615,6 @@ class FlaxSpeechEncoderDecoderModel(FlaxPreTrainedModel):
         def _decoder_forward(
             module, decoder_input_ids, decoder_attention_mask, decoder_position_ids, encoder_hidden_states, **kwargs
         ):
-
             projection_module = module._get_projection_module()
             decoder_module = module._get_decoder_module()
 

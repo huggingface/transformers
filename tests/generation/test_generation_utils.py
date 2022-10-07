@@ -1528,7 +1528,6 @@ class GenerationTesterMixin:
 
 @require_torch
 class UtilsFunctionsTest(unittest.TestCase):
-
     # tests whether the top_k_top_p function behaves as expected
     def test_top_k_top_p_filtering(self):
         logits = torch.tensor(
@@ -1684,12 +1683,16 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                "The couple announced the birth of their son, Silas Randall Timberlake, in a statement. Silas was the"
-                " middle name of Timberlake's maternal grandfather Bill Bomar. Randall is the musician's own middle"
-                " name, as well as his father's first. It is the first baby for both of them.",
-                "Justin Timberlake and Jessica Biel have a son. The baby is named Silas Randall Timberlake. It is the"
-                " first child for both. The couple announced the pregnancy in January. The name Silas is the middle"
-                " name of Timberlake's maternal grandfather. It's also his own middle name.",
+                (
+                    "The couple announced the birth of their son, Silas Randall Timberlake, in a statement. Silas was"
+                    " the middle name of Timberlake's maternal grandfather Bill Bomar. Randall is the musician's own"
+                    " middle name, as well as his father's first. It is the first baby for both of them."
+                ),
+                (
+                    "Justin Timberlake and Jessica Biel have a son. The baby is named Silas Randall Timberlake. It is"
+                    " the first child for both. The couple announced the pregnancy in January. The name Silas is the"
+                    " middle name of Timberlake's maternal grandfather. It's also his own middle name."
+                ),
             ],
         )
 
@@ -1981,7 +1984,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
 
     def test_stop_sequence_stopping_criteria(self):
-
         prompt = """Hello I believe in"""
         generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-bart")
         output = generator(prompt)
@@ -2572,8 +2574,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                "The soldiers, who had been stationed at the base for more than a year before being evacuated"
-                " screaming scared",
+                (
+                    "The soldiers, who had been stationed at the base for more than a year before being evacuated"
+                    " screaming scared"
+                ),
                 "The child was taken to a local hospital where he died.\n 'I don't think screaming scared",
             ],
         )
@@ -2609,8 +2613,10 @@ class GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(
             generated_text,
             [
-                "The soldiers, who had been stationed at the base for more than a year before being evacuated"
-                " screaming scared",
+                (
+                    "The soldiers, who had been stationed at the base for more than a year before being evacuated"
+                    " screaming scared"
+                ),
                 "The child was taken to a local hospital where he died.\n 'I don't think screaming scared",
             ],
         )

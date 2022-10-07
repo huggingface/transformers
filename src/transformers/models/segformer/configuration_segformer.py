@@ -156,7 +156,6 @@ class SegformerConfig(PretrainedConfig):
 
 
 class SegformerOnnxConfig(OnnxConfig):
-
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

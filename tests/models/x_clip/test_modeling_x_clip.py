@@ -393,7 +393,6 @@ class XCLIPTextModelTester:
 
 @require_torch
 class XCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (XCLIPTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False

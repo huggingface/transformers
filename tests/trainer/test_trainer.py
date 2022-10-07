@@ -558,7 +558,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_gpu
     @require_torch_bf16_gpu
     def test_mixed_bf16(self):
-
         # very basic test
         trainer = get_regression_trainer(learning_rate=0.1, bf16=True)
         trainer.train()
@@ -573,7 +572,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_gpu
     @require_torch_tf32
     def test_tf32(self):
-
         # very basic test
         trainer = get_regression_trainer(learning_rate=0.1, tf32=True)
         trainer.train()
@@ -1281,7 +1279,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @slow
     @require_torch_non_multi_gpu
     def test_auto_batch_size_finder(self):
-
         if torch.cuda.is_available():
             torch.backends.cudnn.deterministic = True
 
@@ -1728,7 +1725,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             check_func("test_mem_gpu_alloc_delta", metrics)
 
     def test_mem_metrics(self):
-
         # with mem metrics enabled
         trainer = get_regression_trainer(skip_memory_metrics=False)
         self.check_mem_metrics(trainer, self.assertIn)
@@ -1739,7 +1735,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_torch_gpu
     def test_fp16_full_eval(self):
-
         # this is a sensitive test so let's keep debugging printouts in place for quick diagnosis.
         # it's using pretty large safety margins, but small enough to detect broken functionality.
         debug = 0
@@ -2426,7 +2421,6 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
             DEFAULTS = {"a": 0, "b": 0}
 
         def hp_space(trial):
-
             return {
                 "method": "random",
                 "metric": {},

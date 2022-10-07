@@ -27,7 +27,6 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 @require_tokenizers
 class CLIPTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-
     tokenizer_class = CLIPTokenizer
     rust_tokenizer_class = CLIPTokenizerFast
     test_rust_tokenizer = True

@@ -73,7 +73,6 @@ class ViTFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class ViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
-
     feature_extraction_class = ViTFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

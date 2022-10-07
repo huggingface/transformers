@@ -320,7 +320,6 @@ class HerbertTokenizer(PreTrainedTokenizer):
         id2lang=None,
         **kwargs
     ):
-
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -369,7 +368,6 @@ class HerbertTokenizer(PreTrainedTokenizer):
         merges = [tuple(merge.split()[:2]) for merge in merges]
         self.bpe_ranks = dict(zip(merges, range(len(merges))))
         self.cache = {}
-
 
         self.bert_pre_tokenizer = BasicTokenizer(
             do_lower_case=False,
@@ -430,7 +428,6 @@ class HerbertTokenizer(PreTrainedTokenizer):
                 raise
         return list(self.ja_word_tokenizer.getWS(text))
 
-
     @property
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.vocab_size
     def vocab_size(self):
@@ -485,9 +482,7 @@ class HerbertTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
-
     def _tokenize(self, text):
-
         pre_tokens = self.bert_pre_tokenizer.tokenize(text)
 
         split_tokens = []
@@ -541,7 +536,6 @@ class HerbertTokenizer(PreTrainedTokenizer):
             return bos + token_ids_0 + sep
         return bos + token_ids_0 + sep + token_ids_1 + sep
 
-
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
@@ -570,8 +564,6 @@ class HerbertTokenizer(PreTrainedTokenizer):
         if token_ids_1 is not None:
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
         return [1] + ([0] * len(token_ids_0)) + [1]
-
-
 
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
@@ -603,8 +595,6 @@ class HerbertTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-
-
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
@@ -633,7 +623,6 @@ class HerbertTokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
-
 
     # Copied from transformers.models.xlm.tokenization_xlm.XLMTokenizer.__getstate__
     def __getstate__(self):
