@@ -71,10 +71,10 @@ def whitespace_tokenize(text):
     return tokens
 
 
-# Copied from transformers.models.bert.tokenization_bert.BertTokenizer with Bert->LayoutLM
+# Copied from transformers.models.bert.tokenization_bert.BertTokenizer with Bert->LayoutLM,BERT->LayoutLM
 class LayoutLMTokenizer(PreTrainedTokenizer):
     r"""
-     Construct a LayoutLM tokenizer. Based on WordPiece.
+    Construct a LayoutLM tokenizer. Based on WordPiece.
 
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
@@ -111,7 +111,7 @@ class LayoutLMTokenizer(PreTrainedTokenizer):
             [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original BERT).
+            value for `lowercase` (as in the original LayoutLM).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -119,7 +119,6 @@ class LayoutLMTokenizer(PreTrainedTokenizer):
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.__init__
     def __init__(
         self,
         vocab_file,
@@ -152,7 +151,7 @@ class LayoutLMTokenizer(PreTrainedTokenizer):
         if not os.path.isfile(vocab_file):
             raise ValueError(
                 f"Can't find a vocabulary file at path '{vocab_file}'. To load the vocabulary from a Google pretrained"
-                " model use `tokenizer = BertTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
+                " model use `tokenizer = LayoutLMTokenizer.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
         self.vocab = load_vocab(vocab_file)
         self.ids_to_tokens = collections.OrderedDict([(ids, tok) for tok, ids in self.vocab.items()])
@@ -209,7 +208,7 @@ class LayoutLMTokenizer(PreTrainedTokenizer):
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A BERT sequence has the following format:
+        adding special tokens. A LayoutLM sequence has the following format:
 
         - single sequence: `[CLS] X [SEP]`
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
@@ -261,8 +260,8 @@ class LayoutLMTokenizer(PreTrainedTokenizer):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
-        pair mask has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A LayoutLM
+        sequence pair mask has the following format:
 
         ```
         0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1

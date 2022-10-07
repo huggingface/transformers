@@ -58,7 +58,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
-# Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with Bert->LayoutLM
+# Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with Bert->LayoutLM,BERT->LayoutLM
 class LayoutLMTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" LayoutLM tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
@@ -94,7 +94,7 @@ class LayoutLMTokenizerFast(PreTrainedTokenizerFast):
             issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original BERT).
+            value for `lowercase` (as in the original LayoutLM).
         wordpieces_prefix (`str`, *optional*, defaults to `"##"`):
             The prefix for subwords.
     """
@@ -150,7 +150,7 @@ class LayoutLMTokenizerFast(PreTrainedTokenizerFast):
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A BERT sequence has the following format:
+        adding special tokens. A LayoutLM sequence has the following format:
 
         - single sequence: `[CLS] X [SEP]`
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
@@ -175,8 +175,8 @@ class LayoutLMTokenizerFast(PreTrainedTokenizerFast):
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
-        pair mask has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A LayoutLM
+        sequence pair mask has the following format:
 
         ```
         0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
