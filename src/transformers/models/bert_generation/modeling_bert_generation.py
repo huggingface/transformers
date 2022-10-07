@@ -354,8 +354,8 @@ class BertGenerationLayer(nn.Module):
         return layer_output
 
 
-# Copied from transformers.models.bert.modeling_bert.BertEncoder with Bert-> BertGeneration
-class BertGenerationEncoder(nn.Module):
+# Copied from transformers.models.bert.modeling_bert.BertEncoder
+class BertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -684,7 +684,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         self.config = config
 
         self.embeddings = BertGenerationEmbeddings(config)
-        self.encoder = BertGenerationEncoder(config)
+        self.encoder = BertEncoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
