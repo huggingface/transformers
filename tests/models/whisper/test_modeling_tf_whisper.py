@@ -342,7 +342,7 @@ class TFWhisperModelTest(TFModelTesterMixin, unittest.TestCase):
                 "decoder_attention_mask",
             ]
             expected_arg_names.extend(
-                ["head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
+                ["decoder_position_ids", "head_mask", "decoder_head_mask", "cross_attn_head_mask", "encoder_outputs"]
                 if "head_mask" and "decoder_head_mask" and "cross_attn_head_mask" in arg_names
                 else ["encoder_outputs"]
             )
