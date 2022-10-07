@@ -442,6 +442,7 @@ _import_structure = {
         "VisualQuestionAnsweringPipeline",
         "ZeroShotClassificationPipeline",
         "ZeroShotImageClassificationPipeline",
+        "ZeroShotObjectDetectionPipeline",
         "pipeline",
     ],
     "processing_utils": ["ProcessorMixin"],
@@ -878,6 +879,7 @@ else:
             "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
             "MODEL_MAPPING",
             "MODEL_WITH_LM_HEAD_MAPPING",
+            "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
             "AutoModel",
             "AutoModelForAudioClassification",
             "AutoModelForAudioFrameClassification",
@@ -905,6 +907,7 @@ else:
             "AutoModelForVision2Seq",
             "AutoModelForVisualQuestionAnswering",
             "AutoModelWithLMHead",
+            "AutoModelForZeroShotObjectDetection",
         ]
     )
     _import_structure["models.bart"].extend(
@@ -2311,6 +2314,7 @@ else:
             "TFCamembertForSequenceClassification",
             "TFCamembertForTokenClassification",
             "TFCamembertModel",
+            "TFCamembertPreTrainedModel",
         ]
     )
     _import_structure["models.clip"].extend(
@@ -3407,6 +3411,7 @@ if TYPE_CHECKING:
         VisualQuestionAnsweringPipeline,
         ZeroShotClassificationPipeline,
         ZeroShotImageClassificationPipeline,
+        ZeroShotObjectDetectionPipeline,
         pipeline,
     )
     from .processing_utils import ProcessorMixin
@@ -3772,6 +3777,7 @@ if TYPE_CHECKING:
             MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
             MODEL_FOR_VISION_2_SEQ_MAPPING,
             MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
@@ -3800,6 +3806,7 @@ if TYPE_CHECKING:
             AutoModelForVideoClassification,
             AutoModelForVision2Seq,
             AutoModelForVisualQuestionAnswering,
+            AutoModelForZeroShotObjectDetection,
             AutoModelWithLMHead,
         )
         from .models.bart import (
@@ -4975,6 +4982,7 @@ if TYPE_CHECKING:
             TFCamembertForSequenceClassification,
             TFCamembertForTokenClassification,
             TFCamembertModel,
+            TFCamembertPreTrainedModel,
         )
         from .models.clip import (
             TF_CLIP_PRETRAINED_MODEL_ARCHIVE_LIST,
