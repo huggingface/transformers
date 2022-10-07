@@ -75,7 +75,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
 
     def get_test_pipeline(self, model, tokenizer, feature_extractor):
         # Fix me Alara
-        if model.__class__.__name__ == "DetrForSegmentation":
+        if model.__class__.__name__ in ["DetrForSegmentation", "MaskFormerForInstanceSegmentation"]:
             return None, None
         image_segmenter = ImageSegmentationPipeline(model=model, feature_extractor=feature_extractor)
         return image_segmenter, [

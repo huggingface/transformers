@@ -18,6 +18,7 @@ Import utilities: Utilities related to imports and our lazy inits.
 import importlib.util
 import json
 import os
+import shutil
 import sys
 import warnings
 from collections import OrderedDict
@@ -455,6 +456,10 @@ def is_detectron2_available():
     return _detectron2_available
 
 
+def is_more_itertools_available():
+    return importlib.util.find_spec("more_itertools") is not None
+
+
 def is_rjieba_available():
     return importlib.util.find_spec("rjieba") is not None
 
@@ -669,6 +674,14 @@ def torch_only_method(fn):
 
 def is_ccl_available():
     return _is_ccl_available
+
+
+def is_sudachi_available():
+    return importlib.util.find_spec("sudachipy") is not None
+
+
+def is_jumanpp_available():
+    return (importlib.util.find_spec("pyknp") is not None) and (shutil.which("jumanpp") is not None)
 
 
 # docstyle-ignore
