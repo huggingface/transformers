@@ -2051,7 +2051,6 @@ else:
     _import_structure["models.timesformer"].extend(
         [
             "TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
-            "TimeSformerForPreTraining",
             "TimeSformerModel",
             "TimeSformerPreTrainedModel",
             "TimeSformerForVideoClassification",
