@@ -52,6 +52,7 @@ from .utils import (
     is_flax_available,
     is_ftfy_available,
     is_ipex_available,
+    is_jumanpp_available,
     is_librosa_available,
     is_onnx_available,
     is_pandas_available,
@@ -66,6 +67,7 @@ from .utils import (
     is_sentencepiece_available,
     is_soundfile_availble,
     is_spacy_available,
+    is_sudachi_available,
     is_tensorflow_probability_available,
     is_tensorflow_text_available,
     is_tf2onnx_available,
@@ -669,6 +671,20 @@ def require_usr_bin_time(test_case):
     Decorator marking a test that requires `/usr/bin/time`
     """
     return unittest.skipUnless(cmd_exists("/usr/bin/time"), "test requires /usr/bin/time")(test_case)
+
+
+def require_sudachi(test_case):
+    """
+    Decorator marking a test that requires sudachi
+    """
+    return unittest.skipUnless(is_sudachi_available(), "test requires sudachi")(test_case)
+
+
+def require_jumanpp(test_case):
+    """
+    Decorator marking a test that requires jumanpp
+    """
+    return unittest.skipUnless(is_jumanpp_available(), "test requires jumanpp")(test_case)
 
 
 def get_gpu_count():

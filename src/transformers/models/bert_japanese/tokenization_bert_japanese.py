@@ -77,7 +77,7 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 class BertJapaneseTokenizer(BertTokenizer):
     r"""
-    Construct a BERT tokenizer for Japanese text, based on a MecabTokenizer.
+    Construct a BERT tokenizer for Japanese text.
 
     Args:
         vocab_file (`str`):
@@ -89,11 +89,15 @@ class BertJapaneseTokenizer(BertTokenizer):
         do_subword_tokenize (`bool`, *optional*, defaults to `True`):
             Whether to do subword tokenization.
         word_tokenizer_type (`str`, *optional*, defaults to `"basic"`):
-            Type of word tokenizer.
+            Type of word tokenizer. Choose from ["basic", "mecab", "sudachi", "jumanpp"].
         subword_tokenizer_type (`str`, *optional*, defaults to `"wordpiece"`):
-            Type of subword tokenizer.
-        mecab_kwargs (`str`, *optional*):
+            Type of subword tokenizer. Choose from ["wordpiece", "character"].
+        mecab_kwargs (`dict`, *optional*):
             Dictionary passed to the `MecabTokenizer` constructor.
+        sudachi_kwargs (`dict`, *optional*):
+            Dictionary passed to the `SudachiTokenizer` constructor.
+        jumanpp_kwargs (`dict`, *optional*):
+            Dictionary passed to the `JumanppTokenizer` constructor.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -116,6 +120,8 @@ class BertJapaneseTokenizer(BertTokenizer):
         cls_token="[CLS]",
         mask_token="[MASK]",
         mecab_kwargs=None,
+        sudachi_kwargs=None,
+        jumanpp_kwargs=None,
         **kwargs
     ):
         super(BertTokenizer, self).__init__(
@@ -131,6 +137,8 @@ class BertJapaneseTokenizer(BertTokenizer):
             subword_tokenizer_type=subword_tokenizer_type,
             never_split=never_split,
             mecab_kwargs=mecab_kwargs,
+            sudachi_kwargs=sudachi_kwargs,
+            jumanpp_kwargs=jumanpp_kwargs,
             **kwargs,
         )
         # ^^ We call the grandparent's init, not the parent's.
@@ -148,6 +156,8 @@ class BertJapaneseTokenizer(BertTokenizer):
         self.lower_case = do_lower_case
         self.never_split = never_split
         self.mecab_kwargs = copy.deepcopy(mecab_kwargs)
+        self.sudachi_kwargs = copy.deepcopy(sudachi_kwargs)
+        self.jumanpp_kwargs = copy.deepcopy(jumanpp_kwargs)
         if do_word_tokenize:
             if word_tokenizer_type == "basic":
                 self.word_tokenizer = BasicTokenizer(
@@ -156,6 +166,14 @@ class BertJapaneseTokenizer(BertTokenizer):
             elif word_tokenizer_type == "mecab":
                 self.word_tokenizer = MecabTokenizer(
                     do_lower_case=do_lower_case, never_split=never_split, **(mecab_kwargs or {})
+                )
+            elif word_tokenizer_type == "sudachi":
+                self.word_tokenizer = SudachiTokenizer(
+                    do_lower_case=do_lower_case, never_split=never_split, **(sudachi_kwargs or {})
+                )
+            elif word_tokenizer_type == "jumanpp":
+                self.word_tokenizer = JumanppTokenizer(
+                    do_lower_case=do_lower_case, never_split=never_split, **(jumanpp_kwargs or {})
                 )
             else:
                 raise ValueError(f"Invalid word_tokenizer_type '{word_tokenizer_type}' is specified.")
@@ -176,7 +194,7 @@ class BertJapaneseTokenizer(BertTokenizer):
 
     def __getstate__(self):
         state = dict(self.__dict__)
-        if self.word_tokenizer_type == "mecab":
+        if self.word_tokenizer_type in ["mecab", "sudachi", "jumanpp"]:
             del state["word_tokenizer"]
         return state
 
@@ -185,6 +203,14 @@ class BertJapaneseTokenizer(BertTokenizer):
         if self.word_tokenizer_type == "mecab":
             self.word_tokenizer = MecabTokenizer(
                 do_lower_case=self.do_lower_case, never_split=self.never_split, **(self.mecab_kwargs or {})
+            )
+        elif self.word_tokenizer_type == "sudachi":
+            self.word_tokenizer = SudachiTokenizer(
+                do_lower_case=self.do_lower_case, never_split=self.never_split, **(self.sudachi_kwargs or {})
+            )
+        elif self.word_tokenizer_type == "jumanpp":
+            self.word_tokenizer = JumanppTokenizer(
+                do_lower_case=self.do_lower_case, never_split=self.never_split, **(self.jumanpp_kwargs or {})
             )
 
     def _tokenize(self, text):
@@ -303,6 +329,157 @@ class MecabTokenizer:
 
             if self.do_lower_case and token not in never_split:
                 token = token.lower()
+
+            tokens.append(token)
+
+        return tokens
+
+
+class SudachiTokenizer:
+    """Runs basic tokenization with Sudachi morphological parser."""
+
+    def __init__(
+        self,
+        do_lower_case=False,
+        never_split=None,
+        normalize_text=True,
+        trim_whitespace=False,
+        sudachi_split_mode="A",
+        sudachi_config_path=None,
+        sudachi_resource_dir=None,
+        sudachi_dict_type="core",
+    ):
+        """
+        Constructs a SudachiTokenizer.
+
+        Args:
+            **do_lower_case**: (*optional*) boolean (default True)
+                Whether to lowercase the input.
+            **never_split**: (*optional*) list of str
+                Kept for backward compatibility purposes. Now implemented directly at the base class level (see
+                [`PreTrainedTokenizer.tokenize`]) List of tokens not to split.
+            **normalize_text**: (*optional*) boolean (default True)
+                Whether to apply unicode normalization to text before tokenization.
+            **trim_whitespace**: (*optional*) boolean (default False)
+                Whether to trim all whitespace, tab, newline from tokens.
+            **sudachi_split_mode**: (*optional*) string
+                Split mode of sudachi, choose from "A", "B", "C".
+            **sudachi_config_path**: (*optional*) string
+            **sudachi_resource_dir**: (*optional*) string
+            **sudachi_dict_type**: (*optional*) string
+                dict type of sudachi, choose from "small", "core", "full".
+        """
+
+        self.do_lower_case = do_lower_case
+        self.never_split = never_split if never_split is not None else []
+        self.normalize_text = normalize_text
+        self.trim_whitespace = trim_whitespace
+
+        try:
+            from sudachipy import dictionary, tokenizer
+        except ImportError:
+            raise ImportError(
+                "You need to install sudachipy to use SudachiTokenizer. "
+                "See https://github.com/WorksApplications/SudachiPy for installation."
+            )
+
+        if sudachi_split_mode == "A":
+            self.split_mode = tokenizer.Tokenizer.SplitMode.A
+        elif sudachi_split_mode == "B":
+            self.split_mode = tokenizer.Tokenizer.SplitMode.B
+        elif sudachi_split_mode == "C":
+            self.split_mode = tokenizer.Tokenizer.SplitMode.C
+        else:
+            raise ValueError("Invalid sudachi_split_mode is specified.")
+
+        self.sudachi = dictionary.Dictionary(
+            config_path=sudachi_config_path, resource_dir=sudachi_resource_dir, dict_type=sudachi_dict_type
+        ).create(self.split_mode)
+
+    def tokenize(self, text, never_split=None, **kwargs):
+        """Tokenizes a piece of text."""
+        if self.normalize_text:
+            text = unicodedata.normalize("NFKC", text)
+
+        never_split = self.never_split + (never_split if never_split is not None else [])
+        tokens = []
+
+        for word in self.sudachi.tokenize(text):
+            token = word.surface()
+
+            if self.do_lower_case and token not in never_split:
+                token = token.lower()
+
+            if self.trim_whitespace:
+                if token.strip() == "":
+                    continue
+                else:
+                    token = token.strip()
+
+            tokens.append(token)
+
+        return tokens
+
+
+class JumanppTokenizer:
+    """Runs basic tokenization with jumanpp morphological parser."""
+
+    def __init__(
+        self,
+        do_lower_case=False,
+        never_split=None,
+        normalize_text=True,
+        trim_whitespace=False,
+    ):
+        """
+        Constructs a JumanppTokenizer.
+
+        Args:
+            **do_lower_case**: (*optional*) boolean (default True)
+                Whether to lowercase the input.
+            **never_split**: (*optional*) list of str
+                Kept for backward compatibility purposes. Now implemented directly at the base class level (see
+                [`PreTrainedTokenizer.tokenize`]) List of tokens not to split.
+            **normalize_text**: (*optional*) boolean (default True)
+                Whether to apply unicode normalization to text before tokenization.
+            **trim_whitespace**: (*optional*) boolean (default False)
+                Whether to trim all whitespace, tab, newline from tokens.
+        """
+
+        self.do_lower_case = do_lower_case
+        self.never_split = never_split if never_split is not None else []
+        self.normalize_text = normalize_text
+        self.trim_whitespace = trim_whitespace
+
+        try:
+            import pyknp
+        except ImportError:
+            raise ImportError(
+                "You need to install pyknp to use JumanppTokenizer. "
+                "See https://github.com/ku-nlp/pyknp for installation."
+            )
+
+        self.juman = pyknp.Juman(jumanpp=True)
+
+    def tokenize(self, text, never_split=None, **kwargs):
+        """Tokenizes a piece of text."""
+        if self.normalize_text:
+            text = unicodedata.normalize("NFKC", text)
+
+        never_split = self.never_split + (never_split if never_split is not None else [])
+        tokens = []
+
+        for mrph in self.juman.analysis(text).mrph_list():
+            token = mrph.midasi
+
+            if self.do_lower_case and token not in never_split:
+                token = token.lower()
+
+            if self.trim_whitespace:
+                if token.strip() == "":
+                    continue
+                else:
+                    token = token.strip()
 
             tokens.append(token)
 
