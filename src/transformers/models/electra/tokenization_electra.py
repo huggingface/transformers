@@ -22,6 +22,8 @@ from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuat
 from ...utils import logging
 
 
+logger = logging.get_logger(__name__)
+
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt"}
 
 PRETRAINED_VOCAB_FILES_MAP = {
