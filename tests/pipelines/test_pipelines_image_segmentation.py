@@ -162,6 +162,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             overlap_mask_area_threshold=0.0,
         )
 
+        # Shortening by hashing
         for o in outputs:
             o["mask"] = hashimage(o["mask"])
 
@@ -259,6 +260,8 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             threshold=0,
             overlap_mask_area_threshold=0.0,
         )
+
+        # Shortening by hashing
         for o in outputs:
             o["mask"] = hashimage(o["mask"])
 
@@ -283,6 +286,8 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             threshold=0.0,
             overlap_mask_area_threshold=0.0,
         )
+
+        # Shortening by hashing
         for output in outputs:
             for o in output:
                 o["mask"] = hashimage(o["mask"])
@@ -312,15 +317,13 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
     @require_torch
     @slow
     def test_threshold(self):
-        threshold = 0.999
         model_id = "facebook/detr-resnet-50-panoptic"
-
         image_segmenter = pipeline("image-segmentation", model=model_id)
 
         outputs = image_segmenter(
-            "http://images.cocodataset.org/val2017/000000039769.jpg", task="panoptic", threshold=threshold
+            "http://images.cocodataset.org/val2017/000000039769.jpg", task="panoptic", threshold=0.999
         )
-
+        # Shortening by hashing
         for o in outputs:
             o["mask"] = hashimage(o["mask"])
 
@@ -329,6 +332,24 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
             [
                 {"score": 0.9995, "label": "remote", "mask": "d02404f5789f075e3b3174adbc3fd5b8"},
                 {"score": 0.9994, "label": "cat", "mask": "eaa115b40c96d3a6f4fe498963a7e470"},
+            ],
+        )
+
+        outputs = image_segmenter(
+            "http://images.cocodataset.org/val2017/000000039769.jpg", task="panoptic", threshold=0.5
+        )
+
+        for o in outputs:
+            o["mask"] = hashimage(o["mask"])
+
+        self.assertEqual(
+            nested_simplify(outputs, decimals=4),
+            [
+                {"score": 0.9941, "label": "cat", "mask": "9c0af87bd00f9d3a4e0c8888e34e70e2"},
+                {"score": 0.9987, "label": "remote", "mask": "c7870600d6c02a1f6d96470fc7220e8e"},
+                {"score": 0.9995, "label": "remote", "mask": "ef899a25fd44ec056c653f0ca2954fdd"},
+                {"score": 0.9722, "label": "couch", "mask": "37b8446ac578a17108aa2b7fccc33114"},
+                {"score": 0.9994, "label": "cat", "mask": "6a09d3655efd8a388ab4511e4cbbb797"},
             ],
         )
 
@@ -347,6 +368,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase, metaclass=PipelineTestCa
         file = image[0]["file"]
         outputs = image_segmenter(file, task="panoptic", threshold=threshold)
 
+        # Shortening by hashing
         for o in outputs:
             o["mask"] = hashimage(o["mask"])
 

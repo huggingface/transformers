@@ -12,8 +12,6 @@ if is_vision_available():
     from ..image_utils import load_image
 
 if is_torch_available():
-    from torch import nn
-
     from ..models.auto.modeling_auto import (
         MODEL_FOR_IMAGE_SEGMENTATION_MAPPING,
         MODEL_FOR_INSTANCE_SEGMENTATION_MAPPING,
@@ -97,9 +95,8 @@ class ImageSegmentationPipeline(Pipeline):
             the following keys:
 
             - **label** (`str`) -- The class label identified by the model.
-            - **mask** (`PIL.Image`) -- A binary mask of the detected object as a Pil Image of shape (heigth, width) of
-              the original image. Pixel values in the image are in the range 0-255. 0 means the pixel is *not* part of
-              the *label*, 255 means it definitely is.
+            - **mask** (`PIL.Image`) -- A binary mask of the detected object as a Pil Image of shape (width, height) of
+              the original image. Returns a mask filled with zeros if no object is found.
             - **score** (*optional* `float`) -- Optionally, when the model is capable of estimating a confidence of the
               "object" described by the label and the mask.
         """
@@ -164,7 +161,7 @@ class ImageSegmentationPipeline(Pipeline):
                     score = segment["score"]
                     annotation.append({"score": score, "label": label, "mask": mask})
 
-        elif hasattr(self.feature_extractor, "post_process_semantic_segmentation"):
+        elif task == "semantic" and hasattr(self.feature_extractor, "post_process_semantic_segmentation"):
             outputs = self.feature_extractor.post_process_semantic_segmentation(
                 model_outputs, target_sizes=model_outputs["target_size"]
             )[0]
@@ -179,35 +176,5 @@ class ImageSegmentationPipeline(Pipeline):
                 label = self.model.config.id2label[label]
                 annotation.append({"score": None, "label": label, "mask": mask})
         else:
-            # Default logits
-            logits = model_outputs.logits
-            logits = logits.softmax(dim=1)
-            if len(logits.shape) != 4:
-                raise ValueError(f"Logits don't have expected dimensions, expected [1, N, H, W], got {logits.shape}")
-            batch_size, num_labels, height, width = logits.shape
-            expected_num_labels = len(self.model.config.id2label)
-            if num_labels != expected_num_labels:
-                raise ValueError(
-                    f"Logits don't have expected dimensions, expected [1, {num_labels}, H, W], got {logits.shape}"
-                )
-            size = model_outputs["target_size"].squeeze(0).tolist()
-            logits_reshaped = nn.functional.interpolate(logits, size=size, mode="bilinear", align_corners=False)
-            classes = logits_reshaped.argmax(dim=1)[0]
-            annotation = []
-
-            for label_id in range(num_labels):
-                label = self.model.config.id2label[label_id]
-                mask = classes == label_id
-                mask_sum = mask.sum()
-
-                # Remove empty masks.
-                if mask_sum == 0:
-                    continue
-                mask = Image.fromarray((mask * 255).numpy().astype(np.uint8), mode="L")
-                # Semantic segmentation does not output a global score for the mask
-                # so we don't attempt to compute one.
-                # XXX: We could send a mask with values between 0 and 255 instead
-                # of a pure mask to enable users to get the probabilities that
-                # are really outputted by the logits.
-                annotation.append({"score": None, "label": label, "mask": mask})
+            raise ValueError(f"task {task} is not supported for model {self.model}")
         return annotation
