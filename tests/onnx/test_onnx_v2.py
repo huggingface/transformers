@@ -217,6 +217,7 @@ PYTORCH_EXPORT_MODELS = {
     ("longformer", "allenai/longformer-base-4096"),
     ("yolos", "hustvl/yolos-tiny"),
     ("segformer", "nvidia/segformer-b0-finetuned-ade-512-512"),
+    ("swin", "microsoft/swin-tiny-patch4-window7-224"),
 }
 
 PYTORCH_EXPORT_WITH_PAST_MODELS = {
