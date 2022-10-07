@@ -208,9 +208,9 @@ class PTtoTFCommand(BaseTransformersCLICommand):
             sample_images = load_dataset("cifar10", "plain_text", split="test")[:2]["img"]
             processor_inputs.update({"images": sample_images})
         if "input_features" in model_forward_signature:
-            processor_inputs.update({"raw_speech": _get_audio_input(), "padding": True})
+            processor_inputs.update({"audio": _get_audio_input(), "padding": "max_length"})
         if "input_values" in model_forward_signature:  # Wav2Vec2 audio input
-            processor_inputs.update({"raw_speech": _get_audio_input(), "padding": True})
+            processor_inputs.update({"audio": _get_audio_input(), "padding": True})
 
         model_config_class = type(pt_model.config)
         if model_config_class in PROCESSOR_MAPPING:
