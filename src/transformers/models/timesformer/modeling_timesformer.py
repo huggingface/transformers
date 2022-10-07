@@ -499,7 +499,6 @@ class TimeSformerLayer(nn.Module):
             return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.VideoMAEEncoder
 class TimeSformerEncoder(nn.Module):
     def __init__(self, config: TimeSformerConfig) -> None:
         super().__init__()
