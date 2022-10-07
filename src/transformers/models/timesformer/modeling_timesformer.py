@@ -151,7 +151,11 @@ class TimeSformerEmbeddings(nn.Module):
             cls_tokens = embeddings[:batch_size, 0, :].unsqueeze(1)
             embeddings = embeddings[:, 1:]
             _, patch_height, patch_width = embeddings.shape
-            embeddings = embeddings.view(batch_size, num_frames, patch_height, patch_width).permute(0, 2, 1, 3).view(batch_size * patch_height, num_frames, patch_width)
+            embeddings = (
+                embeddings.view(batch_size, num_frames, patch_height, patch_width)
+                .permute(0, 2, 1, 3)
+                .view(batch_size * patch_height, num_frames, patch_width)
+            )
             # Resizing time embeddings in case they don't match
             if num_frames != self.time_embeddings.size(1):
                 time_embeddings = self.time_embeddings.transpose(1, 2)
@@ -161,8 +165,10 @@ class TimeSformerEmbeddings(nn.Module):
             else:
                 embeddings = embeddings + self.time_embeddings
             embeddings = self.time_drop(embeddings)
-            #embeddings = rearrange(embeddings, "(b n) t m -> b (n t) m", b=batch_size, t=num_frames)
-            embeddings = embeddings.view(batch_size, patch_height, num_frames, patch_width).reshape(batch_size, patch_height * num_frames, patch_width)
+            # embeddings = rearrange(embeddings, "(b n) t m -> b (n t) m", b=batch_size, t=num_frames)
+            embeddings = embeddings.view(batch_size, patch_height, num_frames, patch_width).reshape(
+                batch_size, patch_height * num_frames, patch_width
+            )
             embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         return embeddings
@@ -222,20 +228,17 @@ def _no_grad_trunc_normal_(tensor, mean, std, a, b):
 def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
     # type: (tensor, float, float, float, float) -> tensor
     r"""Fills the input Tensor with values drawn from a truncated
-    normal distribution. The values are effectively drawn from the
-    normal distribution :math:`\mathcal{N}(\text{mean}, \text{std}^2)`
-    with values outside :math:`[a, b]` redrawn until they are within
-    the bounds. The method used for generating the random values works
-    best when :math:`a \leq \text{mean} \leq b`.
     Args:
+    normal distribution. The values are effectively drawn from the normal distribution :math:`\mathcal{N}(\text{mean},
+    \text{std}^2)` with values outside :math:`[a, b]` redrawn until they are within the bounds. The method used for
+    generating the random values works best when :math:`a \leq \text{mean} \leq b`.
         tensor: an n-dimensional `torch.Tensor`
         mean: the mean of the normal distribution
         std: the standard deviation of the normal distribution
         a: the minimum cutoff value
         b: the maximum cutoff value
     Examples:
-        >>> w = torch.empty(3, 5)
-        >>> nn.init.trunc_normal_(w)
+        >>> w = torch.empty(3, 5) >>> nn.init.trunc_normal_(w)
     """
     return _no_grad_trunc_normal_(tensor, mean, std, a, b)
 
@@ -243,12 +246,11 @@ def trunc_normal_(tensor, mean=0.0, std=1.0, a=-2.0, b=2.0):
 # Copied from transformers.models.beit.modeling_beit.drop_path
 def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). Comment by Ross Wightman:
+    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however, the original name is
+    misleading as 'Drop Connect' is a different form of dropout in a separate paper... See discussion:
+    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
+    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -310,8 +312,8 @@ class TimeSformerSelfAttention(nn.Module):
 # copied from transformers.models.videomae.modeling_videomae.VideoMAESelfOutput
 class TimeSformerSelfOutput(nn.Module):
     """
-    The residual connection is defined in TimeSformerLayer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
+    The residual connection is defined in TimeSformerLayer instead of here (as is the case with other models), due to
+    the layernorm applied before each block.
     """
 
     def __init__(self, config: TimeSformerConfig) -> None:
@@ -423,8 +425,7 @@ class TimeSformerLayer(nn.Module):
 
         if self.attention_type in ["space_only", "joint_space_time"]:
             self_attention_outputs = self.attention(
-                self.layernorm_before(hidden_states),
-                output_attentions=output_attentions
+                self.layernorm_before(hidden_states), output_attentions=output_attentions
             )
             attention_output = self_attention_outputs[0]
             outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
@@ -446,15 +447,16 @@ class TimeSformerLayer(nn.Module):
             xt = xt.reshape(B, H, W, T, xt.shape[2]).reshape(B * H * W, T, xt.shape[2])
 
             temporal_attention_outputs = self.temporal_attention(
-                self.temporal_layernorm(xt),
-                output_attentions=output_attentions
+                self.temporal_layernorm(xt), output_attentions=output_attentions
             )
             attention_output = temporal_attention_outputs[0]
             outputs = temporal_attention_outputs[1:]  # add self attentions if we output attention weights
 
             res_temporal = self.drop_path(attention_output)
 
-            res_temporal = res_temporal.reshape(B, H, W, T, res_temporal.shape[2]).reshape(B, H * W * T, res_temporal.shape[2])
+            res_temporal = res_temporal.reshape(B, H, W, T, res_temporal.shape[2]).reshape(
+                B, H * W * T, res_temporal.shape[2]
+            )
             res_temporal = self.temporal_dense(res_temporal)
             xt = hidden_states[:, 1:, :] + res_temporal
 
@@ -475,12 +477,16 @@ class TimeSformerLayer(nn.Module):
 
             # Taking care of CLS token
             cls_token = res_spatial[:, 0, :]
-            #cls_token = rearrange(cls_token, "(b t) m -> b t m", b=B, t=T)
+            # cls_token = rearrange(cls_token, "(b t) m -> b t m", b=B, t=T)
             cls_token = cls_token.reshape(B, T, cls_token.shape[1])
             cls_token = torch.mean(cls_token, 1, True)  # averaging for every frame
             res_spatial = res_spatial[:, 1:, :]
-            #res_spatial = rearrange(res_spatial, "(b t) (h w) m -> b (h w t) m", b=B, h=H, w=W, t=T)
-            res_spatial = res_spatial.reshape(B, T, H, W, res_spatial.shape[2]).permute(0, 2, 3, 1, 4).reshape(B, H * W * T, res_spatial.shape[2])
+            # res_spatial = rearrange(res_spatial, "(b t) (h w) m -> b (h w t) m", b=B, h=H, w=W, t=T)
+            res_spatial = (
+                res_spatial.reshape(B, T, H, W, res_spatial.shape[2])
+                .permute(0, 2, 3, 1, 4)
+                .reshape(B, H * W * T, res_spatial.shape[2])
+            )
             res = res_spatial
             hidden_states = xt
 
@@ -822,7 +828,7 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        pixel_values = pixel_values.permute(0,2,1,3,4)
+        pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
 
         outputs = self.timesformer(
             pixel_values,

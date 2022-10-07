@@ -3330,11 +3330,11 @@ if TYPE_CHECKING:
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
     from .models.tapex import TapexTokenizer
-    from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimeSformerConfig
     from .models.time_series_transformer import (
         TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TimeSeriesTransformerConfig,
     )
+    from .models.timesformer import TIMESFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TimeSformerConfig
     from .models.trajectory_transformer import (
         TRAJECTORY_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TrajectoryTransformerConfig,
@@ -4638,17 +4638,17 @@ if TYPE_CHECKING:
             T5PreTrainedModel,
             load_tf_weights_in_t5,
         )
-        from .models.timesformer import (
-            TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TimeSformerForVideoClassification,
-            TimeSformerModel,
-            TimeSformerPreTrainedModel,
-        )
         from .models.time_series_transformer import (
             TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
             TimeSeriesTransformerForPrediction,
             TimeSeriesTransformerModel,
             TimeSeriesTransformerPreTrainedModel,
+        )
+        from .models.timesformer import (
+            TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TimeSformerForVideoClassification,
+            TimeSformerModel,
+            TimeSformerPreTrainedModel,
         )
         from .models.trajectory_transformer import (
             TRAJECTORY_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

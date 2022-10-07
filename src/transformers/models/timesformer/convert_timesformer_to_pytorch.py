@@ -22,11 +22,7 @@ import torch
 
 import gdown
 from huggingface_hub import hf_hub_download
-from transformers import (
-    TimeSformerConfig,
-    TimeSformerForVideoClassification,
-    VideoMAEFeatureExtractor,
-)
+from transformers import TimeSformerConfig, TimeSformerForVideoClassification, VideoMAEFeatureExtractor
 
 
 def get_timesformer_config(model_name):
@@ -51,7 +47,7 @@ def get_timesformer_config(model_name):
         filename = "something-something-v2-id2label.json"
     else:
         raise ValueError("Model name should either contain 'k400', 'k600' or 'ssv2'.")
-    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type='dataset'), "r"))
+    id2label = json.load(open(hf_hub_download(repo_id, filename, repo_type="dataset"), "r"))
     id2label = {int(k): v for k, v in id2label.items()}
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
@@ -76,17 +72,17 @@ def rename_key(name):
         name = name.replace("blocks", "timesformer.encoder.layer")
     if "attn.proj" in name:
         name = name.replace("attn.proj", "attention.output.dense")
-    if "attn" in name and "bias" not in name and 'temporal' not in name:
+    if "attn" in name and "bias" not in name and "temporal" not in name:
         name = name.replace("attn", "attention.self")
-    if "attn" in name and 'temporal' not in name:
+    if "attn" in name and "temporal" not in name:
         name = name.replace("attn", "attention.attention")
-    if 'temporal_norm1' in name:
+    if "temporal_norm1" in name:
         name = name.replace("temporal_norm1", "temporal_layernorm")
-    if 'temporal_attn.proj' in name:
-        name = name.replace('temporal_attn', 'temporal_attention.output.dense')
-    if 'temporal_fc' in name:
-        name = name.replace('temporal_fc', 'temporal_dense')
-    if "norm1" in name and 'temporal' not in name:
+    if "temporal_attn.proj" in name:
+        name = name.replace("temporal_attn", "temporal_attention.output.dense")
+    if "temporal_fc" in name:
+        name = name.replace("temporal_fc", "temporal_dense")
+    if "norm1" in name and "temporal" not in name:
         name = name.replace("norm1", "layernorm_before")
     if "norm2" in name:
         name = name.replace("norm2", "layernorm_after")
@@ -94,9 +90,9 @@ def rename_key(name):
         name = name.replace("mlp.fc1", "intermediate.dense")
     if "mlp.fc2" in name:
         name = name.replace("mlp.fc2", "output.dense")
-    if "norm.weight" in name and "fc" not in name and 'temporal' not in name:
+    if "norm.weight" in name and "fc" not in name and "temporal" not in name:
         name = name.replace("norm.weight", "timesformer.layernorm.weight")
-    if "norm.bias" in name and "fc" not in name and 'temporal' not in name:
+    if "norm.bias" in name and "fc" not in name and "temporal" not in name:
         name = name.replace("norm.bias", "timesformer.layernorm.bias")
     if "head" in name:
         name = name.replace("head", "classifier")
@@ -115,7 +111,7 @@ def convert_state_dict(orig_state_dict, config):
             key_split = key.split(".")
             layer_num = int(key_split[1])
             prefix = "timesformer.encoder.layer."
-            if 'temporal' in key:
+            if "temporal" in key:
                 postfix = ".temporal_attention.attention.qkv."
             else:
                 postfix = ".attention.attention.qkv."
@@ -132,7 +128,9 @@ def convert_state_dict(orig_state_dict, config):
 # We will verify our results on a video of eating spaghetti
 # Frame indices used: [164 168 172 176 181 185 189 193 198 202 206 210 215 219 223 227]
 def prepare_video():
-    file = hf_hub_download(repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti.npy", repo_type='dataset')
+    file = hf_hub_download(
+        repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti.npy", repo_type="dataset"
+    )
     video = np.load(file)
     return list(video)
 
@@ -223,7 +221,7 @@ def convert_timesformer_checkpoint(checkpoint_url, pytorch_dump_folder_path, mod
 
     if push_to_hub:
         print("Pushing to the hub...")
-        model.push_to_hub(f'fcakyon/{model_name}')
+        model.push_to_hub(f"fcakyon/{model_name}")
 
 
 if __name__ == "__main__":
