@@ -624,7 +624,7 @@ def filter_pipeline_tests(output_file):
         print("No test file found.")
         return
     with open(output_file, "r", encoding="utf-8") as f:
-        test_files = output_file.split(" ")
+        test_files = f.read().split(" ")
 
     if len(test_files) == 0:
         print("No tests to filter.")
