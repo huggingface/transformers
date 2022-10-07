@@ -90,7 +90,7 @@ def get_pairs(word):
     return pairs
 
 
-# Copied from transformers.models.bart.tokenization_bart.BartTokenizer with Bart->LED,facebook/bart-base->allenai/led-base-16384
+# Copied from transformers.models.bart.tokenization_bart.BartTokenizer with Bart->LED,BART-LED,facebook/bart-base->allenai/led-base-16384
 class LEDTokenizer(PreTrainedTokenizer):
     """
     Constructs a LED tokenizer, which is smilar to the ROBERTa tokenizer, using byte-level Byte-Pair-Encoding.
@@ -172,6 +172,7 @@ class LEDTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
+    # Copied from transformers.models.bart.tokenization_bart.BartTokenizer.__init__
     def __init__(
         self,
         vocab_file,
@@ -227,12 +228,15 @@ class LEDTokenizer(PreTrainedTokenizer):
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
     @property
+    # Copied from transformers.models.bart.tokenization_bart.BartTokenizer.vocab_size
     def vocab_size(self):
         return len(self.encoder)
 
+    # Copied from transformers.models.bart.tokenization_bart.BartTokenizer.get_vocab
     def get_vocab(self):
         return dict(self.encoder, **self.added_tokens_encoder)
 
+    # Copied from transformers.models.bart.tokenization_bart.BartTokenizer.bpe
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
@@ -275,6 +279,7 @@ class LEDTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
+    # Copied from transformers.models.bart.tokenization_bart.BartTokenizer._tokenize
     def _tokenize(self, text):
         """Tokenize a string."""
         bpe_tokens = []
@@ -285,20 +290,24 @@ class LEDTokenizer(PreTrainedTokenizer):
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
         return bpe_tokens
 
+    # Copied from transformers.models.bart.tokenization_bart.BartTokenizer._convert_token_to_id
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
+    # Copied from transformers.models.bart.tokenization_bart.BartTokenizer._convert_id_to_token
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
+    # Copied from transformers.models.bart.tokenization_bart.BartTokenizer.convert_tokens_to_string
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
         return text
 
+    # Copied from transformers.models.bart.tokenization_bart.BartTokenizer.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
@@ -328,6 +337,7 @@ class LEDTokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file
 
+    # Copied from transformers.models.bart.tokenization_bart.BartTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -353,6 +363,7 @@ class LEDTokenizer(PreTrainedTokenizer):
         sep = [self.sep_token_id]
         return cls + token_ids_0 + sep + sep + token_ids_1 + sep
 
+    # Copied from transformers.models.bart.tokenization_bart.BartTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
@@ -380,6 +391,7 @@ class LEDTokenizer(PreTrainedTokenizer):
             return [1] + ([0] * len(token_ids_0)) + [1]
         return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
 
+    # Copied from transformers.models.bart.tokenization_bart.BartTokenizer.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -403,6 +415,7 @@ class LEDTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
+    # Copied from transformers.models.bart.tokenization_bart.BartTokenizer.prepare_for_tokenization
     def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
         add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
         if (is_split_into_words or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):

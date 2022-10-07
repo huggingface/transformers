@@ -47,7 +47,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-# Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast with Bart->LED,facebook/bart-base->allenai/led-base-1638
+# Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast with Bart->LED,BART-LED,facebook/bart-base->allenai/led-base-1638
 class LEDTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" LED tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2 tokenizer,
@@ -133,6 +133,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
     slow_tokenizer_class = LEDTokenizer
     model_input_names = ["input_ids", "attention_mask"]
 
+    # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast.__init__
     def __init__(
         self,
         vocab_file=None,
@@ -203,6 +204,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
                 setattr(self.backend_tokenizer, tokenizer_component, new_value)
 
     @property
+    # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast.mask_token
     def mask_token(self) -> str:
         """
         `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
@@ -218,6 +220,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
         return str(self._mask_token)
 
     @mask_token.setter
+    # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast.mask_token
     def mask_token(self, value):
         """
         Overriding the default behavior of the mask token to have it eat the space before it.
@@ -229,6 +232,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
         value = AddedToken(value, lstrip=True, rstrip=False) if isinstance(value, str) else value
         self._mask_token = value
 
+    # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast._batch_encode_plus
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
 
@@ -240,6 +244,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
 
         return super()._batch_encode_plus(*args, **kwargs)
 
+    # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast._encode_plus
     def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
 
@@ -251,10 +256,12 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
 
         return super()._encode_plus(*args, **kwargs)
 
+    # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
+    # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
         if token_ids_1 is None:
@@ -262,6 +269,7 @@ class LEDTokenizerFast(PreTrainedTokenizerFast):
 
         return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
 
+    # Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
