@@ -1116,6 +1116,13 @@ class OPTForSequenceClassification(OPTPreTrainedModel):
         self.model.decoder.embed_tokens = value
 
 
+@add_start_docstrings(
+    """
+    The OPT Model transformer with a span classification head on top for extractive question-answering tasks like SQuAD
+    (a linear layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
+    """,
+    OPT_START_DOCSTRING,
+)
 class OPTForQuestionAnswering(OPTPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
