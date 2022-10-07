@@ -52,6 +52,7 @@ PRETRAINED_INIT_CONFIGURATION = {
     "squeezebert/squeezebert-mnli-headless": {"do_lower_case": True},
 }
 
+
 # Copied from transformers.models.bert.tokenization_bert.load_vocab
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
@@ -188,6 +189,7 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
         split_tokens = []
         if self.do_basic_tokenize:
             for token in self.basic_tokenizer.tokenize(text, never_split=self.all_special_tokens):
+
                 # If the token is part of the never_split set
                 if token in self.basic_tokenizer.never_split:
                     split_tokens.append(token)
@@ -213,20 +215,22 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
         out_string = " ".join(tokens).replace(" ##", "").strip()
         return out_string
 
-    # Copied from transformers.models.bert.tokenization_bert.BertTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A BERT sequence has the following format:
+
         - single sequence: `[CLS] X [SEP]`
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
             token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
+
         Returns:
             `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
@@ -243,6 +247,7 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
         special tokens using the tokenizer `prepare_for_model` method.
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs.
@@ -250,6 +255,7 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
                 Optional second list of IDs for sequence pairs.
             already_has_special_tokens (`bool`, *optional*, defaults to `False`):
                 Whether or not the token list is already formatted with special tokens for the model.
+
         Returns:
             `List[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
         """
@@ -270,16 +276,20 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
         pair mask has the following format:
+
         ```
         0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
         | first sequence    | second sequence |
         ```
+
         If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs.
             token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
+
         Returns:
             `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
@@ -315,6 +325,7 @@ class SqueezeBertTokenizer(PreTrainedTokenizer):
 class BasicTokenizer(object):
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
+
     Args:
         do_lower_case (`bool`, *optional*, defaults to `True`):
             Whether or not to lowercase the input when tokenizing.
@@ -323,6 +334,7 @@ class BasicTokenizer(object):
             `do_basic_tokenize=True`
         tokenize_chinese_chars (`bool`, *optional*, defaults to `True`):
             Whether or not to tokenize Chinese characters.
+
             This should likely be deactivated for Japanese (see this
             [issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents (`bool`, *optional*):
@@ -342,6 +354,7 @@ class BasicTokenizer(object):
         """
         Basic Tokenization of a piece of text. Split on "white spaces" only, for sub-word tokenization, see
         WordPieceTokenizer.
+
         Args:
             never_split (`List[str]`, *optional*)
                 Kept for backward compatibility purposes. Now implemented directly at the base class level (see
@@ -458,7 +471,6 @@ class BasicTokenizer(object):
         return "".join(output)
 
 
-# Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
 class WordpieceTokenizer(object):
     """Runs WordPiece tokenization."""
 
@@ -471,10 +483,13 @@ class WordpieceTokenizer(object):
         """
         Tokenizes a piece of text into its word pieces. This uses a greedy longest-match-first algorithm to perform
         tokenization using the given vocabulary.
+
         For example, `input = "unaffable"` wil return as output `["un", "##aff", "##able"]`.
+
         Args:
             text: A single token or whitespace separated tokens. This should have
                 already been passed through *BasicTokenizer*.
+
         Returns:
             A list of wordpiece tokens.
         """

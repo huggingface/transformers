@@ -161,13 +161,16 @@ class SqueezeBertTokenizerFast(PreTrainedTokenizerFast):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
         adding special tokens. A BERT sequence has the following format:
+
         - single sequence: `[CLS] X [SEP]`
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs to which the special tokens will be added.
             token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
+
         Returns:
             `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
         """
@@ -185,16 +188,20 @@ class SqueezeBertTokenizerFast(PreTrainedTokenizerFast):
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
         pair mask has the following format:
+
         ```
         0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
         | first sequence    | second sequence |
         ```
+
         If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
+
         Args:
             token_ids_0 (`List[int]`):
                 List of IDs.
             token_ids_1 (`List[int]`, *optional*):
                 Optional second list of IDs for sequence pairs.
+
         Returns:
             `List[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
         """
