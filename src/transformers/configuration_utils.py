@@ -287,6 +287,7 @@ class PretrainedConfig(PushToHubMixin):
         self.top_p = kwargs.pop("top_p", 1.0)
         self.typical_p = kwargs.pop("typical_p", 1.0)
         self.repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
+        self.encoder_repetition_penalty = kwargs.pop("repetition_penalty", 1.0)
         self.length_penalty = kwargs.pop("length_penalty", 1.0)
         self.no_repeat_ngram_size = kwargs.pop("no_repeat_ngram_size", 0)
         self.encoder_no_repeat_ngram_size = kwargs.pop("encoder_no_repeat_ngram_size", 0)
