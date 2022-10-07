@@ -372,7 +372,7 @@ class TimeSformerIntermediate(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.VideoMAEOutput
+# Copied from transformers.models.videomae.modeling_videomae.VideoMAEOutput
 class TimeSformerOutput(nn.Module):
     def __init__(self, config: TimeSformerConfig) -> None:
         super().__init__()
