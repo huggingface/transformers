@@ -47,7 +47,6 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
 }
 
 
-# Copied from transformers.models.bart.tokenization_bart_fast.BartTokenizerFast with Bart->LED,BART-LED,facebook/bart-base->allenai/led-base-1638
 class LEDTokenizerFast(PreTrainedTokenizerFast):
     r"""
     Construct a "fast" LED tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2 tokenizer,

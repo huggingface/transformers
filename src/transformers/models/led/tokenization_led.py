@@ -90,7 +90,6 @@ def get_pairs(word):
     return pairs
 
 
-# Copied from transformers.models.bart.tokenization_bart.BartTokenizer with Bart->LED,BART-LED,facebook/bart-base->allenai/led-base-16384
 class LEDTokenizer(PreTrainedTokenizer):
     """
     Constructs a LED tokenizer, which is smilar to the ROBERTa tokenizer, using byte-level Byte-Pair-Encoding.
