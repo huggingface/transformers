@@ -443,7 +443,7 @@ def validate_model_outputs(
             raise ValueError(
                 "Outputs values doesn't match between reference model and ONNX exported model: "
                 f"Got max absolute difference of: {np.amax(np.abs(ref_value - ort_value))} for "
-                f"{ref_value[bad_idxes]} vs {ort_value[bad_idxes]}"
+                f"{ref_value[bad_indices]} vs {ort_value[bad_indices]}"
             )
         else:
             logger.info(f"\t\t-[✓] all values close (atol: {atol})")
