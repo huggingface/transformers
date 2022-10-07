@@ -677,7 +677,7 @@ class GenerationMixin:
     def _get_logits_processor(
         self,
         repetition_penalty: float,
-        hallucination_penalty: float,
+        encoder_repetition_penalty: float,
         no_repeat_ngram_size: int,
         encoder_no_repeat_ngram_size: int,
         input_ids_seq_length: int,
@@ -708,8 +708,8 @@ class GenerationMixin:
 
         # init warp parameters
         repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
-        hallucination_penalty = (
-            hallucination_penalty if hallucination_penalty is not None else self.config.hallucination_penalty
+        encoder_repetition_penalty = (
+            EncoderRepetitionPenaltyLogitsProcessor if EncoderRepetitionPenaltyLogitsProcessor is not None else self.config.encoder_repetition_penalty
         )
         no_repeat_ngram_size = (
             no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
@@ -754,10 +754,10 @@ class GenerationMixin:
             )
         if repetition_penalty is not None and repetition_penalty != 1.0:
             processors.append(RepetitionPenaltyLogitsProcessor(penalty=repetition_penalty))
-        if hallucination_penalty is not None and hallucination_penalty != 1.0:
+        if encoder_repetition_penalty is not None and encoder_repetition_penalty != 1.0:
             processors.append(
                 EncoderRepetitionPenaltyLogitsProcessor(
-                    penalty=hallucination_penalty, encoder_input_ids=encoder_input_ids
+                    penalty=encoder_repetition_penalty, encoder_input_ids=encoder_input_ids
                 )
             )
         if no_repeat_ngram_size is not None and no_repeat_ngram_size > 0:
@@ -936,7 +936,7 @@ class GenerationMixin:
         top_p: Optional[float] = None,
         typical_p: Optional[float] = None,
         repetition_penalty: Optional[float] = None,
-        hallucination_penalty: Optional[float] = None,
+        encoder_repetition_penalty: Optional[float] = None,
         bad_words_ids: Optional[Iterable[int]] = None,
         force_words_ids: Optional[Union[Iterable[int], Iterable[Iterable[int]]]] = None,
         bos_token_id: Optional[int] = None,
@@ -1363,7 +1363,7 @@ class GenerationMixin:
 
         # 7. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
-            hallucination_penalty=hallucination_penalty,
+            encoder_repetition_penalty=encoder_repetition_penalty,
             repetition_penalty=repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
             encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
