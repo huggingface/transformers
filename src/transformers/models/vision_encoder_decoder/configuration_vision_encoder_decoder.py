@@ -19,7 +19,6 @@ from typing import Any, Mapping, Optional, OrderedDict
 
 from packaging import version
 
-from transformers.modeling_utils import PreTrainedModel
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 from transformers.utils.generic import TensorType
 
@@ -146,7 +145,7 @@ class VisionEncoderDecoderEncoderOnnxConfig(OnnxConfig):
 
     @property
     def outputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict({"encoder_last_hidden_state": {0: "batch", 1: "encoder_sequence"}})
+        return OrderedDict({"last_hidden_state": {0: "batch", 1: "encoder_sequence"}})
 
 
 class VisionEncoderDecoderDecoderOnnxConfig(OnnxConfig):
@@ -189,23 +188,31 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
     def inputs(self) -> None:
         pass
 
-    def get_encoder_config(self, encoder_model: PreTrainedModel) -> OnnxConfig:
+    def get_encoder_config(self, encoder_config: PretrainedConfig) -> OnnxConfig:
         r"""
         Returns encoder Onnx config for VisionEncoderDecoder model.
+
+        Args:
+            encoder_config: The encoder model's configuration to use when exporting to ONNX
 
         Returns:
             [`VisionEncoderDecoderEncoderOnnxConfig`]: An instance of onnx configuration object
         """
-        return VisionEncoderDecoderEncoderOnnxConfig(encoder_model.config)
+        return VisionEncoderDecoderEncoderOnnxConfig(encoder_config)
 
     def get_decoder_config(
-        self, encoder_model: PretrainedConfig, decoder_model: PretrainedConfig, task: str = "default"
+        self, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, feature: str = "default"
     ) -> OnnxConfig:
         r"""
         Returns decoder Onnx config for VisionEncoderDecoder model.
 
+        Args:
+            encoder_config: The encoder model's configuration to use when exporting to ONNX
+            decoder_config: The decoder model's configuration to use when exporting to ONNX
+            feature: The type of feature to export the model with.
+
         Returns:
             [`VisionEncoderDecoderDecoderOnnxConfig`]: An instance of onnx configuration object
         """
-        decoder_model.config.encoder_hidden_size = encoder_model.config.hidden_size
-        return VisionEncoderDecoderDecoderOnnxConfig(decoder_model.config, task)
+        decoder_config.encoder_hidden_size = encoder_config.hidden_size
+        return VisionEncoderDecoderDecoderOnnxConfig(decoder_config, feature)

@@ -22,6 +22,9 @@ from .convert import export, validate_model_outputs
 from .features import FeaturesManager
 
 
+ENCODER_DECODER_MODELS = ["vision-encoder-decoder"]
+
+
 def main():
     parser = ArgumentParser("Hugging Face Transformers ONNX exporter")
     parser.add_argument(
@@ -73,12 +76,14 @@ def main():
     model_kind, model_onnx_config = FeaturesManager.check_supported_model_or_raise(model, feature=args.feature)
     onnx_config = model_onnx_config(model.config)
 
-    if model_kind == "vision-encoder-decoder":
+    if model_kind in ENCODER_DECODER_MODELS:
         encoder_model = model.get_encoder()
         decoder_model = model.get_decoder()
 
-        encoder_onnx_config = onnx_config.get_encoder_config(encoder_model)
-        decoder_onnx_config = onnx_config.get_decoder_config(encoder_model, decoder_model, task=args.feature)
+        encoder_onnx_config = onnx_config.get_encoder_config(encoder_model.config)
+        decoder_onnx_config = onnx_config.get_decoder_config(
+            encoder_model.config, decoder_model.config, feature=args.feature
+        )
 
         if args.opset is None:
             args.opset = max(encoder_onnx_config.default_onnx_opset, decoder_onnx_config.default_onnx_opset)
