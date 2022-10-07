@@ -630,7 +630,7 @@ def filter_pipeline_tests(output_file):
         print("No tests to filter.")
         return
     if test_files == ["tests"]:
-        test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f != "pipelines"]
+        test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py", "pipelines"]]
     else:
         test_files = [f for f in test_files if not f.startswith(os.path.join("tests", "pipelines"))]
 
