@@ -65,16 +65,14 @@ PRETRAINED_INIT_CONFIGURATION = {
 }
 
 
-# Copied from transformers.models.bert.tokenization_bert.BertTokenizerFast with Bert->SqueezeBert,BERT->SqueezeBERT
+# Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast with Bert->SqueezeBert,BERT->SqueezeBERT
 class SqueezeBertTokenizerFast(PreTrainedTokenizerFast):
     r"""
-    Constructs a "Fast" SqueezeBert tokenizer (backed by HuggingFace's *tokenizers* library).
-
-    [`SqueezeBertTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization: punctuation
-    splitting + wordpiece.
+    Construct a "fast" SqueezeBERT tokenizer (backed by HuggingFace's *tokenizers* library). Based on WordPiece.
 
     This tokenizer inherits from [`PreTrainedTokenizerFast`] which contains most of the main methods. Users should
     refer to this superclass for more information regarding those methods.
+
     Args:
         vocab_file (`str`):
             File containing the vocabulary.
@@ -103,18 +101,17 @@ class SqueezeBertTokenizerFast(PreTrainedTokenizerFast):
             issue](https://github.com/huggingface/transformers/issues/328)).
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
-            value for `lowercase` (as in the original BERT).
+            value for `lowercase` (as in the original SqueezeBERT).
         wordpieces_prefix (`str`, *optional*, defaults to `"##"`):
             The prefix for subwords.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     pretrained_vocab_files_map = PRETRAINED_VOCAB_FILES_MAP
-    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     pretrained_init_configuration = PRETRAINED_INIT_CONFIGURATION
+    max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     slow_tokenizer_class = SqueezeBertTokenizer
 
-    # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast.__init__
     def __init__(
         self,
         vocab_file=None,
@@ -157,11 +154,10 @@ class SqueezeBertTokenizerFast(PreTrainedTokenizerFast):
 
         self.do_lower_case = do_lower_case
 
-    # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A BERT sequence has the following format:
+        adding special tokens. A SqueezeBERT sequence has the following format:
 
         - single sequence: `[CLS] X [SEP]`
         - pair of sequences: `[CLS] A [SEP] B [SEP]`
@@ -182,13 +178,12 @@ class SqueezeBertTokenizerFast(PreTrainedTokenizerFast):
 
         return output
 
-    # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast.create_token_type_ids_from_sequences
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
         """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A BERT sequence
-        pair mask has the following format:
+        Create a mask from the two sequences passed to be used in a sequence-pair classification task. A SqueezeBERT
+        sequence pair mask has the following format:
 
         ```
         0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
@@ -212,7 +207,6 @@ class SqueezeBertTokenizerFast(PreTrainedTokenizerFast):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1]
 
-    # Copied from transformers.models.bert.tokenization_bert_fast.BertTokenizerFast.save_vocabulary
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
