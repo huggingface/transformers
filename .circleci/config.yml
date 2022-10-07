@@ -85,11 +85,11 @@ jobs:
                 fi
             - run: python utils/tests_fetcher.py --filter_pipeline_tests
             - run: |
-                  if [ -f test_list.txt ]; then
-                      cp test_list.txt test_preparation/filtered_test_list.txt
-                  else
-                      touch test_preparation/filtered_test_list.txt
-                  fi
+                if [ -f test_list.txt ]; then
+                    mv test_list.txt test_preparation/filtered_test_list.txt
+                else
+                    touch test_preparation/filtered_test_list.txt
+                fi
             - store_artifacts:
                   path: ~/transformers/test_preparation/filtered_test_list.txt
             - run: python utils/tests_fetcher.py --filters tests examples | tee examples_tests_fetched_summary.txt
@@ -120,6 +120,8 @@ jobs:
                   mkdir test_preparation
                   echo "tests" > test_preparation/test_list.txt
                   echo "tests" > test_preparation/examples_test_list.txt
+            - run: python utils/tests_fetcher.py --filter_pipeline_tests
+            - run: mv test_list.txt test_preparation/filtered_test_list.txt
 
             - persist_to_workspace:
                   root: test_preparation/
