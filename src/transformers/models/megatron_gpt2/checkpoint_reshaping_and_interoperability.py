@@ -244,11 +244,7 @@ def merge_transformers_sharded_states(path, num_checkpoints):
 def get_megatron_sharded_states(args, tp_size, pp_size, pp_rank):
     tp_state_dicts = []
     for i in range(tp_size):
-        if pp_size == 1:
-            sub_dir_name = f"mp_rank_{i:02d}"
-
-        else:
-            sub_dir_name = f"mp_rank_{i:02d}_{pp_rank:03d}"
+        sub_dir_name = f"mp_rank_{i:02d}" if pp_size == 1 else f"mp_rank_{i:02d}_{pp_rank:03d}"
         checkpoint_name = os.listdir(os.path.join(args.load_path, sub_dir_name))[0]
         checkpoint_path = os.path.join(args.load_path, sub_dir_name, checkpoint_name)
         state_dict = torch.load(checkpoint_path, map_location="cpu")
@@ -475,7 +471,7 @@ def convert_checkpoint_from_megatron_to_transformers(args):
 
     # The final layernorm.
     print("Converting final layernorm")
-    output_state_dict["transformer.ln_f.weight"] = get_element_from_dict_by_path(tp_state_dicts[0], f"{path}")[
+    output_state_dict["transformer.ln_f.weight"] = get_element_from_dict_by_path(tp_state_dicts[0], str(path))[
         "final_layernorm.weight"
     ].to(dtype)
     output_state_dict["transformer.ln_f.bias"] = get_element_from_dict_by_path(tp_state_dicts[0], f"{path}")[
