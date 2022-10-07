@@ -54,6 +54,7 @@ from transformers.testing_utils import (
     require_tensorflow_probability,
     require_tf,
     require_torch,
+    require_torch_or_tf,
     slow,
 )
 from transformers.utils import is_tf_available, is_torch_available
@@ -830,6 +831,7 @@ class CustomPipelineTest(unittest.TestCase):
         # Clean registry for next tests.
         del PIPELINE_REGISTRY.supported_tasks["custom-text-classification"]
 
+    @require_torch_or_tf
     def test_dynamic_pipeline(self):
         PIPELINE_REGISTRY.register_pipeline(
             "pair-classification",
@@ -881,6 +883,7 @@ class CustomPipelineTest(unittest.TestCase):
             [{"label": "LABEL_0", "score": 0.505}],
         )
 
+    @require_torch_or_tf
     def test_cached_pipeline_has_minimum_calls_to_head(self):
         # Make sure we have cached the pipeline.
         _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
