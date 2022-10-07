@@ -17,12 +17,9 @@
 
 import math
 import warnings
-from copy import deepcopy
-from dataclasses import dataclass
 from itertools import repeat
-from typing import Optional, Set, Tuple, Union
+from typing import Optional, Tuple, Union
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -33,13 +30,11 @@ from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
 )
-from ...utils.constants import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from .configuration_timesformer import TimeSformerConfig
 
 
