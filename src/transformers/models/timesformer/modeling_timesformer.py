@@ -29,12 +29,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_timesformer import TimeSformerConfig
 
 
@@ -811,6 +806,8 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
         eating spaghetti
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
 
         outputs = self.timesformer(
             pixel_values,
