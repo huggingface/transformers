@@ -33,7 +33,6 @@ else:
     _import_structure["modeling_timesformer"] = [
         "TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST",
         "TimeSformerModel",
-        "TimeSformerPreTrainedModel",
         "TimeSformerForVideoClassification",
     ]
 
@@ -48,10 +47,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_timesformer import (
             TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
-            TimeSformerForPreTraining,
             TimeSformerForVideoClassification,
             TimeSformerModel,
-            TimeSformerPreTrainedModel,
         )
 
 else:
