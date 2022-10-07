@@ -204,8 +204,6 @@ deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] f
 def deps_list(*pkgs):
     return [deps[pkg] for pkg in pkgs]
 
-def deps_list1(*pkgs):
-    return [deps[pkg] for pkg in pkgs]
 
 class DepsTableUpdateCommand(Command):
     """
