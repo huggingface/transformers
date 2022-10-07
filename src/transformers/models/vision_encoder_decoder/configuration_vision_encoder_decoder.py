@@ -190,13 +190,14 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
 
     def get_encoder_config(self, encoder_config: PretrainedConfig) -> OnnxConfig:
         r"""
-        Returns encoder Onnx config for VisionEncoderDecoder model.
+        Returns ONNX encoder config for `VisionEncoderDecoder` model.
 
         Args:
-            encoder_config: The encoder model's configuration to use when exporting to ONNX
+            encoder_config (`PretrainedConfig`): 
+                The encoder model's configuration to use when exporting to ONNX.
 
         Returns:
-            [`VisionEncoderDecoderEncoderOnnxConfig`]: An instance of onnx configuration object
+            [`VisionEncoderDecoderEncoderOnnxConfig`]: An instance of the ONNX configuration object
         """
         return VisionEncoderDecoderEncoderOnnxConfig(encoder_config)
 
@@ -204,15 +205,18 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
         self, encoder_config: PretrainedConfig, decoder_config: PretrainedConfig, feature: str = "default"
     ) -> OnnxConfig:
         r"""
-        Returns decoder Onnx config for VisionEncoderDecoder model.
+        Returns ONNX decoder config for `VisionEncoderDecoder` model.
 
         Args:
-            encoder_config: The encoder model's configuration to use when exporting to ONNX
-            decoder_config: The decoder model's configuration to use when exporting to ONNX
-            feature: The type of feature to export the model with.
+            encoder_config (`PretrainedConfig`): 
+                The encoder model's configuration to use when exporting to ONNX.
+            decoder_config (`PretrainedConfig`): 
+                The decoder model's configuration to use when exporting to ONNX
+            feature (`str`, *optional*): 
+                The type of feature to export the model with.
 
         Returns:
-            [`VisionEncoderDecoderDecoderOnnxConfig`]: An instance of onnx configuration object
+            [`VisionEncoderDecoderDecoderOnnxConfig`]: An instance of the ONNX configuration object.
         """
         decoder_config.encoder_hidden_size = encoder_config.hidden_size
         return VisionEncoderDecoderDecoderOnnxConfig(decoder_config, feature)
