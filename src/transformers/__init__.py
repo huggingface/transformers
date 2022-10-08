@@ -1264,7 +1264,7 @@ else:
             "FlaubertForTokenClassification",
             "FlaubertModel",
             "FlaubertWithLMHeadModel",
-            "FlaubertPreTrainedModel"
+            "FlaubertPreTrainedModel",
         ]
     )
     _import_structure["models.flava"].extend(
