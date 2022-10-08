@@ -41,6 +41,7 @@ else:
         "FlaubertForTokenClassification",
         "FlaubertModel",
         "FlaubertWithLMHeadModel",
+        "FlaubertPreTrainedModel"
     ]
 
 try:

@@ -868,7 +868,6 @@ class TFFlaubertWithLMHeadModel(TFFlaubertPreTrainedModel):
     """,
     FLAUBERT_START_DOCSTRING,
 )
-
 # Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMForSequenceClassification with TFXLMForSequenceClassification->TFFlaubertForSequenceClassification, TFXLMPreTrainedModelTFFlaubertPreTrainedModel, TFXLMMainLayer->TFFlaubertMainLayer, XLM_INPUTS_DOCSTRING->FLAUBERT_INPUTS_DOCSTRING
 class TFFlaubertForSequenceClassification(TFFlaubertPreTrainedModel, TFSequenceClassificationLoss):
     def __init__(self, config, *inputs, **kwargs):
@@ -956,7 +955,6 @@ class TFFlaubertForSequenceClassification(TFFlaubertPreTrainedModel, TFSequenceC
     """,
     FLAUBERT_START_DOCSTRING,
 )
-
 # Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMForQuestionAnsweringSimple with TFXLMForQuestionAnsweringSimple->TFFlaubertForQuestionAnsweringSimple, TFXLMPreTrainedModel->TFFlaubertPreTrainedModel, TFXLMMainLayer->TFFlaubertMainLayer, XLM_INPUTS_DOCSTRING->FLAUBERT_INPUTS_DOCSTRING
 class TFFlaubertForQuestionAnsweringSimple(TFFlaubertPreTrainedModel, TFQuestionAnsweringLoss):
     def __init__(self, config, *inputs, **kwargs):
@@ -1147,7 +1145,6 @@ class TFFlaubertForTokenClassification(TFFlaubertPreTrainedModel, TFTokenClassif
     """,
     FLAUBERT_START_DOCSTRING,
 )
-
 # Copied from transformers.models.xlm.modeling_tf_xlm.TFXLMForMultipleChoice with TFXLMForMultipleChoice->TFFlaubertForMultipleChoice, TFXLMPreTrainedModelTFFlaubertPreTrainedModel, TFXLMMainLayer->TFFlaubertMainLayer, XLM_INPUTS_DOCSTRING->FLAUBERT_INPUTS_DOCSTRING
 class TFFlaubertForMultipleChoice(TFFlaubertPreTrainedModel, TFMultipleChoiceLoss):
     def __init__(self, config, *inputs, **kwargs):
