@@ -66,6 +66,9 @@ class SwitchTransformersConfig(PretrainedConfig):
             Amount of noise to add to the router.
         router_ignore_padding_tokens (`bool`, *optional*, defaults to `False`):
             Whether to ignore padding tokens when routing.
+        router_dtype (`str`, *optional*, default to `float32`):
+            The `dtype` used for the routers. It is preferable to keep the `dtype` to `float32` as specified in the
+            "selective precision" discussion in https://arxiv.org/abs/2101.03961.
         batch_prioritized_routing (`bool`, *optional*, defaults to `False`):
             Whether to use batch prioritized routing.
         num_selected_experts (`int`, *optional*, defaults to 2):
@@ -103,6 +106,7 @@ class SwitchTransformersConfig(PretrainedConfig):
         num_experts=8,
         router_bias=False,
         router_jitter_noise=0.01,
+        router_dtype="float32",
         num_selected_experts=2,
         router_ignore_padding_tokens=False,
         batch_prioritized_routing=False,
@@ -130,6 +134,10 @@ class SwitchTransformersConfig(PretrainedConfig):
         self.num_experts = num_experts
         self.router_bias = router_bias
         self.router_jitter_noise = router_jitter_noise
+        self.router_dtype = router_dtype
+
+        if router_dtype not in ["float16", "float32", "bfloat16"]:
+            raise ValueError("""Please select a correct `router_dtype` from ["float16", "float32", "bfloat16"].""")
 
         self.router_ignore_padding_tokens = router_ignore_padding_tokens
         self.relative_attention_num_buckets = relative_attention_num_buckets
