@@ -157,7 +157,7 @@ class Trillsson_efficientFeatureExtractor(SequenceFeatureExtractor):
         spectrogram = tf.abs(
             tf.signal.stft(
                 tf.cast(raw_speech, tf.dtypes.float64),
-                frame_length=window_length_samplesl,
+                frame_length=window_length_samples,
                 frame_step=hop_length_samples,
                 fft_length=fft_length,
                 window_fn=tf.signal.hann_window,
