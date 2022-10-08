@@ -31,7 +31,6 @@ from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
 from transformers.pipelines.audio_utils import chunk_bytes_iter
 from transformers.pipelines.automatic_speech_recognition import chunk_iter
 from transformers.testing_utils import (
-    is_pipeline_test,
     is_torch_available,
     nested_simplify,
     require_pyctcdecode,
@@ -52,7 +51,6 @@ if is_torch_available():
 # from .test_pipelines_common import CustomInputPipelineCommonMixin
 
 
-@is_pipeline_test
 class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = {
         k: v
