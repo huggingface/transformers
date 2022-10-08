@@ -95,10 +95,10 @@ class TFLevitConvEmbeddings(tf.keras.layers.Layer):
             filters=out_channels,
             kernel_size=kernel_size,
             strides=stride,
-            padding=padding,
+            padding=(padding, padding), # TODO @ariG23498: Make sure the padding is a tuple
             dilation_rate=dilation,
             groups=groups,
-            bias=False,
+            use_bias=False,
             data_format="channels_first",
             name="convolution",
         )
@@ -190,7 +190,7 @@ class TFLevitPatchEmbeddings(tf.keras.layers.Layer):
 class TFMLPLayerWithBN(tf.keras.layers.Layer):
     def __init__(self, input_dim, output_dim, bn_weight_init=1, **kwargs):
         super().__init__(**kwargs)
-        self.linear = tf.keras.layers.Dense(units=output_dim, bias=False, name="linear")
+        self.linear = tf.keras.layers.Dense(units=output_dim, use_bias=False, name="linear")
         # The epsilon and momentum used here are the defaults in torch batch norm layer.
         self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-05, momentum=0.1, name="batch_norm")
 
@@ -280,12 +280,12 @@ class TFLevitAttention(tf.keras.layers.Layer):
         )
         super().build(input_shape)
 
-    # TODO @ariG23498
-    @torch.no_grad()
-    def train(self, mode=True):
-        super().train(mode)
-        if mode and self.attention_bias_cache:
-            self.attention_bias_cache = {}  # clear ab cache
+    # # TODO @ariG23498
+    # @torch.no_grad()
+    # def train(self, mode=True):
+    #     super().train(mode)
+    #     if mode and self.attention_bias_cache:
+    #         self.attention_bias_cache = {}  # clear ab cache
 
     def get_attention_biases(self, device, training=None):
         if training:
@@ -386,12 +386,12 @@ class TFLevitAttentionSubsample(tf.keras.layers.Layer):
         )
         super().build(input_shape)
 
-    # TODO @ariG23498
-    @torch.no_grad()
-    def train(self, mode=True):
-        super().train(mode)
-        if mode and self.attention_bias_cache:
-            self.attention_bias_cache = {}  # clear ab cache
+    # # TODO @ariG23498
+    # @torch.no_grad()
+    # def train(self, mode=True):
+    #     super().train(mode)
+    #     if mode and self.attention_bias_cache:
+    #         self.attention_bias_cache = {}  # clear ab cache
 
     def get_attention_biases(self, device, training=None):
         if training:
@@ -445,10 +445,10 @@ class TFLevitMLPLayer(tf.keras.layers.Layer):
         self.activation = hard_swish
         self.linear_down = TFMLPLayerWithBN(hidden_dim, input_dim, name="linear_down")
 
-    def call(self, hidden_state):
-        hidden_state = self.linear_up(hidden_state)
+    def call(self, hidden_state, training=None):
+        hidden_state = self.linear_up(hidden_state, training=training)
         hidden_state = self.activation(hidden_state)
-        hidden_state = self.linear_down(hidden_state)
+        hidden_state = self.linear_down(hidden_state, training=training)
         return hidden_state
 
 
@@ -518,10 +518,14 @@ class TFLevitStage(tf.keras.layers.Layer):
                 )
 
         if down_ops[0] == "Subsample":
+
+            print("info", self.config.hidden_sizes)
+            print("info", idx)
             self.resolution_out = (self.resolution_in - 1) // down_ops[5] + 1
             self.layers.append(
                 TFLevitAttentionSubsample(
-                    *self.config.hidden_sizes[idx : idx + 2],
+                    input_dim=self.config.hidden_sizes[idx],
+                    output_dim=self.config.hidden_sizes[idx + 1],
                     key_dim=down_ops[1],
                     num_attention_heads=down_ops[2],
                     attention_ratio=down_ops[3],
@@ -607,7 +611,7 @@ class TFLevitClassificationLayer(tf.keras.layers.Layer):
 
         # The epsilon and momentum used here are the defaults in torch batch norm layer.
         self.batch_norm = tf.keras.layers.BatchNormalization(epsilon=1e-05, momentum=0.1, name="batch_norm")
-        self.linear = tf.keras.layers.Dense(units=output_dim, bias=False, name="linear")
+        self.linear = tf.keras.layers.Dense(units=output_dim, use_bias=False, name="linear")
 
     def call(self, hidden_state, training=None):
         hidden_state = self.batch_norm(hidden_state, training=training)
@@ -617,8 +621,10 @@ class TFLevitClassificationLayer(tf.keras.layers.Layer):
 
 @keras_serializable
 class TFLevitMainLayer(tf.keras.layers.Layer):
+    config_class = LevitConfig
+
     def __init__(self, config, **kwargs):
-        super().__init__(config, **kwargs)
+        super().__init__(**kwargs)
         self.config = config
         self.patch_embeddings = TFLevitPatchEmbeddings(config, name="patch_embeddings")
         self.encoder = TFLevitEncoder(config, name="encoder")
