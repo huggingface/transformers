@@ -69,6 +69,7 @@ else:
         "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING",
         "MODEL_MAPPING",
         "MODEL_WITH_LM_HEAD_MAPPING",
+        "MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING",
         "AutoModel",
         "AutoModelForAudioClassification",
         "AutoModelForAudioFrameClassification",
@@ -96,6 +97,7 @@ else:
         "AutoModelForVisualQuestionAnswering",
         "AutoModelForDocumentQuestionAnswering",
         "AutoModelWithLMHead",
+        "AutoModelForZeroShotObjectDetection",
     ]
 
 try:
@@ -215,6 +217,7 @@ if TYPE_CHECKING:
             MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
             MODEL_FOR_VISION_2_SEQ_MAPPING,
             MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_ZERO_SHOT_OBJECT_DETECTION_MAPPING,
             MODEL_MAPPING,
             MODEL_WITH_LM_HEAD_MAPPING,
             AutoModel,
@@ -243,6 +246,7 @@ if TYPE_CHECKING:
             AutoModelForVideoClassification,
             AutoModelForVision2Seq,
             AutoModelForVisualQuestionAnswering,
+            AutoModelForZeroShotObjectDetection,
             AutoModelWithLMHead,
         )
 

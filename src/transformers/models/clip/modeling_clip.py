@@ -688,6 +688,8 @@ class CLIPTextTransformer(nn.Module):
 class CLIPTextModel(CLIPPreTrainedModel):
     config_class = CLIPTextConfig
 
+    _no_split_modules = ["CLIPEncoderLayer"]
+
     def __init__(self, config: CLIPTextConfig):
         super().__init__(config)
         self.text_model = CLIPTextTransformer(config)

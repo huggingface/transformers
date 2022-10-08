@@ -72,6 +72,7 @@ from .token_classification import (
 from .visual_question_answering import VisualQuestionAnsweringPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
+from .zero_shot_object_detection import ZeroShotObjectDetectionPipeline
 
 
 if is_tf_available():
@@ -124,6 +125,7 @@ if is_torch_available():
         AutoModelForTokenClassification,
         AutoModelForVision2Seq,
         AutoModelForVisualQuestionAnswering,
+        AutoModelForZeroShotObjectDetection,
     )
 if TYPE_CHECKING:
     from ..modeling_tf_utils import TFPreTrainedModel
@@ -334,6 +336,13 @@ SUPPORTED_TASKS = {
         "pt": (AutoModelForObjectDetection,) if is_torch_available() else (),
         "default": {"model": {"pt": ("facebook/detr-resnet-50", "2729413")}},
         "type": "image",
+    },
+    "zero-shot-object-detection": {
+        "impl": ZeroShotObjectDetectionPipeline,
+        "tf": (),
+        "pt": (AutoModelForZeroShotObjectDetection,) if is_torch_available() else (),
+        "default": {"model": {"pt": ("google/owlvit-base-patch32", "17740e1")}},
+        "type": "multimodal",
     },
 }
 
