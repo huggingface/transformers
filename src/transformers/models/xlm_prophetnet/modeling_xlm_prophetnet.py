@@ -555,10 +555,10 @@ class XLMProphetNetDecoderLMOutput(ModelOutput):
     cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetPreTrainedModel with ProphetNet->XLMProphetNet all-casing
+# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetPreTrainedModel with ProphetNet->XLMProphetNet
 class XLMProphetNetPreTrainedModel(PreTrainedModel):
     config_class = XLMProphetNetConfig
-    base_model_prefix = "xlmprophetnet"
+    base_model_prefix = "prophetnet"
     supports_gradient_checkpointing = True
 
     def _init_weights(self, module):
@@ -598,7 +598,7 @@ class XLMProphetNetPreTrainedModel(PreTrainedModel):
         return shifted_input_ids
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetPositionalEmbeddings with ProphetNet->XLMProphetNet all-casing
+# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetPositionalEmbeddings with ProphetNet->XLMProphetNet
 class XLMProphetNetPositionalEmbeddings(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size. Padding ids are ignored by either offsetting
@@ -642,7 +642,7 @@ class XLMProphetNetPositionalEmbeddings(nn.Embedding):
         return super().forward(position_ids)
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetAttention with ProphetNet->XLMProphetNet all-casing
+# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetAttention with ProphetNet->XLMProphetNet
 class XLMProphetNetAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -802,7 +802,7 @@ class XLMProphetNetAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetFeedForward with ProphetNet->XLMProphetNet all-casing
+# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetFeedForward with ProphetNet->XLMProphetNet
 class XLMProphetNetFeedForward(nn.Module):
     """
     This is the residual two feed-forward layer block based on the original Transformer implementation.
@@ -826,7 +826,7 @@ class XLMProphetNetFeedForward(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetNgramSelfAttention with ProphetNet->XLMProphetNet all-casing
+# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetNgramSelfAttention with ProphetNet->XLMProphetNet
 class XLMProphetNetNgramSelfAttention(nn.Module):
     def __init__(self, config: XLMProphetNetConfig):
         super().__init__()
@@ -1924,11 +1924,11 @@ class XLMProphetNetModel(XLMProphetNetPreTrainedModel):
     "The XLMProphetNet Model with a language modeling head. Can be used for sequence generation tasks.",
     XLM_PROPHETNET_START_DOCSTRING,
 )
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetForConditionalGeneration with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, prophetnet->xlmprophetnet, PROPHETNET->XLM_PROPHETNET,
+# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetForConditionalGeneration with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET
 class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
     def __init__(self, config: XLMProphetNetConfig):
         super().__init__(config)
-        self.xlmprophetnet = XLMProphetNetModel(config)
+        self.prophetnet = XLMProphetNetModel(config)
         self.padding_idx = config.pad_token_id
         self.disable_ngram_loss = config.disable_ngram_loss
 
@@ -1944,7 +1944,7 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
         self.lm_head = new_embeddings
 
     def get_input_embeddings(self):
-        return self.xlmprophetnet.word_embeddings
+        return self.prophetnet.word_embeddings
 
     @add_start_docstrings_to_model_forward(XLM_PROPHETNET_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=XLMProphetNetSeq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -1980,11 +1980,9 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
         ```python
         >>> from transformers import XLMProphetNetTokenizer, XLMProphetNetForConditionalGeneration
 
-        >>> tokenizer = XLMProphetNetTokenizer.from_pretrained(
-        ...     "patrickvonplaten/xxlmprophetnet-large-uncased-standalone"
-        ... )
+        >>> tokenizer = XLMProphetNetTokenizer.from_pretrained("patrickvonplaten/xprophetnet-large-uncased-standalone")
         >>> model = XLMProphetNetForConditionalGeneration.from_pretrained(
-        ...     "patrickvonplaten/xxlmprophetnet-large-uncased-standalone"
+        ...     "patrickvonplaten/xprophetnet-large-uncased-standalone"
         ... )
 
         >>> input_ids = tokenizer(
@@ -2002,7 +2000,7 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
             # get decoder inputs from shifting lm labels to the right
             decoder_input_ids = self._shift_right(labels)
 
-        outputs = self.xlmprophetnet(
+        outputs = self.prophetnet(
             input_ids=input_ids,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
@@ -2128,10 +2126,10 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
         return reordered_past
 
     def get_encoder(self):
-        return self.xlmprophetnet.encoder
+        return self.prophetnet.encoder
 
     def get_decoder(self):
-        return self.xlmprophetnet.decoder
+        return self.prophetnet.decoder
 
 
 @add_start_docstrings(
@@ -2139,7 +2137,7 @@ class XLMProphetNetForConditionalGeneration(XLMProphetNetPreTrainedModel):
     " language modeling.",
     XLM_PROPHETNET_START_DOCSTRING,
 )
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetForCausalLM with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, self.prophetnet->self.xlmprophetnet, PROPHETNET->XLM_PROPHETNET
+# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetForCausalLM with microsoft/prophetnet-large-uncased->patrickvonplaten/xprophetnet-large-uncased-standalone, ProphetNet->XLMProphetNet, PROPHETNET->XLM_PROPHETNET
 class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
     def __init__(self, config: XLMProphetNetConfig):
         # set config for CLM
@@ -2147,7 +2145,7 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         config.is_decoder = True
         config.is_encoder_decoder = False
         super().__init__(config)
-        self.xlmprophetnet = XLMProphetNetDecoderWrapper(config)
+        self.prophetnet = XLMProphetNetDecoderWrapper(config)
 
         self.padding_idx = config.pad_token_id
         self.disable_ngram_loss = config.disable_ngram_loss
@@ -2158,10 +2156,10 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.xlmprophetnet.decoder.word_embeddings
+        return self.prophetnet.decoder.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.xlmprophetnet.decoder.word_embeddings = value
+        self.prophetnet.decoder.word_embeddings = value
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -2170,10 +2168,10 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        self.xlmprophetnet.decoder = decoder
+        self.prophetnet.decoder = decoder
 
     def get_decoder(self):
-        return self.xlmprophetnet.decoder
+        return self.prophetnet.decoder
 
     @add_start_docstrings_to_model_forward(XLM_PROPHETNET_STANDALONE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=XLMProphetNetDecoderLMOutput, config_class=_CONFIG_FOR_DOC)
@@ -2268,7 +2266,7 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, past_key_values, dec_hidden, dec_attn)
-        outputs = self.xlmprophetnet.decoder(
+        outputs = self.prophetnet.decoder(
             input_ids=input_ids,
             attention_mask=attention_mask,
             encoder_hidden_states=encoder_hidden_states,
@@ -2372,10 +2370,10 @@ class XLMProphetNetForCausalLM(XLMProphetNetPreTrainedModel):
         return reordered_past
 
 
-# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetDecoderWrapper with ProphetNet->XLMProphetNet all-casing
+# Copied from transformers.models.prophetnet.modeling_prophetnet.ProphetNetDecoderWrapper with ProphetNet->XLMProphetNet, prophetnet->XLMProphetNet
 class XLMProphetNetDecoderWrapper(XLMProphetNetPreTrainedModel):
     """
-    This is a wrapper class, so that [`XLMProphetNetForCausalLM`] can correctly be loaded from pretrained xlmprophetnet
+    This is a wrapper class, so that [`XLMProphetNetForCausalLM`] can correctly be loaded from pretrained XLMProphetNet
     classes.
     """
 
