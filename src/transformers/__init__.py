@@ -2113,6 +2113,7 @@ else:
             "XLMProphetNetForCausalLM",
             "XLMProphetNetForConditionalGeneration",
             "XLMProphetNetModel",
+            "XLMProphetNetPreTrainedModel",
         ]
     )
     _import_structure["models.xlm_roberta"].extend(
