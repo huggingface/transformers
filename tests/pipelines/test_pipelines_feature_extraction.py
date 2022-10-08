@@ -22,12 +22,11 @@ from transformers import (
     LxmertConfig,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, nested_simplify, require_tf, require_torch
+from transformers.testing_utils import nested_simplify, require_tf, require_torch
 
 from .test_pipelines_common import PipelineTestCaseMeta
 
 
-@is_pipeline_test
 class FeatureExtractionPipelineTests(unittest.TestCase, metaclass=PipelineTestCaseMeta):
     model_mapping = MODEL_MAPPING
     tf_model_mapping = TF_MODEL_MAPPING

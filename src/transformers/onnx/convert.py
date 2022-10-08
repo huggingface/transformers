@@ -262,7 +262,9 @@ def export_tensorflow(
     inputs_match, matched_inputs = ensure_model_and_config_inputs_match(model, model_inputs.keys())
     onnx_outputs = list(config.outputs.keys())
 
-    input_signature = [tf.TensorSpec.from_tensor(tensor, name=key) for key, tensor in model_inputs.items()]
+    input_signature = [
+        tf.TensorSpec([None] * tensor.ndim, dtype=tensor.dtype, name=key) for key, tensor in model_inputs.items()
+    ]
     onnx_model, _ = tf2onnx.convert.from_keras(model, input_signature, opset=opset)
     onnx.save(onnx_model, output.as_posix())
     config.restore_ops()
@@ -363,12 +365,22 @@ def validate_model_outputs(
         logger.info("Overwriting the `preprocessor` argument with `tokenizer` to generate dummmy inputs.")
         preprocessor = tokenizer
 
-    # TODO: generate inputs with a different batch_size and seq_len that was used for conversion to properly test
+    # generate inputs with a different batch_size and seq_len that was used for conversion to properly test
     # dynamic input shapes.
     if is_torch_available() and issubclass(type(reference_model), PreTrainedModel):
-        reference_model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.PYTORCH)
+        reference_model_inputs = config.generate_dummy_inputs(
+            preprocessor,
+            batch_size=config.default_fixed_batch + 1,
+            seq_length=config.default_fixed_sequence + 1,
+            framework=TensorType.PYTORCH,
+        )
     else:
-        reference_model_inputs = config.generate_dummy_inputs(preprocessor, framework=TensorType.TENSORFLOW)
+        reference_model_inputs = config.generate_dummy_inputs(
+            preprocessor,
+            batch_size=config.default_fixed_batch + 1,
+            seq_length=config.default_fixed_sequence + 1,
+            framework=TensorType.TENSORFLOW,
+        )
 
     # Create ONNX Runtime session
     options = SessionOptions()
