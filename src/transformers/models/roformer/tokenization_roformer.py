@@ -18,7 +18,7 @@ import collections
 import os
 from typing import List, Optional, Tuple
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_utils import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import logging
 
 
