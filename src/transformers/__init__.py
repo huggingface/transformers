@@ -178,6 +178,7 @@ _import_structure = {
     "models.cpm": [],
     "models.ctrl": ["CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP", "CTRLConfig", "CTRLTokenizer"],
     "models.cvt": ["CVT_PRETRAINED_CONFIG_ARCHIVE_MAP", "CvtConfig"],
+    "models.dallemega": ["DalleMegaConfig", "DalleMegaTokenizer"],
     "models.data2vec": [
         "DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP",
@@ -920,6 +921,14 @@ else:
             "BartModel",
             "BartPretrainedModel",
             "PretrainedBartModel",
+        ]
+    )
+    _import_structure["models.dallemega"].extend(
+        [
+            "DALLE_MEGA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "DalleMegaForConditionalGeneration",
+            "DalleMegaModel",
+            "DalleMegaPretrainedModel",
         ]
     )
     _import_structure["models.mvp"].extend(
@@ -3174,6 +3183,7 @@ if TYPE_CHECKING:
     from .models.convnext import CONVNEXT_PRETRAINED_CONFIG_ARCHIVE_MAP, ConvNextConfig
     from .models.ctrl import CTRL_PRETRAINED_CONFIG_ARCHIVE_MAP, CTRLConfig, CTRLTokenizer
     from .models.cvt import CVT_PRETRAINED_CONFIG_ARCHIVE_MAP, CvtConfig
+    from .models.dallemega import DalleMegaConfig, DalleMegaTokenizer
     from .models.data2vec import (
         DATA2VEC_TEXT_PRETRAINED_CONFIG_ARCHIVE_MAP,
         DATA2VEC_VISION_PRETRAINED_CONFIG_ARCHIVE_MAP,
@@ -3959,6 +3969,12 @@ if TYPE_CHECKING:
             CvtForImageClassification,
             CvtModel,
             CvtPreTrainedModel,
+        )
+        from .models.dallemega import (
+            DALLE_MEGA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            DalleMegaForConditionalGeneration,
+            DalleMegaModel,
+            DalleMegaPretrainedModel,
         )
         from .models.data2vec import (
             DATA2VEC_AUDIO_PRETRAINED_MODEL_ARCHIVE_LIST,
