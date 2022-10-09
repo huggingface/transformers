@@ -44,6 +44,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_switchtransformers import SwitchTransformersConfig
+from .router import ExpertsChooseMaskedRouter, TokensChooseMaskedRouter, TokensChooseScatterRouter
 
 
 logger = logging.get_logger(__name__)
@@ -134,17 +135,61 @@ class SwitchTransformersDenseGatedActDense(nn.Module):
 # This class should also contain a router class
 # check flaxformer/architecture/moe/router.py : https://github.com/google/flaxformer/blob/main/flaxformer/architectures/moe/routing.py
 class SwitchTransformersLayerFF(nn.Module):
-    def __init__(self, config: SwitchTransformersConfig):
+    def __init__(self, config: SwitchTransformersConfig, is_sparse=False):
         super().__init__()
         # TODO: check the comments above
+        self.is_sparse = is_sparse
+        if self.is_sparse:
+            self.mlp = SwitchTransformersDenseActDense(config)
+        else:
+            self.mlp = SwitchTransformersSparseMLP(config)
         self.layer_norm = SwitchTransformersLayerNorm(config.d_model, eps=config.layer_norm_epsilon)
         self.dropout = nn.Dropout(config.dropout_rate)
 
     def forward(self, hidden_states):
         forwarded_states = self.layer_norm(hidden_states)
-        forwarded_states = self.DenseReluDense(forwarded_states)
+        forwarded_states = self.mlp(forwarded_states)
         hidden_states = hidden_states + self.dropout(forwarded_states)
         return hidden_states
+
+
+class SwitchTransformersSparseMLP(nn.Module):
+    r"""
+    Implementation of the Switch Transformers Sparse MLP module
+
+    TODO: Add a LOT of details here
+    """
+
+    def __init__(self, config: SwitchTransformersConfig):
+        super().__init__()
+        # Step 1: Get the correct router
+        self.router = self._get_router(config)
+
+        # Step 2: Get the experts
+        self.experts = None  # TODO: figure out how this is done in t5x...
+
+    def _get_router(self, config):
+        r"""
+        For now two types of Router are supported:
+            - Masked Routers
+            - Scatter Routers
+        In total the list of supported Routers are the following:
+
+        """
+        if config.router_type.lower() == "tokens_masked":
+            return TokensChooseMaskedRouter(config)
+        elif config.router_type.lower() == "tokens_scatter":
+            return TokensChooseScatterRouter(config)
+        elif config.router_type.lower() == "experts_masked":
+            return ExpertsChooseMaskedRouter(config)
+        else:
+            raise NotImplementedError(
+                f"{config.router_type.lower()} not implemented ! Please chose a router among [tokens_masked,"
+                " tokens_scatter, experts_masked]"
+            )
+
+    def forward(self, hidden_states):
+        pass
 
 
 # Copied from transformers.models.t5.modeling_t5.T5Attention with T5->SwitchTransformers
@@ -448,11 +493,11 @@ class SwitchTransformersLayerCrossAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.t5.modeling_t5.T5Block with T5->SwitchTransformers
 class SwitchTransformersBlock(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False):
+    def __init__(self, config, has_relative_attention_bias=False, is_sparse=False):
         super().__init__()
         self.is_decoder = config.is_decoder
+        self.is_sparse = is_sparse
         self.layer = nn.ModuleList()
         self.layer.append(
             SwitchTransformersLayerSelfAttention(config, has_relative_attention_bias=has_relative_attention_bias)
@@ -460,7 +505,7 @@ class SwitchTransformersBlock(nn.Module):
         if self.is_decoder:
             self.layer.append(SwitchTransformersLayerCrossAttention(config))
 
-        self.layer.append(SwitchTransformersLayerFF(config))
+        self.layer.append(SwitchTransformersLayerFF(config, is_sparse=self.is_sparse))
 
     def forward(
         self,
@@ -665,15 +710,18 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
 
 
 class SwitchTransformersStack(nn.Module):
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config, embed_tokens=None, sparse_step=1):
         super().__init__(config)
 
         self.embed_tokens = embed_tokens
         self.is_decoder = config.is_decoder
 
+        # TODO: change this, actually you can have a block full of sparse layers...
         self.block = nn.ModuleList(
             [
-                SwitchTransformersBlock(config, has_relative_attention_bias=bool(i == 0))
+                SwitchTransformersBlock(
+                    config, has_relative_attention_bias=bool(i == 0), is_sparse=(i % sparse_step == 0)
+                )
                 for i in range(config.num_layers)
             ]
         )
@@ -1088,13 +1136,13 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = SwitchTransformersStack(encoder_config, self.shared)
+        self.encoder = SwitchTransformersStack(encoder_config, self.shared, encoder_config.encoder_sparse_step)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
         decoder_config.is_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = SwitchTransformersStack(decoder_config, self.shared)
+        self.decoder = SwitchTransformersStack(decoder_config, self.shared, decoder_config.decoder_sparse_step)
 
         # Initialize weights and apply final processing
         self.post_init()
