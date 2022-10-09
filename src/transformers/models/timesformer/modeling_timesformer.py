@@ -48,7 +48,7 @@ _CONFIG_FOR_DOC = "TimeSformerConfig"
 _CHECKPOINT_FOR_DOC = "facebook/timesformer"
 
 TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/timesformer",
+    "fcakyon/timesformer-base-finetuned-k400",
     # See all TimeSformer models at https://huggingface.co/models?filter=timesformer
 ]
 
@@ -76,7 +76,7 @@ class TimeSformerPatchEmbed(nn.Module):
 
     def forward(self, x):
         B, C, num_frames, H, W = x.shape
-        x = x.permute(0, 2, 1, 3, 4).view(B * num_frames, C, H, W)
+        x = x.permute(0, 2, 1, 3, 4).reshape(B * num_frames, C, H, W)
 
         x = self.projection(x)
         patch_width = x.size(-1)
@@ -142,9 +142,9 @@ class TimeSformerEmbeddings(nn.Module):
             embeddings = embeddings[:, 1:]
             _, patch_height, patch_width = embeddings.shape
             embeddings = (
-                embeddings.view(batch_size, num_frames, patch_height, patch_width)
+                embeddings.reshape(batch_size, num_frames, patch_height, patch_width)
                 .permute(0, 2, 1, 3)
-                .view(batch_size * patch_height, num_frames, patch_width)
+                .reshape(batch_size * patch_height, num_frames, patch_width)
             )
             # Resizing time embeddings in case they don't match
             if num_frames != self.time_embeddings.size(1):
@@ -324,7 +324,6 @@ class TimeSformerAttention(nn.Module):
         super().__init__()
         self.attention = TimeSformerSelfAttention(config)
         self.output = TimeSformerSelfOutput(config)
-        self.pruned_heads = set()
 
     def forward(
         self,
@@ -435,10 +434,9 @@ class TimeSformerLayer(nn.Module):
             xt = xt.reshape(B, H, W, T, xt.shape[2]).reshape(B * H * W, T, xt.shape[2])
 
             temporal_attention_outputs = self.temporal_attention(
-                self.temporal_layernorm(xt), output_attentions=output_attentions
+                self.temporal_layernorm(xt),
             )
             attention_output = temporal_attention_outputs[0]
-            outputs = temporal_attention_outputs[1:]  # add self attentions if we output attention weights
 
             res_temporal = self.drop_path(attention_output)
 
@@ -456,20 +454,17 @@ class TimeSformerLayer(nn.Module):
             xs = xs.reshape(B, H, W, T, xs.shape[2]).permute(0, 3, 1, 2, 4).reshape(B * T, H * W, xs.shape[2])
             xs = torch.cat((cls_token, xs), 1)
 
-            spatial_attention_outputs = self.attention(
-                self.layernorm_before(xs),
-            )
+            spatial_attention_outputs = self.attention(self.layernorm_before(xs), output_attentions=output_attentions)
             attention_output = spatial_attention_outputs[0]
+            outputs = spatial_attention_outputs[1:]  # add self attentions if we output attention weights
 
             res_spatial = self.drop_path(attention_output)
 
             # Taking care of CLS token
             cls_token = res_spatial[:, 0, :]
-            # cls_token = rearrange(cls_token, "(b t) m -> b t m", b=B, t=T)
             cls_token = cls_token.reshape(B, T, cls_token.shape[1])
             cls_token = torch.mean(cls_token, 1, True)  # averaging for every frame
             res_spatial = res_spatial[:, 1:, :]
-            # res_spatial = rearrange(res_spatial, "(b t) (h w) m -> b (h w t) m", b=B, h=H, w=W, t=T)
             res_spatial = (
                 res_spatial.reshape(B, T, H, W, res_spatial.shape[2])
                 .permute(0, 2, 3, 1, 4)
@@ -698,6 +693,9 @@ class TimeSformerModel(TimeSformerPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # timesformer expects (batch_size, num_channels, num_frames, ,eight, width)
+        pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
+
         embedding_output = self.embeddings(pixel_values)
 
         encoder_outputs = self.encoder(
@@ -806,8 +804,6 @@ class TimeSformerForVideoClassification(TimeSformerPreTrainedModel):
         eating spaghetti
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        pixel_values = pixel_values.permute(0, 2, 1, 3, 4)
 
         outputs = self.timesformer(
             pixel_values,

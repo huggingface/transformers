@@ -37,7 +37,6 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING,
-        TimeSformerForPreTraining,
         TimeSformerForVideoClassification,
         TimeSformerModel,
     )
@@ -56,7 +55,6 @@ class TimeSformerModelTester:
         image_size=10,
         num_channels=3,
         patch_size=2,
-        tubelet_size=2,
         num_frames=2,
         is_training=True,
         use_labels=True,
@@ -69,7 +67,7 @@ class TimeSformerModelTester:
         attention_probs_dropout_prob=0.1,
         type_sequence_label_size=10,
         initializer_range=0.02,
-        mask_ratio=0.9,
+        attention_type="divided_space_time",
         scope=None,
     ):
         self.parent = parent
@@ -77,7 +75,6 @@ class TimeSformerModelTester:
         self.image_size = image_size
         self.num_channels = num_channels
         self.patch_size = patch_size
-        self.tubelet_size = tubelet_size
         self.num_frames = num_frames
         self.is_training = is_training
         self.use_labels = use_labels
@@ -88,17 +85,14 @@ class TimeSformerModelTester:
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.type_sequence_label_size = type_sequence_label_size
+        self.attention_type = attention_type
         self.initializer_range = initializer_range
-        self.mask_ratio = mask_ratio
         self.scope = scope
+        self.type_sequence_label_size = type_sequence_label_size
 
-        # in TimeSformer, the number of tokens equals num_frames/tubelet_size * num_patches per frame
+        # in TimeSformer, the number of spatial tokens equals num_frames * num_patches per frame + 1 CLS token
         self.num_patches_per_frame = (image_size // patch_size) ** 2
-        self.seq_length = (num_frames // tubelet_size) * self.num_patches_per_frame
-
-        # use this variable to define bool_masked_pos
-        self.num_masks = int(mask_ratio * self.seq_length)
+        self.seq_length = (num_frames) * self.num_patches_per_frame + 1
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
@@ -119,7 +113,6 @@ class TimeSformerModelTester:
             patch_size=self.patch_size,
             num_channels=self.num_channels,
             num_frames=self.num_frames,
-            tubelet_size=self.tubelet_size,
             hidden_size=self.hidden_size,
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
@@ -127,8 +120,8 @@ class TimeSformerModelTester:
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            is_decoder=False,
             initializer_range=self.initializer_range,
+            attention_type=self.attention_type,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -137,22 +130,6 @@ class TimeSformerModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def create_and_check_for_pretraining(self, config, pixel_values, labels):
-        model = TimeSformerForPreTraining(config)
-        model.to(torch_device)
-        model.eval()
-        # important: each video needs to have the same number of masked patches
-        # hence we define a single mask, which we then repeat for each example in the batch
-        mask = torch.ones((self.num_masks,))
-        mask = torch.cat([mask, torch.zeros(self.seq_length - mask.size(0))])
-        bool_masked_pos = mask.expand(self.batch_size, -1).bool()
-
-        result = model(pixel_values, bool_masked_pos)
-        # model only returns predictions for masked patches
-        num_masked_patches = mask.sum().item()
-        decoder_num_labels = 3 * self.tubelet_size * self.patch_size**2
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, num_masked_patches, decoder_num_labels))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -168,11 +145,7 @@ class TimeSformerModelTest(ModelTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (
-        (TimeSformerModel, TimeSformerForPreTraining, TimeSformerForVideoClassification)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (TimeSformerModel, TimeSformerForVideoClassification) if is_torch_available() else ()
 
     test_pruning = False
     test_torchscript = False
@@ -187,14 +160,6 @@ class TimeSformerModelTest(ModelTesterMixin, unittest.TestCase):
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
-
-        if model_class == TimeSformerForPreTraining:
-            # important: each video needs to have the same number of masked patches
-            # hence we define a single mask, which we then repeat for each example in the batch
-            mask = torch.ones((self.model_tester.num_masks,))
-            mask = torch.cat([mask, torch.zeros(self.model_tester.seq_length - mask.size(0))])
-            bool_masked_pos = mask.expand(self.model_tester.batch_size, -1).bool()
-            inputs_dict["bool_masked_pos"] = bool_masked_pos.to(torch_device)
 
         if return_labels:
             if model_class in [
@@ -238,10 +203,6 @@ class TimeSformerModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_pretraining(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
-
     @slow
     def test_model_from_pretrained(self):
         for model_name in TIMESFORMER_PRETRAINED_MODEL_ARCHIVE_LIST[:1]:
@@ -257,10 +218,8 @@ class TimeSformerModelTest(ModelTesterMixin, unittest.TestCase):
             config.return_dict = True
 
             for model_class in self.all_model_classes:
-                num_visible_patches = self.model_tester.seq_length - self.model_tester.num_masks
-                seq_len = (
-                    num_visible_patches if model_class == TimeSformerForPreTraining else self.model_tester.seq_length
-                )
+                seq_len = self.model_tester.seq_length
+                num_frames = self.model_tester.num_frames
 
                 inputs_dict["output_attentions"] = True
                 inputs_dict["output_hidden_states"] = False
@@ -284,9 +243,10 @@ class TimeSformerModelTest(ModelTesterMixin, unittest.TestCase):
                 attentions = outputs.attentions
                 self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
 
+                # attentions has shape (batch_size x num_frames) x num_heads x (num_patches per frame + 1) x (num_patches per frame + 1)
                 self.assertListEqual(
                     list(attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                    [self.model_tester.num_attention_heads, seq_len // num_frames + 1, seq_len // num_frames + 1],
                 )
                 out_len = len(outputs)
 
@@ -304,9 +264,11 @@ class TimeSformerModelTest(ModelTesterMixin, unittest.TestCase):
                 self_attentions = outputs.attentions
 
                 self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+
+                # attentions has shape (batch_size x num_frames) x num_heads x (num_patches per frame + 1) x (num_patches per frame + 1)
                 self.assertListEqual(
                     list(self_attentions[0].shape[-3:]),
-                    [self.model_tester.num_attention_heads, seq_len, seq_len],
+                    [self.model_tester.num_attention_heads, seq_len // num_frames + 1, seq_len // num_frames + 1],
                 )
 
     def test_hidden_states_output(self):
@@ -322,10 +284,7 @@ class TimeSformerModelTest(ModelTesterMixin, unittest.TestCase):
             expected_num_layers = self.model_tester.num_hidden_layers + 1
             self.assertEqual(len(hidden_states), expected_num_layers)
 
-            num_visible_patches = self.model_tester.seq_length - self.model_tester.num_masks
-            seq_length = (
-                num_visible_patches if model_class == TimeSformerForPreTraining else self.model_tester.seq_length
-            )
+            seq_length = self.model_tester.seq_length
 
             self.assertListEqual(
                 list(hidden_states[0].shape[-2:]),
@@ -348,7 +307,9 @@ class TimeSformerModelTest(ModelTesterMixin, unittest.TestCase):
 # We will verify our results on a video of eating spaghetti
 # Frame indices used: [164 168 172 176 181 185 189 193 198 202 206 210 215 219 223 227]
 def prepare_video():
-    file = hf_hub_download(repo_id="datasets/hf-internal-testing/spaghetti-video", filename="eating_spaghetti.npy")
+    file = hf_hub_download(
+        repo_id="hf-internal-testing/spaghetti-video", filename="eating_spaghetti.npy", repo_type="dataset"
+    )
     video = np.load(file)
     return list(video)
 
@@ -367,13 +328,13 @@ class TimeSformerModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_for_video_classification(self):
-        model = TimeSformerForVideoClassification.from_pretrained("facebook/timesformer-finetuned-kinetics").to(
+        model = TimeSformerForVideoClassification.from_pretrained("fcakyon/timesformer-base-finetuned-k400").to(
             torch_device
         )
 
         feature_extractor = self.default_feature_extractor
         video = prepare_video()
-        inputs = feature_extractor(video, return_tensors="pt").to(torch_device)
+        inputs = feature_extractor(video[:8], return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
@@ -383,45 +344,6 @@ class TimeSformerModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 400))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([0.3669, -0.0688, -0.2421]).to(torch_device)
+        expected_slice = torch.tensor([-0.3016, -0.7713, -0.4205]).to(torch_device)
 
         self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_for_pretraining(self):
-        model = TimeSformerForPreTraining.from_pretrained("facebook/timesformer-short").to(torch_device)
-
-        feature_extractor = self.default_feature_extractor
-        video = prepare_video()
-        inputs = feature_extractor(video, return_tensors="pt").to(torch_device)
-
-        # add boolean mask, indicating which patches to mask
-        local_path = hf_hub_download(repo_id="hf-internal-testing/bool-masked-pos", filename="bool_masked_pos.pt")
-        inputs["bool_masked_pos"] = torch.load(local_path)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        # verify the logits
-        expected_shape = torch.Size([1, 1408, 1536])
-        expected_slice = torch.tensor(
-            [[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]], device=torch_device
-        )
-        self.assertEqual(outputs.logits.shape, expected_shape)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
-
-        # verify the loss (`config.norm_pix_loss` = `True`)
-        expected_loss = torch.tensor([0.5142], device=torch_device)
-        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
-
-        # verify the loss (`config.norm_pix_loss` = `False`)
-        model = TimeSformerForPreTraining.from_pretrained("facebook/timesformer-short", norm_pix_loss=False).to(
-            torch_device
-        )
-
-        with torch.no_grad():
-            outputs = model(**inputs)
-
-        expected_loss = torch.tensor(torch.tensor([0.6469]), device=torch_device)
-        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
