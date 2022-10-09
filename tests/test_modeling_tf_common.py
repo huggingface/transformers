@@ -2237,23 +2237,24 @@ class UtilsFunctionsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir, saved_model=True, signatures=None)
             model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
-            self.assertTrue('serving_default' in list(model_loaded.signatures.keys()))
+            self.assertTrue("serving_default" in list(model_loaded.signatures.keys()))
 
         # Providing custom signature function
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir, saved_model=True, signatures={"custom_signature": serving_fn})
             model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
-            self.assertTrue('custom_signature' in list(model_loaded.signatures.keys()))
+            self.assertTrue("custom_signature" in list(model_loaded.signatures.keys()))
 
         # Providing multiple custom signature function
         with tempfile.TemporaryDirectory() as tmp_dir:
-            model.save_pretrained(tmp_dir, saved_model=True, signatures={
-                                                                        "custom_signature_1": serving_fn, 
-                                                                        "custom_signature_2": serving_fn
-                                                                        })
+            model.save_pretrained(
+                tmp_dir,
+                saved_model=True,
+                signatures={"custom_signature_1": serving_fn, "custom_signature_2": serving_fn},
+            )
             model_loaded = tf.keras.models.load_model(f"{tmp_dir}/saved_model/1")
-            self.assertTrue('custom_signature_1' in list(model_loaded.signatures.keys()))
-            self.assertTrue('custom_signature_2' in list(model_loaded.signatures.keys()))
+            self.assertTrue("custom_signature_1" in list(model_loaded.signatures.keys()))
+            self.assertTrue("custom_signature_2" in list(model_loaded.signatures.keys()))
 
 
 @require_tf
