@@ -13,8 +13,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Tuple
-
+from typing import Optional, Tuple, Union
+import math
+import collections.abc
+import numpy as np
+import flax
 import flax.linen as nn
 import jax
 import jax.numpy as jnp
@@ -29,8 +32,7 @@ from ...modeling_flax_utils import (
     append_replace_return_docstrings,
     overwrite_call_docstring,
 )
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward
-
+from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from .configuration_donut_swin import DonutSwinConfig
 
 
@@ -50,8 +52,7 @@ DONUT_SWIN_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-@dataclass
-# Copied from transformers.models.swin.modeling_swin.SwinEncoderOutput with Swin->DonutSwin
+@flax.struct.dataclass
 class DonutSwinEncoderOutput(ModelOutput):
     """
     DonutSwin encoder's outputs, with potential hidden states and attentions.
@@ -78,51 +79,51 @@ class DonutSwinEncoderOutput(ModelOutput):
             include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: jnp.ndarray = None
+    hidden_states: Optional[Tuple[jnp.ndarray]] = None
+    attentions: Optional[Tuple[jnp.ndarray]] = None
+    reshaped_hidden_states: Optional[Tuple[jnp.ndarray]] = None
 
 
-@dataclass
+@flax.struct.dataclass
 # Copied from transformers.models.swin.modeling_swin.SwinModelOutput with Swin->DonutSwin
 class DonutSwinModelOutput(ModelOutput):
     """
     DonutSwin model's outputs that also contains a pooling of the last hidden states.
 
     Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        last_hidden_state (`jnp.ndarray` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
+        pooler_output (`jnp.ndarray` of shape `(batch_size, hidden_size)`, *optional*, returned when `add_pooling_layer=True` is passed):
             Average pooling of the last layer hidden-state.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        hidden_states (`tuple(jnp.ndarray)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `jnp.ndarray` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, sequence_length, hidden_size)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
+        attentions (`tuple(jnp.ndarray)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `jnp.ndarray` (one for each stage) of shape `(batch_size, num_heads, sequence_length,
             sequence_length)`.
 
             Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
             heads.
-        reshaped_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        reshaped_hidden_states (`tuple(jnp.ndarray)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `jnp.ndarray` (one for the output of the embeddings + one for the output of each stage) of
             shape `(batch_size, hidden_size, height, width)`.
 
             Hidden-states of the model at the output of each layer plus the initial embedding outputs reshaped to
             include the spatial dimensions.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
+    last_hidden_state: jnp.ndarray = None
+    pooler_output: Optional[jnp.ndarray] = None
+    hidden_states: Optional[Tuple[jnp.ndarray]] = None
+    attentions: Optional[Tuple[jnp.ndarray]] = None
+    reshaped_hidden_states: Optional[Tuple[jnp.ndarray]] = None
 
 
 # Copied from transformers.models.swin.modeling_swin.window_partition
-def window_partition(input_feature, window_size):
+def window_partition(input_feature: jnp.ndarray, window_size: int) -> jnp.ndarray:
     """
     Partitions the given input into windows.
     """
@@ -130,18 +131,20 @@ def window_partition(input_feature, window_size):
     input_feature = input_feature.view(
         batch_size, height // window_size, window_size, width // window_size, window_size, num_channels
     )
-    windows = input_feature.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, window_size, window_size, num_channels)
+    windows = jnp.transpose(input_feature, (0, 1, 3, 2, 4, 5))
+    windows = jnp.reshape(windows, (-1, window_size, window_size, num_channels))
     return windows
 
 
 # Copied from transformers.models.swin.modeling_swin.window_reverse
-def window_reverse(windows, window_size, height, width):
+def window_reverse(windows: jnp.ndarray, window_size: int, height: int, width: int) -> jnp.ndarray:
     """
     Merges windows to produce higher resolution features.
     """
     batch_size = math.floor(windows.shape[0] / (height * width / window_size / window_size))
     windows = windows.view(batch_size, height // window_size, width // window_size, window_size, window_size, -1)
-    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(batch_size, height, width, -1)
+    windows = jnp.transpose(windows, (0, 1, 3, 2, 4, 5))
+    windows = jnp.reshape(windows, (batch_size, height, width, -1))
     return windows
 
 
@@ -150,38 +153,42 @@ class DonutSwinEmbeddings(nn.Module):
     """
     Construct the patch and position embeddings. Optionally, also the mask token.
     """
+    config: DonutSwinConfig
+    use_mask_token: bool = False
+    dtype: jnp.dtype = jnp.float32
 
-    def __init__(self, config, use_mask_token=False):
-        super().__init__()
-
-        self.patch_embeddings = DonutSwinPatchEmbeddings(config)
+    def setup(self):
+        self.patch_embeddings = DonutSwinPatchEmbeddings(self.config, dtype=self.dtype)
         num_patches = self.patch_embeddings.num_patches
         self.patch_grid = self.patch_embeddings.grid_size
-        self.mask_token = nn.Parameter(torch.zeros(1, 1, config.embed_dim)) if use_mask_token else None
+        if self.use_mask_token:
+            self.mask_token = self.param("mask_token", nn.initializers.zeros, (1, 1, self.config.embed_dim))
+        else:
+            self.mask_token = None
 
-        if config.use_absolute_embeddings:
-            self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.embed_dim))
+        if self.config.use_absolute_embeddings:
+            self.position_embeddings = self.param("position_embeddings", nn.initializers.zeros, (1, num_patches + 1, self.config.embed_dim)) 
         else:
             self.position_embeddings = None
 
-        self.norm = nn.LayerNorm(config.embed_dim)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.norm = nn.LayerNorm(self.config.embed_dim)
+        self.dropout = nn.Dropout(rate=self.config.hidden_dropout_prob)
 
-    def forward(
-        self, pixel_values: Optional[torch.FloatTensor], bool_masked_pos: Optional[torch.BoolTensor] = None
-    ) -> Tuple[torch.Tensor]:
+    def __call__(
+        self, pixel_values: jnp.ndarray, bool_masked_pos: Optional[jnp.ndarray] = None
+    ) -> Tuple[jnp.ndarray]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
         embeddings = self.norm(embeddings)
-        batch_size, seq_len, _ = embeddings.size()
+        batch_size, seq_len, _ = embeddings.shape
 
         if bool_masked_pos is not None:
-            mask_tokens = self.mask_token.expand(batch_size, seq_len, -1)
+            mask_tokens = jnp.broadcast_to(self.mask_token, (batch_size, seq_len, -1))
             # replace the masked visual tokens by mask_tokens
-            mask = bool_masked_pos.unsqueeze(-1).type_as(mask_tokens)
+            mask = jnp.expand_dims(bool_masked_pos, -1).astype(mask_tokens.dtype)
             embeddings = embeddings * (1.0 - mask) + mask_tokens * mask
 
         if self.position_embeddings is not None:
-            embeddings = embeddings + self.position_embeddings
+            embeddings = embeddings + self.position_embeddings.astype(self.dtype)
 
         embeddings = self.dropout(embeddings)
 
@@ -195,11 +202,12 @@ class DonutSwinPatchEmbeddings(nn.Module):
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
     Transformer.
     """
+    config: DonutSwinConfig
+    dtype: jnp.dtype = jnp.float32
 
-    def __init__(self, config):
-        super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.embed_dim
+    def setup(self):
+        image_size, patch_size = self.config.image_size, self.config.patch_size
+        num_channels, hidden_size = self.config.num_channels, self.config.embed_dim
         image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
         patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
@@ -209,18 +217,18 @@ class DonutSwinPatchEmbeddings(nn.Module):
         self.num_patches = num_patches
         self.grid_size = (image_size[0] // patch_size[0], image_size[1] // patch_size[1])
 
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+        self.projection = nn.Conv(hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def maybe_pad(self, pixel_values, height, width):
+    def maybe_pad(self, pixel_values: jnp.ndarray, height: int, width: int):
         if width % self.patch_size[1] != 0:
             pad_values = (0, self.patch_size[1] - width % self.patch_size[1])
-            pixel_values = nn.functional.pad(pixel_values, pad_values)
+            pixel_values = jax.lax.pad(pixel_values, 0, pad_values)
         if height % self.patch_size[0] != 0:
             pad_values = (0, 0, 0, self.patch_size[0] - height % self.patch_size[0])
-            pixel_values = nn.functional.pad(pixel_values, pad_values)
+            pixel_values = jax.lax.pad(pixel_values, 0, pad_values)
         return pixel_values
 
-    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> Tuple[torch.Tensor, Tuple[int]]:
+    def __call__(self, pixel_values: jnp.ndarray) -> Tuple[jnp.ndarray, Tuple[int]]:
         _, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -231,9 +239,8 @@ class DonutSwinPatchEmbeddings(nn.Module):
         embeddings = self.projection(pixel_values)
         _, _, height, width = embeddings.shape
         output_dimensions = (height, width)
-        embeddings = embeddings.flatten(2).transpose(1, 2)
-
-        return embeddings, output_dimensions
+        batch_size, _, _, channels = embeddings.shape
+        return jnp.reshape(embeddings, (batch_size, -1, channels)), output_dimensions
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinPatchMerging
@@ -249,28 +256,31 @@ class DonutSwinPatchMerging(nn.Module):
         norm_layer (`nn.Module`, *optional*, defaults to `nn.LayerNorm`):
             Normalization layer class.
     """
-
-    def __init__(self, input_resolution: Tuple[int], dim: int, norm_layer: nn.Module = nn.LayerNorm) -> None:
-        super().__init__()
-        self.input_resolution = input_resolution
-        self.dim = dim
-        self.reduction = nn.Linear(4 * dim, 2 * dim, bias=False)
-        self.norm = norm_layer(4 * dim)
+    config: DonutSwinConfig
+    input_resolution: Tuple[int]
+    dim: int
+    norm_layer: nn.Module = nn.LayerNorm
+    dtype: jnp.dtype = jnp.float32
+    
+    def setup(self) -> None:
+        self.reduction = nn.Dense(2 * self.dim, use_bias=False)
+        self.norm = self.norm_layer(self.config.layer_norm_eps)
 
     def maybe_pad(self, input_feature, height, width):
         should_pad = (height % 2 == 1) or (width % 2 == 1)
         if should_pad:
             pad_values = (0, 0, 0, width % 2, 0, height % 2)
-            input_feature = nn.functional.pad(input_feature, pad_values)
+            input_feature = jax.lax.pad(input_feature, 0, pad_values)
 
         return input_feature
 
-    def forward(self, input_feature: torch.Tensor, input_dimensions: Tuple[int, int]) -> torch.Tensor:
+    def __call__(self, input_feature: jnp.ndarray, input_dimensions: Tuple[int, int]) -> jnp.ndarray:
         height, width = input_dimensions
+        
         # `dim` is height * width
         batch_size, dim, num_channels = input_feature.shape
 
-        input_feature = input_feature.view(batch_size, height, width, num_channels)
+        input_feature = jnp.reshape(input_feature, (batch_size, height, width, num_channels))
         # pad input to be disible by width and height, if needed
         input_feature = self.maybe_pad(input_feature, height, width)
         # [batch_size, height/2, width/2, num_channels]
@@ -282,8 +292,9 @@ class DonutSwinPatchMerging(nn.Module):
         # [batch_size, height/2, width/2, num_channels]
         input_feature_3 = input_feature[:, 1::2, 1::2, :]
         # batch_size height/2 width/2 4*num_channels
-        input_feature = torch.cat([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
-        input_feature = input_feature.view(batch_size, -1, 4 * num_channels)  # batch_size height/2*width/2 4*C
+        
+        input_feature = jnp.concatenate([input_feature_0, input_feature_1, input_feature_2, input_feature_3], -1)
+        input_feature = jnp.reshape(input_feature, (batch_size, -1, 4 * num_channels))  # batch_size height/2*width/2 4*C
 
         input_feature = self.norm(input_feature)
         input_feature = self.reduction(input_feature)
@@ -291,191 +302,181 @@ class DonutSwinPatchMerging(nn.Module):
         return input_feature
 
 
-# Copied from transformers.models.swin.modeling_swin.drop_path
-def drop_path(input, drop_prob=0.0, training=False, scale_by_keep=True):
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-# Copied from transformers.models.swin.modeling_swin.SwinDropPath
-class DonutSwinDropPath(nn.Module):
+# Copied from transformers.models.beit.modeling_flax_beit.FlaxBeitDropPath
+class FlaxDonutSwinDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
+    rate: float
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return drop_path(x, self.drop_prob, self.training)
+    @nn.module.compact
+    def __call__(self, inputs, deterministic: Optional[bool] = True):
+        if self.rate == 0.0:
+            return inputs
+        keep_prob = 1.0 - self.rate
+        if deterministic:
+            return inputs
+        else:
+            shape = (inputs.shape[0],) + (1,) * (inputs.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+            rng = self.make_rng("droppath")
+            random_tensor = keep_prob + jax.random.uniform(rng, shape=shape, dtype=inputs.dtype)
+            binary_tensor = jnp.floor(random_tensor)
+            output = inputs / keep_prob * binary_tensor
+            return output
 
-    def extra_repr(self) -> str:
-        return "p={}".format(self.drop_prob)
 
+def relative_position_index_init(window_size: Tuple[int, int]) -> jnp.ndarray:
+    """
+    get pair-wise relative position index for each token inside the window
+    """
+    num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
 
-# Copied from transformers.models.swin.modeling_swin.SwinSelfAttention with Swin->DonutSwin
-class DonutSwinSelfAttention(nn.Module):
-    def __init__(self, config, dim, num_heads):
-        super().__init__()
-        if dim % num_heads != 0:
+    coords_h = np.arange(window_size[0])
+    coords_w = np.arange(window_size[1])
+    coords = np.stack(np.meshgrid(coords_h, coords_w, indexing="ij"))  # 2, Wh, Ww
+    coords_flatten = np.reshape(coords, (2, -1))
+    relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]  # 2, Wh*Ww, Wh*Ww
+    relative_coords = np.transpose(relative_coords, (1, 2, 0))  # Wh*Ww, Wh*Ww, 2
+    relative_coords[:, :, 0] += window_size[0] - 1  # shift to start from 0
+    relative_coords[:, :, 1] += window_size[1] - 1
+    relative_coords[:, :, 0] *= 2 * window_size[1] - 1
+
+    relative_position_index = np.zeros(shape=(window_size[0] * window_size[1] + 1,) * 2, dtype=relative_coords.dtype)
+    relative_position_index[1:, 1:] = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
+    return jnp.array(relative_position_index)
+
+class FlaxDonutSwinRelativePositionBias(nn.Module):
+    config: DonutSwinConfig
+    window_size: Tuple[int, int]
+    dtype: jnp.dtype = jnp.float32  # the dtype of the computation
+
+    def setup(self):
+        num_relative_distance = (2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1) + 3
+        self.relative_position_bias_table = self.param(
+            "relative_position_bias_table",
+            nn.initializers.zeros,
+            (num_relative_distance, self.config.num_attention_heads),
+        )  # 2*Wh-1 * 2*Ww-1, nH
+        # cls to token & token 2 cls & cls to cls
+
+        self.relative_position_index = relative_position_index_init(self.window_size)
+
+    def __call__(self):
+        index = self.relative_position_index.reshape(-1)
+        shape = (self.window_size[0] * self.window_size[1] + 1, self.window_size[0] * self.window_size[1] + 1, -1)
+        relative_position_bias = self.relative_position_bias_table[index].reshape(shape)  # Wh*Ww,Wh*Ww,nH
+        return jnp.transpose(relative_position_bias, (2, 0, 1))
+
+class FlaxDonutSwinSelfAttention(nn.Module):
+    config: DonutSwinConfig
+    dim: int
+    num_attention_heads: int
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        if self.dim % self.num_attention_heads != 0:
             raise ValueError(
-                f"The hidden size ({dim}) is not a multiple of the number of attention heads ({num_heads})"
+                f"The hidden size ({self.dim}) is not a multiple of the number of attention heads ({self.num_attention_heads})"
             )
-
-        self.num_attention_heads = num_heads
-        self.attention_head_size = int(dim / num_heads)
+        self.attention_head_size = int(self.dim / self.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
-        window_size = config.window_size
         self.window_size = (
-            window_size if isinstance(window_size, collections.abc.Iterable) else (window_size, window_size)
+            self.config.window_size if isinstance(self.config.window_size, collections.abc.Iterable) else (self.config.window_size, self.config.window_size)
         )
+        self.relative_position_bias = FlaxDonutSwinRelativePositionBias(self.config, self.window_size, dtype=self.dtype)
+        self.query = nn.Dense(self.all_head_size, use_bias=self.config.qkv_bias)
+        self.key = nn.Dense(self.all_head_size, use_bias=self.config.qkv_bias)
+        self.value = nn.Dense(self.all_head_size, use_bias=self.config.qkv_bias)
 
-        self.relative_position_bias_table = nn.Parameter(
-            torch.zeros((2 * self.window_size[0] - 1) * (2 * self.window_size[1] - 1), num_heads)
-        )
+        self.dropout = nn.Dropout(self.config.attention_probs_dropout_prob)
 
-        # get pair-wise relative position index for each token inside the window
-        coords_h = torch.arange(self.window_size[0])
-        coords_w = torch.arange(self.window_size[1])
-        coords = torch.stack(torch.meshgrid([coords_h, coords_w]))
-        coords_flatten = torch.flatten(coords, 1)
-        relative_coords = coords_flatten[:, :, None] - coords_flatten[:, None, :]
-        relative_coords = relative_coords.permute(1, 2, 0).contiguous() 
-        relative_coords[:, :, 0] += self.window_size[0] - 1
-        relative_coords[:, :, 1] += self.window_size[1] - 1
-        relative_coords[:, :, 0] *= 2 * self.window_size[1] - 1
-        relative_position_index = relative_coords.sum(-1)
-        self.register_buffer("relative_position_index", relative_position_index)
-
-        self.query = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(self.all_head_size, self.all_head_size, bias=config.qkv_bias)
-
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
-
-    def transpose_for_scores(self, x):
-        new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
-        x = x.view(new_x_shape)
-        return x.permute(0, 2, 1, 3)
-
-    def forward(
+    def __call__(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        hidden_states: jnp.ndarray,
+        attention_mask: Optional[jnp.ndarray] = None,
+        head_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
-        batch_size, dim, num_channels = hidden_states.shape
-        mixed_query_layer = self.query(hidden_states)
+        deterministic: bool = True
+    ) -> Tuple[jnp.ndarray]:
+        head_dim = self.config.hidden_size // self.config.num_attention_heads
 
-        key_layer = self.transpose_for_scores(self.key(hidden_states))
-        value_layer = self.transpose_for_scores(self.value(hidden_states))
-        query_layer = self.transpose_for_scores(mixed_query_layer)
-
-        # Take the dot product between "query" and "key" to get the raw attention scores.
-        attention_scores = torch.matmul(query_layer, key_layqer.transpose(-1, -2))
-
-        attention_scores = attention_scores / math.sqrt(self.attention_head_size)
-
-        relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1)]
-        relative_position_bias = relative_position_bias.view(
-            self.window_size[0] * self.window_size[1], self.window_size[0] * self.window_size[1], -1
+        query_states = self.query(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
         )
-
-        relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()
-        attention_scores = attention_scores + relative_position_bias.unsqueeze(0)
+        value_states = self.value(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
+        )
+        key_states = self.key(hidden_states).reshape(
+            hidden_states.shape[:2] + (self.config.num_attention_heads, head_dim)
+        )
+        dropout_rng = None
+        if not deterministic and self.config.attention_probs_dropout_prob > 0.0:
+            dropout_rng = self.make_rng("dropout")
+        
+        # Add relative position bias if present.
+        attention_bias = jnp.expand_dims(self.relative_position_bias(), 0)
+        attention_bias = attention_bias.astype(query_states.dtype)
 
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in DonutSwinModel forward() function)
-            mask_shape = attention_mask.shape[0]
-            attention_scores = attention_scores.view(
-                batch_size // mask_shape, mask_shape, self.num_attention_heads, dim, dim
-            )
-            attention_scores = attention_scores + attention_mask.unsqueeze(1).unsqueeze(0)
-            attention_scores = attention_scores.view(-1, self.num_attention_heads, dim, dim)
+            attention_bias += attention_mask.astype(self.dtype)
 
-        # Normalize the attention scores to probabilities.
-        attention_probs = nn.functional.softmax(attention_scores, dim=-1)
+        attn_weights = dot_product_attention_weights(
+            query_states,
+            key_states,
+            attention_bias=attention_bias,
+            dropout_rng=dropout_rng,
+            dropout_rate=self.config.attention_probs_dropout_prob,
+            broadcast_dropout=True,
+            deterministic=deterministic,
+            dtype=self.dtype,
+            precision=None,
+        )
 
-        # This is actually dropping out entire tokens to attend to, which might
-        # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
-
-        # Mask heads if we want to
         if head_mask is not None:
-            attention_probs = attention_probs * head_mask
+            attn_weights = jnp.einsum("...hqk,h->...hqk", attn_weights, head_mask)
 
-        context_layer = torch.matmul(attention_probs, value_layer)
-        context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.view(new_context_layer_shape)
+        attn_output = jnp.einsum("...hqk,...khd->...qhd", attn_weights, value_states)
+        attn_output = attn_output.reshape(attn_output.shape[:2] + (-1,))
 
-        outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
-
+        outputs = (attn_output, attn_weights) if output_attentions else (attn_output,)
+        
         return outputs
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinSelfOutput
-class DonutSwinSelfOutput(nn.Module):
-    def __init__(self, config, dim):
-        super().__init__()
-        self.dense = nn.Linear(dim, dim)
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+class FlaxDonutSwinSelfOutput(nn.Module):
+    config: DonutSwinConfig
+    dim: int
+    dtype: jnp.dtype = jnp.float32
 
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+    def setup(self): 
+        self.dense = nn.Dense(self.dim)
+        self.dropout = nn.Dropout(self.config.attention_probs_dropout_prob)
+
+    def __call__(self, hidden_states: jnp.ndarray) -> jnp.ndarray:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
 
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinAttention with Swin->DonutSwin
-class DonutSwinAttention(nn.Module):
-    def __init__(self, config, dim, num_heads):
-        super().__init__()
-        self.self = DonutSwinSelfAttention(config, dim, num_heads)
-        self.output = DonutSwinSelfOutput(config, dim)
-        self.pruned_heads = set()
+class FlaxDonutSwinAttention(nn.Module):
+    config: DonutSwinConfig
+    dim: int
+    num_heads: int
+    dtype: jnp.dtype = jnp.float32
 
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(
-            heads, self.self.num_attention_heads, self.self.attention_head_size, self.pruned_heads
-        )
+    def setup(self):    
+        self.self = FlaxDonutSwinSelfAttention(self.config, self.dim, self.num_heads, dtype=self.dtype)
+        self.output = FlaxDonutSwinSelfOutput(self.config, self.dim, dtype=self.dtype)
+    
 
-        # Prune linear layers
-        self.self.query = prune_linear_layer(self.self.query, index)
-        self.self.key = prune_linear_layer(self.self.key, index)
-        self.self.value = prune_linear_layer(self.self.value, index)
-        self.output.dense = prune_linear_layer(self.output.dense, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.self.num_attention_heads = self.self.num_attention_heads - len(heads)
-        self.self.all_head_size = self.self.attention_head_size * self.self.num_attention_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
-    def forward(
+    def __call__(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        head_mask: Optional[torch.FloatTensor] = None,
+        hidden_states: jnp.ndarray,
+        attention_mask: Optional[jnp.ndarray] = None,
+        head_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+    ) -> Tuple[jnp.ndarray]:
         self_outputs = self.self(hidden_states, attention_mask, head_mask, output_attentions)
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -483,51 +484,63 @@ class DonutSwinAttention(nn.Module):
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinIntermediate
-class DonutSwinIntermediate(nn.Module):
-    def __init__(self, config, dim):
-        super().__init__()
-        self.dense = nn.Linear(dim, int(config.mlp_ratio * dim))
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+class FlaxDonutSwinIntermediate(nn.Module):
+    mlp_ratio: float
+    dim: int
+    hidden_act: str
+    dtype: jnp.dtype = jnp.float32
+    
+    def setup(self):
+        self.dense = nn.Dense(int(self.mlp_ratio * self.dim))
+        if isinstance(self.hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[self.hidden_act]
         else:
-            self.intermediate_act_fn = config.hidden_act
+            self.intermediate_act_fn = self.hidden_act
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def __call__(self, hidden_states: jnp.ndarray) -> jnp.ndarray:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.intermediate_act_fn(hidden_states)
         return hidden_states
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinOutput
-class DonutSwinOutput(nn.Module):
-    def __init__(self, config, dim):
-        super().__init__()
-        self.dense = nn.Linear(int(config.mlp_ratio * dim), dim)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+class FlaxDonutSwinOutput(nn.Module):
+    mlp_ratio: float
+    dim: int
+    hidden_dropout_prob: float
+    dtype: jnp.dtype = jnp.float32
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+    def setup(self):
+        self.dense = nn.Dense(int(self.mlp_ratio * self.dim), self.dim)
+        self.dropout = nn.Dropout(self.hidden_dropout_prob)
+
+    def __call__(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.dense(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
 
 
-# Copied from transformers.models.swin.modeling_swin.SwinLayer with Swin->DonutSwin
-class DonutSwinLayer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
-        super().__init__()
-        self.chunk_size_feed_forward = config.chunk_size_feed_forward
-        self.shift_size = shift_size
-        self.window_size = config.window_size
-        self.input_resolution = input_resolution
-        self.set_shift_and_window_size(input_resolution)
-        self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.attention = DonutSwinAttention(config, dim, num_heads)
-        self.drop_path = DonutSwinDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-        self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
-        self.intermediate = DonutSwinIntermediate(config, dim)
-        self.output = DonutSwinOutput(config, dim)
+# TODO: convert from torch to jax
+class FlaxDonutSwinLayer(nn.Module):
+    config: DonutSwinConfig
+    dim: int
+    input_resolution: Tuple[int, int]
+    num_heads: int
+    shift_size: int = 0
+    dtype: jnp.dtype = jnp.float32
 
-    def set_shift_and_window_size(self, input_resolution):
+    def setup(self):
+        
+        self.window_size = self.config.window_size
+        self.set_shift_and_window_size(self.input_resolution)
+        self.layernorm_before = nn.LayerNorm(self.config.layer_norm_eps)
+        self.attention = FlaxDonutSwinAttention(self.config, self.dim, self.num_heads)
+        self.drop_path = FlaxDonutSwinDropPath(self.config.drop_path_rate) if self.config.drop_path_rate > 0.0 else nn.Identity()
+        self.layernorm_after = nn.LayerNorm(epsilon=self.config.layer_norm_eps)
+        self.intermediate = FlaxDonutSwinIntermediate(self.config.mlp_ratio, self.dim, self.config.hidden_act, dtype=self.dtype)
+        self.output = FlaxDonutSwinOutput(self.config.mlp_ratio, self.dim, self.config.hidden_dropout_prob, dtype=self.dtype)
+
+    def set_shift_and_window_size(self, input_resolution:Tuple[int, int]):
         if min(input_resolution) <= self.window_size:
             # if window size is larger than input resolution, we don't partition windows
             self.shift_size = 0
@@ -536,7 +549,7 @@ class DonutSwinLayer(nn.Module):
     def get_attn_mask(self, height, width, dtype):
         if self.shift_size > 0:
             # calculate attention mask for SW-MSA
-            img_mask = torch.zeros((1, height, width, 1), dtype=dtype)
+            img_mask = jnp.zeros((1, height, width, 1), dtype=dtype)
             height_slices = (
                 slice(0, -self.window_size),
                 slice(-self.window_size, -self.shift_size),
@@ -568,13 +581,13 @@ class DonutSwinLayer(nn.Module):
         hidden_states = nn.functional.pad(hidden_states, pad_values)
         return hidden_states, pad_values
 
-    def forward(
+    def __call__(
         self,
-        hidden_states: torch.Tensor,
+        hidden_states: jnp.ndarray,
         input_dimensions: Tuple[int, int],
-        head_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, torch.Tensor]:
+    ) -> Tuple[jnp.ndarray, jnp.ndarray]:
         self.set_shift_and_window_size(input_dimensions)
         height, width = input_dimensions
         batch_size, _, channels = hidden_states.size()
@@ -588,7 +601,7 @@ class DonutSwinLayer(nn.Module):
         _, height_pad, width_pad, _ = hidden_states.shape
         # cyclic shift
         if self.shift_size > 0:
-            shifted_hidden_states = torch.roll(hidden_states, shifts=(-self.shift_size, -self.shift_size), dims=(1, 2))
+            shifted_hidden_states = jnp.roll(hidden_states, shift=(-self.shift_size, -self.shift_size), axis=(1, 2))
         else:
             shifted_hidden_states = hidden_states
 
@@ -610,13 +623,13 @@ class DonutSwinLayer(nn.Module):
 
         # reverse cyclic shift
         if self.shift_size > 0:
-            attention_windows = torch.roll(shifted_windows, shifts=(self.shift_size, self.shift_size), dims=(1, 2))
+            attention_windows = jnp.roll(shifted_windows, shift=(self.shift_size, self.shift_size), axis=(1, 2))
         else:
             attention_windows = shifted_windows
 
         was_padded = pad_values[3] > 0 or pad_values[5] > 0
         if was_padded:
-            attention_windows = attention_windows[:, :height, :width, :].contiguous()
+            attention_windows = attention_windows[:, :height, :width, :]
 
         attention_windows = attention_windows.view(batch_size, height * width, channels)
 
@@ -631,39 +644,44 @@ class DonutSwinLayer(nn.Module):
 
 
 # Copied from transformers.models.swin.modeling_swin.SwinStage with Swin->DonutSwin
-class DonutSwinStage(nn.Module):
-    def __init__(self, config, dim, input_resolution, depth, num_heads, drop_path, downsample):
-        super().__init__()
-        self.config = config
-        self.dim = dim
-        self.blocks = nn.ModuleList(
-            [
-                DonutSwinLayer(
-                    config=config,
-                    dim=dim,
-                    input_resolution=input_resolution,
-                    num_heads=num_heads,
-                    shift_size=0 if (i % 2 == 0) else config.window_size // 2,
+class FlaxDonutSwinStage(nn.Module):
+    config: DonutSwinConfig
+    dim: int
+    input_resolution: Tuple[int, int]
+    depth: int
+    num_heads: int
+    downsample: DonutSwinPatchMerging
+    dtype: jnp.dtype = jnp.float32
+
+    def setup(self):
+        self.blocks =[
+                FlaxDonutSwinLayer(
+                    config=self.config,
+                    dim=self.dim,
+                    input_resolution=self.input_resolution,
+                    num_heads=self.num_heads,
+                    shift_size=0 if (i % 2 == 0) else self.config.window_size // 2,
+                    dtype=self.dtype
                 )
-                for i in range(depth)
+                for i in range(self.depth)
             ]
-        )
 
         # patch merging layer
-        if downsample is not None:
-            self.downsample = downsample(input_resolution, dim=dim, norm_layer=nn.LayerNorm)
+        if self.downsample is not None:
+            self.downsample = self.downsample(self.input_resolution, dim=self.dim, norm_layer=nn.LayerNorm)
         else:
             self.downsample = None
 
         self.pointing = False
 
-    def forward(
+    def __call__(
         self,
-        hidden_states: torch.Tensor,
+        hidden_states: jnp.ndarray,
         input_dimensions: Tuple[int, int],
-        head_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor]:
+        head_mask: Optional[jnp.ndarray] = None,
+        determinstic: Optional[bool] = True,
+        output_attentions: Optional[bool] = False
+    ) -> Tuple[jnp.ndarray]:
         height, width = input_dimensions
         for i, layer_module in enumerate(self.blocks):
 
@@ -689,33 +707,32 @@ class DonutSwinStage(nn.Module):
 
 # Copied from transformers.models.swin.modeling_swin.SwinEncoder with Swin->DonutSwin
 class DonutSwinEncoder(nn.Module):
-    def __init__(self, config, grid_size):
-        super().__init__()
-        self.num_layers = len(config.depths)
-        self.config = config
-        dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths))]
-        self.layers = nn.ModuleList(
-            [
-                DonutSwinStage(
-                    config=config,
-                    dim=int(config.embed_dim * 2**i_layer),
-                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
-                    depth=config.depths[i_layer],
-                    num_heads=config.num_heads[i_layer],
-                    drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
+    config: DonutSwinConfig
+    grid_size: Tuple[int, int]
+    gradient_checkpointing: bool = False
+    dtype: jnp.dtype = jnp.float32
+    
+
+    def setup(self):
+        self.num_layers = len(self.config.depths)
+        dpr = [x.item() for x in jnp.linspace(0, self.config.drop_path_rate, sum(self.config.depths))]
+        self.layers = [
+                FlaxDonutSwinStage(
+                    config=self.config,
+                    dim=int(self.config.embed_dim * 2**i_layer),
+                    input_resolution=(self.grid_size[0] // (2**i_layer), self.grid_size[1] // (2**i_layer)),
+                    depth=self.config.depths[i_layer],
+                    num_heads=self.config.num_heads[i_layer],
+                    drop_path=dpr[sum(self.config.depths[:i_layer]): sum(self.config.depths[: i_layer + 1])],
                     downsample=DonutSwinPatchMerging if (i_layer < self.num_layers - 1) else None,
                 )
-                for i_layer in range(self.num_layers)
-            ]
-        )
+                for i_layer in range(self.num_layers)]
 
-        self.gradient_checkpointing = False
-
-    def forward(
+    def __call__(
         self,
-        hidden_states: torch.Tensor,
+        hidden_states: jnp.ndarray,
         input_dimensions: Tuple[int, int],
-        head_mask: Optional[torch.FloatTensor] = None,
+        head_mask: Optional[jnp.ndarray] = None,
         output_attentions: Optional[bool] = False,
         output_hidden_states: Optional[bool] = False,
         return_dict: Optional[bool] = True,
