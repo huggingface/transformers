@@ -15,7 +15,6 @@
 """ Tokenization class for model DeBERTa."""
 import json
 import os
-from functools import lru_cache
 from typing import TYPE_CHECKING, List, Optional, Tuple
 
 import regex as re
@@ -71,7 +70,6 @@ PRETRAINED_INIT_CONFIGURATION = {
 
 
 # Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
-@lru_cache()
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
