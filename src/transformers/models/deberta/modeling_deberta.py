@@ -1036,7 +1036,7 @@ class DebertaModel(DebertaPreTrainedModel):
 
 
 @add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
-class OldDebertaForMaskedLM(DebertaPreTrainedModel):
+class DebertaForMaskedLM(DebertaPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
@@ -1044,7 +1044,7 @@ class OldDebertaForMaskedLM(DebertaPreTrainedModel):
         super().__init__(config)
 
         self.deberta = DebertaModel(config)
-        self.cls = OldDebertaOnlyMLMHead(config)
+        self.cls = DebertaOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1118,7 +1118,7 @@ class OldDebertaForMaskedLM(DebertaPreTrainedModel):
 
 
 # copied from transformers.models.bert.BertPredictionHeadTransform with bert -> deberta
-class OldDebertaPredictionHeadTransform(nn.Module):
+class DebertaPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -1136,10 +1136,10 @@ class OldDebertaPredictionHeadTransform(nn.Module):
 
 
 # copied from transformers.models.bert.BertLMPredictionHead with bert -> deberta
-class OldDebertaLMPredictionHead(nn.Module):
+class DebertaLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.transform = OldDebertaPredictionHeadTransform(config)
+        self.transform = DebertaPredictionHeadTransform(config)
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -1157,10 +1157,10 @@ class OldDebertaLMPredictionHead(nn.Module):
 
 
 # copied from transformers.models.bert.BertOnlyMLMHead with bert -> deberta
-class OldDebertaOnlyMLMHead(nn.Module):
+class DebertaOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.predictions = OldDebertaLMPredictionHead(config)
+        self.predictions = DebertaLMPredictionHead(config)
 
     def forward(self, sequence_output):
         prediction_scores = self.predictions(sequence_output)

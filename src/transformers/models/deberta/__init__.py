@@ -48,7 +48,7 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["modeling_deberta"] = [
         "DEBERTA_PRETRAINED_MODEL_ARCHIVE_LIST",
-        "OldDebertaForMaskedLM",
+        "DebertaForMaskedLM",
         "NewDebertaForMaskedLM",
         "DebertaForQuestionAnswering",
         "DebertaForSequenceClassification",
@@ -100,7 +100,7 @@ if TYPE_CHECKING:
             DebertaModel,
             DebertaPreTrainedModel,
             NewDebertaForMaskedLM,
-            OldDebertaForMaskedLM,
+            DebertaForMaskedLM,
         )
 
     try:

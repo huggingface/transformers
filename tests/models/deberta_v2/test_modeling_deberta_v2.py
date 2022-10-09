@@ -31,7 +31,7 @@ if is_torch_available():
         DebertaV2ForTokenClassification,
         DebertaV2Model,
         NewDebertaV2ForMaskedLM,
-        OldDebertaV2ForMaskedLM,
+        DebertaV2ForMaskedLM,
     )
     from transformers.models.deberta_v2.modeling_deberta_v2 import DEBERTA_V2_PRETRAINED_MODEL_ARCHIVE_LIST
 
@@ -150,7 +150,7 @@ class DebertaV2ModelTester(object):
     def create_and_check_old_deberta_for_masked_lm(
         self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
-        model = OldDebertaV2ForMaskedLM(config=config)
+        model = DebertaV2ForMaskedLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, token_type_ids=token_type_ids, labels=token_labels)
@@ -242,7 +242,7 @@ class DebertaV2ModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             DebertaV2Model,
-            OldDebertaV2ForMaskedLM,
+            DebertaV2ForMaskedLM,
             NewDebertaV2ForMaskedLM,
             DebertaV2ForSequenceClassification,
             DebertaV2ForTokenClassification,

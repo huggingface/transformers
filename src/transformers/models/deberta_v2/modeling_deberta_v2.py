@@ -1138,8 +1138,8 @@ class DebertaV2Model(DebertaV2PreTrainedModel):
 
 
 @add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
-# Copied from transformers.models.deberta.modeling_deberta.OldDebertaForMaskedLM with Deberta->DebertaV2
-class OldDebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
+# Copied from transformers.models.deberta.modeling_deberta.DebertaForMaskedLM with Deberta->DebertaV2
+class DebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
@@ -1147,7 +1147,7 @@ class OldDebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
         super().__init__(config)
 
         self.deberta = DebertaV2Model(config)
-        self.cls = OldDebertaV2OnlyMLMHead(config)
+        self.cls = DebertaV2OnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1221,7 +1221,7 @@ class OldDebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
 
 
 # copied from transformers.models.bert.BertPredictionHeadTransform with bert -> deberta
-class OldDebertaV2PredictionHeadTransform(nn.Module):
+class DebertaV2PredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -1239,10 +1239,10 @@ class OldDebertaV2PredictionHeadTransform(nn.Module):
 
 
 # copied from transformers.models.bert.BertLMPredictionHead with bert -> deberta
-class OldDebertaV2LMPredictionHead(nn.Module):
+class DebertaV2LMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.transform = OldDebertaV2PredictionHeadTransform(config)
+        self.transform = DebertaV2PredictionHeadTransform(config)
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -1260,10 +1260,10 @@ class OldDebertaV2LMPredictionHead(nn.Module):
 
 
 # copied from transformers.models.bert.BertOnlyMLMHead with bert -> deberta
-class OldDebertaV2OnlyMLMHead(nn.Module):
+class DebertaV2OnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.predictions = OldDebertaV2LMPredictionHead(config)
+        self.predictions = DebertaV2LMPredictionHead(config)
 
     def forward(self, sequence_output):
         prediction_scores = self.predictions(sequence_output)
@@ -1271,7 +1271,7 @@ class OldDebertaV2OnlyMLMHead(nn.Module):
 
 
 @add_start_docstrings("""DeBERTa Model with a `language modeling` head on top.""", DEBERTA_START_DOCSTRING)
-# Copied from transformers.models.deberta.modeling_deberta.OldDebertaForMaskedLM with Deberta->DebertaV2
+# Copied from transformers.models.deberta.modeling_deberta.DebertaForMaskedLM with Deberta->DebertaV2
 class NewDebertaV2ForMaskedLM(DebertaV2PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
