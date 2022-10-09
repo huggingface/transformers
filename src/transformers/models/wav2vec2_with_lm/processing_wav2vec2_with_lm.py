@@ -363,56 +363,7 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
             [`~models.wav2vec2.Wav2Vec2DecoderWithLMOutput`].
 
         Example:
-
-        ```python
-        >>> # Let's see how to use a user-managed pool for batch decoding multiple audios
-        >>> from multiprocessing import get_context
-        >>> from transformers import AutoTokenizer, AutoProcessor, AutoModelForCTC
-        >>> from datasets import load_dataset
-        >>> import datasets
-        >>> import torch
-
-        >>> # import model, feature extractor, tokenizer
-        >>> model = AutoModelForCTC.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm").to("cuda")
-        >>> processor = AutoProcessor.from_pretrained("patrickvonplaten/wav2vec2-base-100h-with-lm")
-
-        >>> # load example dataset
-        >>> dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        >>> dataset = dataset.cast_column("audio", datasets.Audio(sampling_rate=16_000))
-
-
-        >>> def map_to_array(batch):
-        ...     batch["speech"] = batch["audio"]["array"]
-        ...     return batch
-
-
-        >>> # prepare speech data for batch inference
-        >>> dataset = dataset.map(map_to_array, remove_columns=["audio"])
-
-
-        >>> def map_to_pred(batch, pool):
-        ...     inputs = processor(batch["speech"], sampling_rate=16_000, padding=True, return_tensors="pt")
-        ...     inputs = {k: v.to("cuda") for k, v in inputs.items()}
-
-        ...     with torch.no_grad():
-        ...         logits = model(**inputs).logits
-
-        ...     transcription = processor.batch_decode(logits.cpu().numpy(), pool).text
-        ...     batch["transcription"] = transcription
-        ...     return batch
-
-
-        >>> # note: pool should be instantiated *after* `Wav2Vec2ProcessorWithLM`.
-        >>> #       otherwise, the LM won't be available to the pool's sub-processes
-        >>> # select number of processes and batch_size based on number of CPU cores available and on dataset size
-        >>> with get_context("fork").Pool(processes=2) as pool:
-        ...     result = dataset.map(
-        ...         map_to_pred, batched=True, batch_size=2, fn_kwargs={"pool": pool}, remove_columns=["speech"]
-        ...     )
-
-        >>> result["transcription"][:2]
-        ['MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL', "NOR IS MISTER COULTER'S MANNER LESS INTERESTING THAN HIS MATTER"]
-        ```
+            See [Decoding multiple audios](#decoding-multiple-audios).
         """
 
         from pyctcdecode.constants import (
@@ -439,7 +390,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
         # create a pool if necessary while also using it as a context manager to close itself
         if pool is None:
-            # fork is safe to use only on Unix, see "Contexts and start methods" section on multiprocessing's docs
+            # fork is safe to use only on Unix, see "Contexts and start methods" section on
+            # multiprocessing's docs (https://docs.python.org/3/library/multiprocessing.html#contexts-and-start-methods)
             default_context = get_start_method()
 
             if default_context == "fork":

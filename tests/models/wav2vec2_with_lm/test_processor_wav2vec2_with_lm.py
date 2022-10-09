@@ -195,13 +195,7 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
         self.assertEqual(decoded_decoder[-2], decoded_processor.logit_score)
         self.assertEqual(decoded_decoder[-1], decoded_processor.lm_score)
 
-    @parameterized.expand(
-        [
-            [None],
-            ["fork"],
-            ["spawn"],
-        ]
-    )
+    @parameterized.expand([[None], ["fork"], ["spawn"]])
     def test_decoder_batch(self, pool_context):
         feature_extractor = self.get_feature_extractor()
         tokenizer = self.get_tokenizer()
