@@ -19,7 +19,6 @@ import math
 import os
 from collections import OrderedDict
 from functools import partial
-from turtle import forward
 from typing import Optional, Tuple, Union
 
 import torch
@@ -54,10 +53,8 @@ from .configuration_fan import FANConfig
 
 if is_timm_available():
     from timm import create_model
-    from timm.models.cait import ClassAttn
-    from timm.models.layers import DropPath, to_2tuple, trunc_normal_
+    from timm.models.layers import  to_2tuple, trunc_normal_
     from timm.models.registry import register_model
-    from timm.models.vision_transformer import Mlp as MlpOri
 
 
 logger = logging.get_logger(__name__)
@@ -345,6 +342,100 @@ class DWConv(nn.Module):
         x = x.reshape(B, C, N).permute(0, 2, 1)
         return x
 
+# Copied from timm.models.layers.drop
+def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: bool = True):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
+    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
+    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
+    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
+    'survival rate' as the argument.
+
+    """
+    if drop_prob == 0. or not training:
+        return x
+    keep_prob = 1 - drop_prob
+    shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = x.new_empty(shape).bernoulli_(keep_prob)
+    if keep_prob > 0.0 and scale_by_keep:
+        random_tensor.div_(keep_prob)
+    return x * random_tensor
+
+class DropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
+    """
+    def __init__(self, drop_prob=None, scale_by_keep=True):
+        super(DropPath, self).__init__()
+        self.drop_prob = drop_prob
+        self.scale_by_keep = scale_by_keep
+
+    def forward(self, x):
+        return drop_path(x, self.drop_prob, self.training, self.scale_by_keep)
+
+
+
+# Copied from timm.models.layers.mlp
+class MlpOri(nn.Module):
+    """ MLP as used in Vision Transformer, MLP-Mixer and related networks
+    """
+    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.):
+        super().__init__()
+        out_features = out_features or in_features
+        hidden_features = hidden_features or in_features
+        drop_probs = to_2tuple(drop)
+
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.act = act_layer()
+        self.drop1 = nn.Dropout(drop_probs[0])
+        self.fc2 = nn.Linear(hidden_features, out_features)
+        self.drop2 = nn.Dropout(drop_probs[1])
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.drop1(x)
+        x = self.fc2(x)
+        x = self.drop2(x)
+        return x
+
+
+# Copied from timm.models.cait
+class ClassAttn(nn.Module):
+    # taken from https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
+    # with slight modifications to do CA 
+    def __init__(self, dim, num_heads=8, qkv_bias=False, attn_drop=0., proj_drop=0.):
+        super().__init__()
+        self.num_heads = num_heads
+        head_dim = dim // num_heads
+        self.scale = head_dim ** -0.5
+
+        self.q = nn.Linear(dim, dim, bias=qkv_bias)
+        self.k = nn.Linear(dim, dim, bias=qkv_bias)
+        self.v = nn.Linear(dim, dim, bias=qkv_bias)
+        self.attn_drop = nn.Dropout(attn_drop)
+        self.proj = nn.Linear(dim, dim)
+        self.proj_drop = nn.Dropout(proj_drop)
+
+    def forward(self, x, return_attention=False):
+        B, N, C = x.shape
+        q = self.q(x[:, 0]).unsqueeze(1).reshape(B, 1, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+        k = self.k(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+
+        q = q * self.scale
+        v = self.v(x).reshape(B, N, self.num_heads, C // self.num_heads).permute(0, 2, 1, 3)
+
+        attn = (q @ k.transpose(-2, -1))
+        attn = attn.softmax(dim=-1)
+        attn = self.attn_drop(attn)
+
+        x_cls = (attn @ v).transpose(1, 2).reshape(B, 1, C)
+        x_cls = self.proj(x_cls)
+        x_cls = self.proj_drop(x_cls)
+        
+        if return_attention:
+            return x_cls, attn
+        return x_cls
 
 class ClassAttentionBlock(nn.Module):
     """Class Attention Layer as in CaiT https://arxiv.org/abs/2103.17239"""
@@ -393,7 +484,7 @@ class ClassAttentionBlock(nn.Module):
     def forward(self, x, return_attention=False):
         x_norm1 = self.norm1(x)
         if return_attention:
-            x1, attn = self.attn(x_norm1, use_attn=return_attention)
+            x1, attn = self.attn(x_norm1, return_attention=return_attention)
         else:
             x1 = self.attn(x_norm1)
         x_attn = torch.cat([x1, x_norm1[:, 1:]], dim=1)
@@ -408,7 +499,7 @@ class ClassAttentionBlock(nn.Module):
         x = torch.cat([cls_token, x[:, 1:]], dim=1)
         x = x_res + self.drop_path(x)
         if return_attention:
-            return attn
+            return x, attn
         return x
 
 
@@ -1393,7 +1484,11 @@ class FANEncoder(FANPreTrainedModel):
         current_hidden_state = torch.cat((cls_tokens, current_hidden_state), dim=1)
 
         for blk in self.cls_attn_blocks:
-            current_hidden_state = blk(current_hidden_state)
+            if output_attentions:
+                current_hidden_state, attn = blk(current_hidden_state, output_attentions)
+                all_attentions = all_attentions + (attn,)
+            else:
+                current_hidden_state = blk(current_hidden_state)
 
         if output_hidden_states:
             if is_backbone_hybrid and self.config.feat_downsample:
