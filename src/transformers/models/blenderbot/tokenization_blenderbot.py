@@ -100,9 +100,9 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
     >>> from transformers import BlenderbotTokenizer
     >>> tokenizer = BlenderbotTokenizer.from_pretrained("facebook/blenderbot-3B")
     >>> tokenizer("Hello world")['input_ids']
-    [0, 31414, 232, 328, 2]
+    [6950, 1085, 2]
     >>> tokenizer(" Hello world")['input_ids']
-    [0, 20920, 232, 2]
+    [6950, 1085, 2]
     ```
 
     You can get around that behavior by passing `add_prefix_space=True` when instantiating this tokenizer or when you
