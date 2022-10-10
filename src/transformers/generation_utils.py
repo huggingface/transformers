@@ -1986,7 +1986,7 @@ class GenerationMixin:
                 " running `.generate()`.",
                 UserWarning,
             )
-            first_device = list(self.parameters())[0].device # retrieve the first device for accelerate compatibility
+            first_device = list(self.parameters())[0].device  # retrieve the first device for accelerate compatibility
             input_ids = input_ids.to(first_device)
 
         # init values
@@ -2050,7 +2050,6 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
-
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
