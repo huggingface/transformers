@@ -19,7 +19,7 @@ from collections import OrderedDict
 from typing import TYPE_CHECKING, Any, Mapping, Optional
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging, is_torch_available
+from ...utils import logging
 from ...onnx import OnnxSeq2SeqConfigWithPast, OnnxConfigWithPast
 from ...onnx.utils import compute_effective_axis_dimension
 from ..auto.configuration_auto import AutoConfig
