@@ -165,6 +165,7 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
     During saving, TensorFlow will also run with `training=True` which trigger `gumbel_softmax` that requires
     `tensorflow-probability`.
     """
+
     @require_tensorflow_probability
     @slow
     def test_saved_model_creation(self):
