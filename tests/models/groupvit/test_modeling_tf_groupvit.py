@@ -310,6 +310,10 @@ class TFGroupViTVisionModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFGroupViTVisionModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
+    @unittest.skip(
+        "TFGroupViTVisionModel does not convert `hidden_states` and `attentions` to tensors as they are all of"
+        " different dimensions, and we get `Got a non-Tensor value` error when saving the model."
+    )
     @slow
     def test_saved_model_creation_extended(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -474,10 +478,6 @@ class TFGroupViTTextModelTest(TFModelTesterMixin, unittest.TestCase):
             model = TFGroupViTTextModel.from_pretrained(model_name)
             self.assertIsNotNone(model)
 
-    @unittest.skip(
-        "TFGroupViTVisionModel does not convert `hidden_states` and `attentions` to tensors as they are all of"
-        " different dimensions, and we get `Got a non-Tensor value` error when saving the model."
-    )
     @slow
     def test_saved_model_creation_extended(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
