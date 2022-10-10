@@ -15,18 +15,18 @@
 # limitations under the License.
 
 import copy
-from typing import Any, Mapping, Optional, OrderedDict
+from typing import TYPE_CHECKING, Any, Mapping, Optional, OrderedDict
 
 from packaging import version
-
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
-from transformers.utils.generic import TensorType
 
 from ...configuration_utils import PretrainedConfig
 from ...onnx import OnnxConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
+
+if TYPE_CHECKING:
+    from ... import PreTrainedTokenizerBase, TensorType
 
 logger = logging.get_logger(__name__)
 
@@ -164,7 +164,7 @@ class VisionEncoderDecoderDecoderOnnxConfig(OnnxConfig):
         batch_size: int = -1,
         seq_length: int = -1,
         is_pair: bool = False,
-        framework: Optional[TensorType] = None,
+        framework: Optional["TensorType"] = None,
     ) -> Mapping[str, Any]:
         import torch
 
@@ -193,7 +193,7 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
         Returns ONNX encoder config for `VisionEncoderDecoder` model.
 
         Args:
-            encoder_config (`PretrainedConfig`): 
+            encoder_config (`PretrainedConfig`):
                 The encoder model's configuration to use when exporting to ONNX.
 
         Returns:
@@ -208,11 +208,11 @@ class VisionEncoderDecoderOnnxConfig(OnnxConfig):
         Returns ONNX decoder config for `VisionEncoderDecoder` model.
 
         Args:
-            encoder_config (`PretrainedConfig`): 
+            encoder_config (`PretrainedConfig`):
                 The encoder model's configuration to use when exporting to ONNX.
-            decoder_config (`PretrainedConfig`): 
+            decoder_config (`PretrainedConfig`):
                 The decoder model's configuration to use when exporting to ONNX
-            feature (`str`, *optional*): 
+            feature (`str`, *optional*):
                 The type of feature to export the model with.
 
         Returns:
