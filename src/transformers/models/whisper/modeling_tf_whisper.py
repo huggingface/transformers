@@ -754,8 +754,6 @@ class TFWhisperDecoder(tf.keras.layers.Layer):
 
         self.layer_norm = tf.keras.layers.LayerNormalization(epsilon=1e-5, name="layer_norm")
 
-        self.gradient_checkpointing = False
-
     def get_input_embeddings(self):
         return self.embed_tokens
 
