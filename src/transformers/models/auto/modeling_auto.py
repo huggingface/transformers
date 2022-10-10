@@ -1042,6 +1042,8 @@ class AutoModelForZeroShotObjectDetection(_BaseAutoModelClass):
 AutoModelForZeroShotObjectDetection = auto_class_update(
     AutoModelForZeroShotObjectDetection, head_doc="zero-shot object detection"
 )
+
+
 class AutoModelForDepthEstimation(_BaseAutoModelClass):
     _model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
 

@@ -339,21 +339,19 @@ SUPPORTED_TASKS = {
         "default": {"model": {"pt": ("facebook/detr-resnet-50", "2729413")}},
         "type": "image",
     },
-<<<<<<< HEAD
     "zero-shot-object-detection": {
         "impl": ZeroShotObjectDetectionPipeline,
         "tf": (),
         "pt": (AutoModelForZeroShotObjectDetection,) if is_torch_available() else (),
         "default": {"model": {"pt": ("google/owlvit-base-patch32", "17740e1")}},
         "type": "multimodal",
-=======
+    },
     "depth-estimation": {
         "impl": DepthEstimationPipeline,
         "tf": (),
         "pt": (AutoModelForDepthEstimation,) if is_torch_available() else (),
         "default": {"model": {"pt": ("Intel/dpt-large", "e93beec")}},
         "type": "image",
->>>>>>> Add initial files for depth estimation pipelines
     },
 }
 
