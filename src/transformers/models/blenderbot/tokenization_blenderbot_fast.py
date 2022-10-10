@@ -47,7 +47,6 @@ PRETRAINED_VOCAB_FILES_MAP = {
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {"facebook/blenderbot-3B": 128}
 
 
-# Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast with roberta-base->facebook/blenderbot-3B, Roberta->Blenderbot, RoBERTa->Blenderbot
 class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
     """
     Construct a "fast" Blenderbot tokenizer (backed by HuggingFace's *tokenizers* library), derived from the GPT-2
@@ -133,6 +132,7 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
     model_input_names = ["input_ids", "attention_mask"]
     slow_tokenizer_class = BlenderbotTokenizer
 
+    # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast.__init__ with Roberta->Blenderbot, RoBERTa->Blenderbot
     def __init__(
         self,
         vocab_file=None,
@@ -202,6 +202,7 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
                 setattr(self.backend_tokenizer, tokenizer_component, new_value)
 
     @property
+    # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast.mask_token with Roberta->Blenderbot, RoBERTa->Blenderbot
     def mask_token(self) -> str:
         """
         `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
@@ -217,17 +218,19 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         return str(self._mask_token)
 
     @mask_token.setter
+    # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast.mask_token with Roberta->Blenderbot, RoBERTa->Blenderbot
     def mask_token(self, value):
         """
         Overriding the default behavior of the mask token to have it eat the space before it.
 
-        This is needed to preserve backward compatibility with all the previously used models based on Blenderbot.
+        This is needed to preserve backward compatibility with all the previously used models based on Roberta.
         """
         # Mask token behave like a normal word, i.e. include the space before it
         # So we set lstrip to True
         value = AddedToken(value, lstrip=True, rstrip=False) if isinstance(value, str) else value
         self._mask_token = value
 
+    # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast._batch_encode_plus with Roberta->Blenderbot, RoBERTa->Blenderbot
     def _batch_encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
         assert self.add_prefix_space or not is_split_into_words, (
@@ -237,6 +240,7 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
 
         return super()._batch_encode_plus(*args, **kwargs)
 
+    # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast._encode_plus with Roberta->Blenderbot, RoBERTa->Blenderbot
     def _encode_plus(self, *args, **kwargs) -> BatchEncoding:
         is_split_into_words = kwargs.get("is_split_into_words", False)
 
@@ -247,17 +251,12 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
 
         return super()._encode_plus(*args, **kwargs)
 
+    # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast.save_vocabulary with Roberta->Blenderbot, RoBERTa->Blenderbot
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 
-    def build_inputs_with_special_tokens(self, token_ids_0, token_ids_1=None):
-        output = [self.bos_token_id] + token_ids_0 + [self.eos_token_id]
-        if token_ids_1 is None:
-            return output
-
-        return output + [self.eos_token_id] + token_ids_1 + [self.eos_token_id]
-
+    # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast.create_token_type_ids_from_sequences with Roberta->Blenderbot, RoBERTa->Blenderbot
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -280,3 +279,35 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         if token_ids_1 is None:
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
+
+    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None):
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A Blenderbot sequence has the following format:
+        - single sequence: ` X </s>`
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs to which the special tokens will be added
+            token_ids_1 (`List[int]`, *optional*):
+                Will be ignored
+        Returns:
+            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+        """
+        return token_ids_0 + [self.eos_token_id]
+
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
+        inputs = []
+        for is_user, text in conversation.iter_texts():
+            if is_user:
+                # We need to space prefix as it's being done within blenderbot
+                inputs.append(" " + text)
+            else:
+                # Generated responses should contain them already.
+                inputs.append(text)
+
+        full_string = "  ".join(inputs)
+        input_ids = self.encode(full_string)
+        if len(input_ids) > self.model_max_length:
+            input_ids = input_ids[-self.model_max_length :]
+            logger.warning(f"Trimmed input from conversation as it was longer than {self.model_max_length} tokens.")
+        return input_ids

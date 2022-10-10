@@ -25,9 +25,6 @@ from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
-# from ..roberta.tokenization_roberta import RobertaTokenizer
-
-
 if TYPE_CHECKING:
     from transformers.pipelines.conversational import Conversation
 
@@ -92,7 +89,6 @@ def get_pairs(word):
     return pairs
 
 
-# Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer with roberta-base->facebook/blenderbot-3B, Roberta->Blenderbot, RoBERTa->Blenderbot
 class BlenderbotTokenizer(PreTrainedTokenizer):
     """
     Constructs a Blenderbot tokenizer, derived from the GPT-2 tokenizer, using byte-level Byte-Pair-Encoding.
@@ -174,6 +170,7 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
     max_model_input_sizes = PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES
     model_input_names = ["input_ids", "attention_mask"]
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.__init__ with Roberta->Blenderbot, RoBERTa->Blenderbot
     def __init__(
         self,
         vocab_file,
@@ -229,12 +226,15 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
     @property
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.vocab_size with Roberta->Blenderbot, RoBERTa->Blenderbot
     def vocab_size(self):
         return len(self.encoder)
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.get_vocab with Roberta->Blenderbot, RoBERTa->Blenderbot
     def get_vocab(self):
         return dict(self.encoder, **self.added_tokens_encoder)
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.bpe with Roberta->Blenderbot, RoBERTa->Blenderbot
     def bpe(self, token):
         if token in self.cache:
             return self.cache[token]
@@ -277,6 +277,7 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer._tokenize with Roberta->Blenderbot, RoBERTa->Blenderbot
     def _tokenize(self, text):
         """Tokenize a string."""
         bpe_tokens = []
@@ -287,20 +288,24 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
         return bpe_tokens
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer._convert_token_to_id with Roberta->Blenderbot, RoBERTa->Blenderbot
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer._convert_id_to_token with Roberta->Blenderbot, RoBERTa->Blenderbot
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.convert_tokens_to_string with Roberta->Blenderbot, RoBERTa->Blenderbot
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
         return text
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.save_vocabulary with Roberta->Blenderbot, RoBERTa->Blenderbot
     def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
@@ -330,31 +335,7 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
 
         return vocab_file, merge_file
 
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
-    ) -> List[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. A Blenderbot sequence has the following format:
-
-        - single sequence: `<s> X </s>`
-        - pair of sequences: `<s> A </s></s> B </s>`
-
-        Args:
-            token_ids_0 (`List[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`List[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `List[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        if token_ids_1 is None:
-            return [self.cls_token_id] + token_ids_0 + [self.sep_token_id]
-        cls = [self.cls_token_id]
-        sep = [self.sep_token_id]
-        return cls + token_ids_0 + sep + sep + token_ids_1 + sep
-
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.get_special_tokens_mask with Roberta->Blenderbot, RoBERTa->Blenderbot
     def get_special_tokens_mask(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
     ) -> List[int]:
@@ -382,6 +363,7 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
             return [1] + ([0] * len(token_ids_0)) + [1]
         return [1] + ([0] * len(token_ids_0)) + [1, 1] + ([0] * len(token_ids_1)) + [1]
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.create_token_type_ids_from_sequences with Roberta->Blenderbot, RoBERTa->Blenderbot
     def create_token_type_ids_from_sequences(
         self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
     ) -> List[int]:
@@ -405,24 +387,41 @@ class BlenderbotTokenizer(PreTrainedTokenizer):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + sep + token_ids_1 + sep) * [0]
 
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.prepare_for_tokenization with Roberta->Blenderbot, RoBERTa->Blenderbot
     def prepare_for_tokenization(self, text, is_split_into_words=False, **kwargs):
         add_prefix_space = kwargs.pop("add_prefix_space", self.add_prefix_space)
         if (is_split_into_words or add_prefix_space) and (len(text) > 0 and not text[0].isspace()):
             text = " " + text
         return (text, kwargs)
 
+    def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None):
+        """
+        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
+        adding special tokens. A Blenderbot sequence has the following format:
+        - single sequence: ` X </s>`
+        Args:
+            token_ids_0 (`List[int]`):
+                List of IDs to which the special tokens will be added
+            token_ids_1 (`List[int]`, *optional*):
+                Will be ignored
+        Returns:
+            `List[int]`: list of [input IDs](../glossary#input-ids) with the appropriate special tokens.
+        """
+        return token_ids_0 + [self.eos_token_id]
 
-def get_pairs(word):
-    """
-    Return set of symbol pairs in a word.
+    def _build_conversation_input_ids(self, conversation: "Conversation") -> List[int]:
+        inputs = []
+        for is_user, text in conversation.iter_texts():
+            if is_user:
+                # We need to space prefix as it's being done within blenderbot
+                inputs.append(" " + text)
+            else:
+                # Generated responses should contain them already.
+                inputs.append(text)
 
-    Word is represented as tuple of symbols (symbols being variable-length strings).
-    """
-    pairs = set()
-    prev_char = word[0]
-    for char in word[1:]:
-        pairs.add((prev_char, char))
-        prev_char = char
-
-    pairs = set(pairs)
-    return pairs
+        full_string = "  ".join(inputs)
+        input_ids = self.encode(full_string)
+        if len(input_ids) > self.model_max_length:
+            input_ids = input_ids[-self.model_max_length :]
+            logger.warning(f"Trimmed input from conversation as it was longer than {self.model_max_length} tokens.")
+        return input_ids
