@@ -1132,10 +1132,10 @@ class TFT5Model(TFT5PreTrainedModel):
         super().__init__(config, *inputs, **kwargs)
 
         self.shared = tf.keras.layers.Embedding(
-            config.vocab_size,
-            config.d_model,
+            input_dim=config.vocab_size,
+            output_dim=config.d_model,
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(self.config.initializer_factor),
             name="shared",
-            embeddings_initializer=get_initializer(self.config.initializer_factor),
         )
         # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
         self.shared.load_weight_prefix = "shared"

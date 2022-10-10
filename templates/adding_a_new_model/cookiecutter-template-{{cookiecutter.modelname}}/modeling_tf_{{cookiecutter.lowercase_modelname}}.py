@@ -2649,7 +2649,12 @@ class TF{{cookiecutter.camelcase_modelname}}MainLayer(tf.keras.layers.Layer):
         super().__init__(**kwargs)
 
         self.config = config
-        self.shared = tf.keras.layers.Embedding(config.vocab_size, config.d_model, name="model.shared")
+        self.shared = tf.keras.layers.Embedding(
+            input_dim=config.vocab_size,
+            output_dim=config.d_model,
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std),
+            name="model.shared"
+        )
         # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
         self.shared.load_weight_prefix = "model.shared"
 

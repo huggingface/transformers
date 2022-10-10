@@ -34,7 +34,6 @@ from ...modeling_tf_utils import (
     DUMMY_INPUTS,
     TFCausalLanguageModelingLoss,
     TFPreTrainedModel,
-    get_initializer,
     keras_serializable,
     unpack_inputs,
 )
@@ -1063,7 +1062,7 @@ class TFBlenderbotSmallMainLayer(tf.keras.layers.Layer):
         self.shared = tf.keras.layers.Embedding(
             input_dim=config.vocab_size,
             output_dim=config.d_model,
-            embeddings_initializer=get_initializer(config.d_model**-0.5),
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std),
             name="model.shared",
         )
         # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
