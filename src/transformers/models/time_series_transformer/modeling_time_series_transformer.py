@@ -109,8 +109,7 @@ class DistributionOutput:
 
     def __init__(self, dim: int = 1) -> None:
         self.dim = dim
-        if self.dim > 1:
-            self.args_dim = {k: self.dim * self.arg_dim[k] for k in self.arg_dim}
+        self.args_dim = {k: dim * self.args_dim[k] for k in self.args_dim}
 
     def _base_distribution(self, distr_args):
         if self.dim == 1:
