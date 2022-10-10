@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import LiltConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_generation_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -25,6 +25,8 @@ from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
+    import torch
+
     from transformers import (
         LiltForQuestionAnswering,
         LiltForSequenceClassification,
@@ -264,7 +266,22 @@ class LiltModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class LiltModelIntegrationTest(TestCasePlus):
-    @slow
-    def test_inference_masked_lm(self):
-        raise NotImplementedError("to do")
+@slow
+class LiltModelIntegrationTest(unittest.TestCase):
+    def test_inference_no_head(self):
+        model = LiltModel.from_pretrained("SCUT-DLVCLab/lilt-roberta-en-base").to(torch_device)
+
+        input_ids = torch.tensor([[1, 2]], device=torch_device)
+        bbox = torch.tensor([[[1, 2, 3, 4], [5, 6, 7, 8]]], device=torch_device)
+
+        # forward pass
+        outputs = model(input_ids=input_ids, bbox=bbox)
+
+        expected_shape = torch.Size([1, 2, 768])
+        expected_slice = torch.tensor(
+            [[-0.0653, 0.0950, -0.0061], [-0.0545, 0.0926, -0.0324]],
+            device=torch_device,
+        )
+
+        self.assertTrue(outputs.last_hidden_state.shape, expected_shape)
+        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :, :3], expected_slice, atol=1e-3))

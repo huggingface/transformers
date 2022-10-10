@@ -38,12 +38,12 @@ from .configuration_lilt import LiltConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "organization/lilt-roberta-en-base"
+_CHECKPOINT_FOR_DOC = "SCUT-DLVCLab/lilt-roberta-en-base"
 _CONFIG_FOR_DOC = "LiltConfig"
 _TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 LILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "organization/lilt-roberta-en-base",
+    "SCUT-DLVCLab/lilt-roberta-en-base",
     # See all LiLT models at https://huggingface.co/models?filter=lilt
 ]
 
