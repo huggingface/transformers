@@ -1019,9 +1019,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     _keys_to_ignore_on_load_unexpected = None
     _requires_load_weight_prefix = False
 
-    # Used to standardize the multiple configuration variable names that may be used to set an initialization range.
-    _initializer_range_name = None
-
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
         """
@@ -1755,23 +1752,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         """
         return None
 
-    def _get_initialization_range(self) -> float:
-        """
-        Scans the configuration file for the weight initialization range, as different configuration classes use
-        different names for this parameter.
-
-        Return:
-            `float`: The initialization range to use for the weights of the model.
-        """
-        potential_initialization_variable_names = [
-            "initializer_range",  # most common
-            "initializer_factor",  # e.g. T5
-            "init_std",  # e.g BART
-        ]
-        for var_name in potential_initialization_variable_names:
-            if hasattr(self.config, var_name):
-                return getattr(self.config, var_name)
-
     def resize_token_embeddings(
         self, new_num_tokens: Optional[int] = None
     ) -> Union[tf.keras.layers.Embedding, tf.Variable]:
@@ -2079,11 +2059,23 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Return:
             `tf.keras.layers.Embedding`: Resized Embedding layer.
         """
+
+        # Get the initialization range for the embeddings
+        init_range = 0.02  # default value
+        potential_initialization_variable_names = [
+            "initializer_range",  # most common
+            "initializer_factor",  # e.g. T5
+            "init_std",  # e.g BART
+        ]
+        for var_name in potential_initialization_variable_names:
+            if hasattr(self.config, var_name):
+                init_range = getattr(self.config, var_name)
+
         # Get a new (initialized) embeddings layer
         new_embeddings = tf.keras.layers.Embedding(
             input_dim=new_num_tokens,
             output_dim=old_embeddings.output_dim,
-            embeddings_initializer=get_initializer(self._get_initialization_range()),
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=init_range),
             name=old_embeddings.embeddings.name[:-13],  # exact same scoped name except "/embeddings:0"
         )
         new_embeddings(tf.constant([[0]]))

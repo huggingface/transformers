@@ -463,7 +463,6 @@ class TFBartDecoderLayer(tf.keras.layers.Layer):
 class TFBartPretrainedModel(TFPreTrainedModel):
     config_class = BartConfig
     base_model_prefix = "model"
-    _initializer_range_name = "init_std"
 
     @property
     def dummy_inputs(self):
@@ -1058,7 +1057,7 @@ class TFBartMainLayer(tf.keras.layers.Layer):
             input_dim=config.vocab_size,
             output_dim=config.d_model,
             embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std),
-            name="model.shared"
+            name="model.shared",
         )
         # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
         self.shared.load_weight_prefix = "model.shared" if load_weight_prefix is None else load_weight_prefix
