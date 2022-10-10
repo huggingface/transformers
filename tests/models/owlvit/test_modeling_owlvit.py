@@ -294,7 +294,6 @@ class OwlViTTextModelTester:
 
 @require_torch
 class OwlViTTextModelTest(ModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (OwlViTTextModel,) if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False

@@ -113,20 +113,18 @@ class OwlViTOutput(ModelOutput):
         )
 
 
-# Copied from transformers.models.detr.modeling_detr.center_to_corners_format
-def center_to_corners_format(boxes: torch.Tensor) -> torch.Tensor:
+# Copied from transformers.models.detr.feature_extraction_detr.center_to_corners_format
+def center_to_corners_format(x: torch.Tensor) -> torch.Tensor:
     """
     Converts a PyTorch tensor of bounding boxes of center format (center_x, center_y, width, height) to corners format
-    (left, top, right, bottom).
+    (x_0, y_0, x_1, y_1).
     """
-    x_center, y_center, width, height = boxes.unbind(-1)
-    boxes = [(x_center - 0.5 * width), (y_center - 0.5 * height), (x_center + 0.5 * width), (y_center + 0.5 * height)]
-    return torch.stack(boxes, dim=-1)
+    x_c, y_c, w, h = x.unbind(-1)
+    b = [(x_c - 0.5 * w), (y_c - 0.5 * h), (x_c + 0.5 * w), (y_c + 0.5 * h)]
+    return torch.stack(b, dim=-1)
 
 
-# below: bounding box utilities taken from https://github.com/facebookresearch/detr/blob/master/util/box_ops.py
-
-
+# Copied from transformers.models.detr.modeling_detr._upcast
 def _upcast(t: torch.Tensor) -> torch.Tensor:
     # Protects from numerical overflows in multiplications by upcasting to the equivalent higher type
     if t.is_floating_point():
@@ -135,6 +133,7 @@ def _upcast(t: torch.Tensor) -> torch.Tensor:
         return t if t.dtype in (torch.int32, torch.int64) else t.int()
 
 
+# Copied from transformers.models.detr.modeling_detr.box_area
 def box_area(boxes: torch.Tensor) -> torch.Tensor:
     """
     Computes the area of a set of bounding boxes, which are specified by its (x1, y1, x2, y2) coordinates.
@@ -151,20 +150,8 @@ def box_area(boxes: torch.Tensor) -> torch.Tensor:
     return (boxes[:, 2] - boxes[:, 0]) * (boxes[:, 3] - boxes[:, 1])
 
 
-# modified from torchvision to also return the union
+# Copied from transformers.models.detr.modeling_detr.box_iou
 def box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
-    """
-    Computes IoU values between given sets of bounding boxes.
-
-    Args:
-        boxes1 (`torch.FloatTensor` of shape `(num_boxes1, 4)`):
-            Predicted bounding boxes in (x1, y1, x2, y2) format with `0 <= x1 < x2` and `0 <= y1 < y2`.
-        boxes2 (`torch.FloatTensor` of shape `(num_boxes2, 4)`):
-            Target bounding boxes in (x1, y1, x2, y2) format with `0 <= x1 < x2` and `0 <= y1 < y2`.
-
-    Returns:
-        `torch.FloatTensor`: a tensor containing the area for each box.
-    """
     area1 = box_area(boxes1)
     area2 = box_area(boxes2)
 
@@ -180,6 +167,7 @@ def box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
     return iou, union
 
 
+# Copied from transformers.models.detr.modeling_detr.generalized_box_iou
 def generalized_box_iou(boxes1: torch.Tensor, boxes2: torch.Tensor) -> torch.Tensor:
     """
     Generalized IoU from https://giou.stanford.edu/. The boxes should be in [x0, y0, x1, y1] (corner) format.
@@ -294,7 +282,6 @@ class OwlViTTextEmbeddings(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
-
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
 
         if position_ids is None:
@@ -1233,7 +1220,6 @@ class OwlViTClassPredictionHead(nn.Module):
         query_embeds: Optional[torch.FloatTensor],
         query_mask: Optional[torch.Tensor],
     ) -> Tuple[torch.FloatTensor]:
-
         image_class_embeds = self.dense0(image_embeds)
         if query_embeds is None:
             return (None, image_class_embeds)
@@ -1363,7 +1349,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Tuple[torch.FloatTensor]:
-
         # Encode text and image
         outputs = self.owlvit(
             pixel_values=pixel_values,
@@ -1439,7 +1424,6 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
     ) -> Tuple[torch.FloatTensor]:
-
         query_image_embeds = self.owlvit.get_image_features(
             pixel_values=query_pixel_values,
             output_attentions=output_attentions,
