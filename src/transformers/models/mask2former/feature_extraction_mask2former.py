@@ -35,7 +35,6 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.maskformer.feature_extraction_maskformer.MaskFormerFeatureExtractor
 class Mask2FormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
     r"""
     Constructs a Mask2Former feature extractor. The feature extractor can be used to prepare image(s) and optional
@@ -492,6 +491,7 @@ class Mask2FormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtraction
         # where $ softmax(p) \in R^{q, c} $ is the mask classes
         # and $ sigmoid(m) \in R^{q, h, w}$ is the mask probabilities
         # b(atch)q(uery)c(lasses), b(atch)q(uery)h(eight)w(idth)
+        
         segmentation = torch.einsum("bqc, bqhw -> bchw", masks_classes, masks_probs)
 
         return segmentation
@@ -648,3 +648,81 @@ class Mask2FormerFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtraction
                                 stuff_memory_list[pred_class] = current_segment_id
             results.append({"segmentation": segmentation, "segments": segments})
         return results
+
+    def post_process_instance_segmentation(
+        self,
+        outputs: "Mask2FormerForInstanceSegmentationOutput",
+        test_topk_per_image: Optional[int] = 200,
+        panoptic_on: Optional[bool] = True,
+        instance_label_ids: Optional[Set[int]] = None,
+    ) -> List[Dict]:
+        """
+        Converts the output of [`Mask2FormerForInstanceSegmentationOutput`] into image instance segmentation
+        predictions. Only supports PyTorch.
+
+        Args:
+            outputs ([`Mask2FormerForInstanceSegmentationOutput`]):
+                The outputs from [`Mask2FormerForInstanceSegmentation`].
+            test_topk_per_image (`int`, *optional*, defaults to 200):
+                instance segmentation parameter, keep topk instances per image
+            panoptic_on (`bool`, *optional*, defaults to True):
+                whether to output panoptic segmentation prediction
+            instance_label_ids (`Set[int]`, *optional*):
+                A set of label_ids for each instance/thing category
+
+        Returns:
+            `List[Dict]`: A list of dictionaries, one per image, each dictionary containing two keys:
+            - **segmentation** -- a tensor of shape `(height, width)` where each pixel represents a `segment_id`.
+            - **boxes** -- a tensor of shape `(M, 4)` 
+            - **scores** --  tensor of shape `(M)` that represents the confidence score of predicted class
+            - **classes** -- a tensor of shape `(M)` that represents the predicted class 
+        """
+
+        if instance_label_ids is None:
+            logger.warning("`instance_label_ids` unset.")
+            instance_label_ids = set()
+        # class_queries_logits has shape [BATCH, QUERIES, CLASSES + 1]
+        class_queries_logits = outputs.class_queries_logits
+        # keep track of the number of labels, subtract -1 for null class
+        num_labels = class_queries_logits.shape[-1] - 1
+        # masks_queries_logits has shape [BATCH, QUERIES, HEIGHT, WIDTH]
+        masks_queries_logits = outputs.masks_queries_logits
+
+        results: List[Dict[str, Tensor]] = []
+        
+        for mask_pred, mask_cls in zip(masks_queries_logits,class_queries_logits):
+            
+            mask_cls  = mask_cls.shape[-2]
+            scores = nn.functional.softmax(mask_cls, dim=-1)[:, :-1]
+
+            labels = torch.arange(num_labels).unsqueeze(0).repeat(num_queries, 1).flatten(0, 1)
+            scores_per_image, topk_indices = scores.flatten(0, 1).topk(test_topk_per_image, sorted=False)
+
+            labels_per_image = labels[topk_indices]
+            topk_indices = topk_indices // num_labels
+            mask_pred = mask_pred[topk_indices]
+            mask_pred = mask_pred[topk_indices]
+    
+            if panoptic_on:
+                keep = torch.zeros_like(scores_per_image).bool()
+                
+                for i, lab in enumerate(labels_per_image):
+                    keep[i] = lab in instance_label_ids
+
+                scores_per_image = scores_per_image[keep]
+                labels_per_image = labels_per_image[keep]
+                mask_pred = mask_pred[keep]
+                
+            segmentation = (mask_pred > 0).int()
+        
+            pred_boxes = torch.zeros(mask_pred.size(0), 4)
+
+            # calculate average mask prob
+            mask_scores_per_image = (mask_pred.sigmoid().flatten(1) * segmentation.flatten(1)).sum(1) / (segmentation.flatten(1).sum(1) + 1e-6)
+            scores = scores_per_image * mask_scores_per_image
+            pred_classes = labels_per_image
+
+            results.append({"segmentation": segmentation, "boxes": pred_boxes, "scores": scores, "classes": pred_classes})
+
+        return results
+    
