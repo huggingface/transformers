@@ -1124,6 +1124,7 @@ class SEWDTransformerEncoder(nn.Module):
         rel_embeddings = self.get_rel_embedding()
         output_states = next_kv
         for i, layer_module in enumerate(self.layer):
+
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (output_states,)
 
@@ -1587,6 +1588,7 @@ class SEWDForCTC(SEWDPreTrainedModel):
 
         loss = None
         if labels is not None:
+
             if labels.max() >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
