@@ -50,6 +50,8 @@ from .configuration_speecht5 import SpeechT5Config
 logger = logging.get_logger(__name__)
 
 
+_HIDDEN_STATES_START_POSITION = 1
+
 # General docstring
 _CONFIG_FOR_DOC = "SpeechT5Config"
 _PROCESSOR_FOR_DOC = "SpeechT5Processor"
@@ -75,6 +77,23 @@ class SpeechT5ForPreTrainingOutput(ModelOutput):
     loss: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+# Copied from transformers.models.bart.modeling_bart.shift_tokens_right
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    """
+    Shift input ids one token to the right.
+    """
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    shifted_input_ids[:, 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+    return shifted_input_ids
 
 
 # Copied from transformers.models.bart.modeling_bart._make_causal_mask
@@ -1809,7 +1828,6 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
     SPEECHT5_START_DOCSTRING,
 )
 class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
-    base_model_prefix = "speecht5"
     _keys_to_ignore_on_load_missing = [
         r"speech_encoder_prenet.embed_positions.weights",
     ]
@@ -1823,8 +1841,6 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
         speech_encoder = SpeechT5SpeechEncoder(config)
         text_decoder = SpeechT5TextDecoder(config)
         self.speecht5 = SpeechT5Model(config, speech_encoder, text_decoder)
-
-        # TODO? self.dropout = nn.Dropout(config.final_dropout)
 
         self.text_decoder_postnet = SpeechT5TextDecoderPostnet(config)
 
@@ -1886,7 +1902,7 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            TODO: verify this SpeechT5 uses the `eos_token_id` as the starting token for `decoder_input_ids`
+            SpeechT5 uses the `eos_token_id` as the starting token for `decoder_input_ids`
             generation. If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input
             (see `past_key_values`).
 
@@ -1901,12 +1917,11 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        # TODO: from Speech2TextForConditionalGeneration -- do we need this?
-        # if labels is not None:
-        #     if decoder_input_ids is None:
-        #         decoder_input_ids = shift_tokens_right(
-        #             labels, self.config.pad_token_id, self.config.decoder_start_token_id
-        #         )
+        if labels is not None:
+            if decoder_input_ids is None:
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
 
         outputs = self.speecht5(
             input_values=input_values,
@@ -1987,7 +2002,6 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
     SPEECHT5_START_DOCSTRING,
 )
 class SpeechT5ForCTC(SpeechT5PreTrainedModel):
-    base_model_prefix = "speecht5"
     _keys_to_ignore_on_load_missing = [
         r"speech_encoder_prenet.embed_positions.weights",
     ]
@@ -2069,40 +2083,40 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         logits = self.lm_head(hidden_states)
 
         loss = None
-        # if labels is not None:
+        if labels is not None:
 
-        #     if labels.max() >= self.config.vocab_size:
-        #         raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
+            if labels.max() >= self.config.vocab_size:
+                raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 
-        #     # retrieve loss input_lengths from attention_mask
-        #     attention_mask = (
-        #         attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
-        #     )
-        #     input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
+            # retrieve loss input_lengths from attention_mask
+            attention_mask = (
+                attention_mask if attention_mask is not None else torch.ones_like(input_values, dtype=torch.long)
+            )
+            input_lengths = self.encoder.prenet._get_feat_extract_output_lengths(attention_mask.sum(-1)).to(torch.long)
 
-        #     # assuming that padded tokens are filled with -100
-        #     # when not being attended to
-        #     labels_mask = labels >= 0
-        #     target_lengths = labels_mask.sum(-1)
-        #     flattened_targets = labels.masked_select(labels_mask)
+            # assuming that padded tokens are filled with -100
+            # when not being attended to
+            labels_mask = labels >= 0
+            target_lengths = labels_mask.sum(-1)
+            flattened_targets = labels.masked_select(labels_mask)
 
-        #     # ctc_loss doesn't support fp16
-        #     log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
+            # ctc_loss doesn't support fp16
+            log_probs = nn.functional.log_softmax(logits, dim=-1, dtype=torch.float32).transpose(0, 1)
 
-        #     with torch.backends.cudnn.flags(enabled=False):
-        #         loss = nn.functional.ctc_loss(
-        #             log_probs,
-        #             flattened_targets,
-        #             input_lengths,
-        #             target_lengths,
-        #             blank=self.config.pad_token_id,
-        #             reduction=self.config.ctc_loss_reduction,
-        #             zero_infinity=self.config.ctc_zero_infinity,
-        #         )
+            with torch.backends.cudnn.flags(enabled=False):
+                loss = nn.functional.ctc_loss(
+                    log_probs,
+                    flattened_targets,
+                    input_lengths,
+                    target_lengths,
+                    blank=self.config.pad_token_id,
+                    reduction=self.config.ctc_loss_reduction,
+                    zero_infinity=self.config.ctc_zero_infinity,
+                )
 
-        # if not return_dict:
-        #     output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-        #     return ((loss,) + output) if loss is not None else output
+        if not return_dict:
+            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
+            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions

@@ -102,6 +102,8 @@ IGNORE_KEYS = [
     "text_decoder_prenet.embed_positions._float_tensor",
 ]
 
+# TODO: should there be an INGORE_KEYS_S2T and IGNORE_KEYS_CTC too?
+
 
 def set_recursively(hf_pointer, key, value, full_name, weight_type):
     for attribute in key.split("."):

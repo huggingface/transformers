@@ -144,6 +144,13 @@ class SpeechT5Config(PretrainedConfig):
             Maximum distance for relative position embedding in the encoder.
         decoder_max_relative_position (`int`, *optional*, defaults to 160):
             Maximum distance for relative position embedding in the dencoder.
+        ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
+            Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
+            instance of [`SpeechT5ForCTC`].
+        ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
+            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
+            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
+            of [`SpeechT5ForCTC`].
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
@@ -202,15 +209,26 @@ class SpeechT5Config(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
+        decoder_start_token_id=2,
         max_speech_positions=4000,
         max_text_positions=450,
         encoder_max_relative_position=160,
         decoder_max_relative_position=160,
+        ctc_loss_reduction="sum",
+        ctc_zero_infinity=False,
         use_cache=True,
         is_encoder_decoder=True,
         **kwargs
     ):
-        super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=decoder_start_token_id,
+            **kwargs,
+        )
+
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.encoder_layers = encoder_layers
@@ -261,6 +279,10 @@ class SpeechT5Config(PretrainedConfig):
         self.mask_feature_prob = mask_feature_prob
         self.mask_feature_length = mask_feature_length
         self.mask_feature_min_masks = mask_feature_min_masks
+
+        # ctc loss
+        self.ctc_loss_reduction = ctc_loss_reduction
+        self.ctc_zero_infinity = ctc_zero_infinity
 
         self.max_speech_positions = max_speech_positions
         self.max_text_positions = max_text_positions
