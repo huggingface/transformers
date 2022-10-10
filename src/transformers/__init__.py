@@ -334,6 +334,7 @@ _import_structure = {
     "models.swin": ["SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP", "SwinConfig"],
     "models.swinv2": ["SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Swinv2Config"],
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
+    "models.manta": ["MANTA_PRETRAINED_CONFIG_ARCHIVE_MAP", "MantaConfig"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
     "models.tapex": ["TapexTokenizer"],
     "models.time_series_transformer": [
@@ -541,6 +542,7 @@ else:
     _import_structure["models.rembert"].append("RemBertTokenizer")
     _import_structure["models.speech_to_text"].append("Speech2TextTokenizer")
     _import_structure["models.t5"].append("T5Tokenizer")
+    _import_structure["models.manta"].append("MantaTokenizer")
     _import_structure["models.xglm"].append("XGLMTokenizer")
     _import_structure["models.xlm_prophetnet"].append("XLMProphetNetTokenizer")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizer")
@@ -610,6 +612,7 @@ else:
     _import_structure["models.splinter"].append("SplinterTokenizerFast")
     _import_structure["models.squeezebert"].append("SqueezeBertTokenizerFast")
     _import_structure["models.t5"].append("T5TokenizerFast")
+    _import_structure["models.manta"].append("MantaTokenizerFast")
     _import_structure["models.xglm"].append("XGLMTokenizerFast")
     _import_structure["models.xlm_roberta"].append("XLMRobertaTokenizerFast")
     _import_structure["models.xlnet"].append("XLNetTokenizerFast")
@@ -1932,6 +1935,16 @@ else:
             "T5Model",
             "T5PreTrainedModel",
             "load_tf_weights_in_t5",
+        ]
+    )
+    _import_structure["models.manta"].extend(
+        [
+            "MANTA_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "MantaEncoderModel",
+            "MantaForConditionalGeneration",
+            "MantaModel",
+            "MantaPreTrainedModel",
+            "load_tf_weights_in_manta",
         ]
     )
     _import_structure["models.trajectory_transformer"].extend(
@@ -3327,6 +3340,7 @@ if TYPE_CHECKING:
     from .models.swin import SWIN_PRETRAINED_CONFIG_ARCHIVE_MAP, SwinConfig
     from .models.swinv2 import SWINV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Swinv2Config
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
+    from .models.manta import MANTA_PRETRAINED_CONFIG_ARCHIVE_MAP, MantaConfig
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
     from .models.tapex import TapexTokenizer
     from .models.time_series_transformer import (
@@ -3516,6 +3530,7 @@ if TYPE_CHECKING:
         from .models.rembert import RemBertTokenizer
         from .models.speech_to_text import Speech2TextTokenizer
         from .models.t5 import T5Tokenizer
+        from .models.manta import MantaTokenizer
         from .models.xglm import XGLMTokenizer
         from .models.xlm_prophetnet import XLMProphetNetTokenizer
         from .models.xlm_roberta import XLMRobertaTokenizer
@@ -3578,6 +3593,7 @@ if TYPE_CHECKING:
         from .models.splinter import SplinterTokenizerFast
         from .models.squeezebert import SqueezeBertTokenizerFast
         from .models.t5 import T5TokenizerFast
+        from .models.manta import MantaTokenizerFast
         from .models.xglm import XGLMTokenizerFast
         from .models.xlm_roberta import XLMRobertaTokenizerFast
         from .models.xlnet import XLNetTokenizerFast
@@ -4636,6 +4652,14 @@ if TYPE_CHECKING:
             T5Model,
             T5PreTrainedModel,
             load_tf_weights_in_t5,
+        )
+        from .models.manta import (
+            MANTA_PRETRAINED_MODEL_ARCHIVE_LIST,
+            MantaEncoderModel,
+            MantaForConditionalGeneration,
+            MantaModel,
+            MantaPreTrainedModel,
+            load_tf_weights_in_manta,
         )
         from .models.time_series_transformer import (
             TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,

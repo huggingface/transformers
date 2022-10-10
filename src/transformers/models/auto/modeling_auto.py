@@ -129,6 +129,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinModel"),
         ("swinv2", "Swinv2Model"),
         ("t5", "T5Model"),
+        ("manta", "MantaModel"),
         ("tapas", "TapasModel"),
         ("time_series_transformer", "TimeSeriesTransformerModel"),
         ("trajectory_transformer", "TrajectoryTransformerModel"),
@@ -197,6 +198,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("splinter", "SplinterForPreTraining"),
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("t5", "T5ForConditionalGeneration"),
+        ("manta", "MantaForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("unispeech", "UniSpeechForPreTraining"),
@@ -271,6 +273,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("speech_to_text", "Speech2TextForConditionalGeneration"),
         ("squeezebert", "SqueezeBertForMaskedLM"),
         ("t5", "T5ForConditionalGeneration"),
+        ("manta", "MantaForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("wav2vec2", "Wav2Vec2ForMaskedLM"),
@@ -501,6 +504,7 @@ MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("plbart", "PLBartForConditionalGeneration"),
         ("prophetnet", "ProphetNetForConditionalGeneration"),
         ("t5", "T5ForConditionalGeneration"),
+        ("manta", "MantaForConditionalGeneration"),
         ("xlm-prophetnet", "XLMProphetNetForConditionalGeneration"),
     ]
 )

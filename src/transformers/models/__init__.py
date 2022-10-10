@@ -137,6 +137,7 @@ from . import (
     swin,
     swinv2,
     t5,
+    manta,
     tapas,
     tapex,
     time_series_transformer,

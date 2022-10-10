@@ -247,6 +247,12 @@ else:
                     "T5TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "manta",
+                (
+                    "MantaTokenizer" if is_sentencepiece_available() else None,
+                    "MantaTokenizerFast" if is_tokenizers_available() else None,
+                ),
             ("tapas", ("TapasTokenizer", None)),
             ("tapex", ("TapexTokenizer", None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
