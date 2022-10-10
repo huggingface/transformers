@@ -79,10 +79,19 @@ jobs:
                 path: ~/transformers/tests_fetched_summary.txt
             - run: |
                 if [ -f test_list.txt ]; then
-                    mv test_list.txt test_preparation/test_list.txt
+                    cp test_list.txt test_preparation/test_list.txt
                 else
                     touch test_preparation/test_list.txt
                 fi
+            - run: python utils/tests_fetcher.py --filter_pipeline_tests
+            - run: |
+                if [ -f test_list.txt ]; then
+                    mv test_list.txt test_preparation/filtered_test_list.txt
+                else
+                    touch test_preparation/filtered_test_list.txt
+                fi
+            - store_artifacts:
+                  path: ~/transformers/test_preparation/filtered_test_list.txt
             - run: python utils/tests_fetcher.py --filters tests examples | tee examples_tests_fetched_summary.txt
             - store_artifacts:
                 path: ~/transformers/examples_tests_fetched_summary.txt
@@ -97,6 +106,7 @@ jobs:
                 root: test_preparation/
                 paths:
                     test_list.txt
+                    filtered_test_list.txt
                     examples_test_list.txt
 
     # To run all tests for the nightly build
@@ -110,6 +120,8 @@ jobs:
                   mkdir test_preparation
                   echo "tests" > test_preparation/test_list.txt
                   echo "tests" > test_preparation/examples_test_list.txt
+            - run: python utils/tests_fetcher.py --filter_pipeline_tests
+            - run: mv test_list.txt test_preparation/filtered_test_list.txt
 
             - persist_to_workspace:
                   root: test_preparation/
@@ -132,7 +144,7 @@ jobs:
             - attach_workspace:
                 at: ~/transformers/test_preparation
             - run: |
-                if [ ! -s test_preparation/test_list.txt ]; then
+                if [ ! -s test_preparation/filtered_test_list.txt ]; then
                     echo "No tests to run, exiting early!"
                     circleci-agent step halt
                 fi
@@ -152,7 +164,7 @@ jobs:
                 key: v0.5-torch_and_tf-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf $(cat test_preparation/test_list.txt) -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_tf $(cat test_preparation/filtered_test_list.txt) -m is_pt_tf_cross_test --durations=0 | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -174,7 +186,7 @@ jobs:
             - attach_workspace:
                 at: ~/transformers/test_preparation
             - run: |
-                if [ ! -s test_preparation/test_list.txt ]; then
+                if [ ! -s test_preparation/filtered_test_list.txt ]; then
                     echo "No tests to run, exiting early!"
                     circleci-agent step halt
                 fi
@@ -192,7 +204,7 @@ jobs:
                 key: v0.5-torch_and_flax-{{ checksum "setup.py" }}
                 paths:
                     - '~/.cache/pip'
-            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax $(cat test_preparation/test_list.txt) -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_torch_and_flax $(cat test_preparation/filtered_test_list.txt) -m is_pt_flax_cross_test --durations=0 | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -213,7 +225,7 @@ jobs:
             - attach_workspace:
                 at: ~/transformers/test_preparation
             - run: |
-                if [ ! -s test_preparation/test_list.txt ]; then
+                if [ ! -s test_preparation/filtered_test_list.txt ]; then
                     echo "No tests to run, exiting early!"
                     circleci-agent step halt
                 fi
@@ -231,7 +243,7 @@ jobs:
                   key: v0.5-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 3 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_torch $(cat test_preparation/test_list.txt) | tee tests_output.txt
+            - run: python -m pytest -n 3 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_torch $(cat test_preparation/filtered_test_list.txt) | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -252,7 +264,7 @@ jobs:
             - attach_workspace:
                 at: ~/transformers/test_preparation
             - run: |
-                if [ ! -s test_preparation/test_list.txt ]; then
+                if [ ! -s test_preparation/filtered_test_list.txt ]; then
                     echo "No tests to run, exiting early!"
                     circleci-agent step halt
                 fi
@@ -269,7 +281,7 @@ jobs:
                   key: v0.5-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_tf $(cat test_preparation/test_list.txt) | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_tf $(cat test_preparation/filtered_test_list.txt) | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -290,7 +302,7 @@ jobs:
             - attach_workspace:
                 at: ~/transformers/test_preparation
             - run: |
-                if [ ! -s test_preparation/test_list.txt ]; then
+                if [ ! -s test_preparation/filtered_test_list.txt ]; then
                     echo "No tests to run, exiting early!"
                     circleci-agent step halt
                 fi
@@ -306,7 +318,7 @@ jobs:
                   key: v0.5-flax-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_flax $(cat test_preparation/test_list.txt) | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_flax $(cat test_preparation/filtered_test_list.txt) | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -318,7 +330,6 @@ jobs:
             - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
-            RUN_PIPELINE_TESTS: yes
             TRANSFORMERS_IS_CI: yes
             PYTEST_TIMEOUT: 120
         resource_class: xlarge
@@ -345,7 +356,7 @@ jobs:
                   key: v0.5-torch-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch -m is_pipeline_test $(cat test_preparation/test_list.txt) | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_torch tests/pipelines | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -357,7 +368,6 @@ jobs:
             - image: cimg/python:3.7.12
         environment:
             OMP_NUM_THREADS: 1
-            RUN_PIPELINE_TESTS: yes
             TRANSFORMERS_IS_CI: yes
             PYTEST_TIMEOUT: 120
         resource_class: xlarge
@@ -382,7 +392,7 @@ jobs:
                   key: v0.5-tf-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf $(cat test_preparation/test_list.txt) -m is_pipeline_test | tee tests_output.txt
+            - run: python -m pytest -n 8 --max-worker-restart=0 --dist=loadfile -rA -s --make-reports=tests_pipelines_tf tests/pipelines | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -401,7 +411,7 @@ jobs:
             - attach_workspace:
                 at: ~/transformers/test_preparation
             - run: |
-                if [ ! -s test_preparation/test_list.txt ]; then
+                if [ ! -s test_preparation/filtered_test_list.txt ]; then
                     echo "No tests to run, exiting early!"
                     circleci-agent step halt
                 fi
@@ -557,7 +567,7 @@ jobs:
             - attach_workspace:
                 at: ~/transformers/test_preparation
             - run: |
-                if [ ! -s test_preparation/test_list.txt ]; then
+                if [ ! -s test_preparation/filtered_test_list.txt ]; then
                     echo "No tests to run, exiting early!"
                     circleci-agent step halt
                 fi
@@ -575,7 +585,7 @@ jobs:
                   key: v0.5-hub-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest --max-worker-restart=0 -sv --make-reports=tests_hub $(cat test_preparation/test_list.txt) -m is_staging_test | tee tests_output.txt
+            - run: python -m pytest --max-worker-restart=0 -sv --make-reports=tests_hub $(cat test_preparation/filtered_test_list.txt) -m is_staging_test | tee tests_output.txt
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
             - store_artifacts:
@@ -596,7 +606,7 @@ jobs:
             - attach_workspace:
                 at: ~/transformers/test_preparation
             - run: |
-                if [ ! -s test_preparation/test_list.txt ]; then
+                if [ ! -s test_preparation/filtered_test_list.txt ]; then
                     echo "No tests to run, exiting early!"
                     circleci-agent step halt
                 fi
@@ -610,7 +620,7 @@ jobs:
                   key: v0.5-onnx-{{ checksum "setup.py" }}
                   paths:
                       - '~/.cache/pip'
-            - run: python -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_onnx $(cat test_preparation/test_list.txt) -k onnx | tee tests_output.txt
+            - run: python -m pytest -n 1 --max-worker-restart=0 --dist=loadfile -s --make-reports=tests_onnx $(cat test_preparation/filtered_test_list.txt) -k onnx | tee tests_output.txt
 
             - store_artifacts:
                   path: ~/transformers/tests_output.txt
@@ -690,7 +700,7 @@ jobs:
         steps:
             - checkout
             - attach_workspace:
-                at: ~/transformers/test_preparation
+                at: ~/transformers/filtered_test_list.txt
             - run: |
                 if [ ! -s test_preparation/test_list.txt ]; then
                     echo "No tests to run, exiting early!"
