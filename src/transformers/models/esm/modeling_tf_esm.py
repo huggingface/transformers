@@ -19,8 +19,8 @@ from typing import List, Optional, Tuple, Union
 import tensorflow as tf
 import numpy as np
 from tensorflow.keras.layers import Dense, Dropout, Embedding, Layer, LayerNormalization
+from tensorflow.keras.activations import gelu
 
-from ...activations import ACT2FN, gelu
 from ...file_utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward
 from ...modeling_tf_outputs import (
     TFBaseModelOutputWithPastAndCrossAttentions,
@@ -75,16 +75,21 @@ class TFRotaryEmbedding(Layer):
     matrices which depend on their relative positions.
     """
 
-    def __init__(self, dim: int):
-        super().__init__()
+    def __init__(self, dim: int, name=None):
+        super().__init__(name=name)
         # Matt: The PyTorch version of this layer does a lot of work to cache values, but we just rely on TF compilation
         # and/or XLA to sort out constants like that. It actually may not seem like this layer needs to be stateful at
         # all when we benefit from TF compilation, but it does. The reason is that self.inv_freq is a buffer in the
         # original implementation, but all the shared ESM checkpoints were trained with fp16 params. This means that
         # the inv_freq tensor was stored as a float16, and we need to replicate those lower-precision values or our
         # models give different outputs from the original.
-        # TODO Check values are copied correctly from the buffer
-        self.inv_freq = 1.0 / (10000 ** (tf.range(start=0, limit=dim, delta=2, dtype=tf.float32) / dim))
+        self.dim = dim
+
+    def build(self, input_shape):
+        super().build(input_shape)
+        self.inv_freq = self.add_weight("inv_freq", shape=(self.dim // 2,), dtype=tf.float32,
+                                        initializer=get_initializer(1.0))
+        self.inv_freq.assign(1.0 / (10000 ** (tf.range(start=0, limit=self.dim, delta=2, dtype=tf.float32) / self.dim)))
 
     def _compute_cos_sin(self, x, seq_dimension=2):
         seq_len = tf.shape(x)[seq_dimension]
@@ -109,10 +114,10 @@ class TFEsmEmbeddings(Layer):
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
     """
 
-    def __init__(self, config):
-        super().__init__()
-        self.word_embeddings = Embedding(config.vocab_size, config.hidden_size, embeddings_initializer=get_initializer(config.initializer_range))
-        self.position_embeddings = Embedding(config.max_position_embeddings, config.hidden_size, embeddings_initializer=get_initializer(config.initializer_range))
+    def __init__(self, config, name=None):
+        super().__init__(name=name)
+        self.word_embeddings = Embedding(config.vocab_size, config.hidden_size, embeddings_initializer=get_initializer(config.initializer_range), name="word_embeddings")
+        self.position_embeddings = Embedding(config.max_position_embeddings, config.hidden_size, embeddings_initializer=get_initializer(config.initializer_range), name="position_embeddings")
 
         if config.emb_layer_norm_before:
             self.layer_norm = LayerNormalization(epsilon=config.layer_norm_eps)
@@ -154,7 +159,7 @@ class TFEsmEmbeddings(Layer):
         # actually dropping out values (or, equivalently, scale up their un-dropped outputs in training).
         if self.token_dropout:
             # embeddings.masked_fill_((input_ids == self.mask_token_id).unsqueeze(-1), 0.0)
-            embeddings = tf.where((input_ids == self.mask_token_id)[None, :], 0.0, embeddings)
+            embeddings = tf.where((input_ids == self.mask_token_id)[:, :, None], 0.0, embeddings)
             mask_ratio_train = 0.15 * 0.8  # Hardcoded as the ratio used in all ESM model training runs
             src_lengths = tf.cast(tf.reduce_sum(attention_mask, axis=-1), tf.float32)
             masked_tokens = input_ids == self.mask_token_id
@@ -168,7 +173,7 @@ class TFEsmEmbeddings(Layer):
         if self.layer_norm is not None:
             embeddings = self.layer_norm(embeddings)
         if attention_mask is not None:
-            embeddings = embeddings * tf.expand_dims(attention_mask, -1)
+            embeddings = embeddings * tf.cast(tf.expand_dims(attention_mask, -1), embeddings.dtype)
         # Matt: I think this line was copied incorrectly from BERT, disabling it for now.
         # embeddings = self.dropout(embeddings)
         return embeddings
@@ -182,7 +187,7 @@ class TFEsmEmbeddings(Layer):
 
         Returns: tf.Tensor
         """
-        input_shape = inputs_embeds.size()[:-1]
+        input_shape = shape_list(inputs_embeds)[:-1]
         sequence_length = input_shape[1]
 
         position_ids = tf.range(
@@ -192,8 +197,8 @@ class TFEsmEmbeddings(Layer):
 
 
 class TFEsmSelfAttention(Layer):
-    def __init__(self, config, position_embedding_type=None):
-        super().__init__()
+    def __init__(self, config, position_embedding_type=None, name=None):
+        super().__init__(name=name)
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
@@ -204,9 +209,9 @@ class TFEsmSelfAttention(Layer):
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range))
-        self.key = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range))
-        self.value = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range))
+        self.query = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="query")
+        self.key = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="key")
+        self.value = Dense(self.all_head_size, kernel_initializer=get_initializer(config.initializer_range), name="value")
 
         self.dropout = Dropout(config.attention_probs_dropout_prob)
         self.position_embedding_type = position_embedding_type or getattr(
@@ -217,12 +222,12 @@ class TFEsmSelfAttention(Layer):
             self.max_position_embeddings = config.max_position_embeddings
             self.distance_embedding = Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size, embeddings_initializer=get_initializer(config.initializer_range))
         elif self.position_embedding_type == "rotary":
-            self.rotary_embeddings = TFRotaryEmbedding(dim=self.attention_head_size)
+            self.rotary_embeddings = TFRotaryEmbedding(dim=self.attention_head_size, name="rotary_embeddings")
 
         self.is_decoder = config.is_decoder
 
     def transpose_for_scores(self, x: tf.Tensor) -> tf.Tensor:
-        new_x_shape = shape_list(x)[:-1] + (self.num_attention_heads, self.attention_head_size)
+        new_x_shape = shape_list(x)[:-1] + [self.num_attention_heads, self.attention_head_size]
         x = tf.reshape(x, new_x_shape)
         return tf.transpose(x, perm=(0, 2, 1, 3))
 
@@ -289,7 +294,7 @@ class TFEsmSelfAttention(Layer):
         attention_scores = tf.matmul(query_layer, key_layer, transpose_b=True)
 
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            seq_length = hidden_states.size()[1]
+            seq_length = shape_list(hidden_states)[1]
             position_ids_l = tf.expand_dims(tf.range(seq_length, dtype=tf.int64), -1)
             position_ids_r = tf.expand_dims(tf.range(seq_length, dtype=tf.int64), 0)
             distance = position_ids_l - position_ids_r
@@ -333,9 +338,9 @@ class TFEsmSelfAttention(Layer):
 
 
 class TFEsmSelfOutput(Layer):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = Dense(config.hidden_size, kernel_initializer=get_initializer(config.initializer_range))
+    def __init__(self, config, name=None):
+        super().__init__(name=name)
+        self.dense = Dense(config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense")
         self.dropout = Dropout(config.hidden_dropout_prob)
 
     def call(self, hidden_states, input_tensor, training=False):
@@ -346,12 +351,12 @@ class TFEsmSelfOutput(Layer):
 
 
 class TFEsmAttention(Layer):
-    def __init__(self, config):
-        super().__init__()
-        self.self = TFEsmSelfAttention(config)
-        self.output = TFEsmSelfOutput(config)
+    def __init__(self, config, name=None):
+        super().__init__(name=name)
+        self.self = TFEsmSelfAttention(config, name="self")
+        self.output_layer = TFEsmSelfOutput(config, name="output")
         self.pruned_heads = set()
-        self.LayerNorm = LayerNormalization(epsilon=config.layer_norm_eps)
+        self.LayerNorm = LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
 
     def prune_heads(self, heads):
         raise NotImplementedError
@@ -378,15 +383,15 @@ class TFEsmAttention(Layer):
             output_attentions,
             training
         )
-        attention_output = self.output(self_outputs[0], hidden_states)
+        attention_output = self.output_layer(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
 
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertIntermediate with Bert->Esm
 class TFEsmIntermediate(tf.keras.layers.Layer):
-    def __init__(self, config: EsmConfig, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, config: EsmConfig, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
 
         self.dense = tf.keras.layers.Dense(
             units=config.intermediate_size, kernel_initializer=get_initializer(config.initializer_range), name="dense"
@@ -405,9 +410,9 @@ class TFEsmIntermediate(tf.keras.layers.Layer):
 
 
 class TFEsmOutput(Layer):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = Dense(config.hidden_size, kernel_initializer=get_initializer(config.initializer_range))
+    def __init__(self, config, name=None):
+        super().__init__(name=name)
+        self.dense = Dense(config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense")
         self.dropout = Dropout(config.hidden_dropout_prob)
 
     def call(self, hidden_states, input_tensor, training=False):
@@ -418,20 +423,20 @@ class TFEsmOutput(Layer):
 
 
 class TFEsmLayer(Layer):
-    def __init__(self, config):
-        super().__init__()
+    def __init__(self, config, name=None):
+        super().__init__(name=name)
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = TFEsmAttention(config)
+        self.attention = TFEsmAttention(config, name="attention")
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise RuntimeError(f"{self} should be used as a decoder model if cross attention is added")
             self.crossattention = TFEsmAttention(config)
-        self.intermediate = TFEsmIntermediate(config)
-        self.output = TFEsmOutput(config)
-        self.LayerNorm = LayerNormalization(epsilon=config.layer_norm_eps)
+        self.intermediate = TFEsmIntermediate(config, name="intermediate")
+        self.output_layer = TFEsmOutput(config, name="output")
+        self.LayerNorm = LayerNormalization(epsilon=config.layer_norm_eps, name="LayerNorm")
 
     def call(
         self,
@@ -490,8 +495,9 @@ class TFEsmLayer(Layer):
             cross_attn_present_key_value = cross_attention_outputs[-1]
             present_key_value = present_key_value + cross_attn_present_key_value
 
-        intermediate_output = self.intermediate(hidden_states=attention_output)
-        layer_output = self.bert_output(
+        layernorm_output = self.LayerNorm(attention_output)
+        intermediate_output = self.intermediate(hidden_states=layernorm_output)
+        layer_output = self.output_layer(
             hidden_states=intermediate_output, input_tensor=attention_output, training=training
         )
         outputs = (layer_output,) + outputs  # add attentions if we output them
@@ -504,11 +510,11 @@ class TFEsmLayer(Layer):
 
 
 class TFEsmEncoder(Layer):
-    def __init__(self, config):
-        super().__init__()
+    def __init__(self, config, name=None):
+        super().__init__(name=name)
         self.config = config
-        self.layer = [TFEsmLayer(config) for _ in range(config.num_hidden_layers)]
-        self.emb_layer_norm_after = LayerNormalization(epsilon=config.layer_norm_eps)
+        self.layer = [TFEsmLayer(config, name=f"layer_._{i}") for i in range(config.num_hidden_layers)]
+        self.emb_layer_norm_after = LayerNormalization(epsilon=config.layer_norm_eps, name="emb_layer_norm_after")
         self.gradient_checkpointing = False
 
     def call(
@@ -586,14 +592,14 @@ class TFEsmEncoder(Layer):
 
 # Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Esm
 class TFEsmPooler(Layer):
-    def __init__(self, config: EsmConfig, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, config: EsmConfig, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
 
         self.dense = tf.keras.layers.Dense(
             units=config.hidden_size,
             kernel_initializer=get_initializer(config.initializer_range),
             activation="tanh",
-            name="dense",
+            name="dense"
         )
 
     def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
@@ -703,8 +709,8 @@ class TFEsmMainLayer(Layer):
     supports_gradient_checkpointing = False
 
     # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.__init__ with Bert->Esm
-    def __init__(self, config, add_pooling_layer=True, **kwargs):
-        super().__init__(**kwargs)
+    def __init__(self, config, add_pooling_layer=True, name=None, **kwargs):
+        super().__init__(name=name, **kwargs)
 
         self.config = config
         self.is_decoder = config.is_decoder
@@ -723,84 +729,116 @@ class TFEsmMainLayer(Layer):
     def _prune_heads(self, heads_to_prune):
         raise NotImplementedError
 
-
+    @unpack_inputs
     def call(
         self,
         input_ids: Optional[TFModelInputType] = None,
-        attention_mask: Optional[tf.Tensor] = None,
-        position_ids: Optional[tf.Tensor] = None,
-        head_mask: Optional[tf.Tensor] = None,
-        inputs_embeds: Optional[tf.Tensor] = None,
-        encoder_hidden_states: Optional[tf.Tensor] = None,
-        encoder_attention_mask: Optional[tf.Tensor] = None,
-        past_key_values: Optional[List[tf.Tensor]] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         training: bool = False,
-    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPoolingAndCrossAttentions]:
-        r"""
-        encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-            the model is configured as a decoder.
-        encoder_attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
+    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
 
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(tf.Tensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-            Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if self.config.is_decoder:
-            use_cache = use_cache if use_cache is not None else self.config.use_cache
-        else:
+        if not self.config.is_decoder:
             use_cache = False
 
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
-            input_shape = input_ids.size()
+            input_shape = shape_list(input_ids)
         elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
+            input_shape = shape_list(inputs_embeds)[:-1]
         else:
             raise ValueError("You have to specify either input_ids or inputs_embeds")
 
         batch_size, seq_length = input_shape
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
 
-        # past_key_values_length
-        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        if past_key_values is None:
+            past_key_values_length = 0
+            past_key_values = [None] * len(self.encoder.layer)
+        else:
+            past_key_values_length = shape_list(past_key_values[0][0])[-2]
 
         if attention_mask is None:
-            attention_mask = tf.ones(((batch_size, seq_length + past_key_values_length)))
+            attention_mask = tf.fill(dims=(batch_size, seq_length + past_key_values_length), value=1)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
+        embedding_output = self.embeddings(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            past_key_values_length=past_key_values_length,
+            training=training,
+        )
 
-        # If a 2D or 3D attention mask is provided for the cross-attention
-        # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
-        if self.config.is_decoder and encoder_hidden_states is not None:
-            encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
-            encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
-            if encoder_attention_mask is None:
-                encoder_attention_mask = tf.ones(encoder_hidden_shape)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+        # We create a 3D attention mask from a 2D tensor mask.
+        # Sizes are [batch_size, 1, 1, to_seq_length]
+        # So we can broadcast to [batch_size, num_heads, from_seq_length, to_seq_length]
+        # this attention mask is more simple than the triangular masking of causal attention
+        # used in OpenAI GPT, we just need to prepare the broadcast dimension here.
+        attention_mask_shape = shape_list(attention_mask)
+
+        mask_seq_length = seq_length + past_key_values_length
+        # Copied from `modeling_tf_t5.py`
+        # Provided a padding mask of dimensions [batch_size, mask_seq_length]
+        # - if the model is a decoder, apply a causal mask in addition to the padding mask
+        # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
+        if self.is_decoder:
+            seq_ids = tf.range(mask_seq_length)
+            causal_mask = tf.less_equal(
+                tf.tile(seq_ids[None, None, :], (batch_size, mask_seq_length, 1)),
+                seq_ids[None, :, None],
+            )
+            causal_mask = tf.cast(causal_mask, dtype=attention_mask.dtype)
+            extended_attention_mask = causal_mask * attention_mask[:, None, :]
+            attention_mask_shape = shape_list(extended_attention_mask)
+            extended_attention_mask = tf.reshape(
+                extended_attention_mask, (attention_mask_shape[0], 1, attention_mask_shape[1], attention_mask_shape[2])
+            )
+            if past_key_values[0] is not None:
+                # attention_mask needs to be sliced to the shape `[batch_size, 1, from_seq_length - cached_seq_length, to_seq_length]
+                extended_attention_mask = extended_attention_mask[:, :, -seq_length:, :]
+        else:
+            extended_attention_mask = tf.reshape(
+                attention_mask, (attention_mask_shape[0], 1, 1, attention_mask_shape[1])
+            )
+
+        # Since attention_mask is 1.0 for positions we want to attend and 0.0 for
+        # masked positions, this operation will create a tensor which is 0.0 for
+        # positions we want to attend and -10000.0 for masked positions.
+        # Since we are adding it to the raw scores before the softmax, this is
+        # effectively the same as removing these entirely.
+        extended_attention_mask = tf.cast(extended_attention_mask, dtype=embedding_output.dtype)
+        one_cst = tf.constant(1.0, dtype=embedding_output.dtype)
+        ten_thousand_cst = tf.constant(-10000.0, dtype=embedding_output.dtype)
+        extended_attention_mask = tf.multiply(tf.subtract(one_cst, extended_attention_mask), ten_thousand_cst)
+
+        # Copied from `modeling_tf_t5.py` with -1e9 -> -10000
+        if self.is_decoder and encoder_attention_mask is not None:
+            # If a 2D ou 3D attention mask is provided for the cross-attention
+            # we need to make broadcastable to [batch_size, num_heads, mask_seq_length, mask_seq_length]
+            # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
+            encoder_attention_mask = tf.cast(encoder_attention_mask, dtype=extended_attention_mask.dtype)
+            num_dims_encoder_attention_mask = len(shape_list(encoder_attention_mask))
+            if num_dims_encoder_attention_mask == 3:
+                encoder_extended_attention_mask = encoder_attention_mask[:, None, :, :]
+            if num_dims_encoder_attention_mask == 2:
+                encoder_extended_attention_mask = encoder_attention_mask[:, None, None, :]
+
+            # T5 has a mask that can compare sequence ids, we can simulate this here with this transposition
+            # Cf. https://github.com/tensorflow/mesh/blob/8d2465e9bc93129b913b5ccc6a59aa97abd96ec6/mesh_tensorflow/transformer/transformer_layers.py#L270
+            # encoder_extended_attention_mask = tf.math.equal(encoder_extended_attention_mask,
+            #                                         tf.transpose(encoder_extended_attention_mask, perm=(-1, -2)))
+
+            encoder_extended_attention_mask = (1.0 - encoder_extended_attention_mask) * -10000.0
         else:
             encoder_extended_attention_mask = None
 
@@ -809,17 +847,13 @@ class TFEsmMainLayer(Layer):
         # attention_probs has shape bsz x n_heads x N x N
         # input head_mask has shape [num_heads] or [num_hidden_layers x num_heads]
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
-        head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
+        if head_mask is not None:
+            raise NotImplementedError
+        else:
+            head_mask = [None] * self.config.num_hidden_layers
 
-        embedding_output = self.embeddings(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
-        )
         encoder_outputs = self.encoder(
-            embedding_output,
+            hidden_states=embedding_output,
             attention_mask=extended_attention_mask,
             head_mask=head_mask,
             encoder_hidden_states=encoder_hidden_states,
@@ -829,13 +863,17 @@ class TFEsmMainLayer(Layer):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            training=training
+            training=training,
         )
+
         sequence_output = encoder_outputs[0]
-        pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
+        pooled_output = self.pooler(hidden_states=sequence_output) if self.pooler is not None else None
 
         if not return_dict:
-            return (sequence_output, pooled_output) + encoder_outputs[1:]
+            return (
+                sequence_output,
+                pooled_output,
+            ) + encoder_outputs[1:]
 
         return TFBaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
@@ -853,10 +891,10 @@ class TFEsmMainLayer(Layer):
 
 
 class TFEsmModel(TFEsmPreTrainedModel):
-    def __init__(self, config: EsmConfig, *inputs, **kwargs):
+    def __init__(self, config: EsmConfig, add_pooling_layer=True, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.bert = TFEsmMainLayer(config, name="bert")
+        self.esm = TFEsmMainLayer(config, add_pooling_layer=add_pooling_layer, name="esm")
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -870,7 +908,6 @@ class TFEsmModel(TFEsmPreTrainedModel):
         self,
         input_ids: Optional[TFModelInputType] = None,
         attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
-        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
         head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
         inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
@@ -903,10 +940,9 @@ class TFEsmModel(TFEsmPreTrainedModel):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`). Set to `False` during training, `True` during generation
         """
-        outputs = self.bert(
+        outputs = self.esm(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
             head_mask=head_mask,
             inputs_embeds=inputs_embeds,
@@ -958,13 +994,11 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
                 "bi-directional self-attention."
             )
 
-        self.esm = TFEsmModel(config, add_pooling_layer=False)
-        self.lm_head = TFEsmLMHead(config)
+        self.esm = TFEsmMainLayer(config, name="esm")
+        self.lm_head = TFEsmLMHead(config, name="lm_head")
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
         self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
-
-        self.init_weights()
 
     def get_output_embeddings(self):
         return self.lm_head.decoder
@@ -1040,22 +1074,29 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
 class TFEsmLMHead(Layer):
     """ESM Head for masked language modeling."""
 
-    def __init__(self, config):
-        super().__init__()
-        self.dense = Dense(config.hidden_size, kernel_initializer=get_initializer(config.initializer_range))
-        self.layer_norm = LayerNormalization(epsilon=config.layer_norm_eps)
+    def __init__(self, config, name=None):
+        super().__init__(name=name)
+        self.dense = Dense(config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), name="dense")
+        self.layer_norm = LayerNormalization(epsilon=config.layer_norm_eps, name="layer_norm")
 
-        # Deleted the custom bias thing here because I don't think protein models will support vocab resizing
-        self.decoder = Dense(config.vocab_size, bias=True, kernel_initializer=get_initializer(config.initializer_range))
+        self.decoder = Dense(config.vocab_size, use_bias=False, kernel_initializer=get_initializer(config.initializer_range), name="decoder")
+        self.vocab_size = config.vocab_size
+
+    def build(self, input_shape):
+        super().build(input_shape)
+        # Separate bias to match the PT model and allow weight cross-loading to work
+        self.bias = self.add_weight("bias", shape=(self.vocab_size,), initializer="zeros", trainable=True)
+
 
 
     def call(self, features):
         x = self.dense(features)
-        x = gelu(x)
+        x = gelu(x, approximate=True)
         x = self.layer_norm(x)
 
         # project back to size of vocabulary with bias
         x = self.decoder(x)
+        x = x + self.bias
 
         return x
 
@@ -1075,10 +1116,8 @@ class TFEsmForSequenceClassification(TFEsmPreTrainedModel, TFSequenceClassificat
         self.num_labels = config.num_labels
         self.config = config
 
-        self.esm = TFEsmModel(config, add_pooling_layer=False)
+        self.esm = TFEsmMainLayer(config, name="esm")
         self.classifier = TFEsmClassificationHead(config)
-
-        self.init_weights()
 
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
@@ -1171,11 +1210,9 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.esm = TFEsmModel(config, add_pooling_layer=False)
+        self.esm = TFEsmMainLayer(config, name="esm")
         self.dropout = Dropout(config.hidden_dropout_prob)
         self.classifier = Dense( config.num_labels)
-
-        self.init_weights()
 
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
     @add_code_sample_docstrings(
