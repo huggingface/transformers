@@ -95,6 +95,7 @@ class DeiTConfig(PretrainedConfig):
     ```"""
     model_type = "deit"
 
+    # Copied from transformers.models.vit.configuration_vit.ViTConfig.__init__
     def __init__(
         self,
         hidden_size=768,
@@ -104,8 +105,8 @@ class DeiTConfig(PretrainedConfig):
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
         cls_token_initializer_range=1e-6,
+        initializer_range=0.02,
         layer_norm_eps=1e-12,
         image_size=224,
         patch_size=16,
@@ -123,8 +124,8 @@ class DeiTConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
-        self.initializer_range = initializer_range
         self.cls_token_initializer_range = cls_token_initializer_range
+        self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.image_size = image_size
         self.patch_size = patch_size
