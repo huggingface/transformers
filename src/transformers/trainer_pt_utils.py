@@ -114,7 +114,9 @@ def nested_concat(tensors, new_tensors, padding_index=-100):
     elif isinstance(tensors, torch.Tensor):
         return torch_pad_and_concatenate(tensors, new_tensors, padding_index=padding_index)
     elif isinstance(tensors, Mapping):
-        return type(tensors)({k: nested_concat(t, new_tensors[k], padding_index=padding_index) for k, t in tensors.items()})
+        return type(tensors)(
+            {k: nested_concat(t, new_tensors[k], padding_index=padding_index) for k, t in tensors.items()}
+        )
     elif isinstance(tensors, np.ndarray):
         return numpy_pad_and_concatenate(tensors, new_tensors, padding_index=padding_index)
     else:
@@ -147,7 +149,7 @@ def nested_numpify(tensors):
         return type(tensors)(nested_numpify(t) for t in tensors)
     if isinstance(tensors, Mapping):
         return type(tensors)({k: nested_numpify(t) for k, t in tensors.items()})
-    
+
     t = tensors.cpu()
     if t.dtype == torch.bfloat16:
         # As of Numpy 1.21.4, NumPy does not support bfloat16 (see
@@ -173,7 +175,9 @@ def nested_xla_mesh_reduce(tensors, name):
         if isinstance(tensors, (list, tuple)):
             return type(tensors)(nested_xla_mesh_reduce(t, f"{name}_{i}") for i, t in enumerate(tensors))
         if isinstance(tensors, Mapping):
-            return type(tensors)({k: nested_xla_mesh_reduce(t, f"{name}_{i}") for i, (k, t) in enumerate(tensors.items())})
+            return type(tensors)(
+                {k: nested_xla_mesh_reduce(t, f"{name}_{i}") for i, (k, t) in enumerate(tensors.items())}
+            )
 
         tensors = atleast_1d(tensors)
         return xm.mesh_reduce(name, tensors, torch.cat)
