@@ -655,6 +655,47 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
         return hidden_states
 
 
+class SpeechT5SpeechDecoderPrenet(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        # TODO: implement this class
+
+    def forward(
+        self,
+        input_values: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+    ):
+        return input_values
+
+
+class SpeechT5SpeechDecoderPostnet(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        # TODO: implement this class
+
+    def forward(self, hidden_states: torch.Tensor):
+        return hidden_states
+
+
+class SpeechT5TextEncoderPrenet(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+
+        # TODO: implement this class
+
+    def forward(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+    ):
+        return input_ids
+
+
 class SpeechT5TextDecoderPrenet(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -718,6 +759,12 @@ class SpeechT5TextDecoderPostnet(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor):
         return self.lm_head(hidden_states)
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
 
 class SpeechT5Attention(nn.Module):
@@ -1313,7 +1360,51 @@ class SpeechT5SpeechEncoder(SpeechT5PreTrainedModel):
         return outputs
 
 
-# TODO: add class SpeechT5TextEncoder that works on input_ids
+class SpeechT5TextEncoder(SpeechT5PreTrainedModel):
+    """
+    Wrapper around SpeechT5Encoder that applies SpeechT5TextEncoderPrenet to convert the input_ids to
+    hidden features.
+    """
+
+    def __init__(self, config: SpeechT5Config):
+        super().__init__(config)
+        self.prenet = SpeechT5TextEncoderPrenet(config)
+        self.wrapped_encoder = SpeechT5Encoder(config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.prenet.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.prenet.set_input_embeddings(value)
+
+    def forward(
+        self,
+        input_values: torch.FloatTensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutput]:
+
+        #TODO: implement this
+        #hidden_states, attention_mask = self.prenet(input_values, attention_mask)
+        hidden_states = input_values
+
+        outputs = self.wrapped_encoder(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        return outputs
 
 
 class SpeechT5Decoder(SpeechT5PreTrainedModel):
@@ -1545,6 +1636,56 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
         )
 
 
+class SpeechT5SpeechDecoder(SpeechT5PreTrainedModel):
+    """
+    Wrapper around SpeechT5Decoder that applies SpeechT5SpeechDecoderPrenet to convert log-mel filterbanks to hidden features.
+    """
+
+    def __init__(self, config: SpeechT5Config):
+        super().__init__(config)
+        self.prenet = SpeechT5SpeechDecoderPrenet(config)
+        self.wrapped_decoder = SpeechT5Decoder(config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def forward(
+        self,
+        input_values: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        cross_attn_head_mask: Optional[torch.Tensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
+
+        #TODO: implement this
+        #decoder_hidden_states = self.prenet(input_values, past_key_values)
+        decoder_hidden_states = input_values
+
+        outputs = self.wrapped_decoder(
+            hidden_states=decoder_hidden_states,
+            attention_mask=attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            head_mask=head_mask,
+            cross_attn_head_mask=cross_attn_head_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        return outputs
+
+
 class SpeechT5TextDecoder(SpeechT5PreTrainedModel):
     """
     Wrapper around SpeechT5Decoder that applies SpeechT5TextDecoderPrenet to convert input tokens to hidden features.
@@ -1558,6 +1699,12 @@ class SpeechT5TextDecoder(SpeechT5PreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.prenet.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.prenet.set_input_embeddings(value)
 
     def forward(
         self,
@@ -1720,6 +1867,19 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        if isinstance(self.encoder, SpeechT5TextEncoder):
+           return self.encoder.get_input_embeddings()
+        if isinstance(self.decoder, SpeechT5TextDecoder):
+            return self.decoder.get_input_embeddings()
+        return None
+
+    def set_input_embeddings(self, value):
+        if isinstance(self.encoder, SpeechT5TextEncoder):
+           self.encoder.set_input_embeddings(value)
+        if isinstance(self.decoder, SpeechT5TextDecoder):
+            self.decoder.set_input_embeddings(value)
+
     def get_encoder(self):
         return self.encoder
 
@@ -1867,6 +2027,16 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
         not be updated during training.
         """
         self.get_encoder().prenet._freeze_parameters()
+
+    def resize_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
+        new_embeddings = super().resize_token_embeddings(new_num_tokens)
+        return new_embeddings
+
+    def get_output_embeddings(self):
+        return self.text_decoder_postnet.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.text_decoder_postnet.set_output_embeddings(new_embeddings)
 
     @add_start_docstrings_to_model_forward(SPEECHT5_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
