@@ -1019,9 +1019,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
     _keys_to_ignore_on_load_unexpected = None
     _requires_load_weight_prefix = False
 
-    # Used to standardize the multiple configuration variable names that may be used to set an initialization range.
-    _initializer_range_name = None
-
     @property
     def dummy_inputs(self) -> Dict[str, tf.Tensor]:
         """
@@ -1754,23 +1751,6 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
             `tf.keras.layers.Layer`: The LM head layer if the model has one, None if not.
         """
         return None
-
-    def _get_initialization_range(self) -> float:
-        """
-        Scans the configuration file for the weight initialization range, as different configuration classes use
-        different names for this parameter.
-
-        Return:
-            `float`: The initialization range to use for the weights of the model.
-        """
-        potential_initialization_variable_names = [
-            "initializer_range",  # most common
-            "initializer_factor",  # e.g. T5
-            "init_std",  # e.g BART
-        ]
-        for var_name in potential_initialization_variable_names:
-            if hasattr(self.config, var_name):
-                return getattr(self.config, var_name)
 
     def resize_token_embeddings(
         self, new_num_tokens: Optional[int] = None
