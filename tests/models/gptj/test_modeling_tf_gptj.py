@@ -287,6 +287,7 @@ class TFGPTJModelTester:
 
 @require_tf
 class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (TFGPTJForCausalLM, TFGPTJForSequenceClassification, TFGPTJForQuestionAnswering, TFGPTJModel)
         if is_tf_available()

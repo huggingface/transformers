@@ -169,6 +169,7 @@ def get_norm(norm, out_channels):
 
 
 def _create_grid_offsets(size: List[int], stride: int, offset: float, device):
+
     grid_height, grid_width = size
     shifts_x = torch.arange(
         offset * stride,
@@ -389,6 +390,7 @@ def assign_boxes_to_levels(
     canonical_box_size: int,
     canonical_level: int,
 ):
+
     box_sizes = torch.sqrt(torch.cat([boxes.area() for boxes in box_lists]))
     # Eqn.(1) in FPN paper
     level_assignments = torch.floor(canonical_level + torch.log2(box_sizes / canonical_box_size + 1e-8))

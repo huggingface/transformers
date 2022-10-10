@@ -250,6 +250,7 @@ class TFOpenAIGPTMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFBaseModelOutput]:
+
         if input_ids is not None and inputs_embeds is not None:
             raise ValueError("You cannot specify both input_ids and inputs_embeds at the same time")
         elif input_ids is not None:
@@ -546,6 +547,7 @@ class TFOpenAIGPTModel(TFOpenAIGPTPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: Optional[bool] = False,
     ) -> Union[Tuple, TFBaseModelOutput]:
+
         outputs = self.transformer(
             input_ids=input_ids,
             attention_mask=attention_mask,

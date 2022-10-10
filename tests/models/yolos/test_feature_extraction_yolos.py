@@ -107,6 +107,7 @@ class YolosFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class YolosFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+
     feature_extraction_class = YolosFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

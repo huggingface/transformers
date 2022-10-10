@@ -216,6 +216,7 @@ def prepare_video(num_frames):
 
 
 def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
+
     model_to_url = {
         # fully supervised kinetics-400 checkpoints
         "xclip-base-patch32": "https://github.com/nbl97/X-CLIP_Model_Zoo/releases/download/v1.0/k400_32_8.pth",

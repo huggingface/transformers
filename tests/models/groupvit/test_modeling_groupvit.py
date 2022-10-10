@@ -432,6 +432,7 @@ class GroupViTTextModelTester:
 
 @require_torch
 class GroupViTTextModelTest(ModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (GroupViTTextModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False

@@ -163,6 +163,7 @@ class QuantAct(nn.Module):
         specified_min=None,
         specified_max=None,
     ):
+
         x_act = x if identity is None else identity + x
         # collect running stats if training
         if self.training:
@@ -662,6 +663,7 @@ class SymmetricQuantFunction(Function):
 
     @staticmethod
     def backward(ctx, grad_output):
+
         scale = ctx.scale
         if len(grad_output.shape) == 4:
             scale = scale.view(-1, 1, 1, 1)
@@ -769,6 +771,7 @@ class FixedPointMul(Function):
         identity=None,
         identity_scaling_factor=None,
     ):
+
         if len(pre_act_scaling_factor.shape) == 3:
             reshape = lambda x: x  # noqa: E731
         else:

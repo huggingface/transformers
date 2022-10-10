@@ -178,6 +178,7 @@ class FlaxGPTJModelTester:
 
 @require_flax
 class FlaxGPTJModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
+
     all_model_classes = (FlaxGPTJModel, FlaxGPTJForCausalLM) if is_flax_available() else ()
     all_generative_model_classes = (FlaxGPTJForCausalLM,) if is_flax_available() else ()
 

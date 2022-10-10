@@ -71,6 +71,7 @@ class LongT5ModelTester:
         decoder_layers=None,
         large_model_config_path="google/long-t5-local-large",
     ):
+
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -501,6 +502,7 @@ class LongT5ModelTester:
 
 @require_torch
 class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+
     all_model_classes = (LongT5Model, LongT5ForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (LongT5ForConditionalGeneration,) if is_torch_available() else ()
     fx_compatible = False
@@ -917,6 +919,7 @@ class LongT5EncoderOnlyModelTester:
         scope=None,
         large_model_config_path="google/long-t5-local-large",
     ):
+
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length

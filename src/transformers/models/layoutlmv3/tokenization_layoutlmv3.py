@@ -721,6 +721,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
+
         # Backward compatibility for 'truncation_strategy', 'pad_to_max_length'
         padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
             padding=padding,
@@ -780,6 +781,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
+
         if return_offsets_mapping:
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "

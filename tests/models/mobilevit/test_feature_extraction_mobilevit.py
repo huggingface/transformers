@@ -73,6 +73,7 @@ class MobileViTFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class MobileViTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+
     feature_extraction_class = MobileViTFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

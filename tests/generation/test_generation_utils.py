@@ -1528,6 +1528,7 @@ class GenerationTesterMixin:
 
 @require_torch
 class UtilsFunctionsTest(unittest.TestCase):
+
     # tests whether the top_k_top_p function behaves as expected
     def test_top_k_top_p_filtering(self):
         logits = torch.tensor(
@@ -1980,6 +1981,7 @@ class GenerationIntegrationTests(unittest.TestCase):
         )
 
     def test_stop_sequence_stopping_criteria(self):
+
         prompt = """Hello I believe in"""
         generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-bart")
         output = generator(prompt)

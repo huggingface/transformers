@@ -19,6 +19,7 @@ from .modeling_highway_bert import BertPreTrainedModel, DeeBertModel, HighwayExc
     ROBERTA_START_DOCSTRING,
 )
 class DeeRobertaModel(DeeBertModel):
+
     config_class = RobertaConfig
     base_model_prefix = "roberta"
 
@@ -35,6 +36,7 @@ class DeeRobertaModel(DeeBertModel):
     ROBERTA_START_DOCSTRING,
 )
 class DeeRobertaForSequenceClassification(BertPreTrainedModel):
+
     config_class = RobertaConfig
     base_model_prefix = "roberta"
 

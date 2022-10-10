@@ -39,6 +39,7 @@ class LightningModel(pl.LightningModule):
 def convert_longformer_qa_checkpoint_to_pytorch(
     longformer_model: str, longformer_question_answering_ckpt_path: str, pytorch_dump_folder_path: str
 ):
+
     # load longformer model from model identifier
     longformer = LongformerModel.from_pretrained(longformer_model)
     lightning_model = LightningModel(longformer)

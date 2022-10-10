@@ -33,6 +33,7 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 class PyTorchBenchmarkArguments(BenchmarkArguments):
+
     deprecated_args = [
         "no_inference",
         "no_cuda",

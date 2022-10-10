@@ -104,6 +104,7 @@ class Speech2TextFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_torchaudio
 class Speech2TextFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+
     feature_extraction_class = Speech2TextFeatureExtractor if is_speech_available() else None
 
     def setUp(self):

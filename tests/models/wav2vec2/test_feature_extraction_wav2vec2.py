@@ -96,6 +96,7 @@ class Wav2Vec2FeatureExtractionTester(unittest.TestCase):
 
 
 class Wav2Vec2FeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+
     feature_extraction_class = Wav2Vec2FeatureExtractor
 
     def setUp(self):

@@ -435,6 +435,7 @@ class FlavaTextModelTester:
 
 @require_torch
 class FlavaTextModelTest(ModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (FlavaTextModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -568,6 +569,7 @@ class FlavaMultimodalModelTester:
 
 @require_torch
 class FlavaMultimodalModelTest(ModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (FlavaMultimodalModel,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
@@ -665,6 +667,7 @@ class FlavaImageCodebookTester:
 
 @require_torch
 class FlavaImageCodebookTest(ModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (FlavaImageCodebook,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False

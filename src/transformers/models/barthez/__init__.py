@@ -41,6 +41,7 @@ else:
 
 
 if TYPE_CHECKING:
+
     try:
         if not is_sentencepiece_available():
             raise OptionalDependencyNotAvailable()

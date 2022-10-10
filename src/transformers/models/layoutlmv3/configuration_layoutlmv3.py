@@ -191,6 +191,7 @@ class LayoutLMv3Config(PretrainedConfig):
 
 
 class LayoutLMv3OnnxConfig(OnnxConfig):
+
     torch_onnx_minimum_version = version.parse("1.12")
 
     @property

@@ -4,6 +4,7 @@ import subprocess
 
 
 def get_runner_status(target_runners, token):
+
     offline_runners = []
 
     cmd = (

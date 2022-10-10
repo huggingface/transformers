@@ -708,6 +708,7 @@ def main():
 
     # Training
     if training_args.do_train:
+
         # use last checkpoint if exist
         if last_checkpoint is not None:
             checkpoint = last_checkpoint

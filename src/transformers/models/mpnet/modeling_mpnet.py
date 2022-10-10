@@ -164,6 +164,7 @@ class MPNetSelfAttention(nn.Module):
         output_attentions=False,
         **kwargs,
     ):
+
         q = self.q(hidden_states)
         k = self.k(hidden_states)
         v = self.v(hidden_states)
@@ -480,6 +481,7 @@ MPNET_INPUTS_DOCSTRING = r"""
     MPNET_START_DOCSTRING,
 )
 class MPNetModel(MPNetPreTrainedModel):
+
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config, add_pooling_layer=True):

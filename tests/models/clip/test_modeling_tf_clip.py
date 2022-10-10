@@ -396,6 +396,7 @@ class TFCLIPTextModelTester:
 
 @require_tf
 class TFCLIPTextModelTest(TFModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (TFCLIPTextModel,) if is_tf_available() else ()
     test_pruning = False
     test_head_masking = False

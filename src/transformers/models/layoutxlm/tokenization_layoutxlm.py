@@ -615,6 +615,7 @@ class LayoutXLMTokenizer(PreTrainedTokenizer):
         verbose: bool = True,
         **kwargs
     ) -> BatchEncoding:
+
         if return_offsets_mapping:
             raise NotImplementedError(
                 "return_offset_mapping is not available when using Python tokenizers. "

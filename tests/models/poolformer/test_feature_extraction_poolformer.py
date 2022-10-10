@@ -73,6 +73,7 @@ class PoolFormerFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class PoolFormerFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+
     feature_extraction_class = PoolFormerFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

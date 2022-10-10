@@ -1042,6 +1042,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
             past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
+
                 if use_cache:
                     logger.warning(
                         "`use_cache = True` is incompatible with gradient checkpointing. Setting `use_cache ="
@@ -1067,6 +1068,7 @@ class Speech2TextDecoder(Speech2TextPreTrainedModel):
                     None,
                 )
             else:
+
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,

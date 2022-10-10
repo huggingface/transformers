@@ -224,6 +224,7 @@ class TFConvBertModelTester:
 
 @require_tf
 class TFConvBertModelTest(TFModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (
             TFConvBertModel,

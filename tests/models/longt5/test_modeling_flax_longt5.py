@@ -82,6 +82,7 @@ class FlaxLongT5ModelTester:
         scope=None,
         decoder_layers=None,
     ):
+
         self.parent = parent
         self.batch_size = batch_size
         self.encoder_seq_length = encoder_seq_length
@@ -235,6 +236,7 @@ class FlaxLongT5ModelTester:
 
 @require_flax
 class FlaxLongT5ModelTest(FlaxModelTesterMixin, FlaxGenerationTesterMixin, unittest.TestCase):
+
     all_model_classes = (FlaxLongT5Model, FlaxLongT5ForConditionalGeneration) if is_flax_available() else ()
     all_generative_model_classes = (FlaxLongT5ForConditionalGeneration,) if is_flax_available() else ()
     is_encoder_decoder = True

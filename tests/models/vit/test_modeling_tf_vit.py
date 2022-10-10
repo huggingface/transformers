@@ -206,6 +206,7 @@ class TFViTModelTest(TFModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
+
         model = TFViTModel.from_pretrained("google/vit-base-patch16-224")
         self.assertIsNotNone(model)
 

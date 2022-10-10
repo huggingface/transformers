@@ -27,6 +27,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 class XLNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+
     tokenizer_class = XLNetTokenizer
     rust_tokenizer_class = XLNetTokenizerFast
     test_rust_tokenizer = True

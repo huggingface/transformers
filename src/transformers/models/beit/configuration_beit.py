@@ -187,6 +187,7 @@ class BeitConfig(PretrainedConfig):
 
 # Copied from transformers.models.vit.configuration_vit.ViTOnnxConfig
 class BeitOnnxConfig(OnnxConfig):
+
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

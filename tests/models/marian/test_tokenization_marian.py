@@ -45,6 +45,7 @@ else:
 
 @require_sentencepiece
 class MarianTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+
     tokenizer_class = MarianTokenizer
     test_rust_tokenizer = False
     test_sentencepiece = True

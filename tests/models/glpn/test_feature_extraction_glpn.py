@@ -67,6 +67,7 @@ class GLPNFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class GLPNFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+
     feature_extraction_class = GLPNFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

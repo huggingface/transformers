@@ -395,6 +395,7 @@ logger.info("Loading ONNX model %s for evaluation", args.onnx_model_path)
 with open(engine_name, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime, runtime.deserialize_cuda_engine(
     f.read()
 ) as engine, engine.create_execution_context() as context:
+
     # setup for TRT inferrence
     for i in range(len(input_names)):
         context.set_binding_shape(i, INPUT_SHAPE)
@@ -426,6 +427,7 @@ with open(engine_name, "rb") as f, trt.Runtime(TRT_LOGGER) as runtime, runtime.d
 
     all_preds = None
     for step, batch in enumerate(eval_dataloader):
+
         outputs, infer_time = model_infer(batch, context, d_inputs, h_output0, h_output1, d_output0, d_output1, stream)
         total_time += infer_time
         niter += 1

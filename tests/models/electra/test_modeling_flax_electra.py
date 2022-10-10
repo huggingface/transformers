@@ -105,6 +105,7 @@ class FlaxElectraModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxElectraModelTest(FlaxModelTesterMixin, unittest.TestCase):
+
     test_head_masking = True
 
     all_model_classes = (

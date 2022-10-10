@@ -216,6 +216,7 @@ class DetrConfig(PretrainedConfig):
 
 
 class DetrOnnxConfig(OnnxConfig):
+
     torch_onnx_minimum_version = version.parse("1.11")
 
     @property

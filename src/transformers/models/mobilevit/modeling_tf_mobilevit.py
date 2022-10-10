@@ -853,6 +853,7 @@ class TFMobileViTModel(TFMobileViTPreTrainedModel):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPooling]:
+
         output = self.mobilevit(pixel_values, output_hidden_states, return_dict, training=training)
         return output
 

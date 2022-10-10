@@ -79,6 +79,7 @@ class DeiTFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class DeiTFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+
     feature_extraction_class = DeiTFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

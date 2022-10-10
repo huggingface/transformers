@@ -193,6 +193,7 @@ class ConditionalDetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtrac
 
     # Copied from transformers.models.detr.feature_extraction_detr.DetrFeatureExtractor.convert_coco_poly_to_mask
     def convert_coco_poly_to_mask(self, segmentations, height, width):
+
         try:
             from pycocotools import mask as coco_mask
         except ImportError:

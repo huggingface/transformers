@@ -176,6 +176,7 @@ class Wav2Vec2Aligner:
                 out_align.write(str(seg) + "\n")
 
     def align_data(self, wav_dir, text_file, output_dir):
+
         if not os.path.exists(output_dir):
             os.makedirs(output_dir)
 

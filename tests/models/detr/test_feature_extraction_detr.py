@@ -107,6 +107,7 @@ class DetrFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class DetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+
     feature_extraction_class = DetrFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

@@ -811,6 +811,7 @@ class TFXGLMModel(TFXGLMPreTrainedModel):
         training: Optional[bool] = False,
         **kwargs: Any,
     ) -> Union[TFBaseModelOutputWithPastAndCrossAttentions, Tuple[tf.Tensor]]:
+
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,

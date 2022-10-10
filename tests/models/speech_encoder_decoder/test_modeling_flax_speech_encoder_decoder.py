@@ -406,6 +406,7 @@ class FlaxEncoderDecoderMixin:
             self.assertTrue((grad == grad_frozen).all())
 
     def check_pt_flax_equivalence(self, pt_model, fx_model, inputs_dict):
+
         pt_model.to(torch_device)
         pt_model.eval()
 
@@ -447,6 +448,7 @@ class FlaxEncoderDecoderMixin:
             self.assert_almost_equals(fx_output, pt_output_loaded.numpy(), 1e-5)
 
     def check_equivalence_pt_to_flax(self, config, decoder_config, inputs_dict):
+
         encoder_decoder_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
 
         pt_model = SpeechEncoderDecoderModel(encoder_decoder_config)
@@ -458,6 +460,7 @@ class FlaxEncoderDecoderMixin:
         self.check_pt_flax_equivalence(pt_model, fx_model, inputs_dict)
 
     def check_equivalence_flax_to_pt(self, config, decoder_config, inputs_dict):
+
         encoder_decoder_config = SpeechEncoderDecoderConfig.from_encoder_decoder_configs(config, decoder_config)
 
         pt_model = SpeechEncoderDecoderModel(encoder_decoder_config)
@@ -505,6 +508,7 @@ class FlaxEncoderDecoderMixin:
 
     @is_pt_flax_cross_test
     def test_pt_flax_equivalence(self):
+
         config_inputs_dict = self.prepare_config_and_inputs()
         config = config_inputs_dict.pop("config")
         decoder_config = config_inputs_dict.pop("decoder_config")

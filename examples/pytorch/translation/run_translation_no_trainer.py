@@ -69,6 +69,7 @@ MODEL_TYPES = tuple(conf.model_type for conf in MODEL_CONFIG_CLASSES)
 
 # Parsing input arguments
 def parse_args():
+
     parser = argparse.ArgumentParser(description="Finetune a transformers model on a text classification task")
     parser.add_argument(
         "--dataset_name",
@@ -745,4 +746,5 @@ def main():
 
 
 if __name__ == "__main__":
+
     main()

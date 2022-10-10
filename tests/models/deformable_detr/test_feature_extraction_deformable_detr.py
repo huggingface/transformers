@@ -107,6 +107,7 @@ class DeformableDetrFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class DeformableDetrFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+
     feature_extraction_class = DeformableDetrFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

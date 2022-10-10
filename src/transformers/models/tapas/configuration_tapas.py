@@ -195,6 +195,7 @@ class TapasConfig(PretrainedConfig):
         no_aggregation_label_index=None,
         **kwargs
     ):
+
         super().__init__(pad_token_id=pad_token_id, **kwargs)
 
         # BERT hyperparameters (with updated max_position_embeddings and type_vocab_sizes)

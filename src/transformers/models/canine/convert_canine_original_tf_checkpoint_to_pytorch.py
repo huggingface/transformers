@@ -25,6 +25,7 @@ logging.set_verbosity_info()
 
 
 def convert_tf_checkpoint_to_pytorch(tf_checkpoint_path, pytorch_dump_path):
+
     # Initialize PyTorch model
     config = CanineConfig()
     model = CanineModel(config)

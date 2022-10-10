@@ -84,6 +84,7 @@ class TapexTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         add_special_tokens: bool = True,
         return_table_and_query: bool = False,
     ):
+
         toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
 
         if empty_table:
@@ -363,6 +364,7 @@ class TapexTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
+
                 table, query = self.get_table_and_query(tokenizer)
 
                 sequences = tokenizer.encode(table, query, add_special_tokens=False)
@@ -448,8 +450,7 @@ class TapexTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                 self.assertEqual(encoded_sequence, filtered_sequence)
 
     def test_padding_to_max_length(self):
-        """We keep this test for backward compatibility but it should be removed when `pad_to_max_length` will be deprecated
-        """
+        """We keep this test for backward compatibility but it should be removed when `pad_to_max_length` will be deprecated"""
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):

@@ -31,6 +31,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 class XGLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+
     tokenizer_class = XGLMTokenizer
     rust_tokenizer_class = XGLMTokenizerFast
     test_rust_tokenizer = True

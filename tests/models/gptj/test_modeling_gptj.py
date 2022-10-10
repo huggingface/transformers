@@ -361,6 +361,7 @@ class GPTJModelTester:
 
 @require_torch
 class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (GPTJModel, GPTJForCausalLM, GPTJForSequenceClassification, GPTJForQuestionAnswering)
         if is_torch_available()

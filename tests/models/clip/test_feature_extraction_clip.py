@@ -112,6 +112,7 @@ class CLIPFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class CLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+
     feature_extraction_class = CLIPFeatureExtractor if is_vision_available() else None
 
     def setUp(self):
@@ -235,6 +236,7 @@ class CLIPFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestC
 @require_torch
 @require_vision
 class CLIPFeatureExtractionTestFourChannels(FeatureExtractionSavingTestMixin, unittest.TestCase):
+
     feature_extraction_class = CLIPFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

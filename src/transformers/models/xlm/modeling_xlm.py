@@ -103,6 +103,7 @@ def get_masks(slen, lengths, causal, padding_mask=None):
 
 
 class MultiHeadAttention(nn.Module):
+
     NEW_ID = itertools.count()
 
     def __init__(self, n_heads, dim, config):

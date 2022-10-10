@@ -169,6 +169,7 @@ class TFCTRLModelTester(object):
 
 @require_tf
 class TFCTRLModelTest(TFModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (TFCTRLModel, TFCTRLLMHeadModel, TFCTRLForSequenceClassification) if is_tf_available() else ()
     all_generative_model_classes = (TFCTRLLMHeadModel,) if is_tf_available() else ()
     test_head_masking = False

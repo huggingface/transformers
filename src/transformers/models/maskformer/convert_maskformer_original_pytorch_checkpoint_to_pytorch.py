@@ -106,6 +106,7 @@ def setup_cfg(args: Args):
 
 class OriginalMaskFormerConfigToOursConverter:
     def __call__(self, original_config: object) -> MaskFormerConfig:
+
         model = original_config.MODEL
         mask_former = model.MASK_FORMER
         swin = model.SWIN
@@ -556,6 +557,7 @@ class OriginalMaskFormerCheckpointToOursConverter:
 
 def test(original_model, our_model: MaskFormerForInstanceSegmentation, feature_extractor: MaskFormerFeatureExtractor):
     with torch.no_grad():
+
         original_model = original_model.eval()
         our_model = our_model.eval()
 
@@ -581,6 +583,7 @@ def test(original_model, our_model: MaskFormerForInstanceSegmentation, feature_e
         for original_model_feature, our_model_feature in zip(
             original_model_backbone_features.values(), our_model_output.encoder_hidden_states
         ):
+
             assert torch.allclose(
                 original_model_feature, our_model_feature, atol=1e-3
             ), "The backbone features are not the same."
@@ -632,6 +635,7 @@ def get_name(checkpoint_file: Path):
 
 
 if __name__ == "__main__":
+
     parser = ArgumentParser(
         description="Command line to convert the original maskformers (with swin backbone) to our implementations."
     )
@@ -686,6 +690,7 @@ if __name__ == "__main__":
     for config_file, checkpoint_file in OriginalMaskFormerCheckpointToOursConverter.using_dirs(
         checkpoints_dir, config_dir
     ):
+
         feature_extractor = OriginalMaskFormerConfigToFeatureExtractorConverter()(
             setup_cfg(Args(config_file=config_file))
         )

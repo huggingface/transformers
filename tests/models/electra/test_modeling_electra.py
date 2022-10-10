@@ -354,6 +354,7 @@ class ElectraModelTester:
 
 @require_torch
 class ElectraModelTest(ModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (
             ElectraModel,

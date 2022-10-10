@@ -156,6 +156,7 @@ class TFTransfoXLModelTester:
 
 @require_tf
 class TFTransfoXLModelTest(TFModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (TFTransfoXLModel, TFTransfoXLLMHeadModel, TFTransfoXLForSequenceClassification) if is_tf_available() else ()
     )

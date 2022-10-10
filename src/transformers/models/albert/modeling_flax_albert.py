@@ -705,6 +705,7 @@ class FlaxAlbertForPreTrainingModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
+
         # Model
         outputs = self.albert(
             input_ids,

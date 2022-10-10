@@ -177,6 +177,7 @@ class TFSwinModelTester:
 
 @require_tf
 class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (
             TFSwinModel,
@@ -334,6 +335,7 @@ class TFSwinModelTest(TFModelTesterMixin, unittest.TestCase):
         )
 
     def test_hidden_states_output(self):
+
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         image_size = to_2tuple(self.model_tester.image_size)

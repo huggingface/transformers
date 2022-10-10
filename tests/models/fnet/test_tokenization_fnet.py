@@ -28,6 +28,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/spiece.model")
 @require_sentencepiece
 @require_tokenizers
 class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+
     tokenizer_class = FNetTokenizer
     rust_tokenizer_class = FNetTokenizerFast
     test_rust_tokenizer = True
@@ -144,6 +145,7 @@ class FNetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_special_tokens_initialization(self):
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+
                 added_tokens = [AddedToken("<special>", lstrip=True)]
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(

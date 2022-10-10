@@ -134,6 +134,7 @@ class FlaxBigBirdModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (
             FlaxBigBirdForCausalLM,
@@ -209,6 +210,7 @@ class FlaxBigBirdModelTest(FlaxModelTesterMixin, unittest.TestCase):
 
                 self.assertEqual(len(outputs), len(jitted_outputs))
                 for jitted_output, output in zip(jitted_outputs, outputs):
+
                     self.assertEqual(jitted_output.shape, output.shape)
 
     # overwrite from common in order to skip the check on `attentions`

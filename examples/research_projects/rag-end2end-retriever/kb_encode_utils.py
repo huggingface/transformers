@@ -26,6 +26,7 @@ def split_documents(documents):
 
 
 def embed_update(ctx_encoder, total_processes, device, process_num, shard_dir, csv_path):
+
     kb_dataset = load_dataset(
         "csv", data_files=[csv_path], split="train", delimiter="\t", column_names=["title", "text"]
     )

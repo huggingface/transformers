@@ -98,6 +98,7 @@ class Args:
 
 @dataclass
 class DataCollator:
+
     pad_id: int
     max_length: int = 4096  # no dynamic padding on TPUs
 

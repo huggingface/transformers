@@ -63,6 +63,7 @@ class LayoutLMv3FeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_pytesseract
 class LayoutLMv3FeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+
     feature_extraction_class = LayoutLMv3FeatureExtractor if is_pytesseract_available() else None
 
     def setUp(self):

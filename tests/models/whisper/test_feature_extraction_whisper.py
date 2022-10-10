@@ -113,6 +113,7 @@ class WhisperFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_torchaudio
 class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+
     feature_extraction_class = WhisperFeatureExtractor if is_speech_available() else None
 
     def setUp(self):

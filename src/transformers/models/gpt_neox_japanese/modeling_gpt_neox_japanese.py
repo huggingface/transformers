@@ -591,6 +591,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
     GPT_NEOX_JAPANESE_START_DOCSTRING,
 )
 class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel):
+
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
     def __init__(self, config):

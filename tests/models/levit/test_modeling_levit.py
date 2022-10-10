@@ -355,6 +355,7 @@ class LevitModelTest(ModelTesterMixin, unittest.TestCase):
 
             for problem_type in problem_types:
                 with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
+
                     config.problem_type = problem_type["title"]
                     config.num_labels = problem_type["num_labels"]
 

@@ -337,6 +337,7 @@ class XLMRobertaXLModelTester:
 
 @require_torch
 class XLMRobertaXLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (
             XLMRobertaXLForCausalLM,

@@ -747,6 +747,7 @@ class TrOCRModelIntegrationTest(unittest.TestCase):
 class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_coco_en(self):
+
         loc = "ydshieh/vit-gpt2-coco-en"
 
         feature_extractor = ViTFeatureExtractor.from_pretrained(loc)
@@ -786,6 +787,7 @@ class ViT2GPT2ModelIntegrationTest(unittest.TestCase):
         self.assertLessEqual(max_diff, 1e-4)
 
         def generate_step(pixel_values):
+
             outputs = model.generate(
                 pixel_values, max_length=16, num_beams=4, return_dict_in_generate=True, output_scores=True
             )

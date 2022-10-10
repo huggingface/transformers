@@ -262,8 +262,7 @@ class BlenderbotSmallModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
 
 
 def assert_tensors_close(a, b, atol=1e-12, prefix=""):
-    """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error.
-    """
+    """If tensors have different shapes, different values or a and b are not both tensors, raise a nice Assertion error."""
     if a is None and b is None:
         return True
     try:
@@ -298,6 +297,7 @@ class Blenderbot90MIntegrationTests(unittest.TestCase):
 
     @slow
     def test_90_generation_from_long_input(self):
+
         src_text = [
             "Social anxiety\nWow, I am never shy. Do you have anxiety?\nYes. I end up sweating and blushing and feel"
             " like       i'm going to throw up.\nand why is that?"

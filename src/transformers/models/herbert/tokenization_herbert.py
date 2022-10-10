@@ -322,6 +322,7 @@ class HerbertTokenizer(PreTrainedTokenizer):
         id2lang=None,
         **kwargs
     ):
+
         super().__init__(
             unk_token=unk_token,
             bos_token=bos_token,
@@ -485,6 +486,7 @@ class HerbertTokenizer(PreTrainedTokenizer):
         return word
 
     def _tokenize(self, text):
+
         pre_tokens = self.bert_pre_tokenizer.tokenize(text)
 
         split_tokens = []

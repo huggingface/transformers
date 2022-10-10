@@ -349,6 +349,7 @@ class CodeGenModelTester:
 
 @require_torch
 class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+
     all_model_classes = (CodeGenModel, CodeGenForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (CodeGenForCausalLM,) if is_torch_available() else ()
     fx_compatible = False

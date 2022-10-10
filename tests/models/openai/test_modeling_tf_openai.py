@@ -192,6 +192,7 @@ class TFOpenAIGPTModelTester:
 
 @require_tf
 class TFOpenAIGPTModelTest(TFModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (TFOpenAIGPTModel, TFOpenAIGPTLMHeadModel, TFOpenAIGPTDoubleHeadsModel, TFOpenAIGPTForSequenceClassification)
         if is_tf_available()

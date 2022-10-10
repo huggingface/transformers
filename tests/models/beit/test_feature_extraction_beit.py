@@ -103,6 +103,7 @@ def prepare_semantic_batch_inputs():
 @require_torch
 @require_vision
 class BeitFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+
     feature_extraction_class = BeitFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

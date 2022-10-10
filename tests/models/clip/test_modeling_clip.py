@@ -301,6 +301,7 @@ class CLIPTextModelTester:
 
 @require_torch
 class CLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (CLIPTextModel,) if is_torch_available() else ()
     fx_compatible = True
     test_pruning = False
@@ -515,6 +516,7 @@ class CLIPModelTest(ModelTesterMixin, unittest.TestCase):
 
         for model_class in self.all_model_classes:
             with self.subTest(model_class.__name__):
+
                 # load PyTorch class
                 pt_model = model_class(config).eval()
                 # Flax models don't use the `use_cache` option and cache is not returned as a default.

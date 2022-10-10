@@ -152,6 +152,7 @@ class BloomConfig(PretrainedConfig):
 
 
 class BloomOnnxConfig(OnnxConfigWithPast):
+
     torch_onnx_minimum_version = version.parse("1.12")
 
     def __init__(

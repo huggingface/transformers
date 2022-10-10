@@ -107,6 +107,7 @@ def create_student_by_copying_alternating_layers(
         AutoTokenizer.from_pretrained(teacher).save_pretrained(save_path)  # purely for convenience
         teacher = AutoModelForSeq2SeqLM.from_pretrained(teacher).eval()
     else:
+
         assert isinstance(teacher, PreTrainedModel), f"teacher must be a model or string got type {type(teacher)}"
     init_kwargs = teacher.config.to_diff_dict()
 

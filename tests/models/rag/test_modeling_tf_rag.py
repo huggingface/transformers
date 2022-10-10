@@ -58,6 +58,7 @@ def require_retrieval(test_case):
 @require_retrieval
 @require_sentencepiece
 class TFRagTestMixin:
+
     all_model_classes = (
         (TFRagModel, TFRagTokenForGeneration, TFRagSequenceForGeneration)
         if is_tf_available() and is_datasets_available() and is_faiss_available()

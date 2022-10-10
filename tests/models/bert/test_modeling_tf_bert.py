@@ -591,6 +591,7 @@ class TFBertModelTester:
 
 @require_tf
 class TFBertModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (
             TFBertModel,

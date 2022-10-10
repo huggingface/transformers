@@ -25,6 +25,7 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class XLMTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
+
     tokenizer_class = XLMTokenizer
     test_rust_tokenizer = False
 

@@ -635,6 +635,7 @@ class TFRobertaMainLayer(tf.keras.layers.Layer):
         return_dict: Optional[bool] = None,
         training: bool = False,
     ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
+
         if not self.config.is_decoder:
             use_cache = False
 

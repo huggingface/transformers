@@ -140,6 +140,7 @@ class FlaxBeitModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxBeitModelTest(FlaxModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (FlaxBeitModel, FlaxBeitForImageClassification, FlaxBeitForMaskedImageModeling) if is_flax_available() else ()
     )

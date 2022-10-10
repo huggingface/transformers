@@ -77,6 +77,7 @@ def random_input_ids(batch_size: int, sequence_length: int, vocab_size: int) -> 
 
 
 class TensorFlowBenchmark(Benchmark):
+
     args: TensorFlowBenchmarkArguments
     configs: PretrainedConfig
     framework: str = "TensorFlow"

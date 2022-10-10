@@ -420,6 +420,7 @@ class QDQBertModelTester:
 @require_torch
 @require_pytorch_quantization
 class QDQBertModelTest(ModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (
             QDQBertModel,

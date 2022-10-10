@@ -85,6 +85,7 @@ VIT_INPUTS_DOCSTRING = r"""
 
 
 class FlaxViTPatchEmbeddings(nn.Module):
+
     config: ViTConfig
     dtype: jnp.dtype = jnp.float32  # the dtype of the computation
 
@@ -355,6 +356,7 @@ class FlaxViTLayerCollection(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
+
         all_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
 
@@ -521,6 +523,7 @@ class FlaxViTModule(nn.Module):
         output_hidden_states: bool = False,
         return_dict: bool = True,
     ):
+
         hidden_states = self.embeddings(pixel_values, deterministic=deterministic)
 
         outputs = self.encoder(

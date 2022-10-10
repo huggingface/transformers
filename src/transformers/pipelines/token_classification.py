@@ -22,6 +22,7 @@ class TokenClassificationArgumentHandler(ArgumentHandler):
     """
 
     def __call__(self, inputs: Union[str, List[str]], **kwargs):
+
         if inputs is not None and isinstance(inputs, (list, tuple)) and len(inputs) > 0:
             inputs = list(inputs)
             batch_size = len(inputs)
@@ -116,6 +117,7 @@ class TokenClassificationPipeline(Pipeline):
         aggregation_strategy: Optional[AggregationStrategy] = None,
         offset_mapping: Optional[List[Tuple[int, int]]] = None,
     ):
+
         preprocess_params = {}
         if offset_mapping is not None:
             preprocess_params["offset_mapping"] = offset_mapping

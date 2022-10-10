@@ -90,6 +90,7 @@ class TFGroupViTVisionModelTester:
         self.seq_length = num_patches
 
     def prepare_config_and_inputs(self):
+
         rng = random.Random(0)
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size], rng=rng)
         config = self.get_config()
@@ -431,6 +432,7 @@ class TFGroupViTTextModelTester:
 
 @require_tf
 class TFGroupViTTextModelTest(TFModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (TFGroupViTTextModel,) if is_tf_available() else ()
     test_pruning = False
     test_head_masking = False

@@ -610,6 +610,7 @@ def main():
     # endregion
 
     with training_args.strategy.scope():
+
         dataset_options = tf.data.Options()
         dataset_options.experimental_distribute.auto_shard_policy = tf.data.experimental.AutoShardPolicy.OFF
         num_replicas = training_args.strategy.num_replicas_in_sync
@@ -627,6 +628,7 @@ def main():
             use_auth_token=True if model_args.use_auth_token else None,
         )
         if training_args.do_train:
+
             training_dataset = model.prepare_tf_dataset(
                 processed_datasets["train"],
                 shuffle=True,

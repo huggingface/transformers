@@ -643,6 +643,7 @@ class LMShuffledIterator(object):
 
 class LMMultiFileIterator(LMShuffledIterator):
     def __init__(self, paths, vocab, bsz, bptt, device="cpu", ext_len=None, shuffle=False):
+
         self.paths = paths
         self.vocab = vocab
 

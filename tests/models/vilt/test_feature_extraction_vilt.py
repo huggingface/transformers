@@ -115,6 +115,7 @@ class ViltFeatureExtractionTester(unittest.TestCase):
 @require_torch
 @require_vision
 class ViltFeatureExtractionTest(FeatureExtractionSavingTestMixin, unittest.TestCase):
+
     feature_extraction_class = ViltFeatureExtractor if is_vision_available() else None
 
     def setUp(self):

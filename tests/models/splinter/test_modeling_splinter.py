@@ -208,6 +208,7 @@ class SplinterModelTester:
 
 @require_torch
 class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (
             SplinterModel,
@@ -337,6 +338,7 @@ class SplinterModelTest(ModelTesterMixin, unittest.TestCase):
                 inputs_dict[k] = v.to(0)
 
         for model_class in self.all_model_classes:
+
             # Skip this case since it will fail sometimes, as described above.
             if model_class == SplinterForPreTraining:
                 continue

@@ -65,6 +65,7 @@ if is_torch_available():
 class TestTrainerDistributed(TestCasePlus):
     @require_torch_multi_gpu
     def test_trainer(self):
+
         distributed_args = f"""
             -m torch.distributed.launch
             --nproc_per_node={torch.cuda.device_count()}

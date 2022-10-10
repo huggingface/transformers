@@ -334,6 +334,7 @@ class DetrFeatureExtractor(FeatureExtractionMixin, ImageFeatureExtractionMixin):
 
     # inspired by https://github.com/facebookresearch/detr/blob/master/datasets/coco.py#L33
     def convert_coco_poly_to_mask(self, segmentations, height, width):
+
         try:
             from pycocotools import mask as coco_mask
         except ImportError:

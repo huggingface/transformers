@@ -575,6 +575,7 @@ class QDQBertEncoder(nn.Module):
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
+
                 if use_cache:
                     logger.warning(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`..."
@@ -1014,6 +1015,7 @@ class QDQBertModel(QDQBertPreTrainedModel):
     """QDQBERT Model with a `language modeling` head on top for CLM fine-tuning.""", QDQBERT_START_DOCSTRING
 )
 class QDQBertLMHeadModel(QDQBertPreTrainedModel):
+
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
@@ -1167,6 +1169,7 @@ class QDQBertLMHeadModel(QDQBertPreTrainedModel):
 
 @add_start_docstrings("""QDQBERT Model with a `language modeling` head on top.""", QDQBERT_START_DOCSTRING)
 class QDQBertForMaskedLM(QDQBertPreTrainedModel):
+
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias"]
 
@@ -1573,6 +1576,7 @@ class QDQBertForMultipleChoice(QDQBertPreTrainedModel):
     QDQBERT_START_DOCSTRING,
 )
 class QDQBertForTokenClassification(QDQBertPreTrainedModel):
+
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
@@ -1654,6 +1658,7 @@ class QDQBertForTokenClassification(QDQBertPreTrainedModel):
     QDQBERT_START_DOCSTRING,
 )
 class QDQBertForQuestionAnswering(QDQBertPreTrainedModel):
+
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):

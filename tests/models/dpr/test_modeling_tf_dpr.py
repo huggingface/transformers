@@ -172,6 +172,7 @@ class TFDPRModelTester:
 
 @require_tf
 class TFDPRModelTest(TFModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (
             TFDPRContextEncoder,

@@ -264,6 +264,7 @@ class TFLayoutLMv3ModelTester:
 
 @require_tf
 class TFLayoutLMv3ModelTest(TFModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (
             TFLayoutLMv3Model,

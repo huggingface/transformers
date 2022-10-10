@@ -146,6 +146,7 @@ class TFDPRReaderOutput(ModelOutput):
 
 
 class TFDPREncoderLayer(tf.keras.layers.Layer):
+
     base_model_prefix = "bert_model"
 
     def __init__(self, config: DPRConfig, **kwargs):
@@ -209,6 +210,7 @@ class TFDPREncoderLayer(tf.keras.layers.Layer):
 
 
 class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
+
     base_model_prefix = "encoder"
 
     def __init__(self, config: DPRConfig, **kwargs):
@@ -273,6 +275,7 @@ class TFDPRSpanPredictorLayer(tf.keras.layers.Layer):
 
 
 class TFDPRSpanPredictor(TFPreTrainedModel):
+
     base_model_prefix = "encoder"
 
     def __init__(self, config: DPRConfig, **kwargs):

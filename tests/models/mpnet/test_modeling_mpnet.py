@@ -191,6 +191,7 @@ class MPNetModelTester:
 
 @require_torch
 class MPNetModelTest(ModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (
             MPNetForMaskedLM,

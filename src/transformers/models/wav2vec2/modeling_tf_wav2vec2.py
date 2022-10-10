@@ -354,6 +354,7 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
         self._check_axis()
 
     def build(self, input_shape):
+
         self._check_if_input_shape_is_none(input_shape)
         self._set_number_of_groups_for_instance_norm(input_shape)
         self._check_size_of_dimensions(input_shape)
@@ -365,6 +366,7 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
         super().build(input_shape)
 
     def call(self, inputs):
+
         input_shape = tf.keras.backend.int_shape(inputs)
         tensor_input_shape = tf.shape(inputs)
 
@@ -401,6 +403,7 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
         return input_shape
 
     def _reshape_into_groups(self, inputs, input_shape, tensor_input_shape):
+
         group_shape = [tensor_input_shape[i] for i in range(len(input_shape))]
         is_instance_norm = (input_shape[self.axis] // self.groups) == 1
         if not is_instance_norm:
@@ -413,6 +416,7 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
             return inputs, group_shape
 
     def _apply_normalization(self, reshaped_inputs, input_shape):
+
         group_shape = tf.keras.backend.int_shape(reshaped_inputs)
         group_reduction_axes = list(range(1, len(group_shape)))
         is_instance_norm = (input_shape[self.axis] // self.groups) == 1
@@ -464,6 +468,7 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
             self.groups = dim
 
     def _check_size_of_dimensions(self, input_shape):
+
         dim = input_shape[self.axis]
         if dim < self.groups:
             raise ValueError(
@@ -484,16 +489,19 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
             )
 
     def _check_axis(self):
+
         if self.axis == 0:
             raise ValueError(
                 "You are trying to normalize your batch axis. Do you want to use tf.layer.batch_normalization instead"
             )
 
     def _create_input_spec(self, input_shape):
+
         dim = input_shape[self.axis]
         self.input_spec = tf.keras.layers.InputSpec(ndim=len(input_shape), axes={self.axis: dim})
 
     def _add_gamma_weight(self, input_shape):
+
         dim = input_shape[self.axis]
         shape = (dim,)
 
@@ -509,6 +517,7 @@ class TFWav2Vec2GroupNorm(tf.keras.layers.Layer):
             self.gamma = None
 
     def _add_beta_weight(self, input_shape):
+
         dim = input_shape[self.axis]
         shape = (dim,)
 
@@ -1672,6 +1681,7 @@ class TFWav2Vec2ForCTC(TFWav2Vec2PreTrainedModel):
         logits = self.lm_head(hidden_states)
 
         if labels is not None:
+
             if tf.reduce_max(labels) >= self.config.vocab_size:
                 raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
 

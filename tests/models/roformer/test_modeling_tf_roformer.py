@@ -240,6 +240,7 @@ class TFRoFormerModelTester:
 
 @require_tf
 class TFRoFormerModelTest(TFModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (
             TFRoFormerModel,
@@ -343,6 +344,7 @@ class TFRoFormerSinusoidalPositionalEmbeddingTest(unittest.TestCase):
         tf.debugging.assert_near(emb, desired_weights, atol=self.tolerance)
 
     def test_positional_emb_weights_against_roformer(self):
+
         desired_weights = tf.constant(
             [
                 [0.0000, 0.0000, 0.0000, 0.0000, 0.0000],

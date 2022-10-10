@@ -451,6 +451,7 @@ class OnnxConfigWithPast(OnnxConfig, ABC):
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
+
         # TODO: should we set seq_length = 1 when self.use_past = True?
         common_inputs = super().generate_dummy_inputs(
             tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
@@ -576,6 +577,7 @@ class OnnxSeq2SeqConfigWithPast(OnnxConfigWithPast):
         is_pair: bool = False,
         framework: Optional[TensorType] = None,
     ) -> Mapping[str, Any]:
+
         encoder_inputs = super(OnnxConfigWithPast, self).generate_dummy_inputs(
             tokenizer, batch_size=batch_size, seq_length=seq_length, is_pair=is_pair, framework=framework
         )

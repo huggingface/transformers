@@ -1903,6 +1903,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             model_max_length = cls.max_model_input_sizes[pretrained_model_name_or_path]
             if model_max_length is not None and isinstance(model_max_length, (int, float)):
+
                 model_max_length = min(init_kwargs.get("model_max_length", int(1e30)), model_max_length)
                 # TODO(PVP) - uncomment following line in Transformers v5
                 # init_kwargs["model_max_length"] = model_max_length
@@ -3329,6 +3330,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
             if self.padding_side == "right":
                 if return_attention_mask:
+
                     encoded_inputs["attention_mask"] = encoded_inputs["attention_mask"] + [0] * difference
                 if "token_type_ids" in encoded_inputs:
                     encoded_inputs["token_type_ids"] = (

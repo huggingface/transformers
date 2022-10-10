@@ -91,6 +91,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         add_special_tokens: bool = True,
         return_table_and_query: bool = False,
     ):
+
         toks = [tokenizer.decode([i], clean_up_tokenization_spaces=False) for i in range(len(tokenizer))]
 
         if empty_table:
@@ -604,6 +605,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
+
                 table, query = self.get_table_and_query(tokenizer)
 
                 sequences = tokenizer.encode(table, query, add_special_tokens=False)
@@ -616,8 +618,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
                     )
 
     def test_padding_to_max_length(self):
-        """We keep this test for backward compatibility but it should be removed when `pad_to_max_length` will be deprecated
-        """
+        """We keep this test for backward compatibility but it should be removed when `pad_to_max_length` will be deprecated"""
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
@@ -1010,6 +1011,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
+
                 if tokenizer.__class__ not in MODEL_TOKENIZER_MAPPING:
                     return
 

@@ -150,6 +150,7 @@ class SegformerModelTester:
 
 @require_torch
 class SegformerModelTest(ModelTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (
             SegformerModel,

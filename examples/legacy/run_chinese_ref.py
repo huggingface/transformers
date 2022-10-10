@@ -93,6 +93,7 @@ def prepare_ref(lines: List[str], ltp_tokenizer: LTP, bert_tokenizer: BertTokeni
 
     ref_ids = []
     for input_ids, chinese_word in zip(bert_res, ltp_res):
+
         input_tokens = []
         for id in input_ids:
             token = bert_tokenizer._convert_id_to_token(id)

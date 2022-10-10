@@ -316,6 +316,7 @@ class NezhaModelTester:
 
 @require_torch
 class NezhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+
     all_model_classes = (
         (
             NezhaModel,
@@ -428,6 +429,7 @@ class NezhaModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase)
     def test_torchscript_device_change(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
+
             # NezhaForMultipleChoice behaves incorrectly in JIT environments.
             if model_class == NezhaForMultipleChoice:
                 return

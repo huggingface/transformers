@@ -2316,6 +2316,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 raise
         elif from_pt:
+
             # restore default dtype
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
