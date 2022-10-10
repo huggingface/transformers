@@ -1661,6 +1661,7 @@ else:
             "OPTModel",
             "OPTPreTrainedModel",
             "OPTForSequenceClassification",
+            "OPTForQuestionAnswering",
         ]
     )
     _import_structure["models.owlvit"].extend(
@@ -2751,6 +2752,14 @@ else:
             "TFWav2Vec2ForCTC",
             "TFWav2Vec2Model",
             "TFWav2Vec2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.whisper"].extend(
+        [
+            "TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFWhisperForConditionalGeneration",
+            "TFWhisperModel",
+            "TFWhisperPreTrainedModel",
         ]
     )
     _import_structure["models.xglm"].extend(
@@ -4408,6 +4417,7 @@ if TYPE_CHECKING:
         from .models.opt import (
             OPT_PRETRAINED_MODEL_ARCHIVE_LIST,
             OPTForCausalLM,
+            OPTForQuestionAnswering,
             OPTForSequenceClassification,
             OPTModel,
             OPTPreTrainedModel,
@@ -5300,6 +5310,12 @@ if TYPE_CHECKING:
             TFWav2Vec2ForCTC,
             TFWav2Vec2Model,
             TFWav2Vec2PreTrainedModel,
+        )
+        from .models.whisper import (
+            TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFWhisperForConditionalGeneration,
+            TFWhisperModel,
+            TFWhisperPreTrainedModel,
         )
         from .models.xglm import (
             TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
