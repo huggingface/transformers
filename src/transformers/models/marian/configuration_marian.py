@@ -110,7 +110,7 @@ class MarianConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=50265,
+        vocab_size=58101,
         decoder_vocab_size=None,
         max_position_embeddings=1024,
         encoder_layers=12,
