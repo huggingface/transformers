@@ -423,7 +423,8 @@ class FeatureExtractionMixin(PushToHubMixin):
 
         except json.JSONDecodeError as e:
             raise EnvironmentError(
-                f"It looks like there was a problem with the config file at '{resolved_feature_extractor_file}': {e.msg}."
+                f"It looks like there was a problem with the config file at '{resolved_feature_extractor_file}':"
+                f" {e.msg}."
             )
 
         if is_local:
