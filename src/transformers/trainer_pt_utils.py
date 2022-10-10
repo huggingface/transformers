@@ -172,7 +172,6 @@ def nested_xla_mesh_reduce(tensors, name):
 
         if isinstance(tensors, (list, tuple)):
             return type(tensors)(nested_xla_mesh_reduce(t, f"{name}_{i}") for i, t in enumerate(tensors))
-
         if isinstance(tensors, Mapping):
             return type(tensors)({k: nested_xla_mesh_reduce(t, f"{name}_{i}") for i, (k, t) in enumerate(tensors.items())})
 
