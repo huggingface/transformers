@@ -103,7 +103,7 @@ class LambdaLayer(nn.Module):
 
 
 class DistributionOutput:
-    distr_cls: type
+    distribution_class: type
     in_features: int
     args_dim: Dict[str, int]
 
@@ -113,9 +113,9 @@ class DistributionOutput:
 
     def _base_distribution(self, distr_args):
         if self.dim == 1:
-            return self.distr_cls(*distr_args)
+            return self.distribution_class(*distr_args)
         else:
-            return Independent(self.distr_cls(*distr_args), 1)
+            return Independent(self.distribution_class(*distr_args), 1)
 
     def distribution(
         self,
@@ -181,7 +181,7 @@ class DistributionOutput:
 
 class StudentTOutput(DistributionOutput):
     args_dim: Dict[str, int] = {"df": 1, "loc": 1, "scale": 1}
-    distr_cls: type = StudentT
+    distribution_class: type = StudentT
 
     @classmethod
     def domain_map(cls, df: torch.Tensor, loc: torch.Tensor, scale: torch.Tensor):
@@ -192,7 +192,7 @@ class StudentTOutput(DistributionOutput):
 
 class NormalOutput(DistributionOutput):
     args_dim: Dict[str, int] = {"loc": 1, "scale": 1}
-    distr_cls: type = Normal
+    distribution_class: type = Normal
 
     @classmethod
     def domain_map(cls, loc: torch.Tensor, scale: torch.Tensor):
@@ -202,7 +202,7 @@ class NormalOutput(DistributionOutput):
 
 class NegativeBinomialOutput(DistributionOutput):
     args_dim: Dict[str, int] = {"total_count": 1, "logits": 1}
-    distr_cls: type = NegativeBinomial
+    distribution_class: type = NegativeBinomial
 
     @classmethod
     def domain_map(cls, total_count: torch.Tensor, logits: torch.Tensor):
@@ -212,9 +212,9 @@ class NegativeBinomialOutput(DistributionOutput):
     def _base_distribution(self, distr_args) -> Distribution:
         total_count, logits = distr_args
         if self.dim == 1:
-            return self.distr_cls(total_count=total_count, logits=logits)
+            return self.distribution_class(total_count=total_count, logits=logits)
         else:
-            return Independent(self.distr_cls(total_count=total_count, logits=logits), 1)
+            return Independent(self.distribution_class(total_count=total_count, logits=logits), 1)
 
     # Overwrites the parent class method. We cannot scale using the affine
     # transformation since negative binomial should return integers. Instead
