@@ -702,3 +702,49 @@ class LogitNormalization(LogitsProcessor, LogitsWarper):
     def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
         scores = scores.log_softmax(dim=-1)
         return scores
+
+
+class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
+    r"""
+    [`SuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function starts
+    generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` at not
+    sampled at the begining of the generation.
+    """
+
+    def __init__(self, begin_suppress_tokens, begin_index):
+        self.begin_suppress_tokens = list(begin_suppress_tokens)
+        self.begin_index = begin_index
+
+    def __call__(self, input_ids, scores):
+        if input_ids.shape[1] == self.begin_index:
+            scores[:, self.begin_suppress_tokens] = -float("inf")
+
+        return scores
+
+
+class SuppressTokensLogitsProcessor(LogitsProcessor):
+    r"""This processor can be used to suppress a list of tokens. The processor will set their log probs to `-inf` so that they
+    are not sampled."""
+
+    def __init__(self, suppress_tokens):
+        self.suppress_tokens = list(suppress_tokens)
+
+    def __call__(self, input_ids, scores):
+        scores[:, self.suppress_tokens] = -float("inf")
+        return scores
+
+
+class ForceTokensLogitsProcessor(LogitsProcessor):
+    r"""This processor can be used to force a list of tokens. The processor will set their log probs to `inf` so that they
+    are sampled at their corresponding index."""
+
+    def __init__(self, force_token_map):
+        self.force_token_map = dict(force_token_map)
+
+    def __call__(self, input_ids, scores):
+        generation_idx = input_ids.shape[-1]
+        current_token = self.force_token_map.get(generation_idx, None)
+        if current_token is not None:
+            scores[:, :] = -float("inf")
+            scores[:, current_token] = 0
+        return scores

@@ -170,6 +170,9 @@ _deps = [
     "unidic_lite>=1.0.7",
     "uvicorn",
     "beautifulsoup4",
+    "sudachipy>=0.6.6",
+    "sudachidict_core>=20220729",
+    "pyknp>=0.6.1",
 ]
 
 
@@ -239,7 +242,7 @@ class DepsTableUpdateCommand(Command):
 
 extras = {}
 
-extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic")
+extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "pyknp")
 extras["sklearn"] = deps_list("scikit-learn")
 
 extras["tf"] = deps_list("tensorflow", "onnxconverter-common", "tf2onnx", "tensorflow-text")

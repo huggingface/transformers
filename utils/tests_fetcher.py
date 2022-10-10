@@ -619,6 +619,25 @@ def infer_tests_to_run(output_file, diff_with_last_commit=False, filters=None, j
                 json.dump(test_map, fp, ensure_ascii=False)
 
 
+def filter_pipeline_tests(output_file):
+    if not os.path.isfile(output_file):
+        print("No test file found.")
+        return
+    with open(output_file, "r", encoding="utf-8") as f:
+        test_files = f.read().split(" ")
+
+    if len(test_files) == 0:
+        print("No tests to filter.")
+        return
+    if test_files == ["tests"]:
+        test_files = [os.path.join("tests", f) for f in os.listdir("tests") if f not in ["__init__.py", "pipelines"]]
+    else:
+        test_files = [f for f in test_files if not f.startswith(os.path.join("tests", "pipelines"))]
+
+    with open(output_file, "w", encoding="utf-8") as f:
+        f.write(" ".join(test_files))
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -646,6 +665,11 @@ if __name__ == "__main__":
         help="Only keep the test files matching one of those filters.",
     )
     parser.add_argument(
+        "--filter_pipeline_tests",
+        action="store_true",
+        help="Will filter the pipeline tests outside of the generated list of tests.",
+    )
+    parser.add_argument(
         "--print_dependencies_of",
         type=str,
         help="Will only print the tree of modules depending on the file passed.",
@@ -656,6 +680,8 @@ if __name__ == "__main__":
         print_tree_deps_of(args.print_dependencies_of)
     elif args.sanity_check:
         sanity_check()
+    elif args.filter_pipeline_tests:
+        filter_pipeline_tests(args.output_file)
     else:
         repo = Repo(PATH_TO_TRANFORMERS)
 
