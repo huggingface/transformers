@@ -1543,7 +1543,11 @@ class TimeSeriesTransformerModel(TimeSeriesTransformerPreTrainedModel):
         # embeddings
         embedded_cat = self.embedder(static_categorical_features)
         static_feat = torch.cat(
-            (embedded_cat, static_real_features, scale.log()),
+            (
+                embedded_cat,
+                static_real_features,
+                scale.log() if self.config.input_size == 1 else scale.squeeze(1).log(),
+            ),
             dim=1,
         )
         expanded_static_feat = static_feat.unsqueeze(1).expand(-1, time_feat.shape[1], -1)
@@ -1846,7 +1850,7 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
             if len(self.target_shape) == 0:
                 loss_weights = future_observed_mask
             else:
-                loss_weights = future_observed_mask.min(dim=-1, keepdim=False)
+                loss_weights, _ = future_observed_mask.min(dim=-1, keepdim=False)
 
             prediction_loss = weighted_average(loss, weights=loss_weights)
 
