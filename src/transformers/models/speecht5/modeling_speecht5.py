@@ -505,7 +505,7 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
 
         self.pos_conv_embed = SpeechT5PositionalConvEmbedding(config)
         self.embed_positions = SpeechT5SinusoidalPositionalEmbedding(
-            config.max_source_positions + config.pad_token_id + 1,
+            config.max_speech_positions + config.pad_token_id + 1,
             config.hidden_size,
             config.pad_token_id,
         )
@@ -640,23 +640,27 @@ class SpeechT5TextDecoderPrenet(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.padding_idx = config.pad_token_id
+        self.dropout = nn.Dropout(config.hidden_dropout)
         self.embed_scale = math.sqrt(config.hidden_size) if config.scale_embedding else 1.0
 
-        # TODO: this is not the real prenet, just something hacky to test the decoder
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, config.pad_token_id)
 
-    # def get_input_embeddings(self):
-    #     return self.embed_tokens
+        self.embed_positions = SpeechT5SinusoidalPositionalEmbedding(
+            config.max_text_positions + config.pad_token_id + 1,
+            config.hidden_size,
+            config.pad_token_id,
+        )
 
-    # def set_input_embeddings(self, value):
-    #     self.embed_tokens = value
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
 
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
+        past_key_values: Optional[List[torch.FloatTensor]] = None,
     ):
         if input_ids is not None:
             input = input_ids
@@ -665,9 +669,24 @@ class SpeechT5TextDecoderPrenet(nn.Module):
         else:
             raise ValueError("You have to specify decoder_input_ids")
 
-        inputs_embeds = self.embed_tokens(input) * self.embed_scale
+        # TODO? this is the tgt_mask that gets returned
+        # if prev_output_tokens.eq(self.padding_idx).any():
+        #     x_mask = prev_output_tokens.eq(self.padding_idx)
+        # else:
+        #     x_mask = None
 
-        # TODO: maybe also do something with attention_mask?
+        # TODO? I think this happens in the generate input func, but maybe not positions?
+        # if incremental_state is not None:
+        #     prev_output_tokens = prev_output_tokens[:, -1:]
+        #     if positions is not None:
+        #         positions = positions[:, -1:]
+
+        past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
+        positions = self.embed_positions(input, past_key_values_length)
+
+        inputs_embeds = self.embed_tokens(input) * self.embed_scale
+        inputs_embeds += positions
+        inputs_embeds = self.dropout(inputs_embeds)
 
         return inputs_embeds
 
@@ -1285,7 +1304,6 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
     def __init__(self, config: SpeechT5Config):
         super().__init__(config)
-        self.dropout = config.hidden_dropout
         self.layerdrop = config.decoder_layerdrop
 
         self.layers = nn.ModuleList([SpeechT5DecoderLayer(config) for _ in range(config.decoder_layers)])
@@ -1540,7 +1558,7 @@ class SpeechT5TextDecoder(SpeechT5PreTrainedModel):
         # TODO: anything I need to do with tgt_mask?
         # prev_output_tokens, tgt_mask, incremental_state = self.text_decoder_prenet(tokens, incremental_state)
 
-        decoder_hidden_states = self.prenet(input_values)
+        decoder_hidden_states = self.prenet(input_values, past_key_values)
 
         outputs = self.wrapped_decoder(
             hidden_states=decoder_hidden_states,

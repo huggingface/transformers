@@ -63,6 +63,7 @@ MAPPING_S2T = {
     "decoder.layers.*.fc2": "speecht5.decoder.wrapped_decoder.layers.*.feed_forward.output_dense",
     "decoder.layers.*.final_layer_norm": "speecht5.decoder.wrapped_decoder.layers.*.final_layer_norm",
     "text_decoder_postnet.output_projection": "text_decoder_postnet.lm_head",
+    "text_decoder_prenet.embed_tokens": "speecht5.decoder.prenet.embed_tokens",
 }
 MAPPING_CTC = {
     "speech_encoder_prenet.layer_norm": "encoder.prenet.feature_projection.layer_norm",
@@ -93,11 +94,12 @@ IGNORE_KEYS = [
     "encoder.version",
     "encoder.layers.*.norm_k.weight",
     "encoder.layers.*.norm_k.bias",
-    "speech_encoder_prenet.embed_positions._float_tensor",
     "decoder.version",
     "decoder.layers.*.norm_k.weight",
     "decoder.layers.*.norm_k.bias",
     "decoder.pos_emb.pe_k",
+    "speech_encoder_prenet.embed_positions._float_tensor",
+    "text_decoder_prenet.embed_positions._float_tensor",
 ]
 
 

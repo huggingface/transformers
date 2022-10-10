@@ -136,61 +136,14 @@ class SpeechT5Config(PretrainedConfig):
             The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
             step, irrespectively of `mask_feature_prob`. Only relevant if
             ''mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks''
-
-
-        TODO: do we need any of the following options?
-        num_codevectors_per_group (`int`, *optional*, defaults to 320):
-            Number of entries in each quantization codebook (group).
-        num_codevector_groups (`int`, *optional*, defaults to 2):
-            Number of codevector groups for product codevector quantization.
-        contrastive_logits_temperature (`float`, *optional*, defaults to 0.1):
-            The temperature *kappa* in the contrastive loss.
-        feat_quantizer_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout probabilitiy for the output of the speech encoder pre-net that's used by the quantizer.
-        num_negatives (`int`, *optional*, defaults to 100):
-            Number of negative samples for the contrastive loss.
-        codevector_dim (`int`, *optional*, defaults to 256):
-            Dimensionality of the quantized feature vectors.
-        proj_codevector_dim (`int`, *optional*, defaults to 256):
-            Dimensionality of the final projection of both the quantized and the transformer features.
-        diversity_loss_weight (`int`, *optional*, defaults to 0.1):
-            The weight of the codebook diversity loss component.
-        ctc_loss_reduction (`str`, *optional*, defaults to `"sum"`):
-            Specifies the reduction to apply to the output of `torch.nn.CTCLoss`. Only relevant when training an
-            instance of [`SpeechT5ForCTC`].
-        ctc_zero_infinity (`bool`, *optional*, defaults to `False`):
-            Whether to zero infinite losses and the associated gradients of `torch.nn.CTCLoss`. Infinite losses mainly
-            occur when the inputs are too short to be aligned to the targets. Only relevant when training an instance
-            of [`SpeechT5ForCTC`].
-        use_weighted_layer_sum (`bool`, *optional*, defaults to `False`):
-            Whether to use a weighted average of layer outputs with learned weights. Only relevant when using an
-            instance of [`SpeechT5ForSequenceClassification`].
-        classifier_proj_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the projection before token mean-pooling for classification.
-        tdnn_dim (`Tuple[int]` or `List[int]`, *optional*, defaults to `(512, 512, 512, 512, 1500)`):
-            A tuple of integers defining the number of output channels of each 1D convolutional layer in the *TDNN*
-            module of the *XVector* model. The length of *tdnn_dim* defines the number of *TDNN* layers.
-        tdnn_kernel (`Tuple[int]` or `List[int]`, *optional*, defaults to `(5, 3, 3, 1, 1)`):
-            A tuple of integers defining the kernel size of each 1D convolutional layer in the *TDNN* module of the
-            *XVector* model. The length of *tdnn_kernel* has to match the length of *tdnn_dim*.
-        tdnn_dilation (`Tuple[int]` or `List[int]`, *optional*, defaults to `(1, 2, 3, 1, 1)`):
-            A tuple of integers defining the dilation factor of each 1D convolutional layer in *TDNN* module of the
-            *XVector* model. The length of *tdnn_dilation* has to match the length of *tdnn_dim*.
-        xvector_output_dim (`int`, *optional*, defaults to 512):
-            Dimensionality of the *XVector* embedding vectors.
-
-        max_source_positions (`int`, *optional*, defaults to 4000):
-            The maximum sequence length of input features that this model might ever be used with.
+        max_speech_positions (`int`, *optional*, defaults to 4000):
+            The maximum sequence length of speech features that this model might ever be used with.
+        max_text_positions (`int`, *optional*, defaults to 450):
+            The maximum sequence length of text features that this model might ever be used with.
         encoder_max_relative_position (`int`, *optional*, defaults to 160):
             Maximum distance for relative position embedding in the encoder.
-
-        TODO: not sure if we'll need these two
-        max_target_positions (`int`, *optional*, defaults to 1024):
-            The maximum sequence length that this model might ever be used with. Typically set this to something large
-            just in case (e.g., 512 or 1024 or 2048).
-        decoder_max_relative_position (`int`, *optional*, defaults to 64):
+        decoder_max_relative_position (`int`, *optional*, defaults to 160):
             Maximum distance for relative position embedding in the dencoder.
-
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
 
@@ -246,28 +199,13 @@ class SpeechT5Config(PretrainedConfig):
         mask_feature_prob=0.0,
         mask_feature_length=10,
         mask_feature_min_masks=0,
-        # num_codevectors_per_group=320,
-        # num_codevector_groups=2,
-        # contrastive_logits_temperature=0.1,
-        # num_negatives=100,
-        # codevector_dim=256,
-        # proj_codevector_dim=256,
-        # diversity_loss_weight=0.1,
-        # ctc_loss_reduction="sum",
-        # ctc_zero_infinity=False,
-        # use_weighted_layer_sum=False,
-        # classifier_proj_size=256,
-        # tdnn_dim=(512, 512, 512, 512, 1500),
-        # tdnn_kernel=(5, 3, 3, 1, 1),
-        # tdnn_dilation=(1, 2, 3, 1, 1),
-        # xvector_output_dim=512,
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        max_source_positions=4000,
-        # max_target_positions=1024,
+        max_speech_positions=4000,
+        max_text_positions=450,
         encoder_max_relative_position=160,
-        # decoder_max_relative_position=160,
+        decoder_max_relative_position=160,
         use_cache=True,
         is_encoder_decoder=True,
         **kwargs
@@ -324,37 +262,12 @@ class SpeechT5Config(PretrainedConfig):
         self.mask_feature_length = mask_feature_length
         self.mask_feature_min_masks = mask_feature_min_masks
 
-        self.max_source_positions = max_source_positions
-        # self.max_target_positions = max_target_positions
+        self.max_speech_positions = max_speech_positions
+        self.max_text_positions = max_text_positions
         self.encoder_max_relative_position = encoder_max_relative_position
-        # self.decoder_max_relative_position = decoder_max_relative_position
+        self.decoder_max_relative_position = decoder_max_relative_position
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
-
-        # TODO: which of the following options do we need?
-
-        # # parameters for pretraining with codevector quantized representations
-        # self.num_codevectors_per_group = num_codevectors_per_group
-        # self.num_codevector_groups = num_codevector_groups
-        # self.contrastive_logits_temperature = contrastive_logits_temperature
-        # self.feat_quantizer_dropout = feat_quantizer_dropout
-        # self.num_negatives = num_negatives
-        # self.codevector_dim = codevector_dim
-        # self.proj_codevector_dim = proj_codevector_dim
-        # self.diversity_loss_weight = diversity_loss_weight
-
-        # # ctc loss
-        # self.ctc_loss_reduction = ctc_loss_reduction
-        # self.ctc_zero_infinity = ctc_zero_infinity
-
-        # # SequenceClassification-specific parameter. Feel free to ignore for other classes.
-        # self.classifier_proj_size = classifier_proj_size
-
-        # # XVector-specific parameters. Feel free to ignore for other classes.
-        # self.tdnn_dim = list(tdnn_dim)
-        # self.tdnn_kernel = list(tdnn_kernel)
-        # self.tdnn_dilation = list(tdnn_dilation)
-        # self.xvector_output_dim = xvector_output_dim
 
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
