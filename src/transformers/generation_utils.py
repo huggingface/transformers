@@ -1976,6 +1976,18 @@ class GenerationMixin:
         >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
         ['Today is a beautiful day, and a wonderful day.\n\nI was lucky enough to meet the']
         ```"""
+        if self.device.type != input_ids.device.type:
+            warnings.warn(
+                "You are calling .generate() with the `input_ids` being on a device type different"
+                f" than your model's device. `input_ids` is on {input_ids.device.type}, whereas the model"
+                f" is on {self.device.type}. You may experience unexpected behaviors."
+                " Please make sure that you have put `input_ids` to the"
+                " correct GPU by calling for example input_ids = input_ids.to('cuda') before"
+                " running `.generate()`.",
+                UserWarning,
+            )
+            first_device = list(self.parameters())[0].device # retrieve the first device for accelerate compatibility
+            input_ids = input_ids.to(first_device)
 
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
@@ -2038,6 +2050,7 @@ class GenerationMixin:
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
             )
+
 
             if synced_gpus and this_peer_finished:
                 continue  # don't waste resources running the code we don't need
