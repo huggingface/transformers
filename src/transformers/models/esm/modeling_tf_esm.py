@@ -30,7 +30,7 @@ from ...modeling_tf_outputs import (
     TFTokenClassifierOutput,
 
 )
-from ...modeling_tf_utils import (get_initializer, get_tf_activation, shape_list, TFModelInputType, unpack_inputs,     TFMaskedLanguageModelingLoss,
+from ...modeling_tf_utils import (get_initializer, get_tf_activation, shape_list, unpack_inputs,     TFMaskedLanguageModelingLoss,
     TFModelInputType,
     TFPreTrainedModel,
     TFSequenceClassificationLoss,
@@ -44,17 +44,14 @@ from .configuration_esm import EsmConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "facebook/esm-1b"
+_CHECKPOINT_FOR_DOC = "Rocketknight1/esm2_t6_8M_UR50D"
 _CONFIG_FOR_DOC = "EsmConfig"
 _TOKENIZER_FOR_DOC = "EsmTokenizer"
 
 ESM_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "Rocketknight1/esm2_t6_8M_UR50D",
     "Rocketknight1/esm2_t12_35M_UR50D",
-    "Rocketknight1/esm2_t30_150M_UR50D",
-    "Rocketknight1/esm2_t33_650M_UR50D",
-    "Rocketknight1/esm2_t36_3B_UR50D",
-    "Rocketknight1/esm2_t48_15B_UR50D",
+    # This is not a complete list of all ESM models!
     # See all ESM models at https://huggingface.co/models?filter=esm
 ]
 
@@ -855,12 +852,11 @@ class TFEsmMainLayer(Layer):
 )
 
 
-# Copied from transformers.models.bert.modeling_tf_bert.TFBertModel with Bert->Esm
 class TFEsmModel(TFEsmPreTrainedModel):
     def __init__(self, config: EsmConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
-        self.bert = TFEsmMainLayer(config, name="esm")
+        self.bert = TFEsmMainLayer(config, name="bert")
 
     @unpack_inputs
     @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
@@ -907,7 +903,7 @@ class TFEsmModel(TFEsmPreTrainedModel):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`). Set to `False` during training, `True` during generation
         """
-        outputs = self.esm(
+        outputs = self.bert(
             input_ids=input_ids,
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
@@ -986,19 +982,19 @@ class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-    ):
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+    ) -> Union[TFMaskedLMOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1093,17 +1089,17 @@ class TFEsmForSequenceClassification(TFEsmPreTrainedModel, TFSequenceClassificat
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-    ):
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+    ) -> Union[TFSequenceClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -1190,17 +1186,17 @@ class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLos
     )
     def call(
         self,
-        input_ids=None,
-        attention_mask=None,
-        position_ids=None,
-        head_mask=None,
-        inputs_embeds=None,
-        labels=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        training=False,
-    ):
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        labels: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: bool = False,
+    ) -> Union[TFTokenClassifierOutput, Tuple[tf.Tensor]]:
         r"""
         labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
