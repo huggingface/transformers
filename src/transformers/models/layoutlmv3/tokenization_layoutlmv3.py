@@ -17,7 +17,9 @@
 import json
 import os
 from functools import lru_cache
-from typing import Dict, List, Optional, Tuple, Union
+from shutil import copyfile
+from typing import Dict, List, Optional, Tuple, Union, Any
+import sentencepiece as spm
 
 import regex as re
 
@@ -35,25 +37,36 @@ from ...utils import PaddingStrategy, TensorType, add_end_docstrings, logging
 
 logger = logging.get_logger(__name__)
 
+SPIECE_UNDERLINE = "▁"
+
 VOCAB_FILES_NAMES = {
     "vocab_file": "vocab.json",
     "merges_file": "merges.txt",
+    "spm_file": "sentencepiece.bpe.model",
 }
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
         "microsoft/layoutlmv3-base": "https://huggingface.co/microsoft/layoutlmv3-base/raw/main/vocab.json",
         "microsoft/layoutlmv3-large": "https://huggingface.co/microsoft/layoutlmv3-large/raw/main/vocab.json",
+        "microsoft/layoutlmv3-base-chinese": None,
     },
     "merges_file": {
         "microsoft/layoutlmv3-base": "https://huggingface.co/microsoft/layoutlmv3-base/raw/main/merges.txt",
         "microsoft/layoutlmv3-large": "https://huggingface.co/microsoft/layoutlmv3-large/raw/main/merges.txt",
+        "microsoft/layoutlmv3-base-chinese": None,
+    },
+    "spm_file": {
+        "microsoft/layoutlmv3-base": None,
+        "microsoft/layoutlmv3-large": None,
+        "microsoft/layoutlmv3-base-chinese": "https://huggingface.co/microsoft/layoutlmv3-base-chinese/raw/main/sentencepiece.bpe.model",
     },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "microsoft/layoutlmv3-base": 512,
     "microsoft/layoutlmv3-large": 512,
+    "microsoft/layoutlmv3-base-chinese": 512,
 }
 
 
@@ -277,6 +290,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         self,
         vocab_file,
         merges_file,
+        spm_file,
         errors="replace",
         bos_token="<s>",
         eos_token="</s>",
@@ -291,6 +305,7 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         pad_token_box=[0, 0, 0, 0],
         pad_token_label=-100,
         only_label_first_subword=True,
+        sp_model_kwargs: Optional[Dict[str, Any]] = None,
         **kwargs
     ):
         bos_token = AddedToken(bos_token, lstrip=False, rstrip=False) if isinstance(bos_token, str) else bos_token
@@ -302,6 +317,8 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
 
         # Mask token behave like a normal word, i.e. include the space before it
         mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
+        self.use_spm = bool(spm_file)
+        sp_model_kwargs = {} if self.use_spm and sp_model_kwargs is None else sp_model_kwargs
 
         super().__init__(
             errors=errors,
@@ -318,24 +335,41 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             pad_token_box=pad_token_box,
             pad_token_label=pad_token_label,
             only_label_first_subword=only_label_first_subword,
+            sp_model_kwargs=sp_model_kwargs,
             **kwargs,
         )
-
-        with open(vocab_file, encoding="utf-8") as vocab_handle:
-            self.encoder = json.load(vocab_handle)
-        self.decoder = {v: k for k, v in self.encoder.items()}
         self.errors = errors  # how to handle errors in decoding
-        self.byte_encoder = bytes_to_unicode()
-        self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
-        with open(merges_file, encoding="utf-8") as merges_handle:
-            bpe_merges = merges_handle.read().split("\n")[1:-1]
-        bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
-        self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
-        self.cache = {}
         self.add_prefix_space = add_prefix_space
+        self.json_file = vocab_file
+        self.spm_file = spm_file
+        self.vocab_file = spm_file if self.use_spm else vocab_file
 
-        # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
-        self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
+        if self.use_spm:
+            self.sp_model_kwargs = sp_model_kwargs
+            self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+            self.sp_model.Load(str(spm_file))
+            # Mimic fairseq token-to-id alignment for the first 4 token
+            self.fairseq_tokens_to_ids = {"<s>": 0, "<pad>": 1, "</s>": 2, "<unk>": 3}
+
+            # The first "real" token "," has position 4 in the original fairseq vocab and position 3 in the spm vocab
+            self.fairseq_offset = 1
+
+            self.fairseq_tokens_to_ids["<mask>"] = len(self.sp_model) + self.fairseq_offset
+            self.fairseq_ids_to_tokens = {v: k for k, v in self.fairseq_tokens_to_ids.items()}
+        else:
+            with open(vocab_file, encoding="utf-8") as vocab_handle:
+                self.encoder = json.load(vocab_handle)
+            self.decoder = {v: k for k, v in self.encoder.items()}
+            self.byte_encoder = bytes_to_unicode()
+            self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
+            with open(merges_file, encoding="utf-8") as merges_handle:
+                bpe_merges = merges_handle.read().split("\n")[1:-1]
+            bpe_merges = [tuple(merge.split()) for merge in bpe_merges]
+            self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
+            self.cache = {}
+
+            # Should have added re.IGNORECASE so BPE merges can happen for capitalized versions of contractions
+            self.pat = re.compile(r"""'s|'t|'re|'ve|'m|'ll|'d| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+""")
 
         # additional properties
         self.cls_token_box = cls_token_box
@@ -347,11 +381,21 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
     @property
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.vocab_size
     def vocab_size(self):
-        return len(self.encoder)
+        return len(self.sp_model) + self.fairseq_offset + 1 if self.use_spm else len(self.encoder)
+
+    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.get_vocab
+    def _spm_get_vocab(self):
+        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
+        vocab.update(self.added_tokens_encoder)
+        return vocab
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.get_vocab
-    def get_vocab(self):
+    def _json_get_vocab(self):
         return dict(self.encoder, **self.added_tokens_encoder)
+
+    def get_vocab(self):
+        fn = self._spm_get_vocab if self.use_spm else self._json_get_vocab
+        return fn()
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.bpe
     def bpe(self, token):
@@ -396,8 +440,13 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
         self.cache[token] = word
         return word
 
+    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer._tokenize
+    def _spm_tokenize(self, text: str) -> List[str]:
+        """Tokenize a string."""
+        return self.sp_model.encode(text, out_type=str)
+
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer._tokenize
-    def _tokenize(self, text):
+    def _json_tokenize(self, text):
         """Tokenize a string."""
         bpe_tokens = []
         for token in re.findall(self.pat, text):
@@ -407,25 +456,74 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
             bpe_tokens.extend(bpe_token for bpe_token in self.bpe(token).split(" "))
         return bpe_tokens
 
-    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer._convert_token_to_id
-    def _convert_token_to_id(self, token):
+    def _tokenize(self, text):
+        """Tokenize a string."""
+        fn = self._spm_tokenize if self.use_spm else self._json_tokenize
+        return fn(text)
+
+    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer._convert_token_to_id
+    def _spm_convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
+        if token in self.fairseq_tokens_to_ids:
+            return self.fairseq_tokens_to_ids[token]
+        spm_id = self.sp_model.PieceToId(token)
+
+        # Need to return unknown token if the SP model returned 0
+        return spm_id + self.fairseq_offset if spm_id else self.unk_token_id
+
+    # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer._convert_token_to_id
+    def _json_convert_token_to_id(self, token):
+        """Converts a token (str) in an id using the vocab."""
+        if self.use_spm:
+            if token in self.fairseq_tokens_to_ids:
+                return self.fairseq_tokens_to_ids[token]
+            spm_id = self.sp_model.PieceToId(token)
+            # Need to return unknown token if the SP model returned 0
+            return spm_id + self.fairseq_offset if spm_id else self.unk_token_id
+
         return self.encoder.get(token, self.encoder.get(self.unk_token))
 
+    def _convert_token_to_id(self, token):
+        """Converts a token (str) in an id using the vocab."""
+        fn = self._spm_convert_token_to_id if self.use_spm else self._json_convert_token_to_id
+        return fn(token)
+
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer._convert_id_to_token
-    def _convert_id_to_token(self, index):
+    def _json_convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
         return self.decoder.get(index)
 
+    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer._convert_id_to_token
+    def _spm_convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        if index in self.fairseq_ids_to_tokens:
+            return self.fairseq_ids_to_tokens[index]
+        return self.sp_model.IdToPiece(index - self.fairseq_offset)
+
+    def _convert_id_to_token(self, index):
+        """Converts an index (integer) in a token (str) using the vocab."""
+        fn = self._spm_convert_id_to_token if self.use_spm else self._json_convert_id_to_token
+        return fn(index)
+
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.convert_tokens_to_string
-    def convert_tokens_to_string(self, tokens):
+    def _json_convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
         text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
         return text
 
+    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.convert_tokens_to_string
+    def _spm_convert_tokens_to_string(self, tokens):
+        """Converts a sequence of tokens (strings for sub-words) in a single string."""
+        return "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
+
+    def convert_tokens_to_string(self, tokens):
+        """Converts a sequence of tokens (string) in a single string."""
+        fn = self._spm_convert_tokens_to_string if self.use_spm else self._json_convert_tokens_to_string
+        return fn(tokens)
+
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.save_vocabulary
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+    def _json_save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -453,6 +551,46 @@ class LayoutLMv3Tokenizer(PreTrainedTokenizer):
                 index += 1
 
         return vocab_file, merge_file
+
+    # Copied from transformers.models.xlm_roberta.tokenization_xlm_roberta.XLMRobertaTokenizer.save_vocabulary
+    def _spm_save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        if not os.path.isdir(save_directory):
+            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
+            return
+        out_vocab_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["spm_file"]
+        )
+
+        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
+            copyfile(self.vocab_file, out_vocab_file)
+        elif not os.path.isfile(self.vocab_file):
+            with open(out_vocab_file, "wb") as fi:
+                content_spiece_model = self.sp_model.serialized_model_proto()
+                fi.write(content_spiece_model)
+
+        return (out_vocab_file,)
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        if self.use_spm:
+            state["sp_model"] = None
+            state["sp_model_proto"] = self.sp_model.serialized_model_proto()
+        return state
+
+    def __setstate__(self, d):
+        self.__dict__ = d
+
+        if self.use_spm:
+            # for backward compatibility
+            if not hasattr(self, "sp_model_kwargs"):
+                self.sp_model_kwargs = {}
+
+            self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
+            self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
+
+    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> Tuple[str]:
+        fn = self._spm_save_vocabulary if self.use_spm else self._json_save_vocabulary
+        return fn(save_directory, filename_prefix)
 
     # Copied from transformers.models.roberta.tokenization_roberta.RobertaTokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(

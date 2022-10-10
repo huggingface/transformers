@@ -18,7 +18,7 @@ and _encode_plus, in which the Rust tokenizer is used.
 """
 
 import json
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Any
 
 from tokenizers import pre_tokenizers, processors
 
@@ -43,7 +43,12 @@ from .tokenization_layoutlmv3 import (
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "vocab.json", "merges_file": "merges.txt", "tokenizer_file": "tokenizer.json"}
+VOCAB_FILES_NAMES = {
+    "vocab_file": "vocab.json",
+    "merges_file": "merges.txt",
+    "tokenizer_file": "tokenizer.json",
+    "spm_file": "sentencepiece.bpe.model",
+}
 
 PRETRAINED_VOCAB_FILES_MAP = {
     "vocab_file": {
@@ -54,11 +59,15 @@ PRETRAINED_VOCAB_FILES_MAP = {
         "microsoft/layoutlmv3-base": "https://huggingface.co/microsoft/layoutlmv3-base/raw/main/merges.txt",
         "microsoft/layoutlmv3-large": "https://huggingface.co/microsoft/layoutlmv3-large/raw/main/merges.txt",
     },
+    "spm_file": {
+        "microsoft/layoutlmv3-base-chinese": "https://huggingface.co/microsoft/layoutlmv3-base-chinese/raw/main/sentencepiece.bpe.model",
+    },
 }
 
 PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "microsoft/layoutlmv3-base": 512,
     "microsoft/layoutlmv3-large": 512,
+    "microsoft/layoutlmv3-base-chinese": 512,
 }
 
 
@@ -140,6 +149,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         self,
         vocab_file=None,
         merges_file=None,
+        spm_file=None,
         tokenizer_file=None,
         errors="replace",
         bos_token="<s>",
@@ -161,6 +171,7 @@ class LayoutLMv3TokenizerFast(PreTrainedTokenizerFast):
         super().__init__(
             vocab_file,
             merges_file,
+            spm_file=spm_file,
             tokenizer_file=tokenizer_file,
             errors=errors,
             bos_token=bos_token,

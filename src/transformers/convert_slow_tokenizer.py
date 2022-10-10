@@ -985,6 +985,17 @@ class LayoutLMv2Converter(Converter):
         return tokenizer
 
 
+class LayoutLMv3Converter(Converter):
+    def __init__(self, original_tokenizer):
+        if hasattr(original_tokenizer, "use_spm") and original_tokenizer.use_spm:
+            self._converter = XLMRobertaConverter(original_tokenizer)
+        else:
+            self._converter = RobertaConverter(original_tokenizer)
+
+    def converted(self) -> Tokenizer:
+        return self._converter.converted()
+
+
 class BlenderbotConverter(Converter):
     def converted(self) -> Tokenizer:
         ot = self.original_tokenizer
@@ -1105,7 +1116,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "HerbertTokenizer": HerbertConverter,
     "LayoutLMTokenizer": BertConverter,
     "LayoutLMv2Tokenizer": BertConverter,
-    "LayoutLMv3Tokenizer": RobertaConverter,
+    "LayoutLMv3Tokenizer": LayoutLMv3Converter,
     "LayoutXLMTokenizer": XLMRobertaConverter,
     "LongformerTokenizer": RobertaConverter,
     "LEDTokenizer": RobertaConverter,
