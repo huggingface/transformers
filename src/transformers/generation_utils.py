@@ -709,7 +709,9 @@ class GenerationMixin:
         # init warp parameters
         repetition_penalty = repetition_penalty if repetition_penalty is not None else self.config.repetition_penalty
         encoder_repetition_penalty = (
-            EncoderRepetitionPenaltyLogitsProcessor if EncoderRepetitionPenaltyLogitsProcessor is not None else self.config.encoder_repetition_penalty
+            encoder_repetition_penalty
+            if encoder_repetition_penalty is not None
+            else self.config.encoder_repetition_penalty
         )
         no_repeat_ngram_size = (
             no_repeat_ngram_size if no_repeat_ngram_size is not None else self.config.no_repeat_ngram_size
