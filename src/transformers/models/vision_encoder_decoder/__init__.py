@@ -27,9 +27,7 @@ from ...utils import (
 )
 
 
-_import_structure = {
-    "configuration_vision_encoder_decoder": ["VisionEncoderDecoderConfig", "VisionEncoderDecoderOnnxConfig"]
-}
+_import_structure = {"configuration_vision_encoder_decoder": ["VisionEncoderDecoderConfig"]}
 
 try:
     if not is_torch_available():
@@ -56,7 +54,7 @@ else:
     _import_structure["modeling_flax_vision_encoder_decoder"] = ["FlaxVisionEncoderDecoderModel"]
 
 if TYPE_CHECKING:
-    from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig, VisionEncoderDecoderOnnxConfig
+    from .configuration_vision_encoder_decoder import VisionEncoderDecoderConfig
 
     try:
         if not is_torch_available():

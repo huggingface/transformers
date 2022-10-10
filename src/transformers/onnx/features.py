@@ -30,7 +30,6 @@ if is_torch_available():
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
         AutoModelForTokenClassification,
-        AutoModelForVision2Seq,
     )
 if is_tf_available():
     from transformers.models.auto import (
@@ -99,7 +98,6 @@ class FeaturesManager:
             "image-segmentation": AutoModelForImageSegmentation,
             "masked-im": AutoModelForMaskedImageModeling,
             "semantic-segmentation": AutoModelForSemanticSegmentation,
-            "vision2seq-lm": AutoModelForVision2Seq,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -483,9 +481,6 @@ class FeaturesManager:
             "seq2seq-lm-with-past",
             onnx_config_cls="models.t5.T5OnnxConfig",
         ),
-        "vision-encoder-decoder": supported_features_mapping(
-            "vision2seq-lm", onnx_config_cls="models.vision_encoder_decoder.VisionEncoderDecoderOnnxConfig"
-        ),
         "vit": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls="models.vit.ViTOnnxConfig"
         ),
@@ -587,7 +582,6 @@ class FeaturesManager:
             raise KeyError(
                 f"Unknown task: {feature}. Possible values are {list(FeaturesManager._TASKS_TO_AUTOMODELS.values())}"
             )
-
         return task_to_automodel[task]
 
     @staticmethod
