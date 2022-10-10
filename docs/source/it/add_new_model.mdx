@@ -49,8 +49,9 @@ Da qui, ci sono alcune scelte sul modo di lavorare che cerchiamo di applicare a 
 
 - La composizione é generalmente favorita sulla sovra-astrazione
 - Duplicare il codice non é sempre male, soprattutto se migliora notevolmente la leggibilità e accessibilità del modello
-- I files del modello devono esssere il più self-contained possibile cosicché quando leggi il codice di uno specifico modello, idealmente, 
-avresti da vedere solo il corrispettivo file `modeling_....py`.
+- Tutti i files creati per il nuovo modello devono il piu possibile "compatti". Questo vuol dire che quando qualcuno leggerá il codice 
+di uno specifico modello, potrá vedere solo il corrispettivo file `modeling_....py` senza avere multiple dipendenze.
+
 
 La cosa piú importante, é che consideriamo la libreria non solo un mezzo per dare un prodotto, *per esempio* dare la possibilità 
 di usare BERT per inferenza, ma é anche il prodotto reale che noi vogliamo migliorare sempre più. Quindi, quando aggiungi 
@@ -72,7 +73,7 @@ Diamo un'occhiata:
 Come potete vedere, ci basiamo sull'ereditarietà in 🤗 Transformers, tenendo però il livello di astrazione a un minimo 
 assoluto.  Non ci sono mai più di due livelli di astrazione per ogni modello nella libreria. `BrandNewBertModel` eredita 
 da `BrandNewBertPreTrainedModel` che, a sua volta, eredita da [`PreTrainedModel`] -  semplice no? 
-Come regola generale, vogliamo esssere sicuri che un nuovo modello dipenda solo da [`PreTrainedModel`]. Le funzionalità
+Come regola generale, vogliamo essere sicuri che un nuovo modello dipenda solo da [`PreTrainedModel`]. Le funzionalità
 importanti che sono automaticamente conferite a ogni nuovo modello sono [`~PreTrainedModel.from_pretrained`]
 e [`~PreTrainedModel.save_pretrained`], che sono usate per serializzazione e deserializzazione. Tutte le altre importanti 
 funzionalità, come ad esempio `BrandNewBertModel.forward` devono essere definite completamente nel nuovo script
@@ -88,7 +89,7 @@ model = BrandNewBertModel.from_pretrained("brandy/brand_new_bert")
 model.config  # il modello ha accesso al suo config
 ```
 
-Similmente al modello, la configurazione eredita le funzionalità base di serializzazione e deserializzazione da 
+Analogamente al modello, la configurazione eredita le funzionalità base di serializzazione e deserializzazione da 
 [`PretrainedConfig`]. É da notare che la configurazione e il modello sono sempre serializzati in due formati differenti - 
 il modello é serializzato in un file *pytorch_model.bin* mentre la configurazione con *config.json*. Chiamando 
 [`~PreTrainedModel.save_pretrained`] automaticamente chiamerà [`~PretrainedConfig.save_pretrained`], cosicché sia il 
@@ -423,7 +424,7 @@ Per prima cosa, ci focalizzeremo sul modello e non sui tokenizer. Tutto il codic
 `src/transformers/models/brand_new_bert/configuration_brand_new_bert.py`.
 
 Ora potete finalmente cominciare il codice :). Il codice generato in 
-`src/transformers/models/brand_new_bert/modeling_brand_new_bert.py` avrà sia la stessa arhcitettura di BERT se é un 
+`src/transformers/models/brand_new_bert/modeling_brand_new_bert.py` avrà sia la stessa architettura di BERT se é un 
 modello encoder-only o BART se é encoder-decoder. A questo punto, ricordatevi cio che avete imparato all'inizio, riguardo 
 agli aspetti teorici del modello: *In che maniera il modello che sto implmementando é diverso da BERT o BART?*. Implementare 
 questi cambi  spesso vuol dire cambiare il layer *self-attention*, l'ordine dei layer di normalizzazione e così via... 
@@ -443,7 +444,7 @@ model = BrandNewBertModel(BrandNewBertConfig())
 ```
 
 Questo comando creerà un modello con i parametri di default definiti in `BrandNewBergConfig()` e weights random. Questo garantisce 
-che `init()` di tutte le componenti funziona correttamente.
+che `init()` di tutte le componenti funzioni correttamente.
 
 
 **6. Scrivere uno script di conversione**
@@ -451,7 +452,7 @@ che `init()` di tutte le componenti funziona correttamente.
 Il prossimo step é scrivere uno script per convertire il checkpoint che avete usato per fare debug su *brand_new_berts* nella 
 repo originale in un checkpoint per la nuova implementazione di *brand_new_bert* in 🤗 Transformers. Non é consigliato scrivere 
 lo script di conversione da zero, ma piuttosto cercate e guardate script gia esistenti in 🤗 Transformers, così da trovarne
-uno simile al vostro modello. Di solito é abbastanza fare una copia di uno script gia esistente e adattarlo al vostro caso. 
+uno simile al vostro modello. Di solito basta fare una copia di uno script gia esistente e adattarlo al vostro caso. 
 Non esistate a chiedre al team di Hugging Face a riguardo.
 
 - Se state convertendo un modello da TensorFlow a PyTorch, un ottimo inizio é vedere [questo script di conversione per BERT](https://github.com/huggingface/transformers/blob/7acfa95afb8194f8f9c1f4d2c6028224dbed35a2/src/transformers/models/bert/modeling_bert.py#L91)
@@ -625,7 +626,7 @@ di solito nella folder `tests/test_modeling_brand_new_bert.py`. Provate questo p
 pytest tests/test_modeling_brand_new_bert.py
 ```
 
-Una volta sistemati i test comuni, dobbiamo assicurarci che il vostro lavoro sia correttamente testato cosicchè:
+Una volta sistemati i test comuni, bisogna assicurarsi che il vostro lavoro sia correttamente testato cosicchè:
 
 - a) La community puo capire in maniera semplice il vostro lavoro controllando tests specifici del modello *brand_new_bert*,
 - b) Implementazioni future del vostro modello non rompano alcune feature importante del modello.
@@ -645,7 +646,7 @@ Nel caso siate su Windows, sostituite `RUN_SLOW=1` con `SET RUN_SLOW=1`
 </Tip>
 
 Di seguito, tutte le features che sono utili e necessarire per *brand_new_bert* devono essere testate in test separati, 
-contenuti in `BrandNewBertModelTester`/``BrandNewBertModelTest`. spesso la gente si scorda questi test, ma ricordate che sono utili per:
+contenuti in `BrandNewBertModelTester`/ `BrandNewBertModelTest`. spesso la gente si scorda questi test, ma ricordate che sono utili per:
 
 
 - Aiuta gli utenti a capire il vostro codice meglio, richiamando l'attenzione su queste nuove features
@@ -711,7 +712,7 @@ scrivere la documentazione e docstring.
 
 **Rifattorizzare il codice**
 
-Perfetto! Ora che abbiamo ttuto per *brand_new_bert* controllate che lo stile del codice sia ok:
+Perfetto! Ora che abbiamo tutto per *brand_new_bert* controllate che lo stile del codice sia ok:
 
 ```bash
 make style
@@ -723,7 +724,7 @@ E che il codice passi i quality check:
 make quality
 ```
 
-A volte capita che mancano delle informazioni nella docstring o alcuni nomi sbagliati, questo farà fallire i tests sopra. 
+A volte capita che manchino delle informazioninella docstring o alcuni nomi sbagliati, questo farà fallire i tests sopra. 
 Ripetiamo: chiedete pure a Hugging Face, saremo lieti di aiutarvi. 
 
 Per ultimo, fare del refactoring del codice una volta che é stato creato.
