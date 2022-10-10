@@ -604,7 +604,6 @@ def main():
 
             # update step
             if (step + 1) % args.gradient_accumulation_steps == 0 or step == len(train_dataloader) - 1:
-
                 # compute grad norm for monitoring
                 scale = (
                     accelerator.scaler._scale.item()

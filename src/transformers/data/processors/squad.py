@@ -166,7 +166,6 @@ def squad_convert_example_to_features(
 
     span_doc_tokens = all_doc_tokens
     while len(spans) * doc_stride < len(all_doc_tokens):
-
         # Define the side we want to truncate / pad and the text/pair sorting
         if tokenizer.padding_side == "right":
             texts = truncated_query

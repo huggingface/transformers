@@ -252,14 +252,12 @@ class GenerativeQAModule(BaseTransformer):
         raise NotImplementedError("pad not implemented")
 
     def training_step(self, batch, batch_idx) -> Dict:
-
         global isEmUpdateBusy  # use to check whether the entire embedding update process is finished or not
         global isAddIndexBusy  # use to check whether the entire indexing process  is finished or not
         global processes  # use to keep threads embedding update processes
         global threadHandle_index  # use to keep thread in embedding indexing processes
 
         if (self.trainer.global_rank == 0) and (self.custom_config.end2end):
-
             if (not batch_idx == 0) and (batch_idx % self.custom_config.indexing_freq == 0):
                 free_gpu_list = []
                 nvmlInit()
@@ -282,7 +280,6 @@ class GenerativeQAModule(BaseTransformer):
                     has_free_gpus = False
 
                 if (not isEmUpdateBusy) and has_free_gpus:
-
                     model_copy = type(self.model.rag.ctx_encoder)(
                         self.config_dpr
                     )  # get a new instance  #this will be load in the CPU
@@ -336,10 +333,8 @@ class GenerativeQAModule(BaseTransformer):
 
             # check when index building has started
             if isAddIndexBusy:
-
                 # check still the index_building process is happening
                 if not threadHandle_index.is_alive():
-
                     logger.info("Merging the dataset shards")
                     saved_dataset_shards = []
 
@@ -494,7 +489,6 @@ class GenerativeQAModule(BaseTransformer):
         self.tokenizer.save_pretrained(save_path)
 
         if self.custom_config.end2end:
-
             modified_state_dict = self.model.state_dict()
             for key in self.model.state_dict().keys():
                 if key.split(".")[1] == "ctx_encoder":
@@ -803,7 +797,6 @@ def main(args=None, model=None) -> GenerativeQAModule:
 
 
 if __name__ == "__main__":
-
     multiprocessing.set_start_method("spawn")
     parser = argparse.ArgumentParser()
     parser = pl.Trainer.add_argparse_args(parser)

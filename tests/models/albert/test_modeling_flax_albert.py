@@ -117,7 +117,6 @@ class FlaxAlbertModelTester(unittest.TestCase):
 
 @require_flax
 class FlaxAlbertModelTest(FlaxModelTesterMixin, unittest.TestCase):
-
     all_model_classes = (
         (
             FlaxAlbertModel,
