@@ -218,7 +218,6 @@ class BlenderbotTokenizerFast(PreTrainedTokenizerFast):
         return str(self._mask_token)
 
     @mask_token.setter
-    # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast.mask_token with Roberta->Blenderbot, RoBERTa->Blenderbot
     def mask_token(self, value):
         """
         Overriding the default behavior of the mask token to have it eat the space before it.
