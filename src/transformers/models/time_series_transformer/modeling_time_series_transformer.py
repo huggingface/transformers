@@ -24,6 +24,7 @@ from torch import nn
 from torch.distributions import (
     AffineTransform,
     Distribution,
+    Independent,
     NegativeBinomial,
     Normal,
     StudentT,
@@ -79,11 +80,7 @@ class AffineTransformed(TransformedDistribution):
 
 class ParameterProjection(nn.Module):
     def __init__(
-        self,
-        in_features: int,
-        args_dim: Dict[str, int],
-        domain_map: Callable[..., Tuple[torch.Tensor]],
-        **kwargs,
+        self, in_features: int, args_dim: Dict[str, int], domain_map: Callable[..., Tuple[torch.Tensor]], **kwargs
     ) -> None:
         super().__init__(**kwargs)
         self.args_dim = args_dim
@@ -110,11 +107,16 @@ class DistributionOutput:
     in_features: int
     args_dim: Dict[str, int]
 
-    def __init__(self) -> None:
-        pass
+    def __init__(self, dim: int = 1) -> None:
+        self.dim = dim
+        if self.dim > 1:
+            self.args_dim = {k: self.dim * self.arg_dim[k] for k in self.arg_dim}
 
     def _base_distribution(self, distr_args):
-        return self.distr_cls(*distr_args)
+        if self.dim == 1:
+            return self.distr_cls(*distr_args)
+        else:
+            return Independent(self.distr_cls(*distr_args), 1)
 
     def distribution(
         self,
@@ -133,7 +135,7 @@ class DistributionOutput:
         r"""
         Shape of each individual event contemplated by the distributions that this object constructs.
         """
-        raise NotImplementedError()
+        return () if self.dim == 1 else (self.dim,)
 
     @property
     def event_dim(self) -> int:
@@ -188,10 +190,6 @@ class StudentTOutput(DistributionOutput):
         df = 2.0 + cls.squareplus(df)
         return df.squeeze(-1), loc.squeeze(-1), scale.squeeze(-1)
 
-    @property
-    def event_shape(self) -> Tuple:
-        return ()
-
 
 class NormalOutput(DistributionOutput):
     args_dim: Dict[str, int] = {"loc": 1, "scale": 1}
@@ -201,10 +199,6 @@ class NormalOutput(DistributionOutput):
     def domain_map(cls, loc: torch.Tensor, scale: torch.Tensor):
         scale = cls.squareplus(scale)
         return loc.squeeze(-1), scale.squeeze(-1)
-
-    @property
-    def event_shape(self) -> Tuple:
-        return ()
 
 
 class NegativeBinomialOutput(DistributionOutput):
@@ -218,27 +212,24 @@ class NegativeBinomialOutput(DistributionOutput):
 
     def _base_distribution(self, distr_args) -> Distribution:
         total_count, logits = distr_args
-        return self.distr_cls(total_count=total_count, logits=logits)
+        if self.dim == 1:
+            return self.distr_cls(total_count=total_count, logits=logits)
+        else:
+            return Independent(self.distr_cls(total_count=total_count, logits=logits), 1)
 
     # Overwrites the parent class method. We cannot scale using the affine
     # transformation since negative binomial should return integers. Instead
     # we scale the parameters.
     def distribution(
-        self,
-        distr_args,
-        loc: Optional[torch.Tensor] = None,
-        scale: Optional[torch.Tensor] = None,
+        self, distr_args, loc: Optional[torch.Tensor] = None, scale: Optional[torch.Tensor] = None
     ) -> Distribution:
         total_count, logits = distr_args
 
         if scale is not None:
+            # See scaling property of Gamma.
             logits += scale.log()
 
-        return NegativeBinomial(total_count=total_count, logits=logits)
-
-    @property
-    def event_shape(self) -> Tuple:
-        return ()
+        return self._base_distribution((total_count, logits))
 
 
 class FeatureEmbedder(nn.Module):
@@ -1716,11 +1707,11 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
         super().__init__(config)
         self.model = TimeSeriesTransformerModel(config)
         if config.distribution_output == "student_t":
-            self.distribution_output = StudentTOutput()
+            self.distribution_output = StudentTOutput(dim=config.input_size)
         elif config.distribution_output == "normal":
-            self.distribution_output = NormalOutput()
+            self.distribution_output = NormalOutput(dim=config.input_size)
         elif config.distribution_output == "negative_binomial":
-            self.distribution_output = NegativeBinomialOutput()
+            self.distribution_output = NegativeBinomialOutput(dim=config.input_size)
         else:
             raise ValueError(f"Unknown distribution output {config.distribution_output}")
 
