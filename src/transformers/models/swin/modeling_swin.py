@@ -219,9 +219,9 @@ def window_reverse(windows, window_size, height, width):
     """
     Merges windows to produce higher resolution features.
     """
-    batch_size = math.floor(windows.shape[0] / (height * width / window_size / window_size))
-    windows = windows.view(batch_size, height // window_size, width // window_size, window_size, window_size, -1)
-    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(batch_size, height, width, -1)
+    channels = int(windows.shape[-1])
+    windows = windows.view(-1, height // window_size, width // window_size, window_size, window_size, channels)
+    windows = windows.permute(0, 1, 3, 2, 4, 5).contiguous().view(-1, height, width, channels)
     return windows
 
 
