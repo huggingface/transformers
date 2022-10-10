@@ -317,6 +317,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                 "words": None,
                 "page": None,
                 "output_attentions": True,
+                "is_last": True,
             }
         else:
             tokenizer_kwargs = {}
@@ -339,9 +340,6 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                 **tokenizer_kwargs,
             )
 
-            if "pixel_values" in image_features:
-                encoding["image"] = image_features.pop("pixel_values")
-
             num_spans = len(encoding["input_ids"])
 
             # p_mask: mask with 1 for token than cannot be in the answer (0 for token which can be in an answer)
@@ -351,9 +349,8 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             for span_idx in range(num_spans):
                 if self.framework == "pt":
                     span_encoding = {k: torch.tensor(v[span_idx : span_idx + 1]) for (k, v) in encoding.items()}
-                    span_encoding.update(
-                        {k: v for (k, v) in image_features.items()}
-                    )  # TODO: Verify cardinality is correct
+                    if "pixel_values" in image_features:
+                        span_encoding["image"] = image_features["pixel_values"]
                 else:
                     raise ValueError("Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline")
 
@@ -389,12 +386,14 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                     "p_mask": p_mask[span_idx],
                     "word_ids": encoding.word_ids(span_idx),
                     "words": words,
+                    "is_last": span_idx == num_spans - 1,
                 }
 
     def _forward(self, model_inputs):
         p_mask = model_inputs.pop("p_mask", None)
         word_ids = model_inputs.pop("word_ids", None)
         words = model_inputs.pop("words", None)
+        is_last = model_inputs.pop("is_last", False)
 
         if "overflow_to_sample_mapping" in model_inputs:
             model_inputs.pop("overflow_to_sample_mapping")
@@ -404,10 +403,12 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         else:
             model_outputs = self.model(**model_inputs)
 
+        model_outputs = {k: v for (k, v) in model_outputs.items()}
         model_outputs["p_mask"] = p_mask
         model_outputs["word_ids"] = word_ids
         model_outputs["words"] = words
         model_outputs["attention_mask"] = model_inputs.get("attention_mask", None)
+        model_outputs["is_last"] = is_last
         return model_outputs
 
     def postprocess(self, model_outputs, top_k=1, **kwargs):
