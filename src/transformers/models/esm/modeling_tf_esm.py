@@ -17,6 +17,7 @@
 from typing import List, Optional, Tuple, Union
 
 import tensorflow as tf
+import numpy as np
 from tensorflow.keras.layers import Dense, Dropout, Embedding, Layer, LayerNormalization
 
 from ...activations import ACT2FN, gelu
@@ -27,15 +28,18 @@ from ...modeling_tf_outputs import (
     TFMaskedLMOutput,
     TFSequenceClassifierOutput,
     TFTokenClassifierOutput,
+
 )
-from ...modeling_tf_utils import TFPreTrainedModel, get_initializer, get_tf_activation, shape_list
+from ...modeling_tf_utils import (get_initializer, get_tf_activation, shape_list, TFModelInputType, unpack_inputs,     TFMaskedLanguageModelingLoss,
+    TFModelInputType,
+    TFPreTrainedModel,
+    TFSequenceClassificationLoss,
+    TFTokenClassificationLoss)
+from ...tf_utils import stable_softmax
 from ...utils import logging
 from .configuration_esm import EsmConfig
 
-
-# TODO 1: Make sure training args are passed correctly
-# TODO 2: Make sure we fill up the model archive list
-# TODO 3: Add tf-pt model equivalence tests and push TF checkpoints
+# TODO 4: Add tf-pt model equivalence tests and push TF checkpoints
 
 
 logger = logging.get_logger(__name__)
@@ -45,7 +49,12 @@ _CONFIG_FOR_DOC = "EsmConfig"
 _TOKENIZER_FOR_DOC = "EsmTokenizer"
 
 ESM_PRETRAINED_MODEL_ARCHIVE_LIST = [
-    "facebook/esm-1b",
+    "Rocketknight1/esm2_t6_8M_UR50D",
+    "Rocketknight1/esm2_t12_35M_UR50D",
+    "Rocketknight1/esm2_t30_150M_UR50D",
+    "Rocketknight1/esm2_t33_650M_UR50D",
+    "Rocketknight1/esm2_t36_3B_UR50D",
+    "Rocketknight1/esm2_t48_15B_UR50D",
     # See all ESM models at https://huggingface.co/models?filter=esm
 ]
 
@@ -105,21 +114,20 @@ class TFEsmEmbeddings(Layer):
 
     def __init__(self, config):
         super().__init__()
-        self.word_embeddings = Embedding(config.vocab_size, config.hidden_size)
-        self.position_embeddings = Embedding(config.max_position_embeddings, config.hidden_size)
+        self.word_embeddings = Embedding(config.vocab_size, config.hidden_size, embeddings_initializer=get_initializer(config.initializer_range))
+        self.position_embeddings = Embedding(config.max_position_embeddings, config.hidden_size, embeddings_initializer=get_initializer(config.initializer_range))
 
         if config.emb_layer_norm_before:
             self.layer_norm = LayerNormalization(epsilon=config.layer_norm_eps)
         else:
             self.layer_norm = None
-        self.dropout = Dropout(config.hidden_dropout_prob)
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        # Matt: I think this line was copied incorrectly from BERT, disabling for now
+        # self.dropout = Dropout(config.hidden_dropout_prob)
         self.position_embedding_type = getattr(config, "position_embedding_type", "absolute")
         # TODO check values are copied correctly from the buffer
         self.position_ids = tf.range(config.max_position_embeddings)[None, :]
 
         self.padding_idx = config.pad_token_id
-        self.position_embeddings = Embedding(config.max_position_embeddings, config.hidden_size)
         self.token_dropout = config.token_dropout
         self.mask_token_id = config.mask_token_id
 
@@ -169,14 +177,13 @@ class TFEsmEmbeddings(Layer):
         return embeddings
 
     def create_position_ids_from_inputs_embeds(self, inputs_embeds):
-        # TODO Figure out if this whole function makes no sense
         """
         We are provided embeddings directly. We cannot infer which are padded so just generate sequential position ids.
 
         Args:
-            inputs_embeds: torch.Tensor
+            inputs_embeds: tf.Tensor
 
-        Returns: torch.Tensor
+        Returns: tf.Tensor
         """
         input_shape = inputs_embeds.size()[:-1]
         sequence_length = input_shape[1]
@@ -211,7 +218,7 @@ class TFEsmSelfAttention(Layer):
         self.rotary_embeddings = None
         if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
             self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
+            self.distance_embedding = Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size, embeddings_initializer=get_initializer(config.initializer_range))
         elif self.position_embedding_type == "rotary":
             self.rotary_embeddings = TFRotaryEmbedding(dim=self.attention_head_size)
 
@@ -231,6 +238,8 @@ class TFEsmSelfAttention(Layer):
         encoder_attention_mask: Optional[tf.Tensor] = None,
         past_key_value: Optional[Tuple[Tuple[tf.Tensor]]] = None,
         output_attentions: Optional[bool] = False,
+        training: bool = False,
+
     ) -> Tuple[tf.Tensor]:
 
         mixed_query_layer = self.query(hidden_states)
@@ -267,10 +276,10 @@ class TFEsmSelfAttention(Layer):
         query_layer = query_layer * self.attention_head_size**-0.5
 
         if self.is_decoder:
-            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # if cross_attention save Tuple(tf.Tensor, tf.Tensor) of all cross attention key/value_states.
             # Further calls to cross_attention layer can then reuse all cross-attention
             # key/value_states (first "if" case)
-            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # if uni-directional self-attention (decoder) save Tuple(tf.Tensor, tf.Tensor) of
             # all previous decoder key/value_states. Further calls to uni-directional self-attention
             # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
             # if encoder bi-directional self-attention `past_key_value` is always `None`
@@ -303,11 +312,11 @@ class TFEsmSelfAttention(Layer):
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
-        attention_probs = tf.nn.softmax(attention_scores, axis=-1)
+        attention_probs = stable_softmax(attention_scores, axis=-1)
 
         # This is actually dropping out entire tokens to attend to, which might
         # seem a bit unusual, but is taken from the original Transformer paper.
-        attention_probs = self.dropout(attention_probs)
+        attention_probs = self.dropout(attention_probs, training=training)
 
         # Mask heads if we want to
         if head_mask is not None:
@@ -332,14 +341,14 @@ class TFEsmSelfOutput(Layer):
         self.dense = Dense(config.hidden_size, kernel_initializer=get_initializer(config.initializer_range))
         self.dropout = Dropout(config.hidden_dropout_prob)
 
-    def call(self, hidden_states, input_tensor):
+    def call(self, hidden_states, input_tensor, training=False):
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states, training=training)
         hidden_states += input_tensor
         return hidden_states
 
 
-class EsmAttention(Layer):
+class TFEsmAttention(Layer):
     def __init__(self, config):
         super().__init__()
         self.self = TFEsmSelfAttention(config)
@@ -359,6 +368,7 @@ class EsmAttention(Layer):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
+        training=False,
     ):
         hidden_states_ln = self.LayerNorm(hidden_states)
         self_outputs = self.self(
@@ -369,6 +379,7 @@ class EsmAttention(Layer):
             encoder_attention_mask,
             past_key_value,
             output_attentions,
+            training
         )
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
@@ -402,9 +413,9 @@ class TFEsmOutput(Layer):
         self.dense = Dense(config.hidden_size, kernel_initializer=get_initializer(config.initializer_range))
         self.dropout = Dropout(config.hidden_dropout_prob)
 
-    def forward(self, hidden_states, input_tensor):
+    def call(self, hidden_states, input_tensor, training=False):
         hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(hidden_states, training=training)
         hidden_states += input_tensor
         return hidden_states
 
@@ -414,18 +425,18 @@ class TFEsmLayer(Layer):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = EsmAttention(config)
+        self.attention = TFEsmAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise RuntimeError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = EsmAttention(config)
+            self.crossattention = TFEsmAttention(config)
         self.intermediate = TFEsmIntermediate(config)
         self.output = TFEsmOutput(config)
         self.LayerNorm = LayerNormalization(epsilon=config.layer_norm_eps)
 
-    def forward(
+    def call(
         self,
         hidden_states,
         attention_mask=None,
@@ -434,6 +445,7 @@ class TFEsmLayer(Layer):
         encoder_attention_mask=None,
         past_key_value=None,
         output_attentions=False,
+        training=False,
     ):
         # decoder uni-directional self-attention cached key/values tuple is at positions 1,2
         self_attn_past_key_value = past_key_value[:2] if past_key_value is not None else None
@@ -443,6 +455,7 @@ class TFEsmLayer(Layer):
             head_mask,
             output_attentions=output_attentions,
             past_key_value=self_attn_past_key_value,
+            training=training,
         )
         attention_output = self_attention_outputs[0]
 
@@ -471,6 +484,7 @@ class TFEsmLayer(Layer):
                 encoder_attention_mask,
                 cross_attn_past_key_value,
                 output_attentions,
+                training=training,
             )
             attention_output = cross_attention_outputs[0]
             outputs = outputs + cross_attention_outputs[1:-1]  # add cross attentions if we output attention weights
@@ -492,15 +506,15 @@ class TFEsmLayer(Layer):
         return outputs
 
 
-class EsmEncoder(nn.Module):
+class TFEsmEncoder(Layer):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([EsmLayer(config) for _ in range(config.num_hidden_layers)])
-        self.emb_layer_norm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layer = [TFEsmLayer(config) for _ in range(config.num_hidden_layers)]
+        self.emb_layer_norm_after = LayerNormalization(epsilon=config.layer_norm_eps)
         self.gradient_checkpointing = False
 
-    def forward(
+    def call(
         self,
         hidden_states,
         attention_mask=None,
@@ -512,6 +526,7 @@ class EsmEncoder(nn.Module):
         output_attentions=False,
         output_hidden_states=False,
         return_dict=True,
+        training=False,
     ):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -525,39 +540,17 @@ class EsmEncoder(nn.Module):
             layer_head_mask = head_mask[i] if head_mask is not None else None
             past_key_value = past_key_values[i] if past_key_values is not None else None
 
-            if self.gradient_checkpointing and self.training:
 
-                if use_cache:
-                    logger.warning(
-                        "`use_cache=True` is incompatible with `config.gradient_checkpointing=True`. Setting "
-                        "`use_cache=False`..."
-                    )
-                    use_cache = False
-
-                def create_custom_forward(module):
-                    def custom_forward(*inputs):
-                        return module(*inputs, past_key_value, output_attentions)
-
-                    return custom_forward
-
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    create_custom_forward(layer_module),
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                )
-            else:
-                layer_outputs = layer_module(
-                    hidden_states,
-                    attention_mask,
-                    layer_head_mask,
-                    encoder_hidden_states,
-                    encoder_attention_mask,
-                    past_key_value,
-                    output_attentions,
-                )
+            layer_outputs = layer_module(
+                hidden_states,
+                attention_mask,
+                layer_head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
+                training
+            )
 
             hidden_states = layer_outputs[0]
             if use_cache:
@@ -594,23 +587,28 @@ class EsmEncoder(nn.Module):
         )
 
 
-# Copied from transformers.models.bert.modeling_bert.BertPooler
-class EsmPooler(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.activation = nn.Tanh()
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertPooler with Bert->Esm
+class TFEsmPooler(Layer):
+    def __init__(self, config: EsmConfig, **kwargs):
+        super().__init__(**kwargs)
 
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        self.dense = tf.keras.layers.Dense(
+            units=config.hidden_size,
+            kernel_initializer=get_initializer(config.initializer_range),
+            activation="tanh",
+            name="dense",
+        )
+
+    def call(self, hidden_states: tf.Tensor) -> tf.Tensor:
         # We "pool" the model by simply taking the hidden state corresponding
         # to the first token.
         first_token_tensor = hidden_states[:, 0]
-        pooled_output = self.dense(first_token_tensor)
-        pooled_output = self.activation(pooled_output)
+        pooled_output = self.dense(inputs=first_token_tensor)
+
         return pooled_output
 
 
-class EsmPreTrainedModel(PreTrainedModel):
+class TFEsmPreTrainedModel(TFPreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
@@ -618,23 +616,6 @@ class EsmPreTrainedModel(PreTrainedModel):
 
     config_class = EsmConfig
     base_model_prefix = "esm"
-
-    # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
     def update_keys_to_ignore(self, config, del_keys_to_ignore):
         """Remove some keys from ignore list"""
@@ -648,48 +629,48 @@ class EsmPreTrainedModel(PreTrainedModel):
 
 ESM_START_DOCSTRING = r"""
 
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    This model inherits from [`TFPreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
 
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    This model is also a Keras [Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model) subclass.
+    Use it as a regular Keras model and refer to the TF/Keras documentation for all matters related to general usage
     and behavior.
 
     Parameters:
         config ([`EsmConfig`]): Model configuration class with all the parameters of the
             model. Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+            configuration. Check out the [`~TFPreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
 ESM_INPUTS_DOCSTRING = r"""
     Args:
-        input_ids (`torch.LongTensor` of shape `({0})`):
+        input_ids (`tf.Tensor` of shape `({0})`):
             Indices of input sequence tokens in the vocabulary.
 
             Indices can be obtained using [`EsmTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.FloatTensor` of shape `({0})`, *optional*):
+        attention_mask (`tf.Tensor` of shape `({0})`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
 
             [What are attention masks?](../glossary#attention-mask)
-        position_ids (`torch.LongTensor` of shape `({0})`, *optional*):
+        position_ids (`tf.Tensor` of shape `({0})`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.max_position_embeddings - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+        head_mask (`tf.Tensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
 
-        inputs_embeds (`torch.FloatTensor` of shape `({0}, hidden_size)`, *optional*):
+        inputs_embeds (`tf.Tensor` of shape `({0}, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
@@ -708,7 +689,7 @@ ESM_INPUTS_DOCSTRING = r"""
     "The bare ESM Model transformer outputting raw hidden-states without any specific head on top.",
     ESM_START_DOCSTRING,
 )
-class EsmModel(EsmPreTrainedModel):
+class TFEsmMainLayer(Layer):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -724,70 +705,55 @@ class EsmModel(EsmPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
     supports_gradient_checkpointing = False
 
-    # Copied from transformers.models.bert.modeling_bert.BertModel.__init__ with Bert->Esm
-    def __init__(self, config, add_pooling_layer=True):
-        super().__init__(config)
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertMainLayer.__init__ with Bert->Esm
+    def __init__(self, config, add_pooling_layer=True, **kwargs):
+        super().__init__(**kwargs)
+
         self.config = config
+        self.is_decoder = config.is_decoder
 
-        self.embeddings = EsmEmbeddings(config)
-        self.encoder = EsmEncoder(config)
-
-        self.pooler = EsmPooler(config) if add_pooling_layer else None
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, EsmEncoder):
-            module.gradient_checkpointing = value
+        self.embeddings = TFEsmEmbeddings(config, name="embeddings")
+        self.encoder = TFEsmEncoder(config, name="encoder")
+        self.pooler = TFEsmPooler(config, name="pooler") if add_pooling_layer else None
 
     def get_input_embeddings(self):
         return self.embeddings.word_embeddings
 
-    def set_input_embeddings(self, value):
-        self.embeddings.word_embeddings = value
+    def set_input_embeddings(self, value: tf.Variable):
+        self.embeddings.weight = value
+        self.embeddings.vocab_size = shape_list(value)[0]
 
     def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.layer[layer].attention.prune_heads(heads)
+        raise NotImplementedError
 
-    @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("(batch_size, sequence_length)"))
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutputWithPoolingAndCrossAttentions,
-        config_class=_CONFIG_FOR_DOC,
-    )
-    def forward(
+
+    def call(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[List[torch.FloatTensor]] = None,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[tf.Tensor] = None,
+        position_ids: Optional[tf.Tensor] = None,
+        head_mask: Optional[tf.Tensor] = None,
+        inputs_embeds: Optional[tf.Tensor] = None,
+        encoder_hidden_states: Optional[tf.Tensor] = None,
+        encoder_attention_mask: Optional[tf.Tensor] = None,
+        past_key_values: Optional[List[tf.Tensor]] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+        training: bool = False,
+    ) -> Union[Tuple[tf.Tensor], TFBaseModelOutputWithPoolingAndCrossAttentions]:
         r"""
-        encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+        encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        encoder_attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
             - 1 for tokens that are **not masked**,
             - 0 for tokens that are **masked**.
-        past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
+        past_key_values (`tuple(tuple(tf.Tensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
             Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
 
             If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
@@ -824,11 +790,11 @@ class EsmModel(EsmPreTrainedModel):
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
         if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
+            attention_mask = tf.ones(((batch_size, seq_length + past_key_values_length)))
 
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -836,7 +802,7 @@ class EsmModel(EsmPreTrainedModel):
             encoder_batch_size, encoder_sequence_length, _ = encoder_hidden_states.size()
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
-                encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
+                encoder_attention_mask = tf.ones(encoder_hidden_shape)
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
@@ -866,6 +832,7 @@ class EsmModel(EsmPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training
         )
         sequence_output = encoder_outputs[0]
         pooled_output = self.pooler(sequence_output) if self.pooler is not None else None
@@ -873,7 +840,7 @@ class EsmModel(EsmPreTrainedModel):
         if not return_dict:
             return (sequence_output, pooled_output) + encoder_outputs[1:]
 
-        return BaseModelOutputWithPoolingAndCrossAttentions(
+        return TFBaseModelOutputWithPoolingAndCrossAttentions(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             past_key_values=encoder_outputs.past_key_values,
@@ -882,9 +849,106 @@ class EsmModel(EsmPreTrainedModel):
             cross_attentions=encoder_outputs.cross_attentions,
         )
 
+@add_start_docstrings(
+    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    ESM_START_DOCSTRING,
+)
+
+
+# Copied from transformers.models.bert.modeling_tf_bert.TFBertModel with Bert->Esm
+class TFEsmModel(TFEsmPreTrainedModel):
+    def __init__(self, config: EsmConfig, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
+        self.bert = TFEsmMainLayer(config, name="esm")
+
+    @unpack_inputs
+    @add_start_docstrings_to_model_forward(ESM_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=TFBaseModelOutputWithPoolingAndCrossAttentions,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def call(
+        self,
+        input_ids: Optional[TFModelInputType] = None,
+        attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        token_type_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        position_ids: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        head_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        inputs_embeds: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_hidden_states: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        encoder_attention_mask: Optional[Union[np.ndarray, tf.Tensor]] = None,
+        past_key_values: Optional[Tuple[Tuple[Union[np.ndarray, tf.Tensor]]]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        training: Optional[bool] = False,
+    ) -> Union[TFBaseModelOutputWithPoolingAndCrossAttentions, Tuple[tf.Tensor]]:
+        r"""
+        encoder_hidden_states  (`tf.Tensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
+            the model is configured as a decoder.
+        encoder_attention_mask (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
+            the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+        past_key_values (`Tuple[Tuple[tf.Tensor]]` of length `config.n_layers`)
+            contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`). Set to `False` during training, `True` during generation
+        """
+        outputs = self.esm(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            training=training,
+        )
+        return outputs
+
+    def serving_output(
+        self, output: TFBaseModelOutputWithPoolingAndCrossAttentions
+    ) -> TFBaseModelOutputWithPoolingAndCrossAttentions:
+        output_cache = self.config.use_cache and self.config.is_decoder
+        pkv = tf.convert_to_tensor(output.past_key_values) if output_cache else None
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+        cross_attns = tf.convert_to_tensor(output.cross_attentions) if output.cross_attentions is not None else None
+        if not (self.config.output_attentions and self.config.add_cross_attention):
+            cross_attns = None
+
+        return TFBaseModelOutputWithPoolingAndCrossAttentions(
+            last_hidden_state=output.last_hidden_state,
+            pooler_output=output.pooler_output,
+            past_key_values=pkv,
+            hidden_states=hs,
+            attentions=attns,
+            cross_attentions=cross_attns,
+        )
+
+
 
 @add_start_docstrings("""ESM Model with a `language modeling` head on top.""", ESM_START_DOCSTRING)
-class EsmForMaskedLM(EsmPreTrainedModel):
+class TFEsmForMaskedLM(TFEsmPreTrainedModel, TFMaskedLanguageModelingLoss):
     _keys_to_ignore_on_save = [r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"lm_head.decoder.weight", r"lm_head.decoder.bias"]
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
@@ -898,8 +962,8 @@ class EsmForMaskedLM(EsmPreTrainedModel):
                 "bi-directional self-attention."
             )
 
-        self.esm = EsmModel(config, add_pooling_layer=False)
-        self.lm_head = EsmLMHead(config)
+        self.esm = TFEsmModel(config, add_pooling_layer=False)
+        self.lm_head = TFEsmLMHead(config)
 
         # The LM head weights require special treatment only when they are tied with the word embeddings
         self.update_keys_to_ignore(config, ["lm_head.decoder.weight"])
@@ -916,11 +980,11 @@ class EsmForMaskedLM(EsmPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=MaskedLMOutput,
+        output_type=TFMaskedLMOutput,
         config_class=_CONFIG_FOR_DOC,
         mask="<mask>",
     )
-    def forward(
+    def call(
         self,
         input_ids=None,
         attention_mask=None,
@@ -933,9 +997,10 @@ class EsmForMaskedLM(EsmPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        training=False,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
@@ -955,20 +1020,20 @@ class EsmForMaskedLM(EsmPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
         sequence_output = outputs[0]
         prediction_scores = self.lm_head(sequence_output)
 
         masked_lm_loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            masked_lm_loss = loss_fct(prediction_scores.view(-1, self.config.vocab_size), labels.view(-1))
+            masked_lm_loss = self.hf_compute_loss(labels=labels, logits=prediction_scores)
 
         if not return_dict:
             output = (prediction_scores,) + outputs[2:]
             return ((masked_lm_loss,) + output) if masked_lm_loss is not None else output
 
-        return MaskedLMOutput(
+        return TFMaskedLMOutput(
             loss=masked_lm_loss,
             logits=prediction_scores,
             hidden_states=outputs.hidden_states,
@@ -976,21 +1041,19 @@ class EsmForMaskedLM(EsmPreTrainedModel):
         )
 
 
-class EsmLMHead(nn.Module):
+class TFEsmLMHead(Layer):
     """ESM Head for masked language modeling."""
 
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dense = Dense(config.hidden_size, kernel_initializer=get_initializer(config.initializer_range))
+        self.layer_norm = LayerNormalization(epsilon=config.layer_norm_eps)
 
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.bias = nn.Parameter(torch.zeros(config.vocab_size))
+        # Deleted the custom bias thing here because I don't think protein models will support vocab resizing
+        self.decoder = Dense(config.vocab_size, bias=True, kernel_initializer=get_initializer(config.initializer_range))
 
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
 
-    def forward(self, features, **kwargs):
+    def call(self, features):
         x = self.dense(features)
         x = gelu(x)
         x = self.layer_norm(x)
@@ -1008,7 +1071,7 @@ class EsmLMHead(nn.Module):
     """,
     ESM_START_DOCSTRING,
 )
-class EsmForSequenceClassification(EsmPreTrainedModel):
+class TFEsmForSequenceClassification(TFEsmPreTrainedModel, TFSequenceClassificationLoss):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
     def __init__(self, config):
@@ -1016,8 +1079,8 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
         self.num_labels = config.num_labels
         self.config = config
 
-        self.esm = EsmModel(config, add_pooling_layer=False)
-        self.classifier = EsmClassificationHead(config)
+        self.esm = TFEsmModel(config, add_pooling_layer=False)
+        self.classifier = TFEsmClassificationHead(config)
 
         self.init_weights()
 
@@ -1025,10 +1088,10 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=SequenceClassifierOutput,
+        output_type=TFSequenceClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    def forward(
+    def call(
         self,
         input_ids=None,
         attention_mask=None,
@@ -1039,9 +1102,10 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        training=False,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+        labels (`tf.Tensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
@@ -1057,43 +1121,43 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
         sequence_output = outputs[0]
         logits = self.classifier(sequence_output)
 
-        loss = None
-        if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+        loss = None if labels is None else self.hf_compute_loss(labels, logits)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return SequenceClassifierOutput(
+        return TFSequenceClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForSequenceClassification.serving_output
+    def serving_output(self, output: TFSequenceClassifierOutput) -> TFSequenceClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
+
+        return TFSequenceClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int64, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
 
 
 @add_start_docstrings(
@@ -1103,7 +1167,7 @@ class EsmForSequenceClassification(EsmPreTrainedModel):
     """,
     ESM_START_DOCSTRING,
 )
-class EsmForTokenClassification(EsmPreTrainedModel):
+class TFEsmForTokenClassification(TFEsmPreTrainedModel, TFTokenClassificationLoss):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
@@ -1111,9 +1175,9 @@ class EsmForTokenClassification(EsmPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.esm = EsmModel(config, add_pooling_layer=False)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+        self.esm = TFEsmModel(config, add_pooling_layer=False)
+        self.dropout = Dropout(config.hidden_dropout_prob)
+        self.classifier = Dense( config.num_labels)
 
         self.init_weights()
 
@@ -1121,10 +1185,10 @@ class EsmForTokenClassification(EsmPreTrainedModel):
     @add_code_sample_docstrings(
         processor_class=_TOKENIZER_FOR_DOC,
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=TokenClassifierOutput,
+        output_type=TFTokenClassifierOutput,
         config_class=_CONFIG_FOR_DOC,
     )
-    def forward(
+    def call(
         self,
         input_ids=None,
         attention_mask=None,
@@ -1135,9 +1199,10 @@ class EsmForTokenClassification(EsmPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        training=False,
     ):
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        labels (`tf.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1151,54 +1216,62 @@ class EsmForTokenClassification(EsmPreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            training=training,
         )
 
         sequence_output = outputs[0]
 
-        sequence_output = self.dropout(sequence_output)
+        sequence_output = self.dropout(sequence_output, training=training)
         logits = self.classifier(sequence_output)
 
-        loss = None
-        if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            # Only keep active parts of the loss
-            if attention_mask is not None:
-                active_loss = attention_mask.view(-1) == 1
-                active_logits = logits.view(-1, self.num_labels)
-                active_labels = torch.where(
-                    active_loss, labels.view(-1), torch.tensor(loss_fct.ignore_index).type_as(labels)
-                )
-                loss = loss_fct(active_logits, active_labels)
-            else:
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+        loss = None if labels is None else self.hf_compute_loss(labels, logits)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return TokenClassifierOutput(
+        return TFTokenClassifierOutput(
             loss=loss,
             logits=logits,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
 
+    # Copied from transformers.models.bert.modeling_tf_bert.TFBertForTokenClassification.serving_output
+    def serving_output(self, output: TFTokenClassifierOutput) -> TFTokenClassifierOutput:
+        hs = tf.convert_to_tensor(output.hidden_states) if self.config.output_hidden_states else None
+        attns = tf.convert_to_tensor(output.attentions) if self.config.output_attentions else None
 
-class EsmClassificationHead(nn.Module):
+        return TFTokenClassifierOutput(logits=output.logits, hidden_states=hs, attentions=attns)
+
+    @tf.function(
+        input_signature=[
+            {
+                "input_ids": tf.TensorSpec((None, None, None), tf.int64, name="input_ids"),
+                "attention_mask": tf.TensorSpec((None, None, None), tf.int64, name="attention_mask"),
+            }
+        ]
+    )
+    def serving(self, inputs):
+        output = self.call(inputs)
+
+        return self.serving_output(output)
+
+
+class TFEsmClassificationHead(Layer):
     """Head for sentence-level classification tasks."""
 
     def __init__(self, config):
         super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.out_proj = nn.Linear(config.hidden_size, config.num_labels)
+        self.dense = Dense(config.hidden_size, kernel_initializer=get_initializer(config.initializer_range), activation="tanh")
+        self.dropout = Dropout(config.hidden_dropout_prob)
+        self.out_proj = Dense(config.num_labels, kernel_initializer=get_initializer(config.initializer_range), activation="linear")
 
-    def forward(self, features, **kwargs):
+    def call(self, features, training=False):
         x = features[:, 0, :]  # take <s> token (equiv. to [CLS])
-        x = self.dropout(x)
+        x = self.dropout(x, training=training)
         x = self.dense(x)
-        x = torch.tanh(x)
-        x = self.dropout(x)
+        x = self.dropout(x, training=training)
         x = self.out_proj(x)
         return x
 
@@ -1209,11 +1282,11 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     are ignored. This is modified from fairseq's `utils.make_positions`.
 
     Args:
-        x: torch.Tensor x:
+        x: tf.Tensor x:
 
-    Returns: torch.Tensor
+    Returns: tf.Tensor
     """
     # The series of casts and type-conversions here are carefully balanced to both work with ONNX export and XLA.
-    mask = input_ids.ne(padding_idx).int()
-    incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
-    return incremental_indices.long() + padding_idx
+    mask = tf.cast(input_ids != padding_idx, tf.int64)
+    incremental_indices = (tf.cumsum(mask, axis=1) + past_key_values_length) * mask
+    return incremental_indices + padding_idx
