@@ -215,6 +215,22 @@ class DataTrainingArguments:
             "help": "Filter audio files in the training set that are shorter than `min_duration_in_seconds` seconds"
         },
     )
+    max_eval_duration_in_seconds: float = field(
+        default=None,
+        metadata={
+            "help": (
+                "Filter audio files in the evaluation set that are longer than `max_eval_duration_in_seconds` seconds"
+            )
+        },
+    )
+    min_eval_duration_in_seconds: float = field(
+        default=None,
+        metadata={
+            "help": (
+                "Filter audio files in the evaluation set that are shorter than `min_eval_duration_in_seconds` seconds"
+            )
+        },
+    )
     preprocessing_only: bool = field(
         default=False,
         metadata={
@@ -586,6 +602,27 @@ def main():
     # derive max & min input length for sample rate & max duration
     max_input_length = data_args.max_duration_in_seconds * feature_extractor.sampling_rate
     min_input_length = data_args.min_duration_in_seconds * feature_extractor.sampling_rate
+
+    if data_args.max_eval_duration_in_seconds is None:
+        logger.warning(
+            "`max_eval_duration_in_seconds` is not provided. Filtering evaluation audio samples longer than"
+            " `max_duration_in_seconds`. This will be updated in Transformers v5: evaluation audio will not be"
+            " filtered by max duration if `max_eval_duration_in_seconds` is not provided."
+        )
+        max_eval_input_length = max_input_length
+    else:
+        max_eval_input_length = data_args.max_eval_duration_in_seconds * feature_extractor.sampling_rate
+
+    if data_args.min_eval_duration_in_seconds is None:
+        logger.warning(
+            "`min_eval_duration_in_seconds` is not provided. Filtering evaluation audio samples shorter than"
+            " `min_duration_in_seconds`. This will be updated in Transformers v5: evaluation audio will not be"
+            " filtered by min duration if `min_eval_duration_in_seconds` is not provided."
+        )
+        min_eval_input_length = min_input_length
+    else:
+        min_eval_input_length = data_args.min_eval_duration_in_seconds * feature_extractor.sampling_rate
+
     audio_column_name = data_args.audio_column_name
     num_workers = data_args.preprocessing_num_workers
 
@@ -626,6 +663,18 @@ def main():
         if training_args.do_train:
             vectorized_datasets["train"] = vectorized_datasets["train"].filter(
                 is_audio_in_length_range,
+                num_proc=num_workers,
+                input_columns=["input_length"],
+            )
+
+        # filter evaluation data that is shorter than min_eval_input_length or longer than
+        # max_eval_input_length
+        def is_eval_audio_in_length_range(length):
+            return length > min_eval_input_length and length < max_eval_input_length
+
+        if training_args.do_eval:
+            vectorized_datasets["eval"] = vectorized_datasets["eval"].filter(
+                is_eval_audio_in_length_range,
                 num_proc=num_workers,
                 input_columns=["input_length"],
             )
