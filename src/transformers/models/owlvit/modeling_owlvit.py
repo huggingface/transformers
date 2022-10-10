@@ -1402,9 +1402,9 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
             if torch.all(ious[0] == 0.0):
                 ious = generalized_box_iou(each_query_box, each_query_pred_boxes)
 
-            selected_inds = (ious[0] >= iou_threshold).nonzero()[0]
+            selected_inds = (ious[0] >= iou_threshold).nonzero()
             if selected_inds.numel():
-                selected_embeddings = class_embeds[i][selected_inds]
+                selected_embeddings = class_embeds[i][selected_inds[0]]
                 mean_embeds = torch.mean(class_embeds[i], axis=0)
                 mean_sim = torch.einsum("d,id->i", mean_embeds, selected_embeddings)
                 best_box_ind = selected_inds[torch.argmin(mean_sim)]
