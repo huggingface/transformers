@@ -30,6 +30,7 @@ if is_torch_available():
         AutoModelForSeq2SeqLM,
         AutoModelForSequenceClassification,
         AutoModelForTokenClassification,
+        AutoModelForVision2Seq,
     )
 if is_tf_available():
     from transformers.models.auto import (
@@ -42,6 +43,7 @@ if is_tf_available():
         TFAutoModelForSeq2SeqLM,
         TFAutoModelForSequenceClassification,
         TFAutoModelForTokenClassification,
+        TFAutoModelForVision2Seq,
     )
 if not is_torch_available() and not is_tf_available():
     logger.warning(
@@ -98,6 +100,7 @@ class FeaturesManager:
             "image-segmentation": AutoModelForImageSegmentation,
             "masked-im": AutoModelForMaskedImageModeling,
             "semantic-segmentation": AutoModelForSemanticSegmentation,
+            "vision2seq-lm": AutoModelForVision2Seq,
         }
     if is_tf_available():
         _TASKS_TO_TF_AUTOMODELS = {
@@ -110,6 +113,7 @@ class FeaturesManager:
             "multiple-choice": TFAutoModelForMultipleChoice,
             "question-answering": TFAutoModelForQuestionAnswering,
             "semantic-segmentation": TFAutoModelForSemanticSegmentation,
+            "vision2seq-lm": TFAutoModelForVision2Seq,
         }
 
     # Set of model topologies we support associated to the features supported by each topology and the factory
@@ -480,6 +484,9 @@ class FeaturesManager:
             "seq2seq-lm",
             "seq2seq-lm-with-past",
             onnx_config_cls="models.t5.T5OnnxConfig",
+        ),
+        "vision-encoder-decoder": supported_features_mapping(
+            "default", "vision2seq-lm", onnx_config_cls="models.vision_encoder_decoder.VisionEncoderDecoderOnnxConfig"
         ),
         "vit": supported_features_mapping(
             "default", "image-classification", "masked-im", onnx_config_cls="models.vit.ViTOnnxConfig"

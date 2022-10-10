@@ -237,6 +237,7 @@ PYTORCH_EXPORT_SEQ2SEQ_WITH_PAST_MODELS = {
     ("blenderbot", "facebook/blenderbot-400M-distill"),
     ("bigbird-pegasus", "google/bigbird-pegasus-large-arxiv"),
     ("longt5", "google/long-t5-local-base"),
+    ("vision-encoder-decoder", "nlpconnect/vit-gpt2-image-captioning"),
     # Disable for now as it causes fatal error `Floating point exception (core dumped)` and the subsequential tests are
     # not run.
     # ("longt5", "google/long-t5-tglobal-base"),
