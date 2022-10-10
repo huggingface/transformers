@@ -390,9 +390,9 @@ def main():
 
     if data_args.max_eval_duration_in_seconds is None:
         logger.warning(
-            "`max_eval_duration_in_seconds` is not provided. Filtering evaluation audio samples longer than"
-            " `max_duration_in_seconds`. This will be updated in Transformers v5: evaluation audio will not be"
-            " filtered by max duration if `max_eval_duration_in_seconds` is not provided."
+            "`max_eval_duration_in_seconds` is not provided. Filtering audio samples in the eval set longer than"
+            " `max_duration_in_seconds`. From Transformers v5, the eval set will not be filtered by maximum audio"
+            " length if `max_eval_duration_in_seconds` is not provided."
         )
         max_eval_input_length = max_input_length
     else:
@@ -400,9 +400,9 @@ def main():
 
     if data_args.min_eval_duration_in_seconds is None:
         logger.warning(
-            "`min_eval_duration_in_seconds` is not provided. Filtering evaluation audio samples shorter than"
-            " `min_duration_in_seconds`. This will be updated in Transformers v5: evaluation audio will not be"
-            " filtered by min duration if `min_eval_duration_in_seconds` is not provided."
+            "`min_eval_duration_in_seconds` is not provided. Filtering audio samples in the eval set longer than"
+            " `min_duration_in_seconds`. From Transformers v5, the eval set will not be filtered by minimum audio"
+            " length if `min_eval_duration_in_seconds` is not provided."
         )
         min_eval_input_length = min_input_length
     else:
