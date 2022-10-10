@@ -1030,7 +1030,7 @@ class TFWhisperMainLayer(tf.keras.layers.Layer):
          >>> from transformers import TFWhisperModel, WhisperFeatureExtractor
          >>> from datasets import load_dataset
 
-         >>> model = TFWhisperModel.from_pretrained("openai/whisper-base", from_pt=True)
+         >>> model = TFWhisperModel.from_pretrained("openai/whisper-base")
          >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> inputs = feature_extractor(
@@ -1157,7 +1157,7 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
          >>> from transformers import TFWhisperModel, WhisperFeatureExtractor
          >>> from datasets import load_dataset
 
-         >>> model = TFWhisperModel.from_pretrained("openai/whisper-base", from_pt=True)
+         >>> model = TFWhisperModel.from_pretrained("openai/whisper-base")
          >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> inputs = feature_extractor(
@@ -1281,7 +1281,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         >>> from datasets import load_dataset
 
         >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
-        >>> model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
+        >>> model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 

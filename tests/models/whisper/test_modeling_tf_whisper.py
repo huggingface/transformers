@@ -644,7 +644,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_tiny_logits_librispeech(self):
         set_seed(0)
-        model = TFWhisperModel.from_pretrained("openai/whisper-tiny", from_pt=True)
+        model = TFWhisperModel.from_pretrained("openai/whisper-tiny")
         input_speech = self._load_datasamples(1)
         feature_extractor = WhisperFeatureExtractor()
         input_features = feature_extractor(input_speech, return_tensors="tf").input_features
@@ -687,7 +687,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     @slow
     def test_small_en_logits_librispeech(self):
         set_seed(0)
-        model = TFWhisperModel.from_pretrained("openai/whisper-small.en", from_pt=True)
+        model = TFWhisperModel.from_pretrained("openai/whisper-small.en")
 
         input_speech = self._load_datasamples(1)
 
@@ -721,7 +721,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     def test_large_logits_librispeech(self):
         set_seed(0)
 
-        model = TFWhisperModel.from_pretrained("openai/whisper-large", from_pt=True)
+        model = TFWhisperModel.from_pretrained("openai/whisper-large")
 
         input_speech = self._load_datasamples(1)
 
@@ -757,7 +757,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     def test_tiny_en_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
         model.config.decoder_start_token_id = 50257
 
         input_speech = self._load_datasamples(1)
@@ -776,7 +776,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     def test_tiny_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny", from_pt=True)
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
 
         input_speech = self._load_datasamples(1)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
@@ -794,7 +794,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     def test_tiny_xla_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny", from_pt=True)
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
 
         input_speech = self._load_datasamples(1)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
@@ -818,7 +818,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     def test_large_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large", from_pt=True)
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
 
         input_speech = self._load_datasamples(1)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
@@ -837,7 +837,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     def test_large_generation_multilingual(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large", from_pt=True)
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
 
         ds = load_dataset("common_voice", "ja", split="test", streaming=True)
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
@@ -872,7 +872,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     def test_large_batched_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large", from_pt=True)
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
 
         input_speech = self._load_datasamples(4)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
@@ -907,7 +907,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     def test_tiny_en_batched_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
 
         input_speech = self._load_datasamples(4)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
@@ -943,7 +943,7 @@ class TFWhisperModelIntegrationTests(unittest.TestCase):
     def test_tiny_en_batched_xla_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
-        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
+        model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
 
         input_speech = self._load_datasamples(4)
         input_features = processor.feature_extractor(raw_speech=input_speech, return_tensors="tf").input_features
