@@ -80,6 +80,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("vit", "TFViTModel"),
         ("vit_mae", "TFViTMAEModel"),
         ("wav2vec2", "TFWav2Vec2Model"),
+        ("whisper", "TFWhisperModel"),
         ("xglm", "TFXGLMModel"),
         ("xlm", "TFXLMModel"),
         ("xlm-roberta", "TFXLMRobertaModel"),
@@ -145,6 +146,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("t5", "TFT5ForConditionalGeneration"),
         ("tapas", "TFTapasForMaskedLM"),
         ("transfo-xl", "TFTransfoXLLMHeadModel"),
+        ("whisper", "TFWhisperForConditionalGeneration"),
         ("xlm", "TFXLMWithLMHeadModel"),
         ("xlm-roberta", "TFXLMRobertaForMaskedLM"),
         ("xlnet", "TFXLNetLMHeadModel"),
@@ -253,6 +255,7 @@ TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING_NAMES = OrderedDict(
     [
         ("speech_to_text", "TFSpeech2TextForConditionalGeneration"),
+        ("whisper", "TFWhisperForConditionalGeneration"),
     ]
 )
 
