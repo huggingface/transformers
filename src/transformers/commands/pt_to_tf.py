@@ -18,7 +18,6 @@ from argparse import ArgumentParser, Namespace
 from importlib import import_module
 
 import numpy as np
-from datasets import load_dataset
 from packaging import version
 
 import huggingface_hub
@@ -31,6 +30,7 @@ from .. import (
     AutoFeatureExtractor,
     AutoProcessor,
     AutoTokenizer,
+    is_datasets_available,
     is_tf_available,
     is_torch_available,
 )
@@ -45,6 +45,9 @@ if is_tf_available():
 
 if is_torch_available():
     import torch
+
+if is_datasets_available():
+    from datasets import load_dataset
 
 
 MAX_ERROR = 5e-5  # larger error tolerance than in our internal tests, to avoid flaky user-facing errors
