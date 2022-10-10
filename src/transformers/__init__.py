@@ -2754,6 +2754,14 @@ else:
             "TFWav2Vec2PreTrainedModel",
         ]
     )
+    _import_structure["models.whisper"].extend(
+        [
+            "TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST",
+            "TFWhisperForConditionalGeneration",
+            "TFWhisperModel",
+            "TFWhisperPreTrainedModel",
+        ]
+    )
     _import_structure["models.xglm"].extend(
         [
             "TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST",
@@ -5302,6 +5310,12 @@ if TYPE_CHECKING:
             TFWav2Vec2ForCTC,
             TFWav2Vec2Model,
             TFWav2Vec2PreTrainedModel,
+        )
+        from .models.whisper import (
+            TF_WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST,
+            TFWhisperForConditionalGeneration,
+            TFWhisperModel,
+            TFWhisperPreTrainedModel,
         )
         from .models.xglm import (
             TF_XGLM_PRETRAINED_MODEL_ARCHIVE_LIST,
