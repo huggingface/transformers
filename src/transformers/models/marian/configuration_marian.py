@@ -43,7 +43,7 @@ class MarianConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 50265):
+        vocab_size (`int`, *optional*, defaults to 58101):
             Vocabulary size of the Marian model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`MarianModel`] or [`TFMarianModel`].
         d_model (`int`, *optional*, defaults to 1024):
