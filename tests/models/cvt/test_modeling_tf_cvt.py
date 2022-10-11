@@ -254,7 +254,6 @@ class TFCvtModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_inference_image_classification_head(self):
-        # Remove 'from_pt=True' after PR to add weights to hub (pt-to-tf)
         model = TFCvtForImageClassification.from_pretrained(TF_CVT_PRETRAINED_MODEL_ARCHIVE_LIST[0])
 
         feature_extractor = self.default_feature_extractor
