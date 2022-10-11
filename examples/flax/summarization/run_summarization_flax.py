@@ -796,29 +796,23 @@ def main():
             logits = state.apply_fn(**batch, params=params, dropout_rng=dropout_rng, train=True)[0]
             loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
             return loss
-        
+
         weight = batch["decoder_attention_mask"].sum()
-        
+
         grad_fn = jax.value_and_grad(compute_loss)
         loss, grad = grad_fn(state.params)
-        
-        loss, grad = jax.tree_util.tree_map(
-            lambda x: x * weight, (loss, grad)
-        )
-        
+
+        loss, grad = jax.tree_util.tree_map(lambda x: x * weight, (loss, grad))
+
         total_weight = jax.lax.psum(weight, "batch")
         grad = jax.lax.psum(grad, "batch")
-        grad = jax.tree_util.tree_map(
-            lambda x: x / total_weight, grad
-        )
+        grad = jax.tree_util.tree_map(lambda x: x / total_weight, grad)
 
         new_state = state.apply_gradients(grads=grad, dropout_rng=new_dropout_rng)
-        
+
         metrics = {"loss": loss, "learning_rate": linear_decay_lr_schedule_fn(state.step) * weight}
         metrics = jax.lax.psum(metrics, axis_name="batch")
-        metrics = jax.tree_util.tree_map(
-            lambda x: x / total_weight, metrics
-        )
+        metrics = jax.tree_util.tree_map(lambda x: x / total_weight, metrics)
 
         return new_state, metrics
 
@@ -827,17 +821,15 @@ def main():
         labels = batch.pop("labels")
         logits = model(**batch, params=params, train=False)[0]
         loss = loss_fn(logits, labels, batch["decoder_attention_mask"], label_smoothing_factor)
-        
+
         weight = batch["decoder_attention_mask"].sum()
         total_weight = jax.lax.psum(weight, axis_name="batch")
 
         # summarize metrics
         metrics = {"loss": loss * weight}
         metrics = jax.lax.psum(metrics, axis_name="batch")
-        metrics = jax.tree_util.tree_map(
-            lambda x: x / total_weight, metrics
-        )
-        
+        metrics = jax.tree_util.tree_map(lambda x: x / total_weight, metrics)
+
         return metrics
 
     # Define generation function
