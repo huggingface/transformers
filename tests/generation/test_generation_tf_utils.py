@@ -103,7 +103,7 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         non_inf_expected_idx = tf.convert_to_tensor(
             [[0, 0], [0, 9], [0, 10], [0, 25], [0, 26], [1, 13], [1, 17], [1, 18], [1, 20], [1, 27]],
-            dtype=tf.int32,
+            dtype=tf.int64,
         )  # expected non filtered idx as noted above
 
         non_inf_expected_output = tf.convert_to_tensor(
@@ -116,7 +116,7 @@ class UtilsFunctionsTest(unittest.TestCase):
         non_inf_output = output[output != -float("inf")]
         non_inf_idx = tf.cast(
             tf.where(tf.not_equal(output, tf.constant(-float("inf"), dtype=tf.float32))),
-            dtype=tf.int32,
+            dtype=tf.int64,
         )
 
         tf.debugging.assert_near(non_inf_output, non_inf_expected_output, rtol=1e-12)
@@ -137,8 +137,8 @@ class TFGenerationIntegrationTests(unittest.TestCase):
 
             @tf.function(
                 input_signature=(
-                    tf.TensorSpec((None, max_length), tf.int32, name="input_ids"),
-                    tf.TensorSpec((None, max_length), tf.int32, name="attention_mask"),
+                    tf.TensorSpec((None, max_length), tf.int64, name="input_ids"),
+                    tf.TensorSpec((None, max_length), tf.int64, name="attention_mask"),
                 ),
                 jit_compile=True,
             )

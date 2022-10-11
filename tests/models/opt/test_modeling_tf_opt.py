@@ -233,7 +233,7 @@ class TFOPTModelTest(TFModelTesterMixin, unittest.TestCase):
 
 
 def _long_tensor(tok_lst):
-    return tf.constant(tok_lst, dtype=tf.int32)
+    return tf.constant(tok_lst, dtype=tf.int64)
 
 
 @require_tf
@@ -241,7 +241,7 @@ class TFOPTHeadTests(unittest.TestCase):
     vocab_size = 99
 
     def _get_config_and_data(self):
-        eos_column_vector = tf.ones((4, 1), dtype=tf.int32) * 2
+        eos_column_vector = tf.ones((4, 1), dtype=tf.int64) * 2
         input_ids = tf.concat([ids_tensor((4, 6), self.vocab_size - 3) + 3, eos_column_vector], axis=1)
         batch_size = input_ids.shape[0]
         config = OPTConfig(

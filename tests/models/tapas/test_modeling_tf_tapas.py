@@ -446,12 +446,12 @@ class TFTapasModelTest(TFModelTesterMixin, unittest.TestCase):
 
         if return_labels:
             if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
-                inputs_dict["labels"] = tf.ones(self.model_tester.batch_size, dtype=tf.int32)
+                inputs_dict["labels"] = tf.ones(self.model_tester.batch_size, dtype=tf.int64)
             elif model_class in get_values(TF_MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING):
                 inputs_dict["labels"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int64
                 )
-                inputs_dict["aggregation_labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+                inputs_dict["aggregation_labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int64)
                 inputs_dict["numeric_values"] = tf.zeros(
                     (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.float32
                 )
@@ -460,9 +460,9 @@ class TFTapasModelTest(TFModelTesterMixin, unittest.TestCase):
                 )
                 inputs_dict["float_answer"] = tf.zeros(self.model_tester.batch_size, dtype=tf.float32)
             elif model_class in get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING):
-                inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+                inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int64)
             elif model_class in get_values(TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING):
-                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int64)
             elif model_class in [
                 *get_values(TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
                 *get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING),
@@ -471,7 +471,7 @@ class TFTapasModelTest(TFModelTesterMixin, unittest.TestCase):
                 *get_values(TF_MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING),
             ]:
                 inputs_dict["labels"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int64
                 )
         return inputs_dict
 
@@ -939,7 +939,7 @@ class TFTapasUtilsTest(unittest.TestCase):
         col_index_flat = flatten(col_index)
 
         shape = [3, 4, 5]
-        batched_index = IndexMap(indices=tf.zeros(shape, dtype=tf.int32), num_segments=1, batch_dims=3)
+        batched_index = IndexMap(indices=tf.zeros(shape, dtype=tf.int64), num_segments=1, batch_dims=3)
         batched_index_flat = flatten(batched_index)
 
         # We use np.testing.assert_array_equal rather than Tensorflow's assertAllEqual

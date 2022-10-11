@@ -154,8 +154,8 @@ class TFT5ModelTester:
 
         # create attention mask
         half_seq_length = self.seq_length // 2
-        attn_mask_begin = tf.ones((self.batch_size, half_seq_length), dtype=tf.int32)
-        attn_mask_end = tf.zeros((self.batch_size, self.seq_length - half_seq_length), dtype=tf.int32)
+        attn_mask_begin = tf.ones((self.batch_size, half_seq_length), dtype=tf.int64)
+        attn_mask_end = tf.zeros((self.batch_size, self.seq_length - half_seq_length), dtype=tf.int64)
         attn_mask = tf.concat([attn_mask_begin, attn_mask_end], axis=1)
 
         # first forward pass
@@ -176,7 +176,7 @@ class TFT5ModelTester:
         # append to next input_ids and attn_mask
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
         attn_mask = tf.concat(
-            [attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int32)],
+            [attn_mask, tf.ones((attn_mask.shape[0], 1), dtype=tf.int64)],
             axis=1,
         )
 

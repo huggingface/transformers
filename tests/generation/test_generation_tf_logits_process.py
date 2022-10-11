@@ -115,7 +115,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
         vocab_size = 10
         cur_len = 2
 
-        input_ids = tf.constant([[0, 1], [5, 0]], dtype=tf.int32)
+        input_ids = tf.constant([[0, 1], [5, 0]], dtype=tf.int64)
         self.assertEqual(cur_len, input_ids.shape[1])
 
         scores = self._get_uniform_logits(batch_size=2, length=vocab_size)
@@ -227,7 +227,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
         batch_size = 2
         cur_len = 4
 
-        input_ids = tf.constant([[1, 1, 2, 1], [0, 1, 0, 1]], dtype=tf.int32)
+        input_ids = tf.constant([[1, 1, 2, 1], [0, 1, 0, 1]], dtype=tf.int64)
         self.assertEqual(cur_len, input_ids.shape[1])
 
         scores = self._get_uniform_logits(batch_size, vocab_size)
@@ -255,7 +255,7 @@ class TFLogitsProcessorTest(unittest.TestCase):
         eos_token_id = 4
         cur_len = 4
 
-        input_ids = tf.constant([[0, 1, 3, 1], [0, 1, 0, 1]], dtype=tf.int32)
+        input_ids = tf.constant([[0, 1, 3, 1], [0, 1, 0, 1]], dtype=tf.int64)
         self.assertEqual(cur_len, input_ids.shape[1])
 
         bad_word_tokens = [[1], [4], [1, 0], [0, 1, 2], [1, 3, 1, 3]]

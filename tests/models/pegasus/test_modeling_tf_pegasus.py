@@ -327,7 +327,7 @@ def _assert_tensors_equal(a, b, atol=1e-12, prefix=""):
 
 
 def _long_tensor(tok_lst):
-    return tf.constant(tok_lst, dtype=tf.int32)
+    return tf.constant(tok_lst, dtype=tf.int64)
 
 
 @require_sentencepiece

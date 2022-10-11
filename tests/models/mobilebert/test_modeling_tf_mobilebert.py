@@ -66,7 +66,7 @@ class TFMobileBertModelTest(TFModelTesterMixin, unittest.TestCase):
 
         if return_labels:
             if model_class in get_values(TF_MODEL_FOR_PRETRAINING_MAPPING):
-                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int64)
 
         return inputs_dict
 

@@ -256,7 +256,7 @@ class TFRagTestMixin:
 
             self.assertTrue(model.config.is_encoder_decoder)
 
-            input_ids = tf.cast(input_ids, tf.int32)
+            input_ids = tf.cast(input_ids, tf.int64)
             outputs = model.generate(
                 input_ids=input_ids,
                 num_beams=2,

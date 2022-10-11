@@ -171,20 +171,20 @@ class TFModelTesterMixin:
 
         if return_labels:
             if model_class in get_values(TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING):
-                inputs_dict["labels"] = tf.ones(self.model_tester.batch_size, dtype=tf.int32)
+                inputs_dict["labels"] = tf.ones(self.model_tester.batch_size, dtype=tf.int64)
             elif model_class in [
                 *get_values(TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING),
                 *get_values(TF_MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING),
             ]:
-                inputs_dict["start_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
-                inputs_dict["end_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+                inputs_dict["start_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int64)
+                inputs_dict["end_positions"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int64)
             elif model_class in [
                 *get_values(TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING),
                 *get_values(TF_MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING),
             ]:
-                inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+                inputs_dict["labels"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int64)
             elif model_class in get_values(TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING):
-                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int32)
+                inputs_dict["next_sentence_label"] = tf.zeros(self.model_tester.batch_size, dtype=tf.int64)
             elif model_class in [
                 *get_values(TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING),
                 *get_values(TF_MODEL_FOR_CAUSAL_LM_MAPPING),
@@ -194,20 +194,20 @@ class TFModelTesterMixin:
                 *get_values(TF_MODEL_FOR_SPEECH_SEQ_2_SEQ_MAPPING),
             ] and "labels" in dict(inspect.signature(model_class.call).parameters):
                 inputs_dict["labels"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int64
                 )
             elif model_class in get_values(TF_MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING):
                 num_patches = self.model_tester.image_size // self.model_tester.patch_size
                 inputs_dict["bool_masked_pos"] = tf.zeros(
-                    (self.model_tester.batch_size, num_patches**2), dtype=tf.int32
+                    (self.model_tester.batch_size, num_patches**2), dtype=tf.int64
                 )
             elif model_class in get_values(TF_MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING):
                 batch_size, num_channels, height, width = inputs_dict["pixel_values"].shape
-                inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, height, width), dtype=tf.int32)
+                inputs_dict["labels"] = tf.zeros((self.model_tester.batch_size, height, width), dtype=tf.int64)
             elif model_class.__name__.endswith("ForCTC"):
                 # When we have enough CTC models for an AutoClass, we should use their mapping instead of name checks
                 inputs_dict["labels"] = tf.zeros(
-                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int32
+                    (self.model_tester.batch_size, self.model_tester.seq_length), dtype=tf.int64
                 )
 
         return inputs_dict
@@ -470,8 +470,8 @@ class TFModelTesterMixin:
                 # (see https://github.com/huggingface/transformers/issues/14859)
                 # attention_mask = tf.concat(
                 #     [
-                #         tf.zeros_like(attention_mask[:1], dtype=tf.int32),
-                #         tf.cast(attention_mask[1:], dtype=tf.int32)
+                #         tf.zeros_like(attention_mask[:1], dtype=tf.int64),
+                #         tf.cast(attention_mask[1:], dtype=tf.int64)
                 #     ],
                 #     axis=0
                 # )
@@ -1881,7 +1881,7 @@ def ids_tensor(shape, vocab_size, rng=None, name=None, dtype=None):
     for _ in range(total_dims):
         values.append(rng.randint(0, vocab_size - 1))
 
-    output = tf.constant(values, shape=shape, dtype=dtype if dtype is not None else tf.int32)
+    output = tf.constant(values, shape=shape, dtype=dtype if dtype is not None else tf.int64)
 
     return output
 
@@ -2039,7 +2039,7 @@ class UtilsFunctionsTest(unittest.TestCase):
 
         # Same outcome regardless of the boolean mask here
         masked_tokens = random.randint(0, n_tokens)
-        boolean_mask = tf.convert_to_tensor([[1] * (n_tokens - masked_tokens) + [0] * masked_tokens], dtype=tf.int32)
+        boolean_mask = tf.convert_to_tensor([[1] * (n_tokens - masked_tokens) + [0] * masked_tokens], dtype=tf.int64)
 
         # We can randomly mask a random numerical input OUTSIDE XLA
         numerical_mask = (1.0 - tf.cast(boolean_mask, dtype=tf.float32)) * large_penalty

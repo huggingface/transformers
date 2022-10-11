@@ -342,7 +342,7 @@ class TFFlaubertModelIntegrationTest(unittest.TestCase):
 
         input_ids = tf.convert_to_tensor(
             [[0, 158, 735, 2592, 1424, 6727, 82, 1]],
-            dtype=tf.int32,
+            dtype=tf.int64,
         )  # "J'aime flaubert !"
 
         output = model(input_ids)[0]

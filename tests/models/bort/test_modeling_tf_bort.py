@@ -36,7 +36,7 @@ class TFBortIntegrationTest(unittest.TestCase):
 
         input_ids = tf.convert_to_tensor(
             [[0, 18077, 4082, 7804, 8606, 6195, 2457, 3321, 11, 10489, 16, 269, 2579, 328, 2]],
-            dtype=tf.int32,
+            dtype=tf.int64,
         )  # Schloß Nymphenburg in Munich is really nice!
 
         output = model(input_ids)["last_hidden_state"]

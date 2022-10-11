@@ -36,7 +36,7 @@ class TFCamembertModelIntegrationTest(unittest.TestCase):
 
         input_ids = tf.convert_to_tensor(
             [[5, 121, 11, 660, 16, 730, 25543, 110, 83, 6]],
-            dtype=tf.int32,
+            dtype=tf.int64,
         )  # J'aime le camembert !"
 
         output = model(input_ids)["last_hidden_state"]

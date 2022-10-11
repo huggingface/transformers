@@ -176,8 +176,8 @@ class TFGPTJModelTester:
 
         # create attention mask
         half_seq_length = self.seq_length // 2
-        attn_mask_begin = tf.ones((self.batch_size, half_seq_length), dtype=tf.int32)
-        attn_mask_end = tf.zeros((self.batch_size, self.seq_length - half_seq_length), dtype=tf.int32)
+        attn_mask_begin = tf.ones((self.batch_size, half_seq_length), dtype=tf.int64)
+        attn_mask_end = tf.zeros((self.batch_size, self.seq_length - half_seq_length), dtype=tf.int64)
         attn_mask = tf.concat([attn_mask_begin, attn_mask_end], axis=1)
 
         # first forward pass
@@ -197,7 +197,7 @@ class TFGPTJModelTester:
 
         # append to next input_ids and attn_mask
         next_input_ids = tf.concat([input_ids, next_tokens], axis=-1)
-        attn_mask = tf.concat([attn_mask, tf.ones((shape_list(attn_mask)[0], 1), dtype=tf.int32)], axis=1)
+        attn_mask = tf.concat([attn_mask, tf.ones((shape_list(attn_mask)[0], 1), dtype=tf.int64)], axis=1)
 
         # get two different outputs
         output_from_no_past = model(next_input_ids, attention_mask=attn_mask)["last_hidden_state"]
@@ -365,7 +365,7 @@ class TFGPTJModelTest(TFModelTesterMixin, TFCoreModelTesterMixin, unittest.TestC
 class TFGPTJModelLanguageGenerationTest(unittest.TestCase):
     def test_lm_generate_gptj(self):
         model = TFGPTJForCausalLM.from_pretrained("EleutherAI/gpt-j-6B", from_pt=True)
-        input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int32)  # The dog
+        input_ids = tf.convert_to_tensor([[464, 3290]], dtype=tf.int64)  # The dog
         # fmt: off
         # The dog is a man's best friend. It is a loyal companion, and it is a friend
         expected_output_ids = [464, 3290, 318, 257, 582, 338, 1266, 1545, 13, 632, 318, 257, 9112, 15185, 11, 290, 340, 318, 257, 1545]

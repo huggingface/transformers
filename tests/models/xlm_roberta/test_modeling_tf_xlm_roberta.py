@@ -35,8 +35,8 @@ class TFFlaubertModelIntegrationTest(unittest.TestCase):
         model = TFXLMRobertaModel.from_pretrained("jplu/tf-xlm-roberta-base")
 
         features = {
-            "input_ids": tf.convert_to_tensor([[0, 2646, 10269, 83, 99942, 2]], dtype=tf.int32),  # "My dog is cute"
-            "attention_mask": tf.convert_to_tensor([[1, 1, 1, 1, 1, 1]], dtype=tf.int32),
+            "input_ids": tf.convert_to_tensor([[0, 2646, 10269, 83, 99942, 2]], dtype=tf.int64),  # "My dog is cute"
+            "attention_mask": tf.convert_to_tensor([[1, 1, 1, 1, 1, 1]], dtype=tf.int64),
         }
 
         output = model(features)["last_hidden_state"]
