@@ -5689,6 +5689,13 @@ class XLMRobertaModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class XLMRobertaPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 XLM_ROBERTA_XL_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 
