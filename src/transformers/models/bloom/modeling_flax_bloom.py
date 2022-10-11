@@ -282,7 +282,6 @@ class FlaxBloomAttention(nn.Module):
             dropout_rate=self.config.attention_dropout,
             deterministic=deterministic,
             dtype=attention_dtype,
-            precision=None,
         )
 
         # Cast back in the original dtype if the native dtype is not fp32
@@ -606,13 +605,11 @@ class FlaxBloomModule(nn.Module):
     def setup(self):
         self.embed_dim = self.config.hidden_size
 
-        embedding_init = jax.nn.initializers.normal(stddev=self.config.initializer_range)
-
         # word embeddings (no positional embedding layer)
         self.word_embeddings = nn.Embed(
             self.config.vocab_size,
             self.embed_dim,
-            embedding_init=embedding_init,
+            embedding_init=jax.nn.initializers.normal(stddev=self.config.initializer_range),
             dtype=self.dtype,
         )
 
@@ -638,8 +635,6 @@ class FlaxBloomModule(nn.Module):
         inputs_embeds = self.word_embeddings(input_ids)
         # do post-embedding layernorm
         hidden_states = self.word_embeddings_layernorm(inputs_embeds)
-
-        batch_size, curr_seq_len, _ = hidden_states.shape
 
         # build alibi depending on `attention_mask`
         alibi = build_alibi_tensor_flax(attention_mask, self.config.n_head, hidden_states.dtype)
