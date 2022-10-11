@@ -89,6 +89,7 @@ from .import_utils import (
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
+    is_bs4_available,
     is_coloredlogs_available,
     is_datasets_available,
     is_detectron2_available,
@@ -97,7 +98,9 @@ from .import_utils import (
     is_ftfy_available,
     is_in_notebook,
     is_ipex_available,
+    is_jumanpp_available,
     is_librosa_available,
+    is_more_itertools_available,
     is_ninja_available,
     is_onnx_available,
     is_pandas_available,
@@ -110,6 +113,7 @@ from .import_utils import (
     is_pytorch_quantization_available,
     is_rjieba_available,
     is_sacremoses_available,
+    is_safetensors_available,
     is_sagemaker_dp_enabled,
     is_sagemaker_mp_enabled,
     is_scatter_available,
@@ -119,6 +123,7 @@ from .import_utils import (
     is_soundfile_availble,
     is_spacy_available,
     is_speech_available,
+    is_sudachi_available,
     is_tensorflow_probability_available,
     is_tensorflow_text_available,
     is_tf2onnx_available,
@@ -155,6 +160,8 @@ TF2_WEIGHTS_INDEX_NAME = "tf_model.h5.index.json"
 TF_WEIGHTS_NAME = "model.ckpt"
 FLAX_WEIGHTS_NAME = "flax_model.msgpack"
 FLAX_WEIGHTS_INDEX_NAME = "flax_model.msgpack.index.json"
+SAFE_WEIGHTS_NAME = "model.safetensors"
+SAFE_WEIGHTS_INDEX_NAME = "model.safetensors.index.json"
 CONFIG_NAME = "config.json"
 FEATURE_EXTRACTOR_NAME = "preprocessor_config.json"
 MODEL_CARD_NAME = "modelcard.json"

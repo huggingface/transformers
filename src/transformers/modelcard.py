@@ -26,6 +26,7 @@ from typing import Any, Dict, List, Optional, Union
 import requests
 import yaml
 from huggingface_hub import model_info
+from huggingface_hub.utils import HFValidationError
 
 from . import __version__
 from .models.auto.modeling_auto import (
@@ -378,7 +379,7 @@ class TrainingSummary:
                 for tag in info.tags:
                     if tag.startswith("license:"):
                         self.license = tag[8:]
-            except requests.exceptions.HTTPError:
+            except (requests.exceptions.HTTPError, HFValidationError):
                 pass
 
     def create_model_index(self, metric_mapping):

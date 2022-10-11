@@ -1300,7 +1300,7 @@ class GroupViTVisionModel(GroupViTPreTrainedModel):
         >>> import requests
         >>> from transformers import AutoProcessor, GroupViTVisionModel
 
-        >>> processor = AutoPProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
+        >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
         >>> model = GroupViTVisionModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

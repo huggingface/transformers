@@ -15,11 +15,13 @@
 """Convert ViT MSN checkpoints from the original repository: https://github.com/facebookresearch/msn"""
 
 import argparse
+import json
 
 import torch
 from PIL import Image
 
 import requests
+from huggingface_hub import hf_hub_download
 from transformers import ViTFeatureExtractor, ViTMSNConfig, ViTMSNModel
 from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
@@ -146,6 +148,13 @@ def rename_key(dct, old, new):
 def convert_vit_msn_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     config = ViTMSNConfig()
     config.num_labels = 1000
+
+    repo_id = "datasets/huggingface/label-files"
+    filename = "imagenet-1k-id2label.json"
+    id2label = json.load(open(hf_hub_download(repo_id, filename), "r"))
+    id2label = {int(k): v for k, v in id2label.items()}
+    config.id2label = id2label
+    config.label2id = {v: k for k, v in id2label.items()}
 
     if "s16" in checkpoint_url:
         config.hidden_size = 384
