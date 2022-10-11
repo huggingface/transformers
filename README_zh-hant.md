@@ -80,7 +80,8 @@ user: 使用者
         <a href="https://github.com/huggingface/transformers/">English</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/README_zh-hans.md">简体中文</a> |
         <b>繁體中文</b> |
-        <a href="https://github.com/huggingface/transformers/blob/main/README_ko.md">한국어</a>
+        <a href="https://github.com/huggingface/transformers/blob/main/README_ko.md">한국어</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/README_es.md">Español</a> 
     <p>
 </h4>
 
