@@ -24,7 +24,7 @@ The abstract from the paper is the following:
 
 Tips:
 
-- One can use the [`AutoProcessor`] and [`AutoTokenizer`] APIs for preparing data for the model. Behind the scenes, this will instantiate a [`LayoutLMv3Processor`] and ['LayoutLMv3TokenizerFast`].
+- One can use the [`AutoTokenizer`] API for preparing data for the model. Behind the scenes, this will instantiate a ['LayoutLMv3TokenizerFast`], which uses the Byte Pair Encoding (BPE) algorithm for tokenization.
 - Demo notebooks for LiLT can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/LiLT).
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
