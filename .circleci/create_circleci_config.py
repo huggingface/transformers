@@ -192,7 +192,6 @@ flax_job = CircleCIJob(
 
 pipelines_torch_job = CircleCIJob(
     "pipelines_torch",
-    additional_env={"RUN_PIPELINE_TESTS": True},
     install_steps=[
         "sudo apt-get -y update && sudo apt-get install -y libsndfile1-dev espeak-ng",
         "pip install --upgrade pip",
@@ -201,12 +200,11 @@ pipelines_torch_job = CircleCIJob(
         "pip install https://github.com/kpu/kenlm/archive/master.zip",
     ],
     pytest_options={"rA": None},
-    marker="is_pipeline_test",
+    tests_to_run="tests/pipelines/"
 )
 
 
 pipelines_tf_job = CircleCIJob(
-    "pipelines_tf",
     additional_env={"RUN_PIPELINE_TESTS": True},
     install_steps=[
         "pip install --upgrade pip",
@@ -214,7 +212,7 @@ pipelines_tf_job = CircleCIJob(
         "pip install tensorflow_probability",
     ],
     pytest_options={"rA": None},
-    marker="is_pipeline_test",
+    tests_to_run="tests/pipelines/"
 )
 
 
@@ -321,8 +319,6 @@ REGULAR_TESTS = [
     torch_job,
     tf_job,
     flax_job,
-    pipelines_torch_job,
-    pipelines_tf_job,
     custom_tokenizers_job,
     hub_job,
     onnx_job,
@@ -333,13 +329,26 @@ EXAMPLES_TESTS = [
     examples_tensorflow_job,
     examples_flax_job,
 ]
+PIPELINE_TESTS = [
+    pipelines_torch_job,
+    pipelines_tf_job,
+]
 
 
 def create_circleci_config(folder=None):
     if folder is None:
         folder = os.getcwd()
     jobs = []
-    test_file = os.path.join(folder, "test_list.txt")
+    all_test_file = os.path.join(folder, "test_list.txt")
+    if os.path.exists(all_test_file):
+        with open(all_test_file) as f:
+            all_test_list = f.read()
+    else:
+        all_test_list = []
+    if len(all_test_list) > 0:
+        jobs.extend(PIPELINE_TESTS)
+
+    test_file = os.path.join(folder, "filtered_test_list.txt")
     if os.path.exists(test_file):
         with open(test_file) as f:
             test_list = f.read()
