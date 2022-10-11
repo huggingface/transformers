@@ -752,7 +752,7 @@ class FlaubertWithLMHeadModel(FlaubertPreTrainedModel):
     """,
     FLAUBERT_START_DOCSTRING,
 )
-# Copied transformers.models.xlm.modeling_xlm.XLMForSequenceClassification with XLM->Flaubert
+# Copied transformers.models.xlm.modeling_xlm.XLMForSequenceClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
