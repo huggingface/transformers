@@ -31,13 +31,22 @@ from ...modeling_outputs import (
     Seq2SeqModelOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils import (
+    add_code_sample_docstrings,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    logging,
+    replace_return_docstrings,
+)
 from .configuration_whisper import WhisperConfig
 
 
 logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "WhisperConfig"
+_CHECKPOINT_FOR_DOC = "openai/whisper-tiny"
+_PROCESSOR_FOR_DOC = "openai/whisper-tiny"
+_EXPECTED_OUTPUT_SHAPE = [1, 2, 512]
 
 
 WHISPER_PRETRAINED_MODEL_ARCHIVE_LIST = [
@@ -982,7 +991,15 @@ class WhisperModel(WhisperPreTrainedModel):
         return self.decoder
 
     @add_start_docstrings_to_model_forward(WHISPER_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    @add_code_sample_docstrings(
+        processor_class=_PROCESSOR_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=Seq2SeqModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+        modality="audio",
+    )
+    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_features=None,
