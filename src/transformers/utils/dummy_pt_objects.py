@@ -5637,6 +5637,13 @@ class XLMProphetNetModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class XLMProphetNetPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST = None
 
 

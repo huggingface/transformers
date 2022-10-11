@@ -2113,6 +2113,7 @@ else:
             "XLMProphetNetForCausalLM",
             "XLMProphetNetForConditionalGeneration",
             "XLMProphetNetModel",
+            "XLMProphetNetPreTrainedModel",
         ]
     )
     _import_structure["models.xlm_roberta"].extend(
@@ -4796,6 +4797,7 @@ if TYPE_CHECKING:
             XLMProphetNetForCausalLM,
             XLMProphetNetForConditionalGeneration,
             XLMProphetNetModel,
+            XLMProphetNetPreTrainedModel,
         )
         from .models.xlm_roberta import (
             XLM_ROBERTA_PRETRAINED_MODEL_ARCHIVE_LIST,
