@@ -19,6 +19,7 @@ import dataclasses
 import json
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
+import shutil
 
 import numpy as np
 from tqdm.auto import tqdm
@@ -562,6 +563,20 @@ class EarlyStoppingCallback(TrainerCallback):
         assert (
             args.evaluation_strategy != IntervalStrategy.NO
         ), "EarlyStoppingCallback requires IntervalStrategy of steps or epoch"
+
+    def on_train_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+
+        checkpoints_sorted = state._sorted_checkpoints(use_mtime=True, output_dir=state.get_run_dir())
+
+        if (
+            state.best_model_checkpoint is not None
+            and state.args.save_total_limit == 1
+            and checkpoints_sorted[-1] != self.state.best_model_checkpoint
+        ):
+            checkpoints_to_be_deleted = checkpoints_sorted[-1]
+            for checkpoint in checkpoints_to_be_deleted:
+                logger.info(f"Deleting older checkpoint [{checkpoint}] due to args.save_total_limit")
+                shutil.rmtree(checkpoint)
 
     def on_evaluate(self, args, state, control, metrics, **kwargs):
         metric_to_check = args.metric_for_best_model
