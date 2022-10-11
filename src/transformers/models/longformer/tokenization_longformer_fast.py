@@ -86,6 +86,7 @@ PRETRAINED_POSITIONAL_EMBEDDINGS_SIZES = {
     "allenai/longformer-large-4096-extra.pos.embd.only": 4096,
 }
 
+
 # Copied from transformers.models.roberta.tokenization_roberta_fast.RobertaTokenizerFast with roberta-base->allenai/longformer-base-4096, RoBERTa->Longformer all-casing, Roberta->Longformer, RobertaTokenizer->LongformerTokenizer
 class LongformerTokenizerFast(PreTrainedTokenizerFast):
     """
