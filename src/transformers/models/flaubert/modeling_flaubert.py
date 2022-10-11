@@ -1092,7 +1092,7 @@ class FlaubertForQuestionAnsweringOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-# Copied from transformer.models.xlm.modeling_xlm.XLMForQuestionAnswering with XLM->Flaubert
+# Copied from transformer.models.xlm.modeling_xlm.XLMForQuestionAnswering with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForQuestionAnswering(FlaubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
