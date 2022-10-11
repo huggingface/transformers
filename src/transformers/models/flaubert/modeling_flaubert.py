@@ -297,7 +297,7 @@ FLAUBERT_INPUTS_DOCSTRING = r"""
     FLAUBERT_START_DOCSTRING,
 )
 # Copied from transformers.models.xlm.modeling_xlm.XLMPredLayer with XLM->Flaubert
-class FlaubertPredLayer(nn.module):
+class FlaubertPredLayer(nn.Module):
     """
     Prediction layer (cross_entropy or adaptive_softmax).
     """
@@ -383,8 +383,6 @@ class FlaubertPreTrainedModel(PreTrainedModel):
 class FlaubertModel(FlaubertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
 
-    config_class = FlaubertConfig
-
     def __init__(self, config):  # , dico, is_encoder, with_output):
         super().__init__(config)
 
@@ -461,13 +459,6 @@ class FlaubertModel(FlaubertPreTrainedModel):
             "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
         )
 
-    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
-    @add_code_sample_docstrings(
-        processor_class=_TOKENIZER_FOR_DOC,
-        checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
-        config_class=_CONFIG_FOR_DOC,
-    )
     # Copied from transformers.models.xlm.modeling_xlm.XLMModel.get_input_embeddings
     def get_input_embeddings(self):
         return self.embeddings
@@ -485,6 +476,13 @@ class FlaubertModel(FlaubertPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.attentions[layer].prune_heads(heads)
 
+    @add_start_docstrings_to_model_forward(FLAUBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        processor_class=_TOKENIZER_FOR_DOC,
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=BaseModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
