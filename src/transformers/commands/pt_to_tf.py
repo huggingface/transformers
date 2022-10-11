@@ -224,9 +224,13 @@ class PTtoTFCommand(BaseTransformersCLICommand):
         if "input_features" in model_forward_signature:
             feature_extractor_signature = inspect.signature(processor.feature_extractor).parameters
             # Pad to the largest input length by default but take feature extractor default
-            # padding value if it exists e.g. "max_length" and is not False
+            # padding value if it exists e.g. "max_length" and is not False or None
             if "padding" in feature_extractor_signature:
-                padding_strategy = feature_extractor_signature["padding"].default or True
+                default_strategy = feature_extractor_signature["padding"].default
+                if default_strategy is not False and default_strategy is not None:
+                    padding_strategy = default_strategy
+                else:
+                    padding_strategy = True
             else:
                 padding_strategy = True
             processor_inputs.update({"audio": _get_audio_input(), "padding": padding_strategy})
