@@ -999,7 +999,6 @@ class WhisperModel(WhisperPreTrainedModel):
         expected_output=_EXPECTED_OUTPUT_SHAPE,
         modality="audio",
     )
-    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_features=None,
@@ -1016,26 +1015,6 @@ class WhisperModel(WhisperPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
     ):
-        r"""
-        Returns:
-
-        Example:
-
-         ```python
-         >>> import torch
-         >>> from transformers import WhisperModel, WhisperFeatureExtractor
-         >>> from datasets import load_dataset
-
-         >>> model = WhisperModel.from_pretrained("openai/whisper-base")
-         >>> feature_extractor = WhisperFeatureExtractor.from_pretrained("openai/whisper-base")
-         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
-         >>> input_features = inputs.input_features
-         >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
-         >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
-         >>> list(last_hidden_state.shape)
-         [1, 2, 512]
-         ```"""
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
