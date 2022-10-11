@@ -24,8 +24,23 @@ The abstract from the paper is the following:
 
 Tips:
 
-- One can use the [`AutoTokenizer`] API for preparing data for the model.
+- To combine the Language-Independent Layout Transformer with a new RoBERTa checkpoint from the [hub](https://huggingface.co/models?search=roberta), refer to [this guide](https://github.com/jpWang/LiLT#or-generate-your-own-checkpoint-optional).
+The script will result in `config.json` and `pytorch_model.bin` files being stored locally. After doing this, one can do the following (assuming you're logged in with your HuggingFace account):
+
+```
+from transformers import LiltModel
+
+model = LiltModel.from_pretrained("path_to_your_files")
+model.push_to_hub("name_of_repo_on_the_hub")
+```
+
+- When preparing data for the model, make sure to use the appropriate tokenization algorithm. E.g. when combining an English RoBERTa model with LilT, one should use the Byte-Pair Encoding (BPE) algorithm.
 - Demo notebooks for LiLT can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/LiLT).
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/lilt_architecture.jpg"
+alt="drawing" width="600"/>
+
+<small> LiLT architecture. Taken from the <a href="https://arxiv.org/abs/2202.13669">original paper</a>. </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/jpwang/lilt).
