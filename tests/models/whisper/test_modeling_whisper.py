@@ -991,10 +991,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
-            ' Mr. Quilter is the apostle of the middle classes, and we are glad to',
+            " Mr. Quilter is the apostle of the middle classes and we are glad to",
             " Nor is Mr. Quilter's manner less interesting than his matter.",
             " He tells us that at this festive season of the year, with Christmas and roast beef",
-            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all,"
+            " He has grave doubts whether Sir Frederick Layton's work is really Greek after all,",
         ]
         # fmt: on
 
