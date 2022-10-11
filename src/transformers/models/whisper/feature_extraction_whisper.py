@@ -221,7 +221,7 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         **kwargs
     ) -> BatchFeature:
         """
-        Main method to featurize and prepare for the model one or several sequence(s). sequences.
+        Main method to featurize and prepare for the model one or several sequence(s).
 
         Args:
             raw_speech (`np.ndarray`, `List[float]`, `List[np.ndarray]`, `List[List[float]]`):
@@ -255,7 +255,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
-                `sampling_rate` at the forward call to prevent silent errors.
+                `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
+                pipeline.
             padding_value (`float`, defaults to 0.0):
                 The value that is used to fill the padding values / vectors.
         """
