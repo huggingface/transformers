@@ -576,14 +576,12 @@ class SpeechT5SpeechEncoderPrenet(nn.Module):
 
         return hidden_states, attention_mask
 
+    # Copied from transformers.models.unispeech.modeling_unispeech.UniSpeechPreTrainedModel._get_feat_extract_output_lengths
     def _get_feature_vector_attention_mask(self, feature_vector_length: int, attention_mask: torch.LongTensor):
         # Effectively attention_mask.sum(-1), but not inplace to be able to run
         # on inference mode.
         non_padded_lengths = attention_mask.cumsum(dim=-1)[:, -1]
-
-        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths)
-        output_lengths = output_lengths.to(torch.long)
-
+        output_lengths = self._get_feat_extract_output_lengths(non_padded_lengths).to(torch.long)
         batch_size = attention_mask.shape[0]
 
         attention_mask = torch.zeros(
@@ -1866,14 +1864,14 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
 
     def get_input_embeddings(self):
         if isinstance(self.encoder, SpeechT5TextEncoder):
-           return self.encoder.get_input_embeddings()
+            return self.encoder.get_input_embeddings()
         if isinstance(self.decoder, SpeechT5TextDecoder):
             return self.decoder.get_input_embeddings()
         return None
 
     def set_input_embeddings(self, value):
         if isinstance(self.encoder, SpeechT5TextEncoder):
-           self.encoder.set_input_embeddings(value)
+            self.encoder.set_input_embeddings(value)
         if isinstance(self.decoder, SpeechT5TextDecoder):
             self.decoder.set_input_embeddings(value)
 
@@ -1948,11 +1946,8 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # TODO: put the downsampled attention mask into the output from the encoder
-        # (change BaseModelOutput to a different class), so it gets added to the
-        # returned encoder_outputs and we don't have to downsample here
-        # downsample encoder attention mask
-        if attention_mask is not None:
+        # downsample encoder attention mask (only for speech-to-text model)
+        if attention_mask is not None and isinstance(self.encoder, SpeechT5SpeechEncoder):
             encoder_attention_mask = self.encoder.prenet._get_feature_vector_attention_mask(
                 encoder_outputs[0].shape[1], attention_mask
             )
