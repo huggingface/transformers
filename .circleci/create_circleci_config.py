@@ -205,7 +205,7 @@ pipelines_torch_job = CircleCIJob(
 
 
 pipelines_tf_job = CircleCIJob(
-    additional_env={"RUN_PIPELINE_TESTS": True},
+    "pipelines_tf",
     install_steps=[
         "pip install --upgrade pip",
         "pip install .[sklearn,tf-cpu,testing,sentencepiece]",
