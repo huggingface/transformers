@@ -178,8 +178,16 @@ class ANY:
 class PipelineTestCaseMeta(type):
     def __new__(mcs, name, bases, dct):
         def gen_test(ModelClass, checkpoint, tiny_config, tokenizer_class, feature_extractor_class):
-            @skipIf(tiny_config is None, "TinyConfig does not exist")
-            @skipIf(checkpoint is None, "checkpoint does not exist")
+            @skipIf(
+                tiny_config is None,
+                "TinyConfig does not exist, make sure that you defined a `_CONFIG_FOR_DOC` variable in the modeling"
+                " file",
+            )
+            @skipIf(
+                checkpoint is None,
+                "checkpoint does not exist, make sure that you defined a `_CHECKPOINT_FOR_DOC` variable in the"
+                " modeling file",
+            )
             def test(self):
                 if ModelClass.__name__.endswith("ForCausalLM"):
                     tiny_config.is_encoder_decoder = False
