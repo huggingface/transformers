@@ -223,14 +223,13 @@ custom_tokenizers_job = CircleCIJob(
         "sudo apt-get -y update && sudo apt-get install -y cmake",
         {
             "name": "install jumanpp",
-            "command": [
-                "wget https://github.com/ku-nlp/jumanpp/releases/download/v2.0.0-rc3/jumanpp-2.0.0-rc3.tar.xz",
-                "tar xvf jumanpp-2.0.0-rc3.tar.xz",
-                "mkdir jumanpp-2.0.0-rc3/bld",
-                "cd jumanpp-2.0.0-rc3/bld",
-                "sudo cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local",
-                "sudo make install",
-            ],
+            "command":
+                "wget https://github.com/ku-nlp/jumanpp/releases/download/v2.0.0-rc3/jumanpp-2.0.0-rc3.tar.xz "
+                "tar xvf jumanpp-2.0.0-rc3.tar.xz "
+                "mkdir jumanpp-2.0.0-rc3/bld "
+                "cd jumanpp-2.0.0-rc3/bld "
+                "sudo cmake .. -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr/local "
+                "sudo make install ",
         },
         "pip install --upgrade pip",
         "pip install .[ja,testing,sentencepiece,jieba,spacy,ftfy,rjieba]",
