@@ -261,7 +261,7 @@ class FlaxBloomConversionTest(unittest.TestCase):
         num_attention_heads = 16
 
         alibi = build_alibi_tensor(torch.from_numpy(single_attention_mask), num_attention_heads, torch.float16)
-        alibi_flax = build_alibi_tensor_flax(single_attention_mask, num_attention_heads, dtype)[0]
+        alibi_flax = build_alibi_tensor_flax(single_attention_mask, num_attention_heads, dtype, return_torch_like=True)
 
         self.assertTrue(jnp.equal(alibi_flax, alibi.numpy()).all())
 
@@ -272,7 +272,9 @@ class FlaxBloomConversionTest(unittest.TestCase):
         single_attention_mask = jnp.array([[1, 1, 1, 1, 1]])
         num_attention_heads = 16
 
-        alibi_padd = build_alibi_tensor_flax(batch_attention_mask, num_attention_heads, dtype)
-        alibi_simple = build_alibi_tensor_flax(single_attention_mask, num_attention_heads, dtype)
+        alibi_padd = build_alibi_tensor_flax(batch_attention_mask, num_attention_heads, dtype, return_torch_like=True)
+        alibi_simple = build_alibi_tensor_flax(
+            single_attention_mask, num_attention_heads, dtype, return_torch_like=True
+        )
 
-        self.assertTrue(jnp.equal(alibi_simple[:, :, :, :2], alibi_padd[1][:, :, 3:]).all())
+        self.assertTrue(jnp.equal(alibi_simple[:, :, :2], alibi_padd[16:, :, 3:]).all())
