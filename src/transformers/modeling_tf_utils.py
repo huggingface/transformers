@@ -2059,12 +2059,23 @@ class TFPreTrainedModel(tf.keras.Model, TFModelUtilsMixin, TFGenerationMixin, Pu
         Return:
             `tf.keras.layers.Embedding`: Resized Embedding layer.
         """
+
+        # Get the initialization range for the embeddings
+        init_range = 0.02  # default value
+        potential_initialization_variable_names = [
+            "initializer_range",  # most common
+            "initializer_factor",  # e.g. T5
+            "init_std",  # e.g BART
+        ]
+        for var_name in potential_initialization_variable_names:
+            if hasattr(self.config, var_name):
+                init_range = getattr(self.config, var_name)
+
         # Get a new (initialized) embeddings layer
-        init_range = getattr(self.config, "initializer_range", 0.02)
         new_embeddings = tf.keras.layers.Embedding(
             input_dim=new_num_tokens,
             output_dim=old_embeddings.output_dim,
-            embeddings_initializer=get_initializer(init_range),
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=init_range),
             name=old_embeddings.embeddings.name[:-13],  # exact same scoped name except "/embeddings:0"
         )
         new_embeddings(tf.constant([[0]]))
