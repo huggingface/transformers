@@ -38,9 +38,7 @@ from .configuration_lilt import LiltConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "SCUT-DLVCLab/lilt-roberta-en-base"
 _CONFIG_FOR_DOC = "LiltConfig"
-_TOKENIZER_FOR_DOC = "RobertaTokenizer"
 
 LILT_PRETRAINED_MODEL_ARCHIVE_LIST = [
     "SCUT-DLVCLab/lilt-roberta-en-base",
@@ -1077,7 +1075,8 @@ class LiltForSequenceClassification(LiltPreTrainedModel):
         >>> encoding = tokenizer(words, boxes=boxes, return_tensors="pt")
 
         >>> outputs = model(**encoding)
-        >>> logits = outputs.logits
+        >>> predicted_class_idx = outputs.logits.argmax(-1).item()
+        >>> predicted_class = model.config.id2label[predicted_class_idx]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1196,7 +1195,7 @@ class LiltForTokenClassification(LiltPreTrainedModel):
         >>> encoding = tokenizer(words, boxes=boxes, return_tensors="pt")
 
         >>> outputs = model(**encoding)
-        >>> logits = outputs.logits
+        >>> predicted_class_indices = outputs.logits.argmax(-1)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -1326,7 +1325,12 @@ class LiltForQuestionAnswering(LiltPreTrainedModel):
         >>> encoding = tokenizer(words, boxes=boxes, return_tensors="pt")
 
         >>> outputs = model(**encoding)
-        >>> start_logits, end_logits = outputs.start_logits, outputs.end_logits
+
+        >>> answer_start_index = outputs.start_logits.argmax()
+        >>> answer_end_index = outputs.end_logits.argmax()
+
+        >>> predict_answer_tokens = encoding.input_ids[0, answer_start_index : answer_end_index + 1]
+        >>> predicted_answer = tokenizer.decode(predict_answer_tokens)
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
