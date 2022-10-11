@@ -16,7 +16,6 @@
 
 
 import random
-from contextlib import nullcontext
 from typing import Optional, Tuple, Union
 
 import numpy as np
@@ -41,6 +40,7 @@ from ...modeling_tf_utils import (
 )
 from ...tf_utils import shape_list, stable_softmax
 from ...utils import (
+    ContextManagers,
     add_code_sample_docstrings,
     add_end_docstrings,
     add_start_docstrings,
@@ -741,11 +741,10 @@ class TFBartEncoder(tf.keras.layers.Layer):
             # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
             # is used with a name ending in `/`, that name replaces the current name scope.
             # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            context = []
             if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context_manager = tf.name_scope(self.embed_tokens.load_weight_prefix + "/")
-            else:
-                context_manager = nullcontext()
-            with context_manager:
+                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
+            with ContextManagers(context):
                 # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
                 # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
                 tf.debugging.assert_less(
@@ -945,11 +944,10 @@ class TFBartDecoder(tf.keras.layers.Layer):
             # scope, so that its weights are registered with the desired name for loading/storing. When `tf.name_scope`
             # is used with a name ending in `/`, that name replaces the current name scope.
             # (embeddings with tf.name_scope: self.embed_tokens.load_weight_prefix/self.embed_tokens.name/embeddings:0)
+            context = []
             if hasattr(self.embed_tokens, "load_weight_prefix"):
-                context_manager = tf.name_scope(self.embed_tokens.load_weight_prefix + "/")
-            else:
-                context_manager = nullcontext()
-            with context_manager:
+                context.append(tf.name_scope(self.embed_tokens.load_weight_prefix + "/"))
+            with ContextManagers(context):
                 # Note: tf.gather, on which the embedding layer is based, won't check positive out of bound
                 # indices on GPU, returning zeros instead. This is a dangerous silent behavior.
                 tf.debugging.assert_less(
@@ -1378,8 +1376,6 @@ class TFBartForConditionalGeneration(TFBartPretrainedModel, TFCausalLanguageMode
             return_dict=return_dict,
             training=training,
         )
-        # TODO (joao): the line below is for models with tied embeddings. The previous TFBart had tied embeddings.
-        # The PT Bart does not have tied embeddings. Untie the weights while keeping loading retrocompatibility.
         lm_logits = tf.matmul(outputs[0], self.model.shared.weights, transpose_b=True)
         lm_logits = self.bias_layer(lm_logits)
         masked_lm_loss = None if labels is None else self.hf_compute_loss(labels, lm_logits)
