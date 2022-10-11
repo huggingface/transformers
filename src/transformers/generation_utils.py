@@ -1980,14 +1980,12 @@ class GenerationMixin:
             warnings.warn(
                 "You are calling .generate() with the `input_ids` being on a device type different"
                 f" than your model's device. `input_ids` is on {input_ids.device.type}, whereas the model"
-                f" is on {self.device.type}. You may experience unexpected behaviors."
+                f" is on {self.device.type}. You may experience unexpected behaviors or slower generation."
                 " Please make sure that you have put `input_ids` to the"
                 " correct GPU by calling for example input_ids = input_ids.to('cuda') before"
                 " running `.generate()`.",
                 UserWarning,
             )
-            # retrieve the first device for accelerate compatibility - self.device should return the first device
-            input_ids = input_ids.to(self.device)
 
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()

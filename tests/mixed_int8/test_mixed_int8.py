@@ -107,21 +107,6 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         self.assertEqual(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
-    def test_generate_sample(self):
-        r"""
-        Test that the generation works correctly with no expected behaviors when running generate using `do_sample=True`.
-
-        Related issues:
-            - https://github.com/huggingface/transformers/issues/19445
-            - https://github.com/TimDettmers/bitsandbytes/issues/42
-        """
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
-        _ = self.model_8bit.generate(input_ids=encoded_input["input_ids"], max_new_tokens=10, do_sample=True)
-        _ = self.model_8bit.generate(
-            input_ids=encoded_input["input_ids"], max_new_tokens=10, do_sample=True, top_p=0.7
-        )
-        _ = self.model_8bit.generate(input_ids=encoded_input["input_ids"], max_new_tokens=10, do_sample=True, top_k=5)
-
 
 class MixedInt8ModelClassesTest(BaseMixedInt8Test):
     def setUp(self):
