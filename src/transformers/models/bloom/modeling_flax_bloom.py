@@ -549,7 +549,6 @@ class FlaxBloomBlockCollection(nn.Module):
                 length=self.config.num_hidden_layers,
             )(self.config, dtype=self.dtype, use_scan=True, name="FlaxBloomBlockLayers")
 
-    # TODO(sanchit-gandhi): re-write as a `setup` to conform to Transformers JAX/Flax conventions
     def __call__(
         self,
         hidden_states,
