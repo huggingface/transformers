@@ -1355,8 +1355,7 @@ class SpeechT5SpeechEncoder(SpeechT5PreTrainedModel):
 
 class SpeechT5TextEncoder(SpeechT5PreTrainedModel):
     """
-    Wrapper around SpeechT5Encoder that applies SpeechT5TextEncoderPrenet to convert the input_ids to
-    hidden features.
+    Wrapper around SpeechT5Encoder that applies SpeechT5TextEncoderPrenet to convert the input_ids to hidden features.
     """
 
     def __init__(self, config: SpeechT5Config):
@@ -1384,8 +1383,8 @@ class SpeechT5TextEncoder(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
 
-        #TODO: implement this
-        #hidden_states, attention_mask = self.prenet(input_values, attention_mask)
+        # TODO: implement this
+        # hidden_states, attention_mask = self.prenet(input_values, attention_mask)
         hidden_states = input_values
 
         outputs = self.wrapped_encoder(
@@ -1631,7 +1630,8 @@ class SpeechT5Decoder(SpeechT5PreTrainedModel):
 
 class SpeechT5SpeechDecoder(SpeechT5PreTrainedModel):
     """
-    Wrapper around SpeechT5Decoder that applies SpeechT5SpeechDecoderPrenet to convert log-mel filterbanks to hidden features.
+    Wrapper around SpeechT5Decoder that applies SpeechT5SpeechDecoderPrenet to convert log-mel filterbanks to hidden
+    features.
     """
 
     def __init__(self, config: SpeechT5Config):
@@ -1658,8 +1658,8 @@ class SpeechT5SpeechDecoder(SpeechT5PreTrainedModel):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
 
-        #TODO: implement this
-        #decoder_hidden_states = self.prenet(input_values, past_key_values)
+        # TODO: implement this
+        # decoder_hidden_states = self.prenet(input_values, past_key_values)
         decoder_hidden_states = input_values
 
         outputs = self.wrapped_decoder(
@@ -2067,9 +2067,9 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
 
             [What are decoder input IDs?](../glossary#decoder-input-ids)
 
-            SpeechT5 uses the `eos_token_id` as the starting token for `decoder_input_ids`
-            generation. If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input
-            (see `past_key_values`).
+            SpeechT5 uses the `eos_token_id` as the starting token for `decoder_input_ids` generation. If
+            `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
 
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
