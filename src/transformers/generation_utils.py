@@ -1986,8 +1986,8 @@ class GenerationMixin:
                 " running `.generate()`.",
                 UserWarning,
             )
-            first_device = list(self.parameters())[0].device  # retrieve the first device for accelerate compatibility
-            input_ids = input_ids.to(first_device)
+            # retrieve the first device for accelerate compatibility - self.device should return the first device
+            input_ids = input_ids.to(self.device)
 
         # init values
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
