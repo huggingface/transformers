@@ -75,7 +75,7 @@ class TFBlenderbotModelTester:
 
     def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length - 1], self.vocab_size)
-        eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size), 1)
+        eos_tensor = tf.expand_dims(tf.constant([self.eos_token_id] * self.batch_size, dtype=tf.int64), 1)
         input_ids = tf.concat([input_ids, eos_tensor], axis=1)
 
         decoder_input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
