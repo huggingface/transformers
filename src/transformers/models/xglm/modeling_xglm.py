@@ -194,7 +194,7 @@ class XGLMSinusoidalPositionalEmbedding(nn.Module):
         if padding_idx is not None:
             emb[padding_idx, :] = 0
 
-        return emb
+        return emb.to(torch.get_default_dtype())
 
     @torch.no_grad()
     def forward(
@@ -709,8 +709,8 @@ class XGLMModel(XGLMPreTrainedModel):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _expand_mask(encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1])
 
-        # embed positions, cast from float32 to `inputs_embeds.dtype`
-        positions = self.embed_positions(input_ids, inputs_embeds, past_key_values_length).to(inputs_embeds.dtype)
+        # embed positions
+        positions = self.embed_positions(input_ids, inputs_embeds, past_key_values_length)
 
         hidden_states = inputs_embeds + positions
 
