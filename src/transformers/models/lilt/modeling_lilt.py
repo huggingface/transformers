@@ -132,6 +132,8 @@ class LiltTextEmbeddings(nn.Module):
 class LiltLayoutEmbeddings(nn.Module):
     def __init__(self, config):
         super().__init__()
+        # we divide the hidden_size by 6 here as there are 6 different layout embeddings,
+        # namely left_position, upper_position, right_position, lower_position, height, width
         self.x_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size // 6)
         self.y_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size // 6)
         self.h_position_embeddings = nn.Embedding(config.max_2d_position_embeddings, config.hidden_size // 6)

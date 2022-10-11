@@ -75,10 +75,11 @@ class LiltConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
-        channel_shrink_ratio
-            ...
-        max_2d_position_embeddings
-            ...
+        channel_shrink_ratio (`int`, *optional*, defaults to 4):
+            The shrink ratio compared to the `hidden_size` for the channel dimension of the layout embeddings.
+        max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
+            The maximum value that the 2D position embedding might ever be used with. Typically set this to something
+            large just in case (e.g., 1024).
 
     Examples:
 
