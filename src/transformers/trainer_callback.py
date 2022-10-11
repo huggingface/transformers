@@ -17,9 +17,9 @@ Callbacks to use with the Trainer class and customize the training loop.
 """
 import dataclasses
 import json
+import shutil
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
-import shutil
 
 import numpy as np
 from tqdm.auto import tqdm
