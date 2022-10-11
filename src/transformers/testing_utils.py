@@ -14,6 +14,7 @@
 
 import collections
 import contextlib
+import functools
 import inspect
 import logging
 import os
@@ -23,12 +24,13 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from collections.abc import Mapping
 from distutils.util import strtobool
 from io import StringIO
 from pathlib import Path
-from typing import Iterator, List, Union
+from typing import Iterator, List, Optional, Union
 from unittest import mock
 
 import huggingface_hub
@@ -83,8 +85,11 @@ from .utils import (
     is_torchaudio_available,
     is_torchdynamo_available,
     is_vision_available,
+    logging,
 )
 
+
+logger = logging.get_logger(__name__)
 
 SMALL_MODEL_IDENTIFIER = "julien-c/bert-xsmall-dummy"
 DUMMY_UNKNOWN_IDENTIFIER = "julien-c/dummy-unknown"
@@ -1635,3 +1640,36 @@ class RequestCounter:
             self.other_request_count += 1
 
         return self.old_request(method=method, **kwargs)
+
+
+def is_flaky(max_attempts: int = 5, wait_before_retry: Optional[float] = None):
+    """
+    To decorate flaky tests. They will be retried on failures.
+
+    Args:
+        max_attempts (`int`, *optional*, defaults to 5):
+            The maximum number of attempts to retry the flaky test.
+        wait_before_retry (`float`, *optional*):
+            If provided, will wait that number of seconds before retrying the test.
+    """
+
+    def decorator(test_func_ref):
+        @functools.wraps(test_func_ref)
+        def wrapper(*args, **kwargs):
+            retry_count = 1
+
+            while retry_count < max_attempts:
+                try:
+                    return test_func_ref(*args, **kwargs)
+
+                except Exception as err:
+                    logger.error(f"Test failed with {err} at try {retry_count}/{max_attempts}.")
+                    if wait_before_retry is not None:
+                        time.sleep(wait_before_retry)
+                    retry_count += 1
+
+            return test_func_ref(*args, **kwargs)
+
+        return wrapper
+
+    return decorator
