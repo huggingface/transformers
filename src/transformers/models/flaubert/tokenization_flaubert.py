@@ -261,7 +261,8 @@ class FlaubertTokenizer(PreTrainedTokenizer):
             lang2id=lang2id,
             id2lang=id2lang,
             do_lowercase_and_remove_accent=do_lowercase_and_remove_accent,
-            do_lowercase=do_lowercase**kwargs,
+            do_lowercase=do_lowercase,
+            **kwargs,
         )
 
         try:
