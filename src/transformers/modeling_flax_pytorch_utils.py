@@ -114,19 +114,9 @@ def rename_key_and_reshape_tensor(
 
 
 def convert_pytorch_state_dict_to_flax(pt_state_dict, flax_model):
-    try:
-        import torch  # noqa: F401
-    except ImportError:
-        logger.error(
-            "Loading a PyTorch model in Flax, requires both PyTorch and Flax to be installed. Please see"
-            " https://pytorch.org/ and https://flax.readthedocs.io/en/latest/installation.html for installation"
-            " instructions."
-        )
-        raise
-
     # convert pytorch tensor to numpy
     # numpy currently does not support bfloat16, need to go over float32 in this case to not loose precision
-    is_bfloat_16 = all(v.dtype == torch.bfloat16 for v in pt_state_dict.values())
+    is_bfloat_16 = all(v.dtype == torch.bfloat16 for v in pt_state_dict.values())  # noqa: F821
     pt_state_dict = {k: v.numpy() if not is_bfloat_16 else v.float().numpy() for k, v in pt_state_dict.items()}
 
     model_prefix = flax_model.base_model_prefix
