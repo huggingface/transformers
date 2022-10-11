@@ -1184,8 +1184,9 @@ class OPTForQuestionAnswering(OPTPreTrainedModel):
         >>> answer_end_index = outputs.end_logits.argmax()
 
         >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
-        >>> tokenizer.decode(predict_answer_tokens)
-         Henson?
+        >>> predicted = tokenizer.decode(predict_answer_tokens)
+        >>> predicted
+        ' Henson?'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
