@@ -856,7 +856,7 @@ class FlaubertForSequenceClassification(FlaubertPreTrainedModel):
     """,
     FLAUBERT_START_DOCSTRING,
 )
-# Copied from transformers.models.xlm.modeling_xlm.XLMForTokenClassification with XLMModel->FlaubertModel, XLMForTokenClassification->FlaubertForTokenClassification, XLMPreTrainedModel->FlaubertPreTrainedModel, XLM_INPUTS_DOCSTRING->FLAUBERT_INPUTS_DOCSTRING
+# Copied from transformers.models.xlm.modeling_xlm.XLMForTokenClassification with XLM_INPUTS->FLAUBERT_INPUTS,XLM->Flaubert
 class FlaubertForTokenClassification(FlaubertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
