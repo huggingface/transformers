@@ -53,15 +53,21 @@ class QuestionAnsweringTrainer(Trainer):
             self.compute_metrics = compute_metrics
 
         if self.post_process_function is not None and self.compute_metrics is not None:
-            eval_preds = self.post_process_function(eval_examples, eval_dataset, output.predictions)
-            metrics = self.compute_metrics(eval_preds)
+            if self.args.should_save:
+                # Only the main node write the results by default
+                eval_preds = self.post_process_function(eval_examples, eval_dataset, output.predictions)
+                metrics = self.compute_metrics(eval_preds)
 
-            # Prefix all keys with metric_key_prefix + '_'
-            for key in list(metrics.keys()):
-                if not key.startswith(f"{metric_key_prefix}_"):
-                    metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
+                # Prefix all keys with metric_key_prefix + '_'
+                for key in list(metrics.keys()):
+                    if not key.startswith(f"{metric_key_prefix}_"):
+                        metrics[f"{metric_key_prefix}_{key}"] = metrics.pop(key)
+            else:
+                metrics = {}
 
-            self.log(metrics)
+            if self.args.should_log:
+                # Only the main node log the results by default
+                self.log(metrics)
         else:
             metrics = {}
 
