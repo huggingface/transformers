@@ -1053,7 +1053,12 @@ class TFBartMainLayer(tf.keras.layers.Layer):
     def __init__(self, config: BartConfig, load_weight_prefix=None, **kwargs):
         super().__init__(**kwargs)
         self.config = config
-        self.shared = tf.keras.layers.Embedding(config.vocab_size, config.d_model, name="model.shared")
+        self.shared = tf.keras.layers.Embedding(
+            input_dim=config.vocab_size,
+            output_dim=config.d_model,
+            embeddings_initializer=tf.keras.initializers.TruncatedNormal(stddev=self.config.init_std),
+            name="model.shared",
+        )
         # Additional attribute to specify the expected name scope of the layer (for loading/storing weights)
         self.shared.load_weight_prefix = "model.shared" if load_weight_prefix is None else load_weight_prefix
 
