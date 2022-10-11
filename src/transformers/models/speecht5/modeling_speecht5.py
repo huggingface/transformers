@@ -1995,7 +1995,7 @@ class SpeechT5ForConditionalGeneration(SpeechT5PreTrainedModel):
         r"speech_encoder_prenet.embed_positions.weights",
     ]
 
-    def __init__(self, config):
+    def __init__(self, config: SpeechT5Config):
         super().__init__(config)
 
         speech_encoder = SpeechT5SpeechEncoder(config)
@@ -2179,7 +2179,7 @@ class SpeechT5ForCTC(SpeechT5PreTrainedModel):
         r"speech_encoder_prenet.embed_positions.weights",
     ]
 
-    def __init__(self, config):
+    def __init__(self, config: SpeechT5Config):
         super().__init__(config)
 
         self.encoder = SpeechT5SpeechEncoder(config)
