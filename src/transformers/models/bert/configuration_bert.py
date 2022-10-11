@@ -23,7 +23,6 @@ from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
-logger = logging.get_logger(__name__)
 
 BERT_PRETRAINED_CONFIG_ARCHIVE_MAP = {
     "bert-base-uncased": "https://huggingface.co/bert-base-uncased/resolve/main/config.json",
