@@ -1400,6 +1400,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
         no_repeat_ngram_size: Optional[int] = None,
         encoder_no_repeat_ngram_size: Optional[int] = None,
         repetition_penalty: Optional[float] = None,
+        encoder_repetition_penalty: Optional[float] = None,
         bad_words_ids: Optional[List[List[int]]] = None,
         num_return_sequences: Optional[int] = None,
         decoder_start_token_id: Optional[int] = None,
@@ -1615,6 +1616,7 @@ class RagTokenForGeneration(RagPreTrainedModel):
 
         pre_processor = self._get_logits_processor(
             repetition_penalty=repetition_penalty,
+            encoder_repetition_penalty=encoder_repetition_penalty,
             no_repeat_ngram_size=no_repeat_ngram_size,
             encoder_no_repeat_ngram_size=encoder_no_repeat_ngram_size,
             input_ids_seq_length=input_ids_seq_length,
